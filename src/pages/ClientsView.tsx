@@ -21,19 +21,29 @@ import { Badge } from '@/src/components/ui/Badge';
 import { Button } from '@/src/components/ui/Button';
 import { cn } from '@/src/lib/utils';
 
+import { useReservations } from '@/src/contexts/ReservationContext';
+
 export const ClientsView = () => {
+  const { reservations } = useReservations();
   const stats = [
-    { label: 'Clients totaux', value: '1,453', sub: '+12 ce mois-ci', icon: Users, bg: 'bg-[#8B5CF6]/10', color: 'text-[#8B5CF6]' },
+    { label: 'Clients totaux', value: (1453 + (reservations.length - 5)).toLocaleString(), sub: `+${reservations.length} ce mois-ci`, icon: Users, bg: 'bg-[#8B5CF6]/10', color: 'text-[#8B5CF6]' },
     { label: 'Taux de fidélité', value: '78%', sub: 'Clients récurrents', icon: Star, bg: 'bg-emerald-50', color: 'text-emerald-500' },
     { label: 'CLV moyen', value: '1 240 €', sub: '+5.3% vs mois dernier', icon: Crown, bg: 'bg-amber-50', color: 'text-amber-500' },
     { label: 'VIP actifs', value: '42', sub: 'Action requise', icon: Gem, bg: 'bg-blue-50', color: 'text-blue-500' },
   ];
 
   const clients = [
+    ...reservations.map(res => ({
+        name: res.client,
+        email: res.email || 'client@example.com',
+        phone: res.phone || '+33 6 00 00 00 00',
+        segment: 'leisure',
+        loyalty: 'medal',
+        lastStay: res.arrival,
+        totalSpent: 400
+    })).slice(0, 5),
     { name: 'Pierre Bernard', email: 'pierre.b@orange.fr', phone: '+33 6 98 76 54 32', segment: 'business', loyalty: 'star', lastStay: '23/04/2026', totalSpent: 840 },
     { name: 'Sophie Dubois', email: 'sophie.d@yahoo.fr', phone: '+33 6 54 32 10 98', segment: 'leisure', loyalty: 'medal', lastStay: '07/04/2026', totalSpent: 360 },
-    { name: 'Ali Larabi', email: 'ali.l@flowtym.com', phone: '+33 6 07 89 32 94', segment: 'vip', loyalty: 'crown', lastStay: '18/04/2026', totalSpent: 4250 },
-    { name: 'Marie Martin', email: 'marie.m@gmail.com', phone: '+33 6 12 34 56 78', segment: 'leisure', loyalty: 'gem', lastStay: '07/04/2026', totalSpent: 360 },
   ];
 
   const getSegmentIcon = (segment: string) => {

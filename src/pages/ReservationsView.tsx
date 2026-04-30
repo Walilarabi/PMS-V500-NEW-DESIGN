@@ -34,6 +34,9 @@ import { cn } from '@/src/lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { motion } from 'motion/react';
 
+import { useReservations } from '@/src/contexts/ReservationContext';
+import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
+
 const STATUS_DATA = [
   { name: 'Confirmées', value: 4, color: '#10B981' },
   { name: 'Check-in', value: 2, color: '#8B5CF6' },
@@ -42,8 +45,11 @@ const STATUS_DATA = [
 ];
 
 export const ReservationsView = () => {
+  const { reservations } = useReservations();
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+
   const stats = [
-    { label: 'Dossiers', value: '4', sub: 'Actifs', icon: CheckCircle2, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
+    { label: 'Dossiers', value: reservations.length.toString(), sub: 'Actifs', icon: CheckCircle2, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
     { label: 'Confirmée', value: '1', sub: '+ 2 aujourd\'hui', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
     { label: 'Check-in', value: '2', sub: 'Aujourd\'hui', icon: Clock, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
     { label: 'CA total', value: '2 950 €', sub: '+ 8.3% vs hier', icon: ArrowUpRight, color: 'text-emerald-500', bg: 'bg-emerald-50' },
@@ -56,16 +62,24 @@ export const ReservationsView = () => {
     { ref: 'RES-096', client: 'Marie Martin', amount: '360 €', status: 'Relancé', statusColor: 'blue', expire: '1j 4h', room: '102' },
   ];
 
-  const allReservations = [
-    { ref: 'RES-001', status: 'CHECK-OUT', client: 'Pierre Bernard', email: 'pierre.bernard@orange.fr', pers: 1, checkin: '23/03/2026', checkout: '27/03/2026', nights: 4, amount: '480.00 €', solde: '0 €', soldeColor: 'emerald', channel: 'DIRECT', room: '101', roomType: 'Simple Classique' },
-    { ref: 'RES-002', status: 'CHECK-IN', client: 'Sophie Dubois', email: 'sophie.dubois@yahoo.fr', pers: 2, checkin: '07/04/2026', checkout: '10/04/2026', nights: 3, amount: '360.00 €', solde: '360.00 €', soldeColor: 'red', channel: 'BOOKING.COM', room: '103', roomType: 'Double Classique' },
-    { ref: 'RES-003', status: 'CHECK-IN', client: 'Ali Larabi', email: 'ali.larabi@flowtym.com', pers: 2, checkin: '18/04/2026', checkout: '25/04/2026', nights: 7, amount: '1 750.00 €', solde: '1 750.00 €', soldeColor: 'red', channel: 'DIRECT', room: '201', roomType: 'Double Supérieure Deluxe' },
-    { ref: 'RES-004', status: 'CONFIRMÉE', client: 'Marie Martin', email: 'marie.martin@gmail.com', pers: 3, checkin: '07/04/2026', checkout: '09/04/2026', nights: 2, amount: '360.00 €', solde: '0 €', soldeColor: 'emerald', channel: 'DIRECT', room: '102', roomType: 'Suite Deluxe' },
-  ];
-
   const [searchQuery, setSearchQuery] = React.useState('');
 
-  const filteredReservations = allReservations.filter(res => 
+  const filteredReservations = reservations.map(res => ({
+    ref: res.id,
+    status: res.status.toUpperCase(),
+    client: res.client,
+    email: res.email || 'contact@client.com',
+    pers: res.guests?.adults || 2,
+    checkin: res.arrival,
+    checkout: res.departure,
+    nights: 1, // simplified
+    amount: '400.50 €',
+    solde: res.payment === 'Payé' ? '0 €' : '400.50 €',
+    soldeColor: res.payment === 'Payé' ? 'emerald' : 'red',
+    channel: (res.source || 'DIRECT').toUpperCase(),
+    room: res.room,
+    roomType: res.roomType
+  })).filter(res => 
     res.client.toLowerCase().includes(searchQuery.toLowerCase()) || 
     res.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
     res.room.includes(searchQuery)
@@ -86,7 +100,10 @@ export const ReservationsView = () => {
           <Button variant="outline" size="sm" className="bg-white border-gray-100 font-bold gap-2 px-4 shadow-sm">
              <FileSpreadsheet size={16} className="text-emerald-500" /> Excel
           </Button>
-          <Button className="bg-[#8B5CF6] font-bold gap-2 px-6 py-2.5 rounded-xl shadow-lg shadow-[#8B5CF6]/20">
+          <Button 
+            onClick={() => setIsModalOpen(true)}
+            className="bg-[#8B5CF6] font-bold gap-2 px-6 py-2.5 rounded-xl shadow-lg shadow-[#8B5CF6]/20"
+          >
              <Plus size={18} /> Nouvelle réservation
           </Button>
           <button className="p-2 bg-white border border-gray-100 rounded-xl text-[#8B5CF6] shadow-sm hover:bg-gray-50 transition-colors">
@@ -444,6 +461,10 @@ export const ReservationsView = () => {
            </div>
         </div>
       </div>
+      <NewReservationModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </div>
   );
 };
