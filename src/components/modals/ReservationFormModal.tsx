@@ -167,7 +167,7 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
     guestName: '', email: '', phone: '',
     nationality: 'FR', nationalityLabel: 'France',
     adults: 2, children: 0, company: '',
-    reference: `RES-${Math.floor(Math.random() * 9000 + 1000)}`,
+    reference: `RES-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100)}`,
     segment: 'Loisir',
     checkIn: new Date().toISOString().split('T')[0],
     checkOut: new Date(Date.now() + 8 * 86400000).toISOString().split('T')[0],

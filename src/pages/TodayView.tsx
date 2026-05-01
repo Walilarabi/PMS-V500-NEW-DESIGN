@@ -58,16 +58,16 @@ import ReservationFormModal, { ReservationFormData } from '@/src/components/moda
 // Mock Data for Timeline
 const TIMELINE_EVENTS = {
   arriving: [
-    { hour: '10:00', count: 2, pos: '20%' },
-    { hour: '13:00', count: 3, pos: '40%' },
-    { hour: '16:00', count: 2, pos: '65%' },
-    { hour: '19:00', count: 1, pos: '85%' },
+    { id: 'arr-1', hour: '10:00', count: 2, pos: '20%', guest: 'L. Bernard', room: '104', ref: 'RES-8821', source: 'Booking.com', time: '10:15' },
+    { id: 'arr-2', hour: '13:00', count: 3, pos: '40%', guest: 'M. Dubois', room: '205', ref: 'RES-8822', source: 'Direct', time: '13:45' },
+    { id: 'arr-3', hour: '16:00', count: 2, pos: '65%', guest: 'J. Martin', room: '302', ref: 'RES-8823', source: 'Expedia', time: '16:10' },
+    { id: 'arr-4', hour: '19:00', count: 1, pos: '85%', guest: 'S. Petit', room: '108', ref: 'RES-8824', source: 'Airbnb', time: '19:30' },
   ],
   departing: [
-    { hour: '09:00', count: 3, pos: '15%' },
-    { hour: '12:00', count: 2, pos: '35%' },
-    { hour: '14:00', count: 1, pos: '50%' },
-    { hour: '16:00', count: 2, pos: '65%' },
+    { id: 'dep-1', hour: '09:00', count: 3, pos: '15%', guest: 'P. Durand', room: '210', ref: 'RES-8825', source: 'Direct', time: '09:05' },
+    { id: 'dep-2', hour: '12:00', count: 2, pos: '35%', guest: 'C. Leroy', room: '401', ref: 'RES-8826', source: 'Hotels.com', time: '11:45' },
+    { id: 'dep-3', hour: '14:00', count: 1, pos: '50%', guest: 'A. Roux', room: '315', ref: 'RES-8827', source: 'Direct', time: '14:00' },
+    { id: 'dep-4', hour: '16:00', count: 2, pos: '65%', guest: 'E. Moreau', room: '204', ref: 'RES-8828', source: 'Booking.com', time: '15:50' },
   ],
   cleaning: [
     { start: '08:30', end: '11:00', label: 'Charge modérée', color: 'bg-indigo-50/50 text-indigo-500', pos: '10%', width: '18%' },
@@ -625,6 +625,105 @@ const ReservationDetails = ({ isOpen, onClose, reservation }: { isOpen: boolean,
   );
 };
 
+// ─── TIMELINE EVENT POPOVER ──────────────────────────────────────────────────
+const TimelineEventPopover = ({ event, type, onClose }: { event: any, type: 'arrival' | 'departure', onClose: () => void }) => {
+  const partnerColors: Record<string, string> = {
+    'Booking.com': '#003580',
+    'Airbnb': '#FF385C',
+    'Expedia': '#FFCC00',
+    'Direct': '#8B5CF6',
+    'Hotels.com': '#D32F2F'
+  };
+
+  const pColor = partnerColors[event.source] || '#6366f1';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9, y: 15 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9, y: 15 }}
+      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-6 w-80 bg-white rounded-[32px] shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 z-[200] overflow-hidden"
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Dynamic Header based on Partner Color */}
+      <div 
+        className="h-2 w-full" 
+        style={{ backgroundColor: pColor }}
+      />
+      
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-gray-50 text-gray-400 group-hover:bg-white transition-colors">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-xs" style={{ backgroundColor: pColor }}>
+                {event.guest?.[0] || 'C'}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-lg font-black text-gray-900 leading-none">{event.guest}</h4>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                {type === 'arrival' ? 'Arrivée' : 'Départ'} · {event.time}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-50 rounded-full transition-colors text-gray-300">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="p-3 bg-gray-50 rounded-2xl space-y-1">
+            <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Chambre</p>
+            <p className="text-sm font-black text-[#8B5CF6]">{event.room}</p>
+          </div>
+          <div className="p-3 bg-gray-50 rounded-2xl space-y-1">
+            <p className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">Statut</p>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-black text-emerald-600 uppercase tracking-tighter">En route</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-gray-400 font-bold">
+              <Users size={14} className="text-gray-300" />
+              <span>2 Voyageurs</span>
+            </div>
+            <div className="flex items-center gap-2 text-gray-400 font-bold">
+              <CreditCard size={14} className="text-gray-300" />
+              <span className="text-emerald-500">Payé</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 pt-6 border-t border-gray-50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-gray-50">
+              <Smartphone size={14} className="text-gray-400" />
+            </div>
+            <span className="text-[11px] font-black text-gray-900 uppercase tracking-widest" style={{ color: pColor }}>
+              {event.source}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" className="h-10 w-10 p-0 rounded-xl hover:bg-gray-50 text-gray-400">
+              <Smartphone size={16} />
+            </Button>
+            <Button variant="primary" size="sm" className="h-10 rounded-xl px-5 bg-gray-900 text-white font-bold text-[11px]">
+              Détails
+            </Button>
+          </div>
+        </div>
+      </div>
+      
+      {/* Arrow Down */}
+      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white rotate-45 border-r border-b border-gray-100" />
+    </motion.div>
+  );
+};
+
 export const TodayView = () => {
   const { reservations, addReservation } = useReservations();
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -635,6 +734,7 @@ export const TodayView = () => {
   const [menuOpenFor, setMenuOpenFor] = React.useState<string | null>(null);
   const [showKPIs, setShowKPIs] = React.useState(true);
   const [showTimeline, setShowTimeline] = React.useState(true);
+  const [selectedEvent, setSelectedEvent] = React.useState<{ type: 'arrival' | 'departure', id: number | string } | null>(null);
 
   // Metrics calculation from spec
   const totalRooms = 42;
@@ -668,6 +768,8 @@ export const TodayView = () => {
   const calculateNowPosition = () => {
     const startHour = 7;
     const endHour = 21;
+    if (!(currentTime instanceof Date) || isNaN(currentTime.getTime())) return '0%';
+    
     const currentHour = currentTime.getHours();
     const currentMinutes = currentTime.getMinutes();
     
@@ -676,7 +778,10 @@ export const TodayView = () => {
     
     const totalMinutes = (endHour - startHour) * 60;
     const elapsedMinutes = (currentHour - startHour) * 60 + currentMinutes;
-    return `${(elapsedMinutes / totalMinutes) * 100}%`;
+    
+    if (totalMinutes <= 0) return '0%';
+    const percentage = Math.min(100, Math.max(0, (elapsedMinutes / totalMinutes) * 100));
+    return `${percentage}%`;
   };
 
   const hours = Array.from({ length: 15 }, (_, i) => `${(i + 7).toString().padStart(2, '0')}:00`);
@@ -690,7 +795,7 @@ export const TodayView = () => {
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight text-left">Flowday</h1>
             <div className="flex items-center gap-2 text-gray-400 mt-1">
               <Calendar size={14} />
-              <span className="text-[11px] font-bold tracking-wide">Dimanche 27 avril 2026</span>
+              <span className="text-[11px] font-bold tracking-wide">{new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())}</span>
             </div>
           </div>
           <Button variant="outline" size="sm" className="rounded-xl bg-white gap-2 text-[11px] font-bold h-9 px-4 border-gray-200">
@@ -775,8 +880,8 @@ export const TodayView = () => {
                       <X size={14} /> Masquer
                     </Button>
                   </div>
-                  <Card className="rounded-[24px] border-gray-100 shadow-sm overflow-hidden bg-white">
-                <div className="relative">
+                  <Card className="rounded-[24px] border-gray-100 shadow-sm bg-white overflow-visible mt-4">
+                <div className="relative pt-4">
                   {/* Hours Header */}
                   <div className="flex border-b border-gray-50 bg-gray-50/20">
                     <div className="w-48 border-r border-gray-50" />
@@ -790,8 +895,8 @@ export const TodayView = () => {
                   </div>
 
                   {/* Now Line */}
-                  <div className="absolute top-0 bottom-0 w-px bg-indigo-500 z-20" style={{ left: `calc(12rem + (100% - 12rem) * ${calculateNowPosition().split('%')[0]} / 100)` }}>
-                    <div className="absolute top-[-10px] left-1/2 -translate-x-1/2 px-2 py-0.5 bg-indigo-500 text-white text-[8px] font-bold rounded uppercase tracking-widest shadow-lg shadow-indigo-500/20">Maintenant</div>
+                  <div className="absolute top-0 bottom-0 w-px bg-indigo-500 z-20" style={{ left: `calc(12rem + (100% - 12rem) * ${(parseFloat(calculateNowPosition()) || 0) / 100})` }}>
+                    <div className="absolute top-[-15px] left-1/2 -translate-x-1/2 px-2 py-1 bg-indigo-500 text-white text-[8px] font-bold rounded-full uppercase tracking-widest shadow-lg shadow-indigo-500/20 whitespace-nowrap">Maintenant</div>
                   </div>
 
                   {/* Arrivées Row */}
@@ -802,7 +907,25 @@ export const TodayView = () => {
                     </div>
                     <div className="flex-1 flex px-4 relative items-center">
                        {TIMELINE_EVENTS.arriving.map((ev, i) => (
-                         <div key={i} className="absolute w-7 h-7 rounded-full border-2 border-green-400 bg-white flex items-center justify-center text-[11px] font-bold text-green-500 shadow-lg shadow-green-500/10 cursor-pointer hover:scale-110 transition-transform" style={{ left: ev.pos }}>{ev.count}</div>
+                         <div key={ev.id} className="absolute" style={{ left: ev.pos }}>
+                            <motion.div 
+                              whileHover={{ scale: 1.15 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => setSelectedEvent({ type: 'arrival', id: ev.id })}
+                              className="w-7 h-7 rounded-full border-2 border-green-400 bg-white flex items-center justify-center text-[11px] font-bold text-green-500 shadow-lg shadow-green-500/10 cursor-pointer"
+                            >
+                              {ev.count}
+                            </motion.div>
+                            <AnimatePresence>
+                              {selectedEvent?.type === 'arrival' && selectedEvent.id === ev.id && (
+                                <TimelineEventPopover 
+                                  event={ev} 
+                                  type="arrival" 
+                                  onClose={() => setSelectedEvent(null)} 
+                                />
+                              )}
+                            </AnimatePresence>
+                         </div>
                        ))}
                     </div>
                   </div>
@@ -815,7 +938,25 @@ export const TodayView = () => {
                     </div>
                     <div className="flex-1 flex px-4 relative items-center">
                        {TIMELINE_EVENTS.departing.map((ev, i) => (
-                         <div key={i} className="absolute w-7 h-7 rounded-full border-2 border-rose-400 bg-white flex items-center justify-center text-[11px] font-bold text-rose-500 shadow-lg shadow-rose-500/10 cursor-pointer hover:scale-110 transition-transform" style={{ left: ev.pos }}>{ev.count}</div>
+                         <div key={ev.id} className="absolute" style={{ left: ev.pos }}>
+                            <motion.div 
+                               whileHover={{ scale: 1.15 }}
+                               whileTap={{ scale: 0.95 }}
+                               onClick={() => setSelectedEvent({ type: 'departure', id: ev.id })}
+                               className="w-7 h-7 rounded-full border-2 border-rose-400 bg-white flex items-center justify-center text-[11px] font-bold text-rose-500 shadow-lg shadow-rose-500/10 cursor-pointer"
+                            >
+                              {ev.count}
+                            </motion.div>
+                            <AnimatePresence>
+                              {selectedEvent?.type === 'departure' && selectedEvent.id === ev.id && (
+                                <TimelineEventPopover 
+                                  event={ev} 
+                                  type="departure" 
+                                  onClose={() => setSelectedEvent(null)} 
+                                />
+                              )}
+                            </AnimatePresence>
+                         </div>
                        ))}
                     </div>
                   </div>
@@ -864,85 +1005,46 @@ export const TodayView = () => {
 
             {/* Main Table - Matching Image 1 */}
             <div>
-              <div className="flex items-center justify-between mb-6">
-                 <div className="flex-1 flex items-center gap-3 bg-white p-1.5 rounded-[22px] border border-gray-100 shadow-sm max-w-[1100px]">
-                    <div className="flex items-center gap-1 bg-[#F9FAFB] px-2 py-1 rounded-xl border border-gray-100">
-                      <button className="p-1 hover:bg-white rounded-lg text-gray-400 transition-colors"><ChevronLeft size={14} /></button>
-                      <div className="flex items-center gap-2 px-3 py-1 border-x border-gray-100">
-                        <Calendar size={14} className="text-[#8B5CF6]" />
-                        <span className="text-[11px] font-bold text-gray-700 whitespace-nowrap">30 avr. 2026</span>
-                      </div>
-                      <button className="p-1 hover:bg-white rounded-lg text-gray-400 transition-colors"><ChevronRight size={14} /></button>
+              <div className="flex items-center justify-between mb-6 gap-6">
+                 <div className="flex-1 flex items-center gap-6 bg-white px-6 py-2 rounded-full border border-gray-100 shadow-sm max-w-[1200px]">
+                    <div className="flex items-center gap-3 shrink-0">
+                      <Calendar size={18} className="text-gray-400" />
+                      <span className="text-[13px] font-bold text-gray-700 whitespace-nowrap">
+                        {new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date())}
+                      </span>
                     </div>
                     
-                    <div className="h-4 w-px bg-gray-200 mx-1 shrink-0" />
+                    <div className="h-6 w-px bg-gray-100 shrink-0" />
                     
-                    <div className="p-2 bg-[#F3E8FF] text-[#8B5CF6] rounded-xl shrink-0 cursor-pointer hover:bg-[#E9D5FF] transition-colors">
-                      <div className="w-4 h-4 rounded-full border-2 border-current flex items-center justify-center">
-                        <div className="w-1 h-1 bg-current rounded-full" />
-                      </div>
-                    </div>
-
-                    <div className="relative flex-1 max-w-[180px] min-w-[120px]">
-                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <div className="relative flex-1 max-w-[300px]">
+                      <Search size={18} className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-300" />
                       <input 
-                        className="w-full bg-[#F9FAFB] border border-transparent focus:border-[#8B5CF6]/30 focus:bg-white transition-all rounded-xl py-2.5 pl-9 pr-3 text-[11px] font-bold text-gray-700 placeholder:text-gray-400" 
-                        placeholder="Nom, chambre, dates..." 
+                        className="w-full bg-white border-none focus:ring-0 py-2 pl-8 pr-3 text-[13px] font-medium text-gray-700 placeholder:text-gray-300" 
+                        placeholder="Nom, chambre..." 
                       />
                     </div>
 
-                    <div className="hidden lg:flex items-center gap-2">
-                      <div className="relative group">
-                        <select className="appearance-none bg-[#F9FAFB] border border-gray-100 rounded-xl py-2.5 pl-4 pr-9 text-[11px] font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/10 cursor-pointer">
-                          <option>Tous les types</option>
-                        </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      </div>
-                      <div className="relative group">
-                        <select className="appearance-none bg-[#F9FAFB] border border-gray-100 rounded-xl py-2.5 pl-4 pr-9 text-[11px] font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/10 cursor-pointer">
-                          <option>Tous statuts</option>
-                        </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      </div>
-                      <div className="relative group">
-                        <select className="appearance-none bg-[#F9FAFB] border border-gray-100 rounded-xl py-2.5 pl-4 pr-9 text-[11px] font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/10 cursor-pointer">
-                          <option>Tous les canaux</option>
-                        </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      </div>
-                      <div className="relative group">
-                        <select className="appearance-none bg-[#F9FAFB] border border-gray-100 rounded-xl py-2.5 pl-4 pr-9 text-[11px] font-bold text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/10 cursor-pointer">
-                          <option>Sources</option>
-                        </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 ml-auto">
-                      <Button className="bg-green-100 hover:bg-green-200 text-green-700 rounded-xl h-10 px-4 gap-2 text-[11px] font-bold transition-all shadow-sm border border-green-200">
-                        <LogIn size={14} /> <span className="hidden xl:inline">Check-in</span>
-                      </Button>
-                      <Button className="bg-red-100 hover:bg-red-200 text-red-700 rounded-xl h-10 px-4 gap-2 text-[11px] font-bold transition-all shadow-sm border border-red-200">
-                        <LogOut size={14} /> <span className="hidden xl:inline">Check-out</span>
-                      </Button>
+                    <div className="hidden lg:flex items-center gap-8 ml-auto">
+                      <button className="text-[12px] font-bold text-gray-500 hover:text-[#8B5CF6] transition-colors whitespace-nowrap">Tous les types</button>
+                      <button className="text-[12px] font-bold text-gray-500 hover:text-[#8B5CF6] transition-colors whitespace-nowrap">Tous statuts</button>
+                      <button className="text-[12px] font-bold text-gray-500 hover:text-[#8B5CF6] transition-colors whitespace-nowrap">Tous les canaux</button>
+                      <button className="text-[12px] font-bold text-gray-500 hover:text-[#8B5CF6] transition-colors whitespace-nowrap">Sources</button>
                     </div>
                  </div>
 
-                 <div className="flex items-center gap-3">
-                   <div className="relative group">
-                      <select className="appearance-none bg-white border border-gray-100 rounded-xl py-2.5 pl-10 pr-9 text-[11px] font-bold text-[#8B5CF6] focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/10 cursor-pointer shadow-sm">
-                        <option>Vue: Chambre</option>
-                        <option>Vue: Liste</option>
-                      </select>
-                      <LayoutDashboard size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8B5CF6]" />
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8B5CF6] pointer-events-none" />
-                    </div>
-                    <Button 
+                 <div className="flex items-center gap-3 shrink-0">
+                    <button className="w-12 h-12 bg-emerald-50 hover:bg-emerald-100 text-emerald-500 rounded-2xl flex items-center justify-center transition-all shadow-sm border border-emerald-100">
+                      <LogIn size={20} />
+                    </button>
+                    <button className="w-12 h-12 bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-2xl flex items-center justify-center transition-all shadow-sm border border-rose-100">
+                      <LogOut size={20} />
+                    </button>
+                    <button 
                       onClick={() => setActiveModal('new-reservation')}
-                      className="w-10 h-10 bg-[#8B5CF6] hover:bg-[#7C3AED] rounded-xl p-0 flex items-center justify-center shadow-lg shadow-[#8B5CF6]/20 transition-all"
+                      className="w-12 h-12 bg-[#8B5CF6] hover:bg-[#7C3AED] rounded-2xl flex items-center justify-center shadow-lg shadow-[#8B5CF6]/20 transition-all text-white"
                     >
-                       <Plus size={20} className="text-white" />
-                    </Button>
+                       <Plus size={24} />
+                    </button>
                  </div>
               </div>
 
@@ -958,69 +1060,70 @@ export const TodayView = () => {
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <AlertCircle size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Priorité</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Priorité</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <Bed size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Chambre</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Chambre</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <RefreshCw size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Statut</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Statut</span>
                                   </div>
                                 </th>
                                 <th className="px-6 py-4 min-w-[250px]">
                                   <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help w-fit">
                                     <Users size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Client / Titre</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Client / Titre</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <CreditCard size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Paiement</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Paiement</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <LogIn size={16} className="rotate-180" />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Arrivée</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Arrivée</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <LogOut size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Départ</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Départ</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <Smartphone size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Canal de réservation</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Canal de réservation</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <SparkleIcon size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Action automatisée</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Action automatisée</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4 text-right">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help ml-auto w-fit">
                                     <Building2 size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Service étage</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] shadow-xl pointer-events-none">Service étage</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4 w-12"></th>
                             </tr>
                         </thead>
+
                         <tbody className="divide-y divide-gray-50">
-                            {reservations.map((item) => (
-                                <tr key={item.id} className="hover:bg-gray-50/80 transition-colors group h-16">
+                            {reservations.map((item, idx) => (
+                                <tr key={`today-res-${item.id}-${idx}`} className="hover:bg-gray-50/80 transition-colors group h-16">
                                     <td className="px-6 py-2"><div className="w-4 h-4 rounded border-2 border-gray-200 group-hover:border-[#8B5CF6]/50 transition-colors" /></td>
                                     <td className="px-4 py-2">
                                         <Badge className={cn(

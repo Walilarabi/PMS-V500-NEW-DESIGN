@@ -25,6 +25,7 @@ const PlaceholderPage = ({ name }: { name: string }) => (
 
 const App = () => {
   const [activePage, setActivePage] = React.useState<PageId>('today');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
 
   const renderPage = () => {
     switch (activePage) {
@@ -77,7 +78,12 @@ const App = () => {
   return (
     <div className="flex h-screen bg-[#F9FAFB] text-gray-900 font-sans overflow-hidden">
       {/* Global Contextual Sidebar */}
-      <Sidebar activePage={activePage} setActivePage={setActivePage} />
+      <Sidebar 
+        activePage={activePage} 
+        setActivePage={setActivePage} 
+        isCollapsed={isSidebarCollapsed}
+        setIsCollapsed={setIsSidebarCollapsed}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">

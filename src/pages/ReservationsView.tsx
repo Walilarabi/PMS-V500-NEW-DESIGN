@@ -346,8 +346,8 @@ export const ReservationsView = () => {
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                       {filteredReservations.map((row) => (
-                         <tr key={`res-row-${row.ref}`} className="text-[13px] hover:bg-gray-50 transition-colors group">
+                       {filteredReservations.map((row, idx) => (
+                         <tr key={`res-row-${row.ref}-${idx}`} className="text-[13px] hover:bg-gray-50 transition-colors group">
                             <td className="px-4 py-5 font-bold text-[#8953F1] leading-none">{row.ref}</td>
                             <td className="px-4 py-5">
                                <div className={cn(

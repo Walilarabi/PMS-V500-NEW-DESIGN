@@ -20,7 +20,9 @@ import {
   Database,
   Cloud,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -28,9 +30,11 @@ import { PageId } from '@/src/types';
 interface SidebarProps {
   activePage: PageId;
   setActivePage: (page: PageId) => void;
+  isCollapsed: boolean;
+  setIsCollapsed: (collapsed: boolean) => void;
 }
 
-export const Sidebar = ({ activePage, setActivePage }: SidebarProps) => {
+export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed }: SidebarProps) => {
   // Determine the "parent" category to show the right sub-menu
   const getCategory = (page: PageId) => {
     if (['reservations', 'calendrier', 'mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(page)) return 'reservations';
@@ -117,22 +121,32 @@ export const Sidebar = ({ activePage, setActivePage }: SidebarProps) => {
   const currentMenu = subMenus[category] || subMenus.general;
 
   return (
-    <aside className="w-64 bg-white border-r border-[#E5E7EB] flex flex-col shrink-0 overflow-y-auto animate-in slide-in-from-left duration-500">
-      <div className="p-6">
-        <div className="mb-8 px-2 flex items-center justify-between">
-          <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{currentMenu.label}</h2>
-          <div className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] animate-pulse" />
+    <aside className={cn(
+      "bg-white border-r border-[#E5E7EB] flex flex-col shrink-0 transition-all duration-300 ease-in-out z-[100]",
+      isCollapsed ? "w-20" : "w-64"
+    )}>
+      <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
+        <div className={cn("mb-8 px-2 flex items-center justify-between", isCollapsed && "justify-center")}>
+          {!isCollapsed && <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{currentMenu.label}</h2>}
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-1.5 hover:bg-gray-50 rounded-lg text-gray-400 hover:text-[#8B5CF6] transition-colors"
+          >
+            {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
         </div>
 
         <nav className="space-y-1">
           {currentMenu.items.map((item) => {
-            const isActive = activePage === item.id || (item.id === 'finance' && activePage === 'finance'); // Simplify active check
+            const isActive = activePage === item.id || (item.id === 'finance' && activePage === 'finance');
             return (
               <button
                 key={item.id}
                 onClick={() => setActivePage(item.id as PageId)}
+                title={isCollapsed ? item.label : undefined}
                 className={cn(
-                  "w-full px-4 py-3 flex items-center justify-between transition-all duration-300 rounded-2xl group relative overflow-hidden",
+                  "w-full flex items-center transition-all duration-300 rounded-2xl group relative overflow-hidden",
+                  isCollapsed ? "justify-center p-2" : "px-4 py-3 justify-between",
                   isActive
                     ? "bg-[#8B5CF6]/[0.08] text-[#8B5CF6]"
                     : "text-gray-500 hover:text-[#8B5CF6] hover:bg-gray-50/80"
@@ -145,35 +159,44 @@ export const Sidebar = ({ activePage, setActivePage }: SidebarProps) => {
                   )}>
                     <item.icon size={16} />
                   </div>
-                  <span className="text-[12px] font-bold tracking-tight text-left">{item.label}</span>
+                  {!isCollapsed && <span className="text-[12px] font-bold tracking-tight text-left">{item.label}</span>}
                 </div>
-                <ChevronRight size={14} className={cn(
-                  "opacity-30 transition-all duration-300 transform",
-                  isActive ? "opacity-100 translate-x-0" : "-translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
-                )} />
+                {!isCollapsed && (
+                  <ChevronRight size={14} className={cn(
+                    "opacity-30 transition-all duration-300 transform",
+                    isActive ? "opacity-100 translate-x-0" : "-translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
+                  )} />
+                )}
               </button>
             );
           })}
         </nav>
       </div>
 
-      <div className="mt-auto p-6">
-        <div className="p-5 bg-gradient-to-br from-[#8B5CF6]/5 to-transparent rounded-3xl border border-[#8B5CF6]/10 relative overflow-hidden">
+      <div className="mt-auto p-4 shrink-0">
+        <div className={cn(
+          "bg-gradient-to-br from-[#8B5CF6]/5 to-transparent rounded-3xl border border-[#8B5CF6]/10 relative overflow-hidden transition-all duration-300",
+          isCollapsed ? "p-2 opacity-100" : "p-5"
+        )}>
            <div className="relative z-10">
-              <div className="flex items-center gap-2 mb-3">
-                 <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center shadow-sm">
+              <div className={cn("flex items-center gap-2 mb-3", isCollapsed && "justify-center mb-0")}>
+                 <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center shadow-sm shrink-0">
                     <Sparkles size={12} className="text-[#F59E0B]" />
                  </div>
-                 <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">Flowtym Pro</span>
+                 {!isCollapsed && <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">Flowtym Pro</span>}
               </div>
-              <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
-                 Optimisez votre revenue management avec nos algorithmes IA.
-              </p>
-              <button className="w-full mt-4 py-2 bg-[#8B5CF6] rounded-xl text-[10px] font-black text-white uppercase tracking-widest hover:bg-[#7C3AED] transition-colors shadow-lg shadow-[#8B5CF6]/20">
-                 En savoir plus
-              </button>
+              {!isCollapsed && (
+                <>
+                  <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                     Optimisez votre revenue management avec nos algorithmes IA.
+                  </p>
+                  <button className="w-full mt-4 py-2 bg-[#8B5CF6] rounded-xl text-[10px] font-black text-white uppercase tracking-widest hover:bg-[#7C3AED] transition-colors shadow-lg shadow-[#8B5CF6]/20">
+                     En savoir plus
+                  </button>
+                </>
+              )}
            </div>
-           <div className="absolute top-0 right-0 w-24 h-24 bg-[#8B5CF6]/5 rounded-full -mr-12 -mt-12" />
+           {!isCollapsed && <div className="absolute top-0 right-0 w-24 h-24 bg-[#8B5CF6]/5 rounded-full -mr-12 -mt-12" />}
         </div>
       </div>
     </aside>
