@@ -21,7 +21,7 @@ import {
   Zap as SparkleIcon,
   Crown,
   Heart,
-  Users as UsersIcon,
+  Users,
   MessageSquare,
   Repeat,
   Download,
@@ -44,15 +44,16 @@ import {
   Info,
   LogOut,
   LogIn,
-  Send
+  Send,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { Card, CardHeader, CardContent } from '@/src/components/ui/Card';
 import { Badge } from '@/src/components/ui/Badge';
 import { Button } from '@/src/components/ui/Button';
-import { useReservations } from '@/src/contexts/ReservationContext';
-import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
+import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
+import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
 
 // Mock Data for Timeline
 const TIMELINE_EVENTS = {
@@ -535,7 +536,7 @@ const ReservationDetails = ({ isOpen, onClose, reservation }: { isOpen: boolean,
                   <div className="flex flex-col items-center gap-1.5">
                     {i === 0 && <FileText size={18} />}
                     {i === 1 && <CreditCard size={18} />}
-                    {i === 2 && <UsersIcon size={18} />}
+                    {i === 2 && <Users size={18} />}
                     {i === 3 && <AlertCircle size={18} />}
                     {i === 4 && <Search size={18} />}
                     {i === 5 && <Crown size={18} />}
@@ -625,7 +626,7 @@ const ReservationDetails = ({ isOpen, onClose, reservation }: { isOpen: boolean,
 };
 
 export const TodayView = () => {
-  const { reservations } = useReservations();
+  const { reservations, addReservation } = useReservations();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [activeFilter, setActiveFilter] = React.useState('Toutes');
   const [currentTime, setCurrentTime] = React.useState(new Date());
@@ -634,6 +635,14 @@ export const TodayView = () => {
   const [menuOpenFor, setMenuOpenFor] = React.useState<string | null>(null);
   const [showKPIs, setShowKPIs] = React.useState(true);
   const [showTimeline, setShowTimeline] = React.useState(true);
+
+  // Metrics calculation from spec
+  const totalRooms = 42;
+  const arrivalsCount = reservations.filter(r => r.status === 'Confirmé' || r.status === 'Arrivée').length;
+  const departuresCount = reservations.filter(r => r.status === 'Clôturé').length; // Assuming Clôturé means checked out
+  const occupancyRate = (((arrivalsCount + 5) / totalRooms) * 100).toFixed(1); // Adding 5 as existing stays
+  const dirtyRooms = 12;
+  const cleanPercentage = (((totalRooms - dirtyRooms) / totalRooms) * 100).toFixed(0);
 
   const handleAction = (type: string, res: any) => {
     if (type === 'details') {
@@ -678,7 +687,7 @@ export const TodayView = () => {
       <header className="px-8 py-6 flex items-center justify-between bg-white shrink-0">
         <div className="flex items-center gap-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Vue du Jour</h1>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight text-left">Flowday</h1>
             <div className="flex items-center gap-2 text-gray-400 mt-1">
               <Calendar size={14} />
               <span className="text-[11px] font-bold tracking-wide">Dimanche 27 avril 2026</span>
@@ -705,7 +714,7 @@ export const TodayView = () => {
             {/* Priorities - Matching Image 1 */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-[10px] font-bold text-gray-400 tracking-widest">Priorités du jour</h2>
+                <h2 className="text-[10px] font-bold text-gray-400 tracking-widest uppercase">Indicateurs temps réel</h2>
                 {!showTimeline && (
                   <Button 
                     variant="ghost" 
@@ -722,23 +731,23 @@ export const TodayView = () => {
                 showKPIs ? "grid-cols-4" : "grid-cols-4 lg:grid-cols-6"
               )}>
                 {[
-                  { label: '3 chambres non prêtes', meta: 'Perte estimée', val: '420 €', color: 'bg-red-50/50 text-red-600', icon: AlertCircle, iconColor: 'bg-red-400' },
-                  { label: '2 arrivées dans < 1h', meta: 'Non assignées', val: '—', color: 'bg-orange-50/50 text-orange-600', icon: Clock, iconColor: 'bg-orange-400' },
-                  { label: '1 ménage en retard', meta: 'Retard estimé', val: '35 min', color: 'bg-orange-50/50 text-orange-600', icon: Clock, iconColor: 'bg-orange-400' },
-                  { label: '4 check-outs terminés', meta: 'Prêts à la vente', val: '—', color: 'bg-green-50/50 text-green-600', icon: CheckCircle2, iconColor: 'bg-green-400' },
-                ].map((p, i) => (
-                  <Card key={i} className={cn("p-5 rounded-2xl border-transparent shadow-sm relative overflow-hidden group", p.color)}>
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-black/5", p.iconColor)}>
-                        <p.icon size={20} />
+                  { label: `Occupation: ${occupancyRate}%`, meta: 'Capacité totale: 42', val: 'Direct/OTA', color: 'bg-[#8B5CF6]/5 text-[#8B5CF6]', icon: TrendingUp, iconColor: 'bg-[#8B5CF6]' },
+                  { label: `${dirtyRooms} chambres sales`, meta: 'Ménage à faire', val: `${cleanPercentage}% clean`, color: 'bg-orange-50/50 text-orange-600', icon: Sparkles, iconColor: 'bg-orange-400' },
+                  { label: `${arrivalsCount} arrivées prévues`, meta: 'Aujourd\'hui', val: '4 VIP', color: 'bg-emerald-50/50 text-emerald-600', icon: Users, iconColor: 'bg-emerald-400' },
+                  { label: '4,280 € à encaisser', meta: 'Paiements attente', val: '2 litiges', color: 'bg-blue-50/50 text-blue-600', icon: CreditCard, iconColor: 'bg-blue-400' },
+                ].map((p) => (
+                  <Card key={`priority-${p.label.replace(/\s+/g, '-')}`} className={cn("p-6 rounded-2xl border-transparent shadow-sm relative overflow-hidden group hover:scale-[1.02] transition-all", p.color)}>
+                    <div className="flex items-start justify-between mb-5 text-left">
+                      <div className={cn("w-14 h-14 rounded-[20px] flex items-center justify-center text-white shrink-0 shadow-lg shadow-black/5 transition-transform duration-500 group-hover:scale-110", p.iconColor)}>
+                        <p.icon size={28} />
                       </div>
-                      <button className="text-[9px] font-bold bg-white/50 px-3 py-1.5 rounded-lg border border-white/50 hover:bg-white transition-all tracking-tight">Voir et agir</button>
+                      <button className="text-[10px] font-bold bg-white/50 px-4 py-2 rounded-xl border border-white/50 hover:bg-white transition-all tracking-tight uppercase">Détails</button>
                     </div>
-                    <div>
-                      <h3 className="text-[13px] font-bold leading-tight">{p.label}</h3>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-[10px] opacity-70 font-bold">{p.meta}</span>
-                        <span className="text-[12px] font-bold">{p.val}</span>
+                    <div className="text-left">
+                      <h3 className="text-[14px] font-bold leading-tight text-gray-900 group-hover:text-black transition-colors">{p.label}</h3>
+                      <div className="flex items-center gap-2 mt-2.5">
+                        <span className="text-[10px] opacity-70 font-bold uppercase tracking-wider">{p.meta}</span>
+                        <span className="text-[13px] font-bold">{p.val}</span>
                       </div>
                     </div>
                   </Card>
@@ -949,69 +958,69 @@ export const TodayView = () => {
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <AlertCircle size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Priorité</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Priorité</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <Bed size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Chambre</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Chambre</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <RefreshCw size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Statut</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Statut</span>
                                   </div>
                                 </th>
                                 <th className="px-6 py-4 min-w-[250px]">
                                   <div className="flex items-center gap-3 p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help w-fit">
-                                    <UsersIcon size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Client / Titre</span>
+                                    <Users size={16} />
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Client / Titre</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <CreditCard size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Paiement</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Paiement</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <LogIn size={16} className="rotate-180" />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Arrivée</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Arrivée</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <LogOut size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Départ</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Départ</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <Smartphone size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Canal de réservation</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Canal de réservation</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help">
                                     <SparkleIcon size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Action automatisée</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Action automatisée</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4 text-right">
                                   <div className="flex items-center justify-center p-2 rounded-lg bg-gray-100 text-gray-400 group relative cursor-help ml-auto w-fit">
                                     <Building2 size={16} />
-                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">Service étage</span>
+                                    <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-[9px] font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[60]">Service étage</span>
                                   </div>
                                 </th>
                                 <th className="px-4 py-4 w-12"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {reservations.map((item, i) => (
-                                <tr key={i} className="hover:bg-gray-50/80 transition-colors group h-16">
+                            {reservations.map((item) => (
+                                <tr key={item.id} className="hover:bg-gray-50/80 transition-colors group h-16">
                                     <td className="px-6 py-2"><div className="w-4 h-4 rounded border-2 border-gray-200 group-hover:border-[#8B5CF6]/50 transition-colors" /></td>
                                     <td className="px-4 py-2">
                                         <Badge className={cn(
@@ -1230,9 +1239,9 @@ export const TodayView = () => {
                   { label: 'Blocage de chambres', icon: Lock },
                   { label: 'Note interne', icon: FileText },
                   { label: 'Message équipe', icon: MessageSquare },
-                ].map((act, i) => (
+                ].map((act) => (
                   <button 
-                    key={i} 
+                    key={`quick-action-${act.label.replace(/\s+/g, '-')}`} 
                     onClick={() => act.action?.()}
                     className="w-full p-4 bg-white hover:bg-gray-50 rounded-3xl border border-transparent shadow-sm flex items-center justify-between group transition-all"
                   >
@@ -1298,9 +1307,39 @@ export const TodayView = () => {
                reservation={selectedRes}
             />
          )}
-         <NewReservationModal 
+         <ReservationFormModal 
             isOpen={activeModal === 'new-reservation'}
             onClose={() => setActiveModal(null)}
+            onSave={(data: ReservationFormData) => {
+              const newRes: Reservation = {
+                id: data.reference,
+                priority: 'Moyenne',
+                room: data.roomNumber,
+                roomType: 'STD/DLX', // fallback
+                status: 'Confirmé',
+                statusColor: 'text-violet-500',
+                dotColor: 'bg-violet-400',
+                client: data.guestName,
+                arrival: `${data.checkIn} 16:00`,
+                departure: `${data.checkOut} 11:00`,
+                source: data.channel.toUpperCase(),
+                sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
+                action: 'Check-in',
+                governess: 'À faire',
+                vip: data.segment === 'VIP',
+                payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
+                totalAmount: data.totalTTC,
+                ownerFeeRate: 0.20,
+                pmsFeeRate: 0.15,
+                cleaningFee: 50,
+                email: data.email,
+                phone: data.phone,
+                nationality: data.nationality,
+                guests: { adults: data.adults, children: data.children },
+                notes: data.notes
+              };
+              addReservation(newRes);
+            }}
          />
       </AnimatePresence>
     </div>

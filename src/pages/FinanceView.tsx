@@ -32,8 +32,10 @@ import {
   HelpCircle,
   Share2,
   LayoutGrid,
-  Table as TableIcon
+  Table as TableIcon,
+  Users
 } from 'lucide-react';
+import { useReservations } from '@/src/contexts/ReservationContext';
 import { Card, CardHeader, CardContent } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
@@ -70,14 +72,15 @@ const CASH_FLOW_DATA = [
   { day: '03 mai', value: 0, color: '#10B981' },
 ];
 
-interface FinanceViewProps {
+export interface FinanceViewProps {
   activeTab?: string;
 }
 
 export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => {
-  const [financeTab, setFinanceTab] = React.useState<'facturation' | 'cloture' | 'caisse' | 'impayes'>('facturation');
+  const [financeTab, setFinanceTab] = React.useState<'facturation' | 'cloture' | 'caisse' | 'impayes' | 'proprietaires'>('facturation');
   const [showKpis, setShowKpis] = React.useState(true);
   const [countedCash, setCountedCash] = React.useState('');
+  const { reservations } = useReservations();
 
   const initialCash = 500;
   const totalEncaissements = 5270;
@@ -87,7 +90,7 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
 
   // Synchronize internal state with prop
   React.useEffect(() => {
-    if (['facturation', 'caisse', 'impayes', 'cloture'].includes(activeTab)) {
+    if (['facturation', 'caisse', 'impayes', 'cloture', 'proprietaires'].includes(activeTab)) {
       setFinanceTab(activeTab as any);
     }
   }, [activeTab]);
@@ -223,8 +226,8 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
                     </div>
                   </div>
                   <div className="flex-1 space-y-4">
-                    {FACTURATION_PIE_DATA.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-[11px]">
+                    {FACTURATION_PIE_DATA.map((item) => (
+                      <div key={`fact-pie-${item.name}`} className="flex items-center justify-between text-[11px]">
                         <div className="flex items-center gap-3">
                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
                           <span className="font-bold text-gray-500">{item.name}</span>
@@ -267,16 +270,16 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
                         }}
                       />
                       <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={24}>
-                        {CASH_FLOW_DATA.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        {CASH_FLOW_DATA.map((entry) => (
+                          <Cell key={`cash-cell-${entry.day}`} fill={entry.color} />
                         ))}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="flex justify-between mt-4">
-                  {CASH_FLOW_DATA.map((d, i) => (
-                    <div key={i} className="text-center w-full">
+                  {CASH_FLOW_DATA.map((d) => (
+                    <div key={`cash-label-${d.day}`} className="text-center w-full">
                         <span className="text-[10px] font-bold" style={{ color: d.color }}>{d.value}€</span>
                     </div>
                   ))}
@@ -346,8 +349,8 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
                 { id: 'FA-2026-1006', client: 'Sophie Martin', initials: 'SM', room: '205', stay: '22/04/26 → 24/04/26', nights: 2, total: '246,40 €', paid: '—', balance: '246,40 €', status: 'En retard', dueDate: '24/04/2026', delay: '2 jours', score: 35 },
                 { id: 'FA-2026-1007', client: 'Jean Dupont', initials: 'JD', room: '312', stay: '24/04/26 → 27/04/26', nights: 3, total: '369,60 €', paid: '—', balance: '369,60 €', status: 'En attente', dueDate: '27/04/2026', delay: '5 jours', score: 65 },
                 { id: 'FA-2026-1008', client: 'Marie Leclerc', initials: 'ML', room: '118', stay: '25/04/26 → 26/04/26', nights: 1, total: '123,20 €', paid: '—', balance: '123,20 €', status: 'Brouillon', dueDate: '—', score: null },
-              ].map((row, i) => (
-                <tr key={i} className="hover:bg-gray-50 transition-all text-sm group">
+              ].map((row) => (
+                <tr key={`fact-row-${row.id}`} className="hover:bg-gray-50 transition-all text-sm group">
                   <td className="px-6 py-5 font-bold text-[#8B5CF6]">{row.id}</td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-3">
@@ -421,7 +424,7 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
               </Button>
               {[1, 2, 3, '...', 12].map((p, i) => (
                 <Button 
-                  key={i} 
+                  key={`page-${p}-${i}`} 
                   variant={p === 1 ? 'default' : 'outline'} 
                   size="sm" 
                   className={cn(
@@ -449,8 +452,8 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
                 { label: 'Envoyer liens de paiement', icon: Share2 },
                 { label: 'Imprimer', icon: Printer },
                 { label: 'Export comptable', icon: FileUp },
-              ].map((action, i) => (
-                <button key={i} className="flex-1 flex items-center gap-3 p-4 bg-gray-50/50 hover:bg-[#8B5CF6]/5 border border-gray-100 rounded-2xl transition-all group">
+              ].map((action) => (
+                <button key={`quick-acc-${action.label.replace(/\s+/g, '-')}`} className="flex-1 flex items-center gap-3 p-4 bg-gray-50/50 hover:bg-[#8B5CF6]/5 border border-gray-100 rounded-2xl transition-all group">
                    <div className="p-2 bg-white text-gray-400 group-hover:text-[#8B5CF6] rounded-xl shadow-sm transition-colors">
                       <action.icon size={16} />
                    </div>
@@ -557,8 +560,8 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
                     { client: 'M. Bernard', email: 'pierre.bernard@orange.fr', ref: 'INV-0990', channel: 'Booking', amount: '120.00€', due: '2026-04-20', delay: '+1j', status: 'RETARD', color: 'rose' },
                     { client: 'SNCF Voyages', email: 'r.petit@sncf.fr', ref: 'INV-0995', channel: 'Direct', amount: '2 800.00€', due: '2026-04-25', delay: '-4j', status: 'À ÉCHÉANCE', color: 'blue' },
                     { client: 'Mme Dupont', email: 'claire.d@gmail.com', ref: 'INV-0948', channel: 'Direct', amount: '450.00€', due: '2026-04-01', delay: '+20j', status: 'RECOUVREMENT', color: 'red' },
-                  ].map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50/50 transition-colors text-[13px] group">
+                  ].map((row) => (
+                    <tr key={`debtor-${row.ref}`} className="hover:bg-gray-50/50 transition-colors text-[13px] group">
                        <td className="px-6 py-5">
                           <div className="font-bold text-gray-900 leadings-tight mb-1">{row.client}</div>
                           <div className="text-[11px] text-gray-400 font-medium">{row.email}</div>
@@ -783,8 +786,8 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
                     { label: 'Main courante règlements', icon: Banknote },
                     { label: 'Encaissements & dépenses', icon: CreditCard },
                     { label: 'Rapport taxe de séjour', icon: FileText },
-                  ].map((item, i) => (
-                    <button key={i} className="w-full flex items-center justify-between p-3.5 hover:bg-gray-50 rounded-2xl transition-colors group text-left">
+                  ].map((item) => (
+                    <button key={`audit-doc-${item.label.replace(/\s+/g, '-')}`} className="w-full flex items-center justify-between p-3.5 hover:bg-gray-50 rounded-2xl transition-colors group text-left">
                        <div className="flex items-center gap-3">
                           <div className="p-2 bg-[#8B5CF6]/5 text-[#8B5CF6] rounded-xl group-hover:scale-110 transition-transform">
                              <item.icon size={16} />
@@ -915,6 +918,117 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
     </div>
   );
 
+  const renderProprietaires = () => {
+    const totalPayout = reservations.reduce((acc, res) => acc + res.ownerPayout, 0);
+    const totalCommission = reservations.reduce((acc, res) => acc + res.pmsCommission, 0);
+    const totalCleaning = reservations.reduce((acc, res) => acc + res.cleaningFee, 0);
+
+    return (
+      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 text-left">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 leading-tight">Reversements Propriétaires</h2>
+            <p className="text-gray-500 text-sm font-medium mt-1">Calcul des commissions et des reversements nets par période.</p>
+          </div>
+          <div className="flex items-center gap-3">
+             <Button variant="outline" className="bg-white border-gray-100 font-bold gap-2 px-4 shadow-sm">
+                <Download size={16} className="text-gray-400" /> Exporter le rapport
+             </Button>
+             <Button className="bg-[#8B5CF6] font-bold gap-2 px-6 py-2.5 rounded-xl shadow-lg shadow-[#8B5CF6]/20">
+                <Plus size={18} /> Nouveau virement
+             </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card className="p-6 bg-white border-transparent shadow-sm group">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Net à reverser</p>
+            <p className="text-2xl font-bold text-gray-900">{totalPayout.toLocaleString()} €</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] font-bold text-emerald-500">+ 12% vs mois dernier</span>
+            </div>
+          </Card>
+          <Card className="p-6 bg-white border-transparent shadow-sm group">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Commissions PMS</p>
+            <p className="text-2xl font-bold text-[#8B5CF6]">{totalCommission.toLocaleString()} €</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] font-bold text-gray-400">Taux moyen: 15.2%</span>
+            </div>
+          </Card>
+          <Card className="p-6 bg-white border-transparent shadow-sm group">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total Ménages</p>
+            <p className="text-2xl font-bold text-orange-500">{totalCleaning.toLocaleString()} €</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] font-bold text-gray-400">Rétrocession complète</span>
+            </div>
+          </Card>
+          <Card className="p-6 bg-white border-transparent shadow-sm group">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Taux de Reversement</p>
+            <p className="text-2xl font-bold text-emerald-500">72.4%</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-[10px] font-bold text-gray-400">Optimisé</span>
+            </div>
+          </Card>
+        </div>
+
+        <Card className="bg-white border-transparent shadow-sm overflow-hidden">
+          <div className="p-6 border-b border-gray-50 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest">Détail par Réservation</h3>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="gap-2 font-bold border-gray-100 h-9">
+                <Filter size={14} /> Filtres
+              </Button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-[#F9FAFB] border-b border-gray-50">
+                <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                  <th className="px-6 py-4">ID RÉSERVATION</th>
+                  <th className="px-6 py-4">PROPRIÉTÉ / CHAMBRE</th>
+                  <th className="px-6 py-4">MONTANT BRUT</th>
+                  <th className="px-6 py-4">COMMISSION PMS</th>
+                  <th className="px-6 py-4">FRAIS MÉNAGE</th>
+                  <th className="px-6 py-4">NET PROPRIÉTAIRE</th>
+                  <th className="px-6 py-4">SAISON</th>
+                  <th className="px-6 py-4 text-center">ACTION</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {reservations.map((res) => (
+                  <tr key={res.id} className="hover:bg-gray-50 transition-all text-sm group">
+                    <td className="px-6 py-5 font-bold text-[#8B5CF6]">{res.id}</td>
+                    <td className="px-6 py-5">
+                      <div className="font-bold text-gray-900">Appartement {res.room}</div>
+                      <div className="text-[10px] text-gray-400 font-bold uppercase">{res.roomType}</div>
+                    </td>
+                    <td className="px-6 py-5 font-bold text-gray-900">{res.totalAmount.toLocaleString()} €</td>
+                    <td className="px-6 py-5 font-bold text-rose-500">-{res.pmsCommission.toLocaleString()} € <span className="text-[9px] font-medium text-gray-400">({(res.pmsFeeRate * 100).toFixed(0)}%)</span></td>
+                    <td className="px-6 py-5 font-bold text-orange-500">-{res.cleaningFee.toLocaleString()} €</td>
+                    <td className="px-6 py-5 font-bold text-emerald-500 underline decoration-dotted underline-offset-4 cursor-help" title="Calcul: Brut - Comm - Ménage">{res.ownerPayout.toLocaleString()} €</td>
+                    <td className="px-6 py-5">
+                      <Badge className={cn(
+                        "text-[9px] font-bold uppercase",
+                        res.season === 'Haute' ? "bg-rose-50 text-rose-500 border-none" : "bg-blue-50 text-blue-500 border-none"
+                      )}>
+                        {res.season}
+                      </Badge>
+                    </td>
+                    <td className="px-6 py-5 text-center">
+                      <button className="p-2 hover:bg-[#8B5CF6]/5 text-gray-400 hover:text-[#8B5CF6] rounded-xl transition-all">
+                        <FileText size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+    );
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-8 bg-[#F9FAFB] scrollbar-hide">
       <motion.div
@@ -927,6 +1041,7 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
         {financeTab === 'cloture' && renderCloture()}
         {financeTab === 'caisse' && renderCaisse()}
         {financeTab === 'impayes' && renderImpayes()}
+        {financeTab === 'proprietaires' && renderProprietaires()}
       </motion.div>
     </div>
   );

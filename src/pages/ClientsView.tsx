@@ -25,6 +25,11 @@ import { useReservations } from '@/src/contexts/ReservationContext';
 
 export const ClientsView = () => {
   const { reservations } = useReservations();
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [segmentFilter, setSegmentFilter] = React.useState('ALL');
+  const [loyaltyFilter, setLoyaltyFilter] = React.useState('ALL');
+  const [countryFilter, setCountryFilter] = React.useState('ALL');
+
   const stats = [
     { label: 'Clients totaux', value: (1453 + (reservations.length - 5)).toLocaleString(), sub: `+${reservations.length} ce mois-ci`, icon: Users, bg: 'bg-[#8B5CF6]/10', color: 'text-[#8B5CF6]' },
     { label: 'Taux de fidélité', value: '78%', sub: 'Clients récurrents', icon: Star, bg: 'bg-emerald-50', color: 'text-emerald-500' },
@@ -37,14 +42,28 @@ export const ClientsView = () => {
         name: res.client,
         email: res.email || 'client@example.com',
         phone: res.phone || '+33 6 00 00 00 00',
+        company: res.company || 'Individuel',
         segment: 'leisure',
         loyalty: 'medal',
         lastStay: res.arrival,
         totalSpent: 400
     })).slice(0, 5),
-    { name: 'Pierre Bernard', email: 'pierre.b@orange.fr', phone: '+33 6 98 76 54 32', segment: 'business', loyalty: 'star', lastStay: '23/04/2026', totalSpent: 840 },
-    { name: 'Sophie Dubois', email: 'sophie.d@yahoo.fr', phone: '+33 6 54 32 10 98', segment: 'leisure', loyalty: 'medal', lastStay: '07/04/2026', totalSpent: 360 },
+    { name: 'Pierre Bernard', email: 'pierre.b@orange.fr', phone: '+33 6 98 76 54 32', company: 'Tech Corp', segment: 'business', loyalty: 'star', lastStay: '23/04/2026', totalSpent: 840 },
+    { name: 'Sophie Dubois', email: 'sophie.d@yahoo.fr', phone: '+33 6 54 32 10 98', company: 'Individuel', segment: 'leisure', loyalty: 'medal', lastStay: '07/04/2026', totalSpent: 360 },
   ];
+
+  const filteredClients = clients.filter(client => {
+    const matchesSearch = client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         client.phone.includes(searchQuery) ||
+                         (client.company && client.company.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    const matchesSegment = segmentFilter === 'ALL' || client.segment === segmentFilter;
+    const matchesLoyalty = loyaltyFilter === 'ALL' || client.loyalty === loyaltyFilter;
+    const matchesCountry = countryFilter === 'ALL' || (client as any).country === countryFilter; // Assuming country field
+
+    return matchesSearch && matchesSegment && matchesLoyalty && matchesCountry;
+  });
 
   const getSegmentIcon = (segment: string) => {
     switch (segment) {
@@ -102,25 +121,68 @@ export const ClientsView = () => {
            <div className="flex items-center gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-                <input className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs focus:ring-1 focus:ring-[#8B5CF6] outline-none w-72" placeholder="Rechercher un client, email, téléphone..." />
+                <input 
+                  className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs focus:ring-1 focus:ring-[#8B5CF6] outline-none w-72" 
+                  placeholder="Nom, email, tél, société..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
               <div className="flex gap-2">
-                 {['Segments', 'Fidélité', 'Pays'].map(filter => (
-                   <div key={filter} className="px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-bold text-gray-400 flex items-center gap-2 cursor-pointer hover:bg-gray-100 transition-colors">
-                      {filter} <ArrowRight size={10} />
-                   </div>
-                 ))}
-                 <Button variant="outline" size="sm" className="font-bold gap-2"><Filter size={14} /> Filtres</Button>
+                 <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl relative group">
+                    <select 
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      value={segmentFilter}
+                      onChange={(e) => setSegmentFilter(e.target.value)}
+                    >
+                      <option value="ALL">Tous segments</option>
+                      <option value="leisure">Leisure</option>
+                      <option value="business">Business</option>
+                      <option value="vip">VIP</option>
+                    </select>
+                    <span className="text-[11px] font-bold text-gray-400 capitalize">{segmentFilter === 'ALL' ? 'Segments' : segmentFilter}</span>
+                    <ArrowRight size={10} className="text-gray-300" />
+                 </div>
+                 <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl relative group">
+                    <select 
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      value={loyaltyFilter}
+                      onChange={(e) => setLoyaltyFilter(e.target.value)}
+                    >
+                      <option value="ALL">Toute fidélité</option>
+                      <option value="medal">Bronze</option>
+                      <option value="star">Argent</option>
+                      <option value="crown">Or</option>
+                      <option value="gem">Diamant</option>
+                    </select>
+                    <span className="text-[11px] font-bold text-gray-400 capitalize">{loyaltyFilter === 'ALL' ? 'Fidélité' : loyaltyFilter}</span>
+                    <ArrowRight size={10} className="text-gray-300" />
+                 </div>
+                 <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl relative group">
+                    <select 
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      value={countryFilter}
+                      onChange={(e) => setCountryFilter(e.target.value)}
+                    >
+                      <option value="ALL">Tous pays</option>
+                      <option value="FR">France</option>
+                      <option value="UK">UK</option>
+                      <option value="US">USA</option>
+                    </select>
+                    <span className="text-[11px] font-bold text-gray-400 capitalize">{countryFilter === 'ALL' ? 'Pays' : countryFilter}</span>
+                    <ArrowRight size={10} className="text-gray-300" />
+                 </div>
+                 <Button variant="outline" size="sm" className="font-bold gap-2 focus:ring-1 focus:ring-[#8B5CF6]"><Filter size={14} /> Filtres</Button>
               </div>
            </div>
-           <Badge variant="neutral" className="font-bold">Total {clients.length} affichés</Badge>
+           <Badge variant="neutral" className="font-bold">Total {filteredClients.length} affichés</Badge>
         </CardHeader>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead className="bg-[#F9FAFB] border-b border-gray-100">
                <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                 <th className="px-6 py-4">Client / Localisation</th>
+                 <th className="px-6 py-4">Client / Société</th>
                  <th className="px-6 py-4">Contact</th>
                  <th className="px-6 py-4">Fidélité / Segment</th>
                  <th className="px-6 py-4">Préférences</th>
@@ -130,7 +192,7 @@ export const ClientsView = () => {
                </tr>
             </thead>
           <tbody className="divide-y divide-gray-50">
-               {clients.map((client, i) => (
+               {filteredClients.map((client, i) => (
                  <tr key={i} className="hover:bg-gray-50 transition-colors group">
                     <td className="px-6 py-5">
                        <div className="flex items-center gap-3">
@@ -139,7 +201,7 @@ export const ClientsView = () => {
                           </div>
                           <div className="flex flex-col">
                              <span className="font-bold text-gray-900 text-[13px]">{client.name}</span>
-                             <span className="text-[11px] text-gray-400 font-bold uppercase tracking-tight mt-0.5">Paris, FR</span>
+                             <span className="text-[11px] text-gray-400 font-bold uppercase tracking-tight mt-0.5">{client.company}</span>
                           </div>
                        </div>
                     </td>

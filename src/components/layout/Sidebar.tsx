@@ -27,7 +27,7 @@ import { PageId } from '@/src/types';
 
 interface SidebarProps {
   activePage: PageId;
-  setActivePage: (id: PageId) => void;
+  setActivePage: (page: PageId) => void;
 }
 
 export const Sidebar = ({ activePage, setActivePage }: SidebarProps) => {
@@ -49,10 +49,10 @@ export const Sidebar = ({ activePage, setActivePage }: SidebarProps) => {
       label: 'Réservations',
       items: [
         { id: 'reservations', label: 'Dashboard', icon: Calendar },
+        { id: 'groupes', label: 'Groupes', icon: Users },
         { id: 'mouvements', label: 'Arrivées / Départs', icon: RefreshCcw },
         { id: 'qr', label: 'QR Check-in', icon: Hash },
         { id: 'simulation', label: 'Simulation', icon: Monitor },
-        { id: 'groupes', label: 'Groupes', icon: Users },
         { id: 'paiements', label: 'Paiements', icon: CreditCard },
         { id: 'relances', label: 'Relances', icon: Send },
         { id: 'anomalies', label: 'Anomalies', icon: AlertCircle },
@@ -64,8 +64,8 @@ export const Sidebar = ({ activePage, setActivePage }: SidebarProps) => {
         { id: 'finance', label: 'Facturation', icon: FileText },
         { id: 'caisse', label: 'Caisse', icon: Banknote },
         { id: 'impayes', label: 'Impayés / Débiteurs', icon: AlertCircle },
+        { id: 'proprietaires', label: 'Propriétaires', icon: Users },
         { id: 'cloture', label: 'Clôture & Audit', icon: Lock },
-        { id: 'finance_history', label: 'Historique', icon: History },
       ]
     },
     revenue: {

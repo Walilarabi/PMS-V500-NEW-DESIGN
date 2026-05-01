@@ -75,7 +75,14 @@ export const FlowboardView = () => {
           { label: 'ADR (Prix Moyen)', value: '142 €', trend: '-2.1%', icon: Target, color: 'text-amber-500', bg: 'bg-amber-50' },
           { label: 'RevPAR', value: '110.76 €', trend: '+8.3%', icon: Zap, color: 'text-blue-500', bg: 'bg-blue-50' },
         ].map((kpi, i) => (
-          <Card key={i} className="p-6 border-transparent bg-white shadow-sm hover:shadow-md transition-all group">
+          <Card key={i} className="p-6 border-transparent bg-white shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+            {kpi.label === 'RevPAR' && (
+              <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="px-2 py-1 bg-[#8B5CF6]/10 text-[#8B5CF6] rounded text-[9px] font-black uppercase tracking-tighter">
+                  ADR × TO
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between mb-4">
               <div className={cn("p-2.5 rounded-xl transition-transform group-hover:scale-110", kpi.bg, kpi.color)}>
                 <kpi.icon size={20} />

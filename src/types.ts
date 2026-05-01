@@ -7,7 +7,6 @@ export type PageId =
   | 'revenue' 
   | 'operations' 
   | 'finance' 
-  | 'compliance' 
   | 'analysis' 
   | 'settings'
   | 'calendrier'

@@ -34,8 +34,8 @@ import { cn } from '@/src/lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { motion } from 'motion/react';
 
-import { useReservations } from '@/src/contexts/ReservationContext';
-import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
+import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
+import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
 
 const STATUS_DATA = [
   { name: 'Confirmées', value: 4, color: '#10B981' },
@@ -45,7 +45,7 @@ const STATUS_DATA = [
 ];
 
 export const ReservationsView = () => {
-  const { reservations } = useReservations();
+  const { reservations, addReservation } = useReservations();
   const [isModalOpen, setIsModalOpen] = React.useState(false);
 
   const stats = [
@@ -63,6 +63,9 @@ export const ReservationsView = () => {
   ];
 
   const [searchQuery, setSearchQuery] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState('ALL');
+  const [channelFilter, setChannelFilter] = React.useState('ALL');
+  const [roomTypeFilter, setRoomTypeFilter] = React.useState('ALL');
 
   const filteredReservations = reservations.map(res => ({
     ref: res.id,
@@ -79,11 +82,17 @@ export const ReservationsView = () => {
     channel: (res.source || 'DIRECT').toUpperCase(),
     room: res.room,
     roomType: res.roomType
-  })).filter(res => 
-    res.client.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    res.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    res.room.includes(searchQuery)
-  );
+  })).filter(res => {
+    const matchesSearch = res.client.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         res.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         res.room.includes(searchQuery);
+    
+    const matchesStatus = statusFilter === 'ALL' || res.status === statusFilter;
+    const matchesChannel = channelFilter === 'ALL' || res.channel === channelFilter;
+    const matchesRoomType = roomTypeFilter === 'ALL' || res.roomType === roomTypeFilter;
+
+    return matchesSearch && matchesStatus && matchesChannel && matchesRoomType;
+  });
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-[#F8F9FD]">
@@ -195,12 +204,54 @@ export const ReservationsView = () => {
             <span className="text-[12px] font-bold text-gray-900">27 avr. - 26 mai 2026</span>
             <Clock size={14} className="text-gray-400 ml-2" />
          </div>
-         <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl">
-            <span className="text-[12px] font-bold text-gray-400">Tous statuts</span>
+         <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl relative group">
+            <select 
+               className="absolute inset-0 opacity-0 cursor-pointer"
+               value={statusFilter}
+               onChange={(e) => setStatusFilter(e.target.value)}
+            >
+               <option value="ALL">Tous statuts</option>
+               <option value="CONFIRMÉE">Confirmée</option>
+               <option value="CHECK-IN">Check-in</option>
+               <option value="CHECK-OUT">Check-out</option>
+               <option value="ANNULÉE">Annulée</option>
+            </select>
+            <span className={cn("text-[12px] font-bold", statusFilter === 'ALL' ? "text-gray-400" : "text-[#8B5CF6]")}>
+               {statusFilter === 'ALL' ? 'Tous statuts' : statusFilter}
+            </span>
             <ChevronDown size={14} className="text-gray-300" />
          </div>
-         <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl">
-            <span className="text-[12px] font-bold text-gray-400">Tous canaux</span>
+         <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl relative group">
+            <select 
+               className="absolute inset-0 opacity-0 cursor-pointer"
+               value={channelFilter}
+               onChange={(e) => setChannelFilter(e.target.value)}
+            >
+               <option value="ALL">Tous canaux</option>
+               <option value="DIRECT">Direct</option>
+               <option value="BOOKING.COM">Booking.com</option>
+               <option value="AIRBNB">Airbnb</option>
+               <option value="EXPEDIA">Expedia</option>
+            </select>
+            <span className={cn("text-[12px] font-bold", channelFilter === 'ALL' ? "text-gray-400" : "text-[#8B5CF6]")}>
+               {channelFilter === 'ALL' ? 'Tous canaux' : channelFilter}
+            </span>
+            <ChevronDown size={14} className="text-gray-300" />
+         </div>
+         <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-xl relative group">
+            <select 
+               className="absolute inset-0 opacity-0 cursor-pointer"
+               value={roomTypeFilter}
+               onChange={(e) => setRoomTypeFilter(e.target.value)}
+            >
+               <option value="ALL">Tout type chambre</option>
+               <option value="Studio">Studio</option>
+               <option value="Suite">Suite</option>
+               <option value="Appartement">Appartement</option>
+            </select>
+            <span className={cn("text-[12px] font-bold", roomTypeFilter === 'ALL' ? "text-gray-400" : "text-[#8B5CF6]")}>
+               {roomTypeFilter === 'ALL' ? 'Tout type chambre' : roomTypeFilter}
+            </span>
             <ChevronDown size={14} className="text-gray-300" />
          </div>
          <Button variant="outline" className="gap-2 font-bold border-gray-100 text-[#8B5CF6] h-10">
@@ -241,8 +292,8 @@ export const ReservationsView = () => {
                   </tr>
                </thead>
                <tbody className="divide-y divide-gray-50">
-                  {paymentFollowUps.map((row, i) => (
-                    <tr key={i} className="text-[13px] hover:bg-gray-50 transition-colors">
+                  {paymentFollowUps.map((row) => (
+                    <tr key={`p-followup-${row.ref}`} className="text-[13px] hover:bg-gray-50 transition-colors">
                        <td className="px-6 py-4 font-bold text-[#8B5CF6]">{row.ref}</td>
                        <td className="px-6 py-4 font-bold text-gray-800">{row.client}</td>
                        <td className="px-6 py-4 font-bold text-gray-900">{row.amount}</td>
@@ -295,15 +346,17 @@ export const ReservationsView = () => {
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                       {filteredReservations.map((row, i) => (
-                         <tr key={i} className="text-[13px] hover:bg-gray-50 transition-colors group">
+                       {filteredReservations.map((row) => (
+                         <tr key={`res-row-${row.ref}`} className="text-[13px] hover:bg-gray-50 transition-colors group">
                             <td className="px-4 py-5 font-bold text-[#8953F1] leading-none">{row.ref}</td>
                             <td className="px-4 py-5">
                                <div className={cn(
-                                 "px-2 py-0.5 rounded text-[8px] font-bold uppercase text-center",
-                                 row.status === 'CHECK-OUT' ? "bg-gray-100 text-gray-500" :
-                                 row.status === 'CHECK-IN' ? "bg-blue-50 text-blue-500" :
-                                 row.status === 'CONFIRMÉE' ? "bg-emerald-50 text-emerald-500" : "bg-gray-100 text-gray-900"
+                                 "px-2 py-1 rounded-lg text-[9px] font-black uppercase text-center border shadow-sm",
+                                 row.status === 'CHECK-OUT' ? "bg-gray-50 text-gray-400 border-gray-100" :
+                                 row.status === 'CHECK-IN' ? "bg-blue-600 text-white border-blue-700" :
+                                 row.status === 'CONFIRMÉE' ? "bg-emerald-500 text-white border-emerald-600" : 
+                                 row.status === 'ANNULÉE' ? "bg-red-500 text-white border-red-600" :
+                                 "bg-amber-400 text-white border-amber-500"
                                )}>
                                   {row.status}
                                </div>
@@ -343,13 +396,13 @@ export const ReservationsView = () => {
                                )}>{row.solde}</span>
                             </td>
                             <td className="px-4 py-5 text-center">
-                               <div className="flex items-center justify-center gap-1.5 opacity-80">
+                               <div className="flex items-center justify-center">
                                   {row.channel === 'DIRECT' ? (
-                                     <span className="text-[8px] font-bold text-emerald-500 uppercase">Direct</span>
+                                     <div className="px-2 py-1 rounded bg-[#8B5CF6]/10 text-[#8B5CF6] text-[9px] font-black uppercase tracking-widest border border-[#8B5CF6]/20 shadow-sm">DIR</div>
                                   ) : (
-                                     <span className="flex items-center gap-1 text-[8px] font-bold text-blue-500 uppercase">
-                                        <Globe size={10} /> {row.channel}
-                                     </span>
+                                     <div className="px-2 py-1 rounded bg-blue-50 text-blue-500 text-[9px] font-black uppercase tracking-widest border border-blue-100 flex items-center gap-1 shadow-sm">
+                                        <Zap size={10} /> {row.channel.substring(0, 3)}
+                                     </div>
                                   )}
                                </div>
                             </td>
@@ -387,8 +440,8 @@ export const ReservationsView = () => {
                    { label: '1 départ tardif prévu', color: 'blue', action: 'Voir' },
                    { label: '2 arrivées demain', color: 'rose', action: 'Voir' },
                    { label: 'Paiements à vérifier', color: 'amber', action: 'Voir' },
-                 ].map((alert, i) => (
-                   <div key={i} className="flex items-center justify-between group cursor-pointer border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                 ].map((alert) => (
+                   <div key={`side-alert-${alert.label.replace(/\s+/g, '-')}`} className="flex items-center justify-between group cursor-pointer border-b border-gray-50 pb-3 last:border-0 last:pb-0">
                       <div className="flex items-center gap-3">
                          <div className={cn(
                            "p-2 rounded-lg transition-transform group-hover:scale-110",
@@ -461,9 +514,39 @@ export const ReservationsView = () => {
            </div>
         </div>
       </div>
-      <NewReservationModal 
+      <ReservationFormModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onSave={(data: ReservationFormData) => {
+          const newRes: Reservation = {
+            id: data.reference,
+            priority: 'Moyenne',
+            room: data.roomNumber,
+            roomType: 'STD/DLX', // fallback
+            status: 'CONFORMÉE',
+            statusColor: 'text-emerald-500',
+            dotColor: 'bg-emerald-400',
+            client: data.guestName,
+            arrival: `${data.checkIn} 16:00`,
+            departure: `${data.checkOut} 11:00`,
+            source: data.channel.toUpperCase(),
+            sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
+            action: 'Check-in',
+            governess: 'À faire',
+            vip: data.segment === 'VIP',
+            payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
+            totalAmount: data.totalTTC,
+            ownerFeeRate: 0.20,
+            pmsFeeRate: 0.15,
+            cleaningFee: 50,
+            email: data.email,
+            phone: data.phone,
+            nationality: data.nationality,
+            guests: { adults: data.adults, children: data.children },
+            notes: data.notes
+          };
+          addReservation(newRes);
+        }}
       />
     </div>
   );

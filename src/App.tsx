@@ -9,15 +9,13 @@ import { RevenueView } from '@/src/pages/RevenueView';
 import { FinanceView } from '@/src/pages/FinanceView';
 import { AnalysisView } from '@/src/pages/AnalysisView';
 import { FlowboardView } from '@/src/pages/FlowboardView';
-import { ComplianceView } from '@/src/pages/ComplianceView';
 import { SettingsView } from '@/src/pages/SettingsView';
 import { PageId } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
 
-// Placeholder components for pages not fully detailed yet
 const PlaceholderPage = ({ name }: { name: string }) => (
-  <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 text-center p-12">
-    <div className="w-24 h-24 bg-white rounded-3xl border border-gray-100 shadow-sm flex items-center justify-center mb-6">
+  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
+    <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6">
        <span className="text-4xl">🏗️</span>
     </div>
     <h1 className="text-2xl font-bold text-gray-900 mb-2">{name}</h1>
@@ -25,7 +23,7 @@ const PlaceholderPage = ({ name }: { name: string }) => (
   </div>
 );
 
-export default function App() {
+const App = () => {
   const [activePage, setActivePage] = React.useState<PageId>('today');
 
   const renderPage = () => {
@@ -47,19 +45,22 @@ export default function App() {
       case 'fiches':
       case 'fidelite':
         return <ClientsView />;
-      case 'revenue': return <RevenueView />;
+      case 'revenue': 
+      case 'yield':
+      case 'promotions':
+        return <RevenueView />;
+      case 'analysis': 
+      case 'performance':
+      case 'forecast':
+        return <AnalysisView />;
       case 'finance': 
       case 'facturation':
       case 'caisse':
       case 'impayes':
       case 'cloture':
+      case 'proprietaires':
         return <FinanceView activeTab={activePage} />;
-      case 'analysis': 
-      case 'performance':
-      case 'forecast':
-        return <AnalysisView />;
       case 'operations': return <PlaceholderPage name="Opérations" />;
-      case 'compliance': return <ComplianceView />;
       case 'settings': 
       case 'annulations':
       case 'supplements':
@@ -120,4 +121,6 @@ export default function App() {
       </div>
     </div>
   );
-}
+};
+
+export default App;

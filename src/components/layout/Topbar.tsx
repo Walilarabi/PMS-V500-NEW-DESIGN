@@ -3,17 +3,17 @@ import {
   Bell, 
   Search, 
   ChevronDown, 
-  MapPin,
-  Circle,
-  LayoutDashboard,
-  BookOpen,
+  Menu, 
+  ChevronRight,
+  HelpCircle,
   Calendar,
-  Clock,
+  CreditCard,
   Users,
-  DollarSign,
-  Activity,
-  Wallet,
-  ShieldCheck,
+  TrendingUp,
+  BarChart2,
+  Zap,
+  RefreshCcw,
+  LayoutGrid,
   Settings
 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
@@ -22,84 +22,113 @@ import { cn } from '@/src/lib/utils';
 
 interface TopbarProps {
   activePage: PageId;
-  setActivePage: (id: PageId) => void;
+  setActivePage: (page: PageId) => void;
 }
 
+import { useConfigStore } from '@/src/store/configStore';
+
 export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
+  const hotel = useConfigStore(s => s.hotel);
+  const user = useConfigStore(s => s.users[0]); // Mock getting first user
+  const getCategory = (page: PageId): string => {
+    if (['today', 'flowboard', 'planning'].includes(page)) return 'today';
+    if (['reservations', 'calendrier', 'mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(page)) return 'reservations';
+    if (['revenue', 'yield', 'promotions'].includes(page)) return 'revenue';
+    if (['finance', 'facturation', 'caisse', 'impayes', 'cloture', 'proprietaires'].includes(page)) return 'finance';
+    if (['analysis', 'performance', 'forecast'].includes(page)) return 'analysis';
+    if (['clients', 'fiches', 'fidelite'].includes(page)) return 'clients';
+    if (['settings', 'annulations', 'supplements', 'hotel', 'taxe', 'pms', 'api'].includes(page)) return 'settings';
+    return 'today';
+  };
+
+  const activeCategory = getCategory(activePage);
+
   const mainNavItems = [
-    { id: 'flowboard', label: 'Flowboard', icon: LayoutDashboard },
-    { id: 'planning', label: 'Planning', icon: Calendar },
-    { id: 'today', label: 'Flowday', icon: Clock },
-    { id: 'reservations', label: 'Réservations', icon: BookOpen },
+    { id: 'today', label: 'Flowday', icon: Zap },
+    { id: 'reservations', label: 'Reservation', icon: Calendar },
     { id: 'clients', label: 'Clients', icon: Users },
-    { id: 'revenue', label: 'Revenue', icon: DollarSign },
-    { id: 'finance', label: 'Finance', icon: Wallet },
-    { id: 'analysis', label: 'Analyse', icon: Activity },
+    { id: 'revenue', label: 'Revenue', icon: TrendingUp },
+    { id: 'finance', label: 'Finance', icon: CreditCard },
+    { id: 'analysis', label: 'Analyse', icon: BarChart2 },
     { id: 'settings', label: 'Paramètres', icon: Settings },
   ];
 
-  const isSettingsActive = activePage === 'settings' || ['annulations', 'supplements', 'fermatures', 'hotel', 'taxe', 'pms', 'api'].includes(activePage);
-  const isFinanceActive = activePage === 'finance' || ['facturation', 'caisse', 'impayes', 'cloture'].includes(activePage);
-  const isReservationsActive = activePage === 'reservations' || ['mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(activePage);
-
   return (
-    <header className="flex flex-col bg-white border-b border-[#E5E7EB] shrink-0 z-[60]">
-      <div className="h-16 flex items-center justify-between px-6">
-        <div className="flex items-center gap-8">
-          <div className="flex items-center gap-2 mr-4">
-            <div className="p-1.5 bg-[#8B5CF6] rounded-lg text-white">
-              <LayoutDashboard size={16} />
-            </div>
-            <span className="font-bold text-gray-900 text-sm">Flowtym</span>
+    <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-[#E5E7EB] shrink-0 z-40 relative">
+      <div className="flex items-center gap-8">
+        <div 
+          onClick={() => setActivePage('today')}
+          className="flex items-center gap-3 cursor-pointer group"
+        >
+          <div className="w-9 h-9 bg-gradient-to-br from-[#8B5CF6] to-[#7C3AED] rounded-xl flex items-center justify-center text-white shadow-lg shadow-[#8B5CF6]/20 group-hover:scale-105 transition-transform">
+             <span className="text-xl font-black italic tracking-tighter">F</span>
           </div>
+          <div className="hidden sm:block">
+             <h1 className="text-gray-900 font-black text-base leading-none tracking-tight">{hotel.name}</h1>
+             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">{hotel.city || 'Edition Pro'}</p>
+          </div>
+        </div>
+        
+        <div className="w-px h-6 bg-gray-100 hidden xl:block" />
+        
+        {/* Main Navigation */}
+        <nav className="hidden xl:flex items-center gap-1 bg-gray-50/50 p-1 rounded-2xl border border-gray-100">
+          {mainNavItems.map((item) => {
+            const isActive = activeCategory === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActivePage(item.id as PageId)}
+                className={cn(
+                  "flex items-center gap-2.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300",
+                  isActive 
+                    ? "bg-white text-[#8B5CF6] shadow-sm shadow-[#8B5CF6]/10 ring-1 ring-gray-100" 
+                    : "text-gray-400 hover:text-gray-600 hover:bg-white/50"
+                )}
+              >
+                <item.icon size={14} className={isActive ? "text-[#8B5CF6]" : "text-gray-400"} />
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
 
-          <nav className="flex items-center gap-1">
-            {mainNavItems.map((item) => {
-              let isActive = activePage === item.id;
-              if (item.id === 'settings') isActive = isSettingsActive;
-              if (item.id === 'finance') isActive = isFinanceActive;
-              if (item.id === 'reservations') isActive = isReservationsActive;
-              
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActivePage(item.id as PageId)}
-                  className={cn(
-                    "px-4 py-2 rounded-xl text-[12px] font-bold transition-all flex items-center gap-2",
-                    isActive 
-                      ? "bg-[#5C4FE5] text-white shadow-md shadow-[#5C4FE5]/20" 
-                      : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
-                  )}
-                >
-                  <item.icon size={14} className={cn(isActive ? "text-white" : "text-gray-400")} />
-                  {item.label}
-                  {['reservations', 'revenue', 'finance'].includes(item.id) && <ChevronDown size={12} className="opacity-50" />}
-                </button>
-              );
-            })}
-          </nav>
+      <div className="flex items-center gap-4 lg:gap-6">
+        <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-2xl border border-gray-100 focus-within:border-[#8B5CF6]/30 transition-all">
+           <Search size={14} className="text-gray-400" />
+           <input 
+              type="text" 
+              placeholder="Rechercher..." 
+              className="bg-transparent border-none outline-none text-[11px] font-bold text-gray-900 w-40 placeholder:text-gray-300"
+           />
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 px-3 py-1.5 bg-gray-50 rounded-xl border border-gray-100">
-             <MapPin size={14} className="text-gray-400" />
-             <span className="text-[11px] font-bold text-gray-900 select-none">Aix-en-Provence</span>
-          </div>
-          
-          <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-[#ECFDF5] text-emerald-600 rounded-full border border-emerald-100">
-             <Circle size={8} fill="currentColor" />
-             <span className="text-[11px] font-bold uppercase tracking-wider">Sync PMS OK</span>
-          </div>
-
-          <div className="flex items-center gap-3 ml-4">
-            <div className="text-right hidden sm:block">
-              <div className="text-[12px] font-bold text-gray-900 leading-none">Ali Larabi</div>
-              <div className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mt-0.5">Admin</div>
-            </div>
-            <div className="w-8 h-8 rounded-xl bg-[#8B5CF6] text-white flex items-center justify-center font-bold text-[10px] shadow-lg shadow-[#8B5CF6]/10">
-               AL
-            </div>
-          </div>
+        <div className="flex items-center gap-2 lg:gap-4">
+           <div className="flex items-center gap-1 pr-4 border-r border-gray-100 hidden sm:flex">
+              <button className="p-2 text-gray-400 hover:text-[#8B5CF6] hover:bg-[#8B5CF6]/5 rounded-xl transition-all relative">
+                 <Bell size={18} />
+                 <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-rose-500 rounded-full border-2 border-white" />
+              </button>
+              <button className="p-2 text-gray-400 hover:text-[#8B5CF6] hover:bg-[#8B5CF6]/5 rounded-xl transition-all">
+                 <LayoutGrid size={18} />
+              </button>
+           </div>
+           
+           <div className="flex items-center gap-3 pl-2 group cursor-pointer">
+              <div className="w-9 h-9 rounded-2xl overflow-hidden shadow-sm group-hover:shadow-md transition-all p-0.5 bg-gradient-to-br from-[#8B5CF6] to-[#C084FC]">
+                 <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center text-[10px] font-black text-[#8B5CF6]">
+                    {user.name.split(' ').map(n => n[0]).join('')}
+                 </div>
+              </div>
+              <div className="hidden lg:block">
+                <ChevronDown size={14} className="text-gray-400" />
+              </div>
+           </div>
+           
+           <button className="xl:hidden p-2 text-gray-400">
+              <Menu size={20} />
+           </button>
         </div>
       </div>
     </header>
