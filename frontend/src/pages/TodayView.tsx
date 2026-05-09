@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as React from 'react';
 import {
   Menu, Calendar, Users, TrendingUp, DollarSign, BarChart2, Settings,
@@ -12,6 +12,9 @@ import {
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+
+import { useFlowdayDataset, type FlowdayKpis, type FlowdayRoomRow } from '@/src/domains/flowday/hooks';
+import { useActiveHotel } from '@/src/domains/hotel/hooks';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -753,8 +756,14 @@ const getSortValue = (row: RoomRow, key: SortKey) => {
   return String(row[key] ?? '').toLowerCase();
 };
 
-const OperationsTable = () => {
-  const [rooms, setRooms] = useState<RoomRow[]>(roomsData);
+const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
+  const [rooms, setRooms] = useState<RoomRow[]>(initialRooms ?? roomsData);
+  // Sync local state when live dataset arrives or refreshes
+  useEffect(() => {
+    if (initialRooms && initialRooms.length > 0) {
+      setRooms(initialRooms);
+    }
+  }, [initialRooms]);
   const [reservationModal, setReservationModal] = useState<ReservationModalState | null>(null);
   const [roomChangeModal, setRoomChangeModal] = useState<RoomRow | null>(null);
   const [communicationModal, setCommunicationModal] = useState<RoomRow | null>(null);
@@ -1785,6 +1794,12 @@ function TodayView() {
   const [showRightPanel, setShowRightPanel] = useState(false);
   const [showRealtimeIndicators, setShowRealtimeIndicators] = useState(true);
   const [showTimeline, setShowTimeline] = useState(true);
+  const flowday = useFlowdayDataset();
+  const hotelQ = useActiveHotel();
+  const kpis: FlowdayKpis = flowday.kpis;
+  const liveRows = flowday.rows as unknown as RoomRow[];
+  const fmtEUR0 = (n: number) =>
+    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F8F9FB] font-sans text-gray-900">
@@ -1793,12 +1808,18 @@ function TodayView() {
           {/* Page Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Flowday</h2>
+              <h2 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight" data-testid="flowday-title">
+                Flowday <span className="text-gray-400 font-normal text-xl">· {hotelQ.data?.name ?? 'Mas Provencal Aix'}</span>
+              </h2>
               <div className="flex items-center text-sm text-gray-500">
                 <Calendar size={14} className="mr-2" />
                 <span>{currentDateLong}</span>
-                <button className="ml-4 flex items-center space-x-1 text-gray-400 hover:text-gray-700 bg-white border border-gray-200 px-2 py-1 rounded-md text-xs transition-colors">
-                  <RefreshCw size={12} />
+                <button
+                  type="button"
+                  onClick={() => { /* refetch via TanStack */ }}
+                  className="ml-4 flex items-center space-x-1 text-gray-400 hover:text-gray-700 bg-white border border-gray-200 px-2 py-1 rounded-md text-xs transition-colors"
+                >
+                  <RefreshCw size={12} className={flowday.isLoading ? 'animate-spin' : ''} />
                   <span>Actualiser</span>
                 </button>
               </div>
@@ -1841,33 +1862,33 @@ function TodayView() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <KpiCard 
-                    title="Occupation: 62.5%" 
-                    subtitle="CAPACITÉ TOTALE: 42" 
-                    detailText="Direct/OTA"
+                    title={`Occupation: ${kpis.occupancy}%`}
+                    subtitle={`CAPACITÉ TOTALE: ${kpis.totalRooms}`}
+                    detailText="Live · Supabase"
                     icon={TrendingUp} 
                     colorClass="text-purple-600" 
                     bgColorClass="bg-purple-50" 
                   />
                   <KpiCard 
-                    title="2 chambres sales" 
+                    title={`${kpis.dirtyRooms} chambres sales`}
                     subtitle="MÉNAGE À FAIRE" 
-                    highlight="75% clean"
+                    highlight={`${kpis.cleanPct}% clean`}
                     icon={Sparkles} 
                     colorClass="text-orange-500" 
                     bgColorClass="bg-orange-50" 
                   />
                   <KpiCard 
-                    title="0 arrivées prévues" 
+                    title={`${kpis.arrivalsToday} arrivée${kpis.arrivalsToday > 1 ? 's' : ''} prévue${kpis.arrivalsToday > 1 ? 's' : ''}`}
                     subtitle="AUJOURD'HUI" 
-                    highlight="4 VIP"
+                    highlight={`${kpis.vipCount} VIP`}
                     icon={Users} 
                     colorClass="text-green-600" 
                     bgColorClass="bg-green-50" 
                   />
                   <KpiCard 
-                    title="4,280 € à encaisser" 
+                    title={`${fmtEUR0(kpis.unpaidAmount)} à encaisser`}
                     subtitle="PAIEMENTS ATTENTE" 
-                    highlight="2 litiges"
+                    highlight={`${kpis.unpaidCount} dossier${kpis.unpaidCount > 1 ? 's' : ''}`}
                     icon={CreditCard} 
                     colorClass="text-blue-500" 
                     bgColorClass="bg-blue-50" 
@@ -1879,7 +1900,7 @@ function TodayView() {
               {showTimeline && <Timeline onHide={() => setShowTimeline(false)} />}
 
               {/* Operations Table */}
-              <OperationsTable />
+              <OperationsTable initialRooms={liveRows} />
 
             </div>
 
