@@ -223,7 +223,7 @@ export function useFlowdayDataset(): FlowdayDataset {
     [reservationRows],
   );
   const guestsQ = useGuestsByIds(guestIds);
-  const guestsById = guestsQ.data ?? {};
+  const guestsById = useMemo(() => guestsQ.data ?? {}, [guestsQ.data]);
 
   const roomsByNumber = useMemo(() => {
     const m: Record<string, DbRoomRow> = {};

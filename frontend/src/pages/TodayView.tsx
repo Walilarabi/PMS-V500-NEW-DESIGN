@@ -758,12 +758,14 @@ const getSortValue = (row: RoomRow, key: SortKey) => {
 
 const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
   const [rooms, setRooms] = useState<RoomRow[]>(initialRooms ?? roomsData);
-  // Sync local state when live dataset arrives or refreshes
+  // Sync local state when the live dataset reference changes (length-based to avoid loops)
+  const liveLength = initialRooms?.length ?? 0;
   useEffect(() => {
     if (initialRooms && initialRooms.length > 0) {
       setRooms(initialRooms);
     }
-  }, [initialRooms]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveLength]);
   const [reservationModal, setReservationModal] = useState<ReservationModalState | null>(null);
   const [roomChangeModal, setRoomChangeModal] = useState<RoomRow | null>(null);
   const [communicationModal, setCommunicationModal] = useState<RoomRow | null>(null);
