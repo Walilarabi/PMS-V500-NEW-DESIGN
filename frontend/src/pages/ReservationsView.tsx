@@ -36,6 +36,7 @@ import { motion } from 'motion/react';
 
 import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
 import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
+import { LiveReservationsBanner } from '@/src/domains/reservations/LiveReservationsBanner';
 
 const STATUS_DATA = [
   { name: 'Confirmées', value: 4, color: '#10B981' },
@@ -96,6 +97,7 @@ export const ReservationsView = () => {
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-[#F8F9FD]">
+      <LiveReservationsBanner />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

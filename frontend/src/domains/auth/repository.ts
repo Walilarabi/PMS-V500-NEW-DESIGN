@@ -1,44 +1,55 @@
 /**
- * FLOWTYM — Auth repository (Supabase Auth).
- *
- * The repository is the only place that talks directly to Supabase Auth APIs.
- * All higher-level layers (services, hooks, components) consume domain types.
+ * FLOWTYM — Auth repository (Supabase Auth + public.users profile).
  */
 import { supabase } from '@/src/lib/supabase';
 import { mapSupabaseError, NotFoundError } from '@/src/domains/_shared/errors';
+import type { AdminUserRole } from '@/src/lib/supabase.types';
 
-import type { AuthSession, LoginInput, SignUpInput } from './schemas';
+import type { AuthSession, LoginInput } from './schemas';
 
 interface AppUserProfile {
   id: string;
-  tenant_id: string;
+  hotel_id: string;
   email: string;
   full_name: string;
-  role: string;
+  role: AdminUserRole;
 }
 
 async function fetchProfile(authUserId: string): Promise<AppUserProfile | null> {
   const { data, error } = await supabase
-    .from('app_users')
-    .select('id, tenant_id, email, full_name, role')
-    .eq('auth_user_id', authUserId)
+    .from('users')
+    .select('id, hotel_id, email, full_name, role')
+    .eq('auth_id', authUserId)
     .maybeSingle();
-  if (error) throw mapSupabaseError(error);
+  if (error) {
+    // RLS may block a not-yet-provisioned user. Treat as "no profile yet".
+    if (error.code === 'PGRST301' || error.code === 'PGRST116') return null;
+    throw mapSupabaseError(error);
+  }
   return data;
+}
+
+function buildSession(authUserId: string, email: string, profile: AppUserProfile | null): AuthSession {
+  return {
+    userId: authUserId,
+    email,
+    tenantId: profile?.hotel_id ?? null,
+    role: profile?.role ?? null,
+    fullName: profile?.full_name ?? null,
+  };
 }
 
 export async function loginWithPassword(input: LoginInput): Promise<AuthSession> {
   const { data, error } = await supabase.auth.signInWithPassword(input);
   if (error) throw mapSupabaseError(error);
   if (!data.user) throw new NotFoundError('AuthUser', input.email);
-  const profile = await fetchProfile(data.user.id);
-  return {
-    userId: data.user.id,
-    email: data.user.email ?? input.email,
-    tenantId: profile?.tenant_id ?? null,
-    role: profile?.role ?? null,
-    fullName: profile?.full_name ?? null,
-  };
+  let profile: AppUserProfile | null = null;
+  try {
+    profile = await fetchProfile(data.user.id);
+  } catch {
+    profile = null;
+  }
+  return buildSession(data.user.id, data.user.email ?? input.email, profile);
 }
 
 export async function signOut(): Promise<void> {
@@ -50,44 +61,13 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
   const { data, error } = await supabase.auth.getSession();
   if (error) throw mapSupabaseError(error);
   if (!data.session?.user) return null;
-  const profile = await fetchProfile(data.session.user.id);
-  return {
-    userId: data.session.user.id,
-    email: data.session.user.email ?? '',
-    tenantId: profile?.tenant_id ?? null,
-    role: profile?.role ?? null,
-    fullName: profile?.full_name ?? null,
-  };
-}
-
-/** Self-service signup that creates a new tenant + admin user.
- *  Requires SECURITY DEFINER RPC `provision_tenant` on the database. */
-export async function signUpAndProvisionTenant(input: SignUpInput): Promise<AuthSession> {
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email: input.email,
-    password: input.password,
-    options: { data: { full_name: input.fullName } },
-  });
-  if (authError) throw mapSupabaseError(authError);
-  if (!authData.user) throw new NotFoundError('AuthUser', input.email);
-
-  const { error: rpcError } = await supabase.rpc('provision_tenant', {
-    p_auth_user_id: authData.user.id,
-    p_email: input.email,
-    p_full_name: input.fullName,
-    p_tenant_slug: input.tenantSlug,
-    p_hotel_name: input.hotelName,
-  });
-  if (rpcError) throw mapSupabaseError(rpcError);
-
-  const profile = await fetchProfile(authData.user.id);
-  return {
-    userId: authData.user.id,
-    email: input.email,
-    tenantId: profile?.tenant_id ?? null,
-    role: profile?.role ?? 'owner',
-    fullName: input.fullName,
-  };
+  let profile: AppUserProfile | null = null;
+  try {
+    profile = await fetchProfile(data.session.user.id);
+  } catch {
+    profile = null;
+  }
+  return buildSession(data.session.user.id, data.session.user.email ?? '', profile);
 }
 
 export function onAuthStateChange(cb: (session: AuthSession | null) => void): () => void {
@@ -96,18 +76,23 @@ export function onAuthStateChange(cb: (session: AuthSession | null) => void): ()
       cb(null);
       return;
     }
+    let profile: AppUserProfile | null = null;
     try {
-      const profile = await fetchProfile(session.user.id);
-      cb({
-        userId: session.user.id,
-        email: session.user.email ?? '',
-        tenantId: profile?.tenant_id ?? null,
-        role: profile?.role ?? null,
-        fullName: profile?.full_name ?? null,
-      });
+      profile = await fetchProfile(session.user.id);
     } catch {
-      cb(null);
+      profile = null;
     }
+    cb(buildSession(session.user.id, session.user.email ?? '', profile));
   });
   return () => data.subscription.unsubscribe();
+}
+
+/** Self-service signup is disabled in this iteration: hotel provisioning is
+ *  done via Supabase Admin scripts only. The API surface is kept so that
+ *  the existing signup form fails predictably until we wire a full RPC. */
+export async function signUpAndProvisionTenant(): Promise<AuthSession> {
+  throw new NotFoundError(
+    'SignUp',
+    "self-service indisponible — contactez votre direction pour être ajouté au tenant.",
+  );
 }

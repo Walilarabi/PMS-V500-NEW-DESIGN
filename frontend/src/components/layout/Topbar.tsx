@@ -19,6 +19,8 @@ import {
 import { Button } from '@/src/components/ui/Button';
 import { PageId } from '@/src/types';
 import { cn } from '@/src/lib/utils';
+import { useAuth } from '@/src/domains/auth/AuthContext';
+import { LogOut } from 'lucide-react';
 
 interface TopbarProps {
   activePage: PageId;
@@ -30,6 +32,7 @@ import { useConfigStore } from '@/src/store/configStore';
 export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
   const hotel = useConfigStore(s => s.hotel);
   const user = useConfigStore(s => s.users[0]); // Mock getting first user
+  const { session, logout } = useAuth();
   const getCategory = (page: PageId): string => {
     if (['today', 'flowboard', 'planning'].includes(page)) return 'today';
     if (['reservations', 'calendrier', 'mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(page)) return 'reservations';
@@ -115,17 +118,27 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
               </button>
            </div>
            
-           <div className="flex items-center gap-3 pl-2 group cursor-pointer">
+           <div className="flex items-center gap-3 pl-2 group cursor-pointer" data-testid="topbar-user">
               <div className="w-9 h-9 rounded-2xl overflow-hidden shadow-sm group-hover:shadow-md transition-all p-0.5 bg-gradient-to-br from-[#8B5CF6] to-[#C084FC]">
                  <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center text-[10px] font-black text-[#8B5CF6]">
-                    {user.name.split(' ').map(n => n[0]).join('')}
+                    {(session?.fullName ?? user.name).split(' ').map(n => n[0]).join('').slice(0, 2)}
                  </div>
               </div>
               <div className="hidden lg:block">
                 <ChevronDown size={14} className="text-gray-400" />
               </div>
            </div>
-           
+
+           <button
+              type="button"
+              onClick={() => { void logout(); }}
+              data-testid="logout-button"
+              title="Se déconnecter"
+              className="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+           >
+              <LogOut size={18} />
+           </button>
+
            <button className="xl:hidden p-2 text-gray-400">
               <Menu size={20} />
            </button>

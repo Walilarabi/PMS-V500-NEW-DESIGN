@@ -50,8 +50,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(s);
         setStatus('authenticated');
       },
-      signUp: async (input) => {
-        const s = await authRepo.signUpAndProvisionTenant(input);
+      signUp: async (_input) => {
+        const s = await authRepo.signUpAndProvisionTenant();
         setSession(s);
         setStatus('authenticated');
       },

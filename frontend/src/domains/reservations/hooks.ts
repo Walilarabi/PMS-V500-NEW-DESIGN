@@ -38,7 +38,7 @@ export function useCreateReservation() {
   return useMutation<ReservationRow, Error, CreateReservationInput>({
     mutationFn: async (input) => {
       const parsed = createReservationInputSchema.parse(input);
-      if (!session?.tenantId) throw new Error('Tenant absent dans la session');
+      if (!session?.tenantId) throw new Error('Hôtel absent dans la session');
       return repo.createReservation(session.tenantId, parsed);
     },
     onSuccess: () => {
