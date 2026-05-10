@@ -425,15 +425,48 @@ const DisputeDrawer: React.FC<{
     }
   };
 
-  const handlePdf = () => {
+  const remindersQ = useRemindersByDispute(disputeId);
+
+  const handlePdf = async () => {
     if (!dispute) return;
     const partner = dispute.partner_id ? partnerById[dispute.partner_id] : null;
+
+    // Fetch the linked reservation evidence (best-effort, soft-fail).
+    let reservation: import('@/src/domains/odms/pdf').DisputeReservationSummary | null = null;
+    if (dispute.reservation_id) {
+      try {
+        const { data: resv } = await supabase
+          .from('reservations')
+          .select('id, reference, guest_first_name, guest_last_name, check_in, check_out, total_amount, channel, status')
+          .eq('id', dispute.reservation_id)
+          .maybeSingle();
+        if (resv) {
+          reservation = resv as import('@/src/domains/odms/pdf').DisputeReservationSummary;
+        }
+      } catch {
+        /* keep null */
+      }
+    }
+
+    const reminders = (remindersQ.data ?? []).map((r) => {
+      const payload = (r.email_payload ?? null) as { subject?: string } | null;
+      return {
+        step: r.step,
+        status: r.status,
+        due_at: r.due_at,
+        sent_at: r.sent_at,
+        subject: payload?.subject ?? null,
+      };
+    });
+
     downloadDisputePdf({
       hotelName,
       partnerName: partner?.name ?? null,
       partnerCode: partner?.code ?? null,
       dispute,
       email: (dispute.computed_email as DraftEmail | null) ?? null,
+      reservation,
+      reminders,
     });
   };
 

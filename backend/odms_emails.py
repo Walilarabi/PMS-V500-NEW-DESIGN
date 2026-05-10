@@ -153,6 +153,12 @@ async def auth_dep(authorization: str | None = Header(default=None)) -> dict[str
     return {"user": user, "hotel_id": hotel_id}
 
 
+def _require_cron_secret(x_cron_secret: str | None = Header(default=None, alias="X-Cron-Secret")) -> None:
+    expected = os.environ.get("CRON_SECRET", "")
+    if not expected or x_cron_secret != expected:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid cron secret")
+
+
 # ------------------------- route -------------------------
 
 @router.post("/send-reminder", response_model=SendReminderResponse)
@@ -200,6 +206,64 @@ async def send_reminder(req: SendReminderRequest, ctx: dict[str, Any] = Depends(
         email = await asyncio.to_thread(resend.Emails.send, params)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Resend send failed for reminder %s", req.reminder_id)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Resend error: {exc}") from exc
+
+    provider_id = (email or {}).get("id") if isinstance(email, dict) else None
+    await _update_reminder_sent(req.reminder_id, provider_id)
+    return SendReminderResponse(
+        status="sent",
+        reminder_id=req.reminder_id,
+        provider_message_id=provider_id,
+        recipients=recipients,
+    )
+
+
+# ------------------------------------------------------------------ #
+#  pg_cron variant — same logic, secret-based auth, no hotel scoping  #
+# ------------------------------------------------------------------ #
+
+class SendReminderCronRequest(BaseModel):
+    reminder_id: str = Field(..., min_length=1)
+
+
+@router.post("/send-reminder-cron", response_model=SendReminderResponse, dependencies=[Depends(_require_cron_secret)])
+async def send_reminder_cron(req: SendReminderCronRequest) -> SendReminderResponse:
+    """Cron-triggered reminder send (Supabase pg_cron → backend → Resend)."""
+    reminder = await _fetch_reminder(req.reminder_id)
+    if not reminder:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder not found")
+    if reminder.get("status") == "SENT":
+        return SendReminderResponse(
+            status="already_sent", reminder_id=req.reminder_id,
+            provider_message_id=None, recipients=[],
+        )
+
+    payload = reminder.get("email_payload") or {}
+    subject: str = payload.get("subject") or "Relance dispute OTA"
+    html_body: str = payload.get("html") or payload.get("body_html") or payload.get("body_text") or ""
+    text_body: str | None = payload.get("body_text")
+    recipients_raw = payload.get("to") or payload.get("recipients") or []
+    recipients = [recipients_raw] if isinstance(recipients_raw, str) else list(recipients_raw)
+    if not recipients:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No recipients in email_payload")
+
+    sender_email = _require_env("SENDER_EMAIL")
+    sender_name = os.environ.get("SENDER_NAME", "FLOWTYM ODMS")
+    resend.api_key = _require_env("RESEND_API_KEY")
+
+    params: dict[str, Any] = {
+        "from": f"{sender_name} <{sender_email}>",
+        "to": recipients,
+        "subject": subject,
+        "html": html_body if html_body else f"<pre>{(text_body or '').strip()}</pre>",
+    }
+    if text_body:
+        params["text"] = text_body
+
+    try:
+        email = await asyncio.to_thread(resend.Emails.send, params)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Cron Resend send failed for reminder %s", req.reminder_id)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Resend error: {exc}") from exc
 
     provider_id = (email or {}).get("id") if isinstance(email, dict) else None
