@@ -31,7 +31,7 @@ async function fetchProfile(authUserId: string): Promise<AppUserProfile | null> 
 
 function buildSession(authUserId: string, email: string, profile: AppUserProfile | null): AuthSession {
   return {
-    userId: authUserId,
+    userId: profile?.id ?? authUserId,
     email,
     tenantId: profile?.hotel_id ?? null,
     role: profile?.role ?? null,

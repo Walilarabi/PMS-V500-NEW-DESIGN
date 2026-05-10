@@ -23,7 +23,7 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - Audit logs immutable via Postgres triggers
 - Realtime invalidation through a single mounted bridge (`RealtimeBridge`) listening to `postgres_changes` on `reservations`/`rooms`.
 
-## 4. What is implemented (Jan 2026)
+## 4. What is implemented (Jan/Feb 2026)
 
 ### Phase 1 — Setup
 - Repo restructured into `/app/frontend` (Vite) + `/app/backend` (FastAPI stub).
@@ -48,7 +48,16 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - ✅ **Flowday** : KPIs, table d'opérations (Ali Larabi, Sophie Dubois, Pierre Bernard, Marie Martin), titre dynamique avec hôtel actif.
 - ✅ **Reservations** : header, 5 KPIs (4 dossiers / 1 confirmée / 2 check-in / 2950€ / 1 à encaisser), pie chart dynamique par statut, tableau live avec 4 lignes, search + filters, Nouvelle réservation modal branché.
 - ✅ **Planning** : Nouvelle réservation modal branché à Supabase (autres parties UI à migrer).
+- ✅ **Revenue Integrity (SAS)** : 6 KPIs, validations récentes, flux d'anomalies, file de quarantaine, simulateur OTA, **Smart RIE — fiabilité partenaires (30j)**.
+- ✅ **OTA Dispute Management (ODMS)** [NEW Feb 2026] : Centre de gestion des litiges, KPIs (ouverts / envoyés / corrigés / récupérés), tableau de fiabilité partenaire 30j, liste filtrable par statut (DRAFT/SENT/IN_REVIEW/CORRECTED/CLOSED), modal "Nouveau litige" avec composition automatique du sujet+description+email à partir d'une validation à risque, drawer détail avec timeline (status_history + messages), transitions FSM (DisputeWorkflowEngine), génération PDF de preuve client-side (jspdf + jspdf-autotable), email simulé persisté dans `ota_dispute_messages`, indicateur "Chambre fictive technique" via `quarantine_virtual_rooms`.
 - ⬜ Clients, Revenue, Finance, Analyse, Flowboard, Settings : encore mock.
+
+### Migrations DB ajoutées
+- `0020_rie_*.sql`, `0021_rie_seed.sql` : RIE config + seeds.
+- `0030_odms.sql` : ODMS — `ota_disputes`, `ota_dispute_messages` (immutable), `ota_dispute_status_history` (immutable), `ota_dispute_attachments`, `ota_dispute_participants`, `quarantine_virtual_rooms`, vue `partner_reliability_view`, RLS hotel-scoped, realtime publication.
+
+### Bug fix Feb 2026
+- `auth/repository.ts` `buildSession()` retourne désormais `userId = profile.id` (public.users.id) au lieu de `auth.users.id`. Corrige les contraintes FK sur `ota_disputes.created_by`, `ota_dispute_status_history.by_user_id`, `ota_dispute_messages.author_user_id`, `quarantine_reservations.resolved_by`.
 
 ### UI components
 - `Toaster` global + `useToast` hook (success / destructive variants, auto-dismiss 4 s).
@@ -65,6 +74,8 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - [x] **b** Wire ReservationFormModal to `useCreateReservation` (DONE — Reservations + Planning).
 - [x] **c** Migrate Reservations page to live Supabase data (DONE).
 - [x] **f** Realtime subscriptions on reservations/rooms (DONE).
+- [x] **RIE** Revenue Integrity Engine + Smart RIE (DONE Jan/Feb 2026).
+- [x] **ODMS** OTA Dispute Management UI (List + Drawer + Timeline + PDF + Email preview + FSM) (DONE Feb 2026).
 - [ ] **a** Migrer la page Planning à Supabase (calendrier des chambres × dates avec drag & drop).
 - [ ] **d** Module gestion des utilisateurs (rôle direction): liste collaborateurs + invitation + désactivation.
 - [ ] **e** Domaine Billing (factures + paiements immuables, écritures inversées).
@@ -74,6 +85,9 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - [ ] User profile self-update (mot de passe, nom, langue).
 - [ ] Audit log UI (filtre par entité, période, acteur).
 - [ ] Multi-hôtel switcher pour propriétaires de plusieurs établissements.
+- [ ] **ODMS Relance Engine** : cron Edge Function lit `ota_disputes.due_at` et envoie relances J+2/J+5/J+10 selon `DisputeReminderEngine`.
+- [ ] **ODMS envoi réel** : intégrer Resend (ou SendGrid) pour transformer la simulation locale en vrai envoi (clé `RESEND_API_KEY` à fournir par l'utilisateur).
+- [ ] **Reconciliation Center** : rapprochement Finance bancaire ↔ payouts OTA ↔ disputes ouverts.
 
 ### P2 — compliance & ops
 - [ ] FEC + UBL 2.1 export jobs (BullMQ + Node sidecar).
