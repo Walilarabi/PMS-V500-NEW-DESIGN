@@ -40,7 +40,7 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
   const getCategory = (page: PageId) => {
     if (['reservations', 'calendrier', 'mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(page)) return 'reservations';
     if (['revenue', 'yield', 'promotions'].includes(page)) return 'revenue';
-    if (['finance', 'facturation', 'caisse', 'impayes', 'cloture', 'rie', 'odms', 'litiges', 'reconciliation'].includes(page)) return 'finance';
+    if (['finance', 'facturation', 'caisse', 'impayes', 'cloture', 'rie', 'odms', 'litiges', 'reconciliation', 'audit'].includes(page)) return 'finance';
     if (['settings', 'annulations', 'supplements', 'fermatures', 'hotel', 'taxe', 'pms', 'api'].includes(page)) return 'settings';
     if (page === 'clients') return 'clients';
     if (page === 'analysis') return 'analysis';
@@ -74,6 +74,7 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
         { id: 'rie', label: 'Revenue Integrity (SAS)', icon: ShieldCheck },
         { id: 'odms', label: 'Litiges OTA (ODMS)', icon: AlertCircle },
         { id: 'reconciliation', label: 'Rapprochement', icon: History },
+        { id: 'audit', label: 'Journal d\'audit', icon: ShieldCheck },
       ]
     },
     revenue: {

@@ -91,7 +91,7 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - [x] **Reconciliation Center** (OTA payouts + BANK_HOTEL ↔ reservations + suggestions auto) — DONE Feb 2026.
 - [x] **ODMS envoi email réel via Resend** — FastAPI endpoint `POST /api/odms/send-reminder` (JWT-protected, hotel-scoped, service-role merge), bouton "Envoyer email" dans le Dispute Center (DONE Feb 2026).
 - [ ] User profile self-update (mot de passe, nom, langue).
-- [ ] Audit log UI (filtre par entité, période, acteur).
+- [x] **Audit log UI** (filtre entité/période/acteur/action + drawer payload JSON, 7 entités auditées, triggers immutables) — DONE Feb 2026 (migration 0110, domaine `domains/audit/`, page `AuditLogView`).
 - [ ] Multi-hôtel switcher pour propriétaires de plusieurs établissements.
 - [x] **Réconciliation — import CSV** (drag&drop CSV Booking/Expedia → batch insert dans bank_statements) — DONE Feb 2026 (papaparse, migration 0090 idempotent index, `ReconciliationCsvImporter` component).
 - [x] **ODMS auto-send via pg_cron** : déclencher l'envoi quand `due_at` < now() — DONE Feb 2026 (migrations 0080/0081, endpoint `/api/odms/send-reminder-cron` avec `X-Cron-Secret`, job toutes les 5 min).
