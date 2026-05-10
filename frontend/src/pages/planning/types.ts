@@ -14,7 +14,7 @@ export interface ChannelDef {
   color: string;
 }
 
-/* Default channels palette (mock — to be migrated to Supabase later). */
+/* Default channels palette (used as fallback when Supabase has no rows yet). */
 export const CHANNELS: ChannelDef[] = [
   { code: 'BOOKING', name: 'Booking.com', color: '#003580' },
   { code: 'EXPEDIA', name: 'Expedia', color: '#FFC72C' },
@@ -23,6 +23,19 @@ export const CHANNELS: ChannelDef[] = [
   { code: 'WALKIN', name: 'Walk-in', color: '#8B5CF6' },
   { code: 'PHONE', name: 'Téléphone', color: '#0EA5E9' },
 ];
+
+/** Lookup a channel inside an arbitrary list (DB-backed) with a default fallback to DIRECT. */
+export const getChannelFromList = (
+  list: ChannelDef[],
+  source: string | null | undefined,
+): ChannelDef => {
+  const code = (source ?? '').toUpperCase();
+  return (
+    list.find((c) => c.code === code)
+    ?? list.find((c) => c.code === 'DIRECT')
+    ?? CHANNELS[3]
+  );
+};
 
 /* Category default prices (mock — fed into ConfirmMove differential). */
 export const CATEGORY_PRICES: Record<string, number> = {

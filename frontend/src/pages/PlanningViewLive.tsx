@@ -7,8 +7,7 @@
  *   • RevenueCalendar     — monthly KPI heatmap + Graphiques
  *   • ConfirmMoveDialog   — délogement supplement workflow
  *
- * Data sources : Supabase (reservations + rooms) — channels & events still
- * served from `configStore` (mock) until Phase 1B migration.
+ * Data sources : Supabase (reservations, rooms, planning_channels, planning_events).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { type DragEndEvent } from '@dnd-kit/core';
@@ -19,7 +18,9 @@ import { useReservationsByRange, useMoveReservation } from '@/src/domains/reserv
 import { useReservations as useReservationsList } from '@/src/domains/reservations/hooks';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
 import type { RoomRow } from '@/src/lib/supabase.types';
-import { useConfigStore } from '@/src/store/configStore';
+import { useChannels, useEvents } from '@/src/domains/planning/hooks';
+import type { PlanningEventRow } from '@/src/domains/planning/schemas';
+import type { HotelEvent } from '@/src/store/configStore';
 import ReservationFormModal, {
   type ReservationFormData,
 } from '@/src/components/modals/ReservationFormModal';
@@ -28,6 +29,7 @@ import { supabase } from '@/src/lib/supabase';
 
 import {
   buildDateRange, computeViewLength, isoDay, CATEGORY_PRICES,
+  type ChannelDef,
   type DisplayMode, type RevenueSubView, type ViewLength,
 } from './planning/types';
 import PlanningHeader from './planning/PlanningHeader';
@@ -35,11 +37,33 @@ import PlanningGrid from './planning/PlanningGrid';
 import RevenueCalendar from './planning/RevenueCalendar';
 import ConfirmMoveDialog, { type ConfirmMovePayload } from './planning/ConfirmMoveDialog';
 
+/** Map a Supabase planning_event row to the legacy HotelEvent shape consumed by Grid/Calendar. */
+const toHotelEvent = (e: PlanningEventRow): HotelEvent => ({
+  id: e.id,
+  name: e.name,
+  startDate: e.start_date,
+  endDate: e.end_date,
+  impact: e.impact,
+  description: e.description ?? undefined,
+  source: e.source ?? undefined,
+  location: e.location ?? undefined,
+});
+
 const PlanningView: React.FC = () => {
   const { toast } = useToast();
   const hotelQ = useActiveHotel();
   const roomsQ = useRooms();
-  const { events: storeEvents } = useConfigStore();
+  const channelsQ = useChannels();
+  const eventsQ = useEvents();
+
+  const channels: ChannelDef[] = useMemo(
+    () => (channelsQ.data ?? []).map((c) => ({ code: c.code, name: c.name, color: c.color })),
+    [channelsQ.data],
+  );
+  const storeEvents: HotelEvent[] = useMemo(
+    () => (eventsQ.data ?? []).map(toHotelEvent),
+    [eventsQ.data],
+  );
 
   const [displayMode, setDisplayMode] = useState<DisplayMode>('Gantt');
   const [view, setView] = useState<ViewLength>('15J');
@@ -281,6 +305,7 @@ const PlanningView: React.FC = () => {
         typeFilter={typeFilter} setTypeFilter={setTypeFilter}
         statusFilter={statusFilter} setStatusFilter={setStatusFilter}
         channelFilter={channelFilter} setChannelFilter={setChannelFilter}
+        channels={channels}
         roomTypes={[...roomCategories, ...roomTypes]}
         showRightPanel={showRightPanel} toggleRightPanel={() => setShowRightPanel((s) => !s)}
         onCreate={() => { setCreateInitial(null); setCreateOpen(true); }}

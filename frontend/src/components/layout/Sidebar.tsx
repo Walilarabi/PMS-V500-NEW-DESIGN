@@ -146,6 +146,7 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
             return (
               <button
                 key={item.id}
+                data-testid={`sidebar-nav-${item.id}`}
                 onClick={() => setActivePage(item.id as PageId)}
                 title={isCollapsed ? item.label : undefined}
                 className={cn(

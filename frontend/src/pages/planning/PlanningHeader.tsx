@@ -11,8 +11,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-import type { DisplayMode, ViewLength } from './types';
-import { CHANNELS } from './types';
+import type { ChannelDef, DisplayMode, ViewLength } from './types';
+import { CHANNELS as DEFAULT_CHANNELS } from './types';
 
 interface Props {
   /* mode */
@@ -39,6 +39,8 @@ interface Props {
   setStatusFilter: (s: string) => void;
   channelFilter: string;
   setChannelFilter: (s: string) => void;
+  /** Channels rendered in the dropdown (Supabase-backed). Falls back to defaults if empty. */
+  channels?: ChannelDef[];
   roomTypes: string[];
   /* misc */
   showRightPanel: boolean;
@@ -54,7 +56,7 @@ export const PlanningHeader: React.FC<Props> = ({
   rangeLabel, onPrev, onNext, onToday,
   anchorMonth, anchorYear, onPickMonth,
   search, setSearch, typeFilter, setTypeFilter, statusFilter, setStatusFilter,
-  channelFilter, setChannelFilter, roomTypes,
+  channelFilter, setChannelFilter, channels, roomTypes,
   showRightPanel, toggleRightPanel, onCreate,
 }) => {
   const [showPicker, setShowPicker] = useState(false);
@@ -194,7 +196,9 @@ export const PlanningHeader: React.FC<Props> = ({
           <span className="w-px h-5 bg-gray-200" />
           <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)} data-testid="planning-filter-channel" className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2 px-2 focus:ring-0 cursor-pointer">
             <option value="Tous Canaux">Tous Canaux</option>
-            {CHANNELS.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+            {(channels && channels.length > 0 ? channels : DEFAULT_CHANNELS).map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
           </select>
         </div>
         {displayMode === 'Gantt' && (

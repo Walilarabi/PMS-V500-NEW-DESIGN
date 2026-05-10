@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { X, Calendar as CalendarIcon, Zap, MoreVertical, Trash2, Edit2, Download } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Zap, Trash2, Edit2, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
-import { useConfigStore, HotelEvent, EventImpact } from '@/src/store/configStore';
+import { useCreateEvent, useDeleteEvent, useEvents } from '@/src/domains/planning/hooks';
+import type { PlanningEventImpact } from '@/src/domains/planning/schemas';
+import { useToast } from '@/src/hooks/use-toast';
 import { cn } from '@/src/lib/utils';
 
 interface EventManagerModalProps {
@@ -11,6 +13,8 @@ interface EventManagerModalProps {
   onClose: () => void;
   initialDate?: string;
 }
+
+type EventImpact = PlanningEventImpact;
 
 const IMPACT_OPTIONS: { label: string, value: EventImpact, color: string }[] = [
   { label: 'Faible', value: 'low', color: 'bg-blue-500' },
@@ -20,7 +24,11 @@ const IMPACT_OPTIONS: { label: string, value: EventImpact, color: string }[] = [
 ];
 
 export const EventManagerModal: React.FC<EventManagerModalProps> = ({ isOpen, onClose, initialDate }) => {
-  const { events, addEvent, deleteEvent } = useConfigStore();
+  const eventsQ = useEvents();
+  const createEvent = useCreateEvent();
+  const deleteEvent = useDeleteEvent();
+  const { toast } = useToast();
+  const events = eventsQ.data ?? [];
   const [formData, setFormData] = useState({
     name: '',
     startDate: initialDate || new Date().toISOString().split('T')[0],
@@ -31,14 +39,20 @@ export const EventManagerModal: React.FC<EventManagerModalProps> = ({ isOpen, on
     location: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newEvent: HotelEvent = {
-        id: `ev-${Date.now()}`,
-        ...formData
-    };
-    addEvent(newEvent);
-    setFormData({
+    try {
+      await createEvent.mutateAsync({
+        name: formData.name,
+        start_date: formData.startDate,
+        end_date: formData.endDate,
+        impact: formData.impact,
+        description: formData.description || null,
+        source: formData.source || null,
+        location: formData.location || null,
+      });
+      toast({ title: 'Événement enregistré', variant: 'success' });
+      setFormData({
         name: '',
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date().toISOString().split('T')[0],
@@ -46,7 +60,19 @@ export const EventManagerModal: React.FC<EventManagerModalProps> = ({ isOpen, on
         description: '',
         source: '',
         location: ''
-    });
+      });
+    } catch (err) {
+      toast({ title: 'Échec', description: err instanceof Error ? err.message : '', variant: 'destructive' });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteEvent.mutateAsync(id);
+      toast({ title: 'Événement supprimé', variant: 'success' });
+    } catch (err) {
+      toast({ title: 'Échec', description: err instanceof Error ? err.message : '', variant: 'destructive' });
+    }
   };
 
   return (
@@ -167,10 +193,10 @@ export const EventManagerModal: React.FC<EventManagerModalProps> = ({ isOpen, on
                             />
                         </div>
 
-                        <div className="flex gap-4 pt-4">
-                            <Button type="submit" className="bg-[#8B5CF6] hover:bg-[#7C3AED] text-white rounded-2xl px-10 h-14 font-black uppercase text-xs tracking-widest shadow-xl shadow-[#8B5CF6]/20">
-                                Enregistrer l'événement
-                            </Button>
+                            <div className="flex gap-4 pt-4">
+                                <Button type="submit" data-testid="event-create-submit" disabled={createEvent.isPending} className="bg-[#8B5CF6] hover:bg-[#7C3AED] text-white rounded-2xl px-10 h-14 font-black uppercase text-xs tracking-widest shadow-xl shadow-[#8B5CF6]/20 disabled:opacity-50">
+                                    {createEvent.isPending ? 'Enregistrement…' : "Enregistrer l'événement"}
+                                </Button>
                             <Button type="button" variant="outline" onClick={onClose} className="rounded-2xl px-10 h-14 font-black uppercase text-xs tracking-widest border-gray-100">
                                 Annuler
                             </Button>
@@ -200,12 +226,12 @@ export const EventManagerModal: React.FC<EventManagerModalProps> = ({ isOpen, on
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                                 {events.map(event => (
-                                    <tr key={event.id} className="hover:bg-white transition-colors">
+                                    <tr key={event.id} className="hover:bg-white transition-colors" data-testid={`event-row-${event.id}`}>
                                         <td className="p-6">
                                             <span className="text-sm font-black text-gray-900">{event.name}</span>
                                         </td>
                                         <td className="p-6 text-xs font-bold text-gray-600">
-                                            {event.startDate} {event.endDate !== event.startDate && ` - ${event.endDate}`}
+                                            {event.start_date} {event.end_date !== event.start_date && ` - ${event.end_date}`}
                                         </td>
                                         <td className="p-6 text-xs text-gray-500 font-bold italic">
                                             {event.location || '-'}
@@ -226,7 +252,7 @@ export const EventManagerModal: React.FC<EventManagerModalProps> = ({ isOpen, on
                                         <td className="p-6 text-right">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button className="p-2 hover:bg-gray-50 rounded-xl text-gray-400 hover:text-blue-500 transition-all"><Edit2 size={14} /></button>
-                                                <button onClick={() => deleteEvent(event.id)} className="p-2 hover:bg-rose-50 rounded-xl text-gray-400 hover:text-rose-500 transition-all"><Trash2 size={14} /></button>
+                                                <button onClick={() => handleDelete(event.id)} data-testid={`event-delete-${event.id}`} className="p-2 hover:bg-rose-50 rounded-xl text-gray-400 hover:text-rose-500 transition-all"><Trash2 size={14} /></button>
                                             </div>
                                         </td>
                                     </tr>
