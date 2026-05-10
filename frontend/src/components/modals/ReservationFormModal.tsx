@@ -13,6 +13,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useRooms } from '@/src/domains/hotel/hooks';
 import { useReservationsByRange } from '@/src/domains/reservations/hooks';
+import { COUNTRIES, findCountry, type Country } from './countries';
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 export interface ReservationFormData {
@@ -113,15 +114,8 @@ const RATE_PLANS = [
   { id: 'AIR-NR', label: 'Airbnb Stricte', channel: 'Airbnb', board: 'Room Only', policy: 'nanr', mult: 1.05 },
 ];
 
-const COUNTRIES = [
-  { name: "France", code: "FR" },
-  { name: "Belgique", code: "BE" },
-  { name: "Suisse", code: "CH" },
-  { name: "Canada", code: "CA" },
-  { name: "États-Unis", code: "US" },
-  { name: "Maroc", code: "MA" },
-  { name: "Algérie", code: "DZ" },
-];
+const COUNTRIES_LEGACY_REMOVED = null; // moved to ./countries.ts
+void COUNTRIES_LEGACY_REMOVED;
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const fmtEur = (n: number) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '€';
@@ -163,6 +157,99 @@ const CustomSelect = ({ value, onChange, options, label, icon, className }: any)
     </select>
     <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
   </InputGroup>
+);
+
+// ─── COUNTRY PICKER (drapeau + recherche) ────────────────────────────────────
+const CountryPicker: React.FC<{
+  className?: string;
+  valueCode: string;
+  onChange: (c: Country) => void;
+}> = ({ className, valueCode, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const cb = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', cb);
+    return () => document.removeEventListener('mousedown', cb);
+  }, []);
+  const current = findCountry(valueCode) ?? COUNTRIES.find((c) => c.code === 'FR') ?? COUNTRIES[0];
+  const filtered = useMemo(
+    () => q.trim() === ''
+      ? COUNTRIES
+      : COUNTRIES.filter((c) => c.name.toLowerCase().includes(q.toLowerCase())),
+    [q],
+  );
+  return (
+    <div className={cn('relative', className)} ref={ref} data-testid="form-country-picker">
+      <InputGroup label="Nationalité" icon={Globe}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          data-testid="form-country-button"
+          className="w-full text-left flex items-center gap-2 bg-transparent outline-none font-bold text-[13px] h-8"
+        >
+          <span className="text-base leading-none" aria-hidden>{current.flag}</span>
+          <span className="text-gray-900">{current.name}</span>
+        </button>
+        <ChevronDown size={14} className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform ${open ? 'rotate-180' : ''}`} />
+      </InputGroup>
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-white border border-gray-100 rounded-2xl shadow-2xl overflow-hidden" data-testid="form-country-list">
+          <div className="p-2 border-b border-gray-50 flex items-center gap-2 bg-gray-50/50">
+            <Globe size={14} className="text-gray-400" />
+            <input
+              autoFocus
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Chercher un pays…"
+              data-testid="form-country-search"
+              className="flex-1 bg-transparent outline-none text-[12px] font-bold text-gray-700"
+            />
+          </div>
+          <ul className="max-h-60 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-3 text-[12px] text-gray-400 text-center">Aucun résultat</li>
+            ) : filtered.map((c) => (
+              <li key={c.code}>
+                <button
+                  type="button"
+                  onClick={() => { onChange(c); setOpen(false); setQ(''); }}
+                  data-testid={`form-country-option-${c.code}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-[12px] font-bold text-left hover:bg-violet-50 transition-colors ${
+                    c.code === valueCode ? 'bg-violet-50/60 text-violet-700' : 'text-gray-700'
+                  }`}
+                >
+                  <span className="text-base leading-none">{c.flag}</span>
+                  {c.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── TULIP BADGE — multi-room popup ───────────────────────────────────────────
+const TulipBadge: React.FC<{
+  count: number;
+  onClick: () => void;
+}> = ({ count, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    data-testid="form-tulip-badge"
+    aria-label={`${count} chambre(s) sélectionnée(s)`}
+    className={`absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full grid place-items-center text-[12px] font-black shadow-md transition-all hover:scale-110 active:scale-95 ${
+      count > 0
+        ? 'bg-violet-600 text-white shadow-violet-200'
+        : 'bg-gray-100 text-gray-400 shadow-gray-100'
+    }`}
+  >
+    {count}
+  </button>
 );
 
 // ─── COMPOSANT PRINCIPAL ─────────────────────────────────────────────────────
@@ -219,6 +306,25 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
   /* Live rooms inventory (Supabase) */
   const liveRoomsQ = useRooms();
   const liveRooms = liveRoomsQ.data ?? [];
+
+  /* Tulip popup open/close + outside-click handler */
+  const [roomsPopupOpen, setRoomsPopupOpen] = useState(false);
+  const roomsPopupRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!roomsPopupOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (roomsPopupRef.current && !roomsPopupRef.current.contains(target)) {
+        const isTrigger = (target instanceof HTMLElement) && (
+          target.closest('[data-testid="form-tulip-badge"]') ||
+          target.closest('[data-testid="form-rooms-numero-trigger"]')
+        );
+        if (!isTrigger) setRoomsPopupOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [roomsPopupOpen]);
 
   /* Conflict detection : reservations overlapping the picked window */
   const conflictWindowQ = useReservationsByRange({
@@ -348,15 +454,11 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
                  placeholder="Wali LARABI"
                />
              </InputGroup>
-             <InputGroup label="Nationalité" icon={Globe} className="col-span-12 md:col-span-5">
-               <select 
-                 value={form.nationality} 
-                 onChange={e => set('nationality', e.target.value)}
-                 className="w-full bg-transparent outline-none font-bold text-[13px] h-8 appearance-none"
-               >
-                 {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-               </select>
-             </InputGroup>
+             <CountryPicker
+               className="col-span-12 md:col-span-5"
+               valueCode={form.nationality}
+               onChange={(c) => { set('nationality', c.code); set('nationalityLabel', c.name); }}
+             />
           </div>
 
           <div className="grid grid-cols-12 gap-3">
@@ -435,47 +537,58 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
              />
           </div>
 
-          {/* Section 3: Room Selection */}
+          {/* Section 3: Room Selection — Type Chambre with Tulip badge + Numéro readonly */}
           <div className="grid grid-cols-12 gap-3">
-             <CustomSelect 
-               label="Type de chambre" 
-               icon={Bed} 
-               value={form.roomType} 
-               onChange={(v: string) => set('roomType', v)}
-               options={ROOM_TYPES}
-               className="col-span-12 md:col-span-4"
-             />
+             <div className="col-span-12 md:col-span-4 relative">
+               <CustomSelect 
+                 label="Type Chambre" 
+                 icon={Bed} 
+                 value={form.roomType} 
+                 onChange={(v: string) => set('roomType', v)}
+                 options={ROOM_TYPES}
+               />
+               <TulipBadge count={form.selectedRoomNumbers.length} onClick={() => setRoomsPopupOpen((o) => !o)} />
+             </div>
+             <div className="col-span-12 md:col-span-4">
+               <InputGroup label="Numéro" icon={Hash}>
+                 <button
+                   type="button"
+                   onClick={() => setRoomsPopupOpen((o) => !o)}
+                   data-testid="form-rooms-numero-trigger"
+                   className="w-full bg-transparent outline-none font-bold text-[13px] h-8 text-left text-gray-900 truncate"
+                 >
+                   {form.selectedRoomNumbers.length === 0
+                     ? <span className="text-gray-300">Choisir…</span>
+                     : form.selectedRoomNumbers.join(', ')}
+                 </button>
+                 <ChevronDown size={14} className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform ${roomsPopupOpen ? 'rotate-180' : ''}`} />
+               </InputGroup>
+             </div>
              <CustomSelect 
                label="Pension" 
                icon={Coffee} 
                value={form.board} 
                onChange={(v: string) => set('board', v)}
                options={BOARDS}
-               className="col-span-12 md:col-span-8"
+               className="col-span-12 md:col-span-4"
              />
           </div>
 
-          {/* Multi-room picker (replaces single Chambre dropdown) */}
-          <div data-testid="form-rooms-picker">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-[10px] uppercase tracking-widest font-black text-gray-500 flex items-center gap-2">
-                <Hash size={12} className="text-violet-500" />
-                Chambres à réserver
-                <span className="text-[9px] text-gray-300 font-bold normal-case tracking-normal">
-                  · double-clic pour ajouter, simple-clic pour retirer
-                </span>
-              </label>
-              {form.selectedRoomNumbers.length > 0 && (
+          {/* Tulip popup — checkboxes for room numbers */}
+          {roomsPopupOpen && (
+            <div ref={roomsPopupRef} className="rounded-2xl border border-violet-100 bg-white shadow-xl p-3" data-testid="form-rooms-popup">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] uppercase tracking-widest font-black text-violet-700">
+                  Chambres disponibles
+                </p>
                 <span className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full text-[10px] font-black tabular-nums">
-                  {form.selectedRoomNumbers.length} sélectionnée{form.selectedRoomNumbers.length > 1 ? 's' : ''}
+                  {form.selectedRoomNumbers.length}/{liveRooms.length}
                 </span>
-              )}
-            </div>
-            <div className="rounded-2xl border border-gray-100 bg-gray-50/50 p-3 max-h-44 overflow-y-auto">
+              </div>
               {liveRooms.length === 0 ? (
-                <p className="text-[11px] text-gray-400 text-center py-4">Aucune chambre dans l'inventaire — synchronise Supabase.</p>
+                <p className="text-[11px] text-gray-400 text-center py-4">Aucune chambre dans l'inventaire.</p>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 max-h-52 overflow-y-auto">
                   {liveRooms
                     .slice()
                     .sort((a, b) => (a.number ?? '').localeCompare(b.number ?? '', 'fr', { numeric: true }))
@@ -485,49 +598,59 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
                       const isBlocked = room.status === 'out_of_order' || room.status === 'maintenance';
                       const disabled = isConflict || isBlocked;
                       return (
-                        <button
+                        <label
                           key={room.id}
-                          type="button"
-                          disabled={disabled}
-                          onClick={() => toggleRoom(room.number, false)}
-                          onDoubleClick={() => toggleRoom(room.number, true)}
                           data-testid={`form-room-chip-${room.number}`}
                           data-selected={isSelected}
                           data-conflict={isConflict}
                           className={cn(
-                            'relative px-3 py-2 rounded-xl border-2 text-left transition-all select-none',
+                            'relative flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all select-none cursor-pointer',
                             isSelected
-                              ? 'bg-violet-600 border-violet-700 text-white shadow-md shadow-violet-200 hover:bg-violet-700'
+                              ? 'bg-violet-50 border-violet-400 text-violet-700'
                               : disabled
-                                ? 'bg-gray-100 border-gray-200 text-gray-300 cursor-not-allowed line-through'
-                                : 'bg-white border-gray-200 text-gray-700 hover:border-violet-300 hover:bg-violet-50/40 cursor-pointer',
+                                ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed line-through'
+                                : 'bg-white border-gray-200 text-gray-700 hover:border-violet-300 hover:bg-violet-50/40',
                           )}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-sm font-black tabular-nums">{room.number}</span>
-                            {isSelected && <CheckCircle2 size={14} className="shrink-0" />}
-                            {isConflict && !isSelected && <AlertTriangle size={12} className="shrink-0 text-rose-400" />}
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={disabled}
+                            onChange={(e) => {
+                              if (disabled) return;
+                              setForm((f) => {
+                                const set = new Set(f.selectedRoomNumbers);
+                                if (e.target.checked) set.add(room.number); else set.delete(room.number);
+                                const arr = Array.from(set);
+                                return { ...f, selectedRoomNumbers: arr, roomNumber: arr[0] ?? '' };
+                              });
+                            }}
+                            className="w-4 h-4 accent-violet-600"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-black tabular-nums leading-tight">{room.number}</p>
+                            <p className="text-[10px] font-bold truncate text-gray-400 leading-tight">
+                              {room.type ?? '—'}
+                            </p>
                           </div>
-                          <p className={`text-[10px] font-bold truncate mt-0.5 ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
-                            {room.type ?? '—'} · {room.category ?? ''}
-                          </p>
-                        </button>
+                          {isConflict && <AlertTriangle size={12} className="text-rose-400 shrink-0" />}
+                        </label>
                       );
                     })}
                 </div>
               )}
+              {form.selectedRoomNumbers.length > 0 ? (
+                <p className="mt-3 text-[11px] text-gray-600 border-t border-gray-100 pt-2" data-testid="form-rooms-recap">
+                  <span className="font-black text-violet-700">{form.selectedRoomNumbers.length} chambre{form.selectedRoomNumbers.length > 1 ? 's' : ''} :</span>{' '}
+                  <span className="tabular-nums font-bold">{form.selectedRoomNumbers.join(', ')}</span>
+                </p>
+              ) : (
+                <p className="mt-3 text-[11px] text-rose-500 font-bold border-t border-gray-100 pt-2" data-testid="form-rooms-empty">
+                  ⚠ Aucune chambre sélectionnée — la réservation ne peut pas être enregistrée.
+                </p>
+              )}
             </div>
-            {form.selectedRoomNumbers.length > 0 ? (
-              <p className="mt-2 text-[11px] text-gray-600" data-testid="form-rooms-recap">
-                <span className="font-black text-violet-700">{form.selectedRoomNumbers.length} chambre{form.selectedRoomNumbers.length > 1 ? 's' : ''} sélectionnée{form.selectedRoomNumbers.length > 1 ? 's' : ''} :</span>{' '}
-                <span className="tabular-nums font-bold">{form.selectedRoomNumbers.join(', ')}</span>
-              </p>
-            ) : (
-              <p className="mt-2 text-[11px] text-rose-500 font-bold" data-testid="form-rooms-empty">
-                ⚠ Aucune chambre sélectionnée — la réservation ne peut pas être enregistrée.
-              </p>
-            )}
-          </div>
+          )}
 
           {/* Section 4: Policy and Rate Plan */}
           <div className="grid grid-cols-12 gap-3">
