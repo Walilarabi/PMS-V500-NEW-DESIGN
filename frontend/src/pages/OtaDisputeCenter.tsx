@@ -23,6 +23,7 @@ import {
   useDisputeDetail,
   useDisputeTimeline,
   useChangeDisputeStatus,
+  useToggleDisputeAutoSendPause,
   usePartnerReliability,
   useReminders,
   useRemindersByDispute,
@@ -392,6 +393,7 @@ const DisputeDrawer: React.FC<{
   const detailQ = useDisputeDetail(disputeId);
   const timelineQ = useDisputeTimeline(disputeId);
   const change = useChangeDisputeStatus();
+  const togglePause = useToggleDisputeAutoSendPause();
   const { toast } = useToast();
 
   const dispute = detailQ.data ?? null;
@@ -488,9 +490,28 @@ const DisputeDrawer: React.FC<{
             {dispute?.reference ?? '…'}
           </h3>
           {dispute && (
-            <span className={`inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_TONE[dispute.status]}`}>
-              {STATUS_LABEL[dispute.status]}
-            </span>
+            <div className="mt-1 flex items-center gap-2 flex-wrap">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_TONE[dispute.status]}`}>
+                {STATUS_LABEL[dispute.status]}
+              </span>
+              <button
+                type="button"
+                onClick={() => togglePause.mutate({ id: dispute.id, paused: !dispute.auto_send_paused })}
+                disabled={togglePause.isPending}
+                data-testid="odms-dispute-toggle-pause"
+                title={dispute.auto_send_paused
+                  ? 'Relances automatiques suspendues — cliquer pour réactiver'
+                  : 'Cliquer pour suspendre les relances automatiques'}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+                  dispute.auto_send_paused
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                }`}
+              >
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${dispute.auto_send_paused ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                {dispute.auto_send_paused ? 'Mode brouillon (auto-pause)' : 'Auto-relances actives'}
+              </button>
+            </div>
           )}
         </div>
         <button

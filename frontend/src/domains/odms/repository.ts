@@ -197,3 +197,20 @@ export async function changeDisputeStatus(
 
   return disputeRowSchema.parse(data) as DisputeRow;
 }
+
+
+/**
+ * Toggle the auto-send pause flag on a dispute. When `paused = true`, pg_cron
+ * skips all reminders attached to this dispute (manual send still works).
+ */
+export async function setDisputeAutoSendPaused(id: string, paused: boolean): Promise<DisputeRow> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const builder = supabase.from('ota_disputes') as any;
+  const { data, error } = await builder
+    .update({ auto_send_paused: paused })
+    .eq('id', id)
+    .select('*')
+    .single();
+  if (error) throw mapSupabaseError(error);
+  return disputeRowSchema.parse(data) as DisputeRow;
+}

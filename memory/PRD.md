@@ -93,9 +93,11 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - [ ] User profile self-update (mot de passe, nom, langue).
 - [ ] Audit log UI (filtre par entité, période, acteur).
 - [ ] Multi-hôtel switcher pour propriétaires de plusieurs établissements.
-- [ ] **Réconciliation — import CSV** (drag&drop CSV Booking/Expedia → batch insert dans bank_statements).
-- [ ] **ODMS auto-send via pg_cron** : déclencher l'envoi quand `due_at` < now() (V2 — actuellement déclenchement manuel UI).
-- [ ] Refactor `TodayView.tsx` (>1900 lignes → KPI cards / Timeline / Operations Table).
+- [x] **Réconciliation — import CSV** (drag&drop CSV Booking/Expedia → batch insert dans bank_statements) — DONE Feb 2026 (papaparse, migration 0090 idempotent index, `ReconciliationCsvImporter` component).
+- [x] **ODMS auto-send via pg_cron** : déclencher l'envoi quand `due_at` < now() — DONE Feb 2026 (migrations 0080/0081, endpoint `/api/odms/send-reminder-cron` avec `X-Cron-Secret`, job toutes les 5 min).
+- [x] **PDF dispute enrichi** — sections Réservation concernée + Historique des relances (DONE Feb 2026).
+- [x] **Refactor `TodayView.tsx`** — extraction de modals + RightSidebar vers `/components/today/` (1919 → 1187 lignes, -38%) — DONE Feb 2026. P2 remaining: OperationsTable encore inline.
+- [x] **Mode brouillon par dispute** — toggle `auto_send_paused` (migration 0100) qui suspend les relances auto, envoi manuel toujours possible (DONE Feb 2026).
 
 ### P2 — compliance & ops
 - [ ] FEC + UBL 2.1 export jobs (BullMQ + Node sidecar).

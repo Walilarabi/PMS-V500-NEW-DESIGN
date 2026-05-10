@@ -45,6 +45,7 @@ export const disputeRowSchema = z.object({
   resolution: z.string().nullable(),
   recovered_amount: z.number().nullable(),
   closed_at: z.string().nullable(),
+  auto_send_paused: z.boolean().optional().default(false),
   created_at: z.string(),
   updated_at: z.string(),
 }).passthrough();

@@ -12,6 +12,7 @@ import {
   listDisputeMessages,
   listDisputeStatusHistory,
   loadReliability,
+  setDisputeAutoSendPaused,
 } from './repository';
 import {
   listReminders,
@@ -140,6 +141,15 @@ export function useSendReminderEmail() {
   const qc = useQueryClient();
   return useMutation<SendReminderResult, Error, string>({
     mutationFn: (id) => sendReminderEmail(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ODMS_KEY }),
+  });
+}
+
+
+export function useToggleDisputeAutoSendPause() {
+  const qc = useQueryClient();
+  return useMutation<DisputeRow, Error, { id: string; paused: boolean }>({
+    mutationFn: ({ id, paused }) => setDisputeAutoSendPaused(id, paused),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ODMS_KEY }),
   });
 }
