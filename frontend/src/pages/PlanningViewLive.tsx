@@ -296,6 +296,16 @@ const PlanningView: React.FC = () => {
           onMoveDrop={handleMoveDrop}
           onResClick={(r) => setResDetails(r)}
           onEmptyCellClick={handleEmptyCellClick}
+          onDragCreateRelease={(room, startDate, endDate) => {
+            setCreateInitial({
+              checkIn: isoDay(startDate),
+              checkOut: isoDay(endDate),
+              roomNumber: room.number,
+              roomType: room.type ?? 'Double Classique',
+              nights: Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000)),
+            });
+            setCreateOpen(true);
+          }}
         />
       ) : (
         <RevenueCalendar
