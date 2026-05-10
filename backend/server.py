@@ -9,10 +9,15 @@ Future use cases for this backend (later phases):
 - Webhook receivers with HMAC validation (Stripe, channel managers)
 - Operations requiring service_role_key that must NEVER be exposed to the client
 """
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="FLOWTYM Backend Stub", version="0.1.0")
+load_dotenv()
+
+from odms_emails import router as odms_emails_router
+
+app = FastAPI(title="FLOWTYM Backend", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,10 +27,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(odms_emails_router)
+
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "flowtym-backend-stub"}
+    return {"status": "ok", "service": "flowtym-backend"}
 
 
 @app.get("/api/")

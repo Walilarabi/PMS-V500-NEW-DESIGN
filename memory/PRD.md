@@ -81,6 +81,7 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - [x] **RIE** Revenue Integrity Engine + Smart RIE (DONE).
 - [x] **ODMS** OTA Dispute Management UI (DONE).
 - [x] **a** Migrer la page Planning à Supabase + drag&drop + optimistic locking (DONE Feb 2026).
+- [x] **Phase 1B Planning** — `planning_channels` + `planning_events` Supabase tables (mig 0070), DDD hooks/repository, EventManagerModal branché Supabase (DONE Feb 2026).
 - [ ] **d** Module gestion des utilisateurs (rôle direction): liste collaborateurs + invitation + désactivation.
 - [ ] **e** Domaine Billing (factures + paiements immuables, écritures inversées).
 
@@ -88,11 +89,13 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - [x] Optimistic locking sur `reservations` (`version` column + trigger) — DONE Feb 2026.
 - [x] **ODMS Relance Engine** (J+2 / J+5 / J+10 — auto-cascade, queue UI) — DONE Feb 2026.
 - [x] **Reconciliation Center** (OTA payouts + BANK_HOTEL ↔ reservations + suggestions auto) — DONE Feb 2026.
+- [x] **ODMS envoi email réel via Resend** — FastAPI endpoint `POST /api/odms/send-reminder` (JWT-protected, hotel-scoped, service-role merge), bouton "Envoyer email" dans le Dispute Center (DONE Feb 2026).
 - [ ] User profile self-update (mot de passe, nom, langue).
 - [ ] Audit log UI (filtre par entité, période, acteur).
 - [ ] Multi-hôtel switcher pour propriétaires de plusieurs établissements.
-- [ ] **ODMS envoi email réel** : intégrer Resend (clé `RESEND_API_KEY` à fournir par l'utilisateur quand il sera prêt).
 - [ ] **Réconciliation — import CSV** (drag&drop CSV Booking/Expedia → batch insert dans bank_statements).
+- [ ] **ODMS auto-send via pg_cron** : déclencher l'envoi quand `due_at` < now() (V2 — actuellement déclenchement manuel UI).
+- [ ] Refactor `TodayView.tsx` (>1900 lignes → KPI cards / Timeline / Operations Table).
 
 ### P2 — compliance & ops
 - [ ] FEC + UBL 2.1 export jobs (BullMQ + Node sidecar).

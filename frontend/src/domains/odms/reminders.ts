@@ -104,3 +104,48 @@ export async function skipReminder(id: string): Promise<ReminderRow> {
   if (error) throw mapSupabaseError(error);
   return reminderRowSchema.parse(data) as ReminderRow;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Real email send via FastAPI backend → Resend                       */
+/* ------------------------------------------------------------------ */
+
+export interface SendReminderResult {
+  status: 'sent' | 'already_sent';
+  reminder_id: string;
+  provider_message_id: string | null;
+  recipients: string[];
+}
+
+/**
+ * Send the reminder's email via the secure backend (Resend).
+ * The backend validates the caller's Supabase JWT, scopes to the user's hotel,
+ * sends the email, and marks the reminder as SENT in the database.
+ */
+export async function sendReminderEmail(reminderId: string): Promise<SendReminderResult> {
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess.session?.access_token;
+  if (!token) throw new Error('Session expirée — reconnectez-vous.');
+
+  const apiBase = (import.meta.env.VITE_BACKEND_URL as string | undefined)
+    ?? (import.meta.env.REACT_APP_BACKEND_URL as string | undefined)
+    ?? window.location.origin;
+  const resp = await fetch(`${apiBase.replace(/\/$/, '')}/api/odms/send-reminder`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ reminder_id: reminderId }),
+  });
+  if (!resp.ok) {
+    let detail = `HTTP ${resp.status}`;
+    try {
+      const j = await resp.json();
+      detail = (j as { detail?: string }).detail ?? detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+  return (await resp.json()) as SendReminderResult;
+}

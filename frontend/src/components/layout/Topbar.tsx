@@ -81,6 +81,7 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
             return (
               <button
                 key={item.id}
+                data-testid={`topbar-nav-${item.id}`}
                 onClick={() => setActivePage(item.id as PageId)}
                 className={cn(
                   "flex items-center gap-2.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300",

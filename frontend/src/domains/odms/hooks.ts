@@ -17,8 +17,10 @@ import {
   listReminders,
   listRemindersByDispute,
   markReminderSent,
+  sendReminderEmail,
   skipReminder,
   type ReminderRow,
+  type SendReminderResult,
 } from './reminders';
 import type { CreateDisputeInput, DisputeRow, DisputeStatus, DraftEmail, ReliabilityRow } from './types';
 
@@ -130,6 +132,14 @@ export function useSkipReminder() {
   const qc = useQueryClient();
   return useMutation<ReminderRow, Error, string>({
     mutationFn: (id) => skipReminder(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ODMS_KEY }),
+  });
+}
+
+export function useSendReminderEmail() {
+  const qc = useQueryClient();
+  return useMutation<SendReminderResult, Error, string>({
+    mutationFn: (id) => sendReminderEmail(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ODMS_KEY }),
   });
 }

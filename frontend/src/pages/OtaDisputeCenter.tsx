@@ -27,6 +27,7 @@ import {
   useReminders,
   useRemindersByDispute,
   useMarkReminderSent,
+  useSendReminderEmail,
   useSkipReminder,
 } from '@/src/domains/odms/hooks';
 import { useRieConfiguration } from '@/src/domains/rie/hooks';
@@ -670,10 +671,45 @@ const REMINDER_STEP_DAYS = [2, 5, 10] as const;
 const RemindersQueueSection: React.FC = () => {
   const remQ = useReminders();
   const markSent = useMarkReminderSent();
+  const sendEmail = useSendReminderEmail();
   const skip = useSkipReminder();
   const { toast } = useToast();
   const all = remQ.data ?? [];
   const pending = all.filter((r) => r.status === 'PENDING');
+
+  const handleSendEmail = async (r: ReminderRow) => {
+    try {
+      const res = await sendEmail.mutateAsync(r.id);
+      toast({
+        title: res.status === 'already_sent' ? 'Déjà envoyée' : 'Email envoyé',
+        description: `Destinataire(s) : ${res.recipients.join(', ')}`,
+        variant: 'success',
+      });
+      // Schedule the next reminder step locally (same logic as handleMarkSent)
+      if (res.status === 'sent' && r.step < 3) {
+        const nextStep = (r.step + 1) as 2 | 3;
+        const days = REMINDER_STEP_DAYS[r.step] ?? 5;
+        const due = new Date(Date.now() + days * 86_400_000).toISOString();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const builder = supabase.from('ota_dispute_reminders') as any;
+        const payload = r.email_payload as DraftEmail | null;
+        const stepDays = REMINDER_STEP_DAYS[nextStep - 1];
+        await builder.insert({
+          hotel_id: r.hotel_id,
+          dispute_id: r.dispute_id,
+          step: nextStep,
+          due_at: due,
+          status: 'PENDING',
+          email_payload: payload
+            ? { ...payload, subject: `[RELANCE J+${stepDays}] ${payload.subject.replace(/^\[RELANCE J\+\d+\] /, '')}` }
+            : null,
+        });
+      }
+      void remQ.refetch();
+    } catch (e) {
+      toast({ title: 'Échec envoi', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    }
+  };
 
   const handleMarkSent = async (r: ReminderRow) => {
     try {
@@ -766,6 +802,15 @@ const RemindersQueueSection: React.FC = () => {
                     <td className="px-3 py-2 text-right">
                       {r.status === 'PENDING' && (
                         <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleSendEmail(r)}
+                            disabled={sendEmail.isPending}
+                            data-testid={`odms-reminder-send-email-${r.id}`}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+                          >
+                            <Send size={11} /> {sendEmail.isPending ? 'Envoi…' : 'Envoyer email'}
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleMarkSent(r)}
