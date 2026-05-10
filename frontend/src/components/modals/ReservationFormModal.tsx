@@ -13,7 +13,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useRooms } from '@/src/domains/hotel/hooks';
 import { useReservationsByRange } from '@/src/domains/reservations/hooks';
-import { COUNTRIES, findCountry, type Country } from './countries';
+import { COUNTRIES, findCountry } from './countries';
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 export interface ReservationFormData {
@@ -49,6 +49,8 @@ export interface ReservationFormData {
   nights: number;
   totalTTC: number;
   stayTax: number;
+  /* Statut de la réservation (3 pills): hold / pending / confirmed */
+  reservationStatus: 'hold' | 'pending' | 'confirmed';
 }
 
 export interface AvailableRoom {
@@ -163,7 +165,7 @@ const CustomSelect = ({ value, onChange, options, label, icon, className }: any)
 const CountryPicker: React.FC<{
   className?: string;
   valueCode: string;
-  onChange: (c: Country) => void;
+  onChange: (c: { code: string; name: string; flag: string }) => void;
 }> = ({ className, valueCode, onChange }) => {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -282,6 +284,7 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
     nights: 8,
     totalTTC: 0,
     stayTax: 40.00,
+    reservationStatus: 'confirmed',
     ...initialData
   });
 
@@ -443,7 +446,40 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-8 space-y-6">
-          
+
+          {/* STATUT DE LA RÉSERVATION — 3 pills */}
+          <div data-testid="form-status-pills">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Statut de la réservation</p>
+            <div className="flex items-center gap-2">
+              {([
+                { v: 'hold', label: 'Option (Hold)', color: 'amber' },
+                { v: 'pending', label: 'Pending', color: 'sky' },
+                { v: 'confirmed', label: 'Confirmée', color: 'emerald' },
+              ] as const).map((opt) => {
+                const active = form.reservationStatus === opt.v;
+                const ringTone = opt.color === 'amber' ? 'border-amber-300 bg-amber-50 text-amber-700'
+                  : opt.color === 'sky' ? 'border-sky-300 bg-sky-50 text-sky-700'
+                  : 'border-emerald-300 bg-emerald-50 text-emerald-700';
+                return (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => set('reservationStatus', opt.v)}
+                    data-testid={`form-status-${opt.v}`}
+                    className={cn(
+                      'px-4 py-1.5 rounded-full border-2 text-[12px] font-black transition-all',
+                      active
+                        ? ringTone
+                        : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300',
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Section 1: Guest Base */}
           <div className="grid grid-cols-12 gap-3">
              <InputGroup label="Nom du client" icon={User} className="col-span-12 md:col-span-7">
@@ -537,8 +573,17 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
              />
           </div>
 
-          {/* Section 3: Room Selection — Type Chambre with Tulip badge + Numéro readonly */}
+          {/* Section 3: Référence + Type Chambre + Numéro (3 cols, conformément à l'image) */}
           <div className="grid grid-cols-12 gap-3">
+             <InputGroup label="Référence" icon={Hash} className="col-span-12 md:col-span-4">
+               <input
+                 value={form.reference}
+                 onChange={e => set('reference', e.target.value.toUpperCase())}
+                 className="w-full bg-transparent outline-none font-bold text-[13px] h-8"
+                 placeholder="RES-7877"
+                 data-testid="form-reference"
+               />
+             </InputGroup>
              <div className="col-span-12 md:col-span-4 relative">
                <CustomSelect 
                  label="Type Chambre" 
@@ -564,14 +609,6 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
                  <ChevronDown size={14} className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none transition-transform ${roomsPopupOpen ? 'rotate-180' : ''}`} />
                </InputGroup>
              </div>
-             <CustomSelect 
-               label="Pension" 
-               icon={Coffee} 
-               value={form.board} 
-               onChange={(v: string) => set('board', v)}
-               options={BOARDS}
-               className="col-span-12 md:col-span-4"
-             />
           </div>
 
           {/* Tulip popup — checkboxes for room numbers */}
@@ -652,15 +689,23 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
             </div>
           )}
 
-          {/* Section 4: Policy and Rate Plan */}
+          {/* Section 4: Pension + Politique d'annulation + Plan tarifaire (3 cols, conformément à l'image) */}
           <div className="grid grid-cols-12 gap-3">
+             <CustomSelect 
+               label="Pension" 
+               icon={Coffee} 
+               value={form.board} 
+               onChange={(v: string) => set('board', v)}
+               options={BOARDS}
+               className="col-span-12 md:col-span-4"
+             />
              <CustomSelect 
                label="Politique d'annulation" 
                icon={ShieldCheck} 
                value={form.cancelPolicy} 
                onChange={(v: string) => set('cancelPolicy', v)}
                options={CANCEL_POLICIES}
-               className="col-span-12 md:col-span-6"
+               className="col-span-12 md:col-span-4"
              />
              <CustomSelect 
                label="Plan tarifaire" 
@@ -668,7 +713,7 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
                value={form.ratePlanId} 
                onChange={(v: string) => set('ratePlanId', v)}
                options={filteredRatePlans.map(p => ({ value: p.id, label: p.label }))}
-               className="col-span-12 md:col-span-6"
+               className="col-span-12 md:col-span-4"
              />
           </div>
 
