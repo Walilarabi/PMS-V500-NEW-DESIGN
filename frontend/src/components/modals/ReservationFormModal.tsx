@@ -635,35 +635,43 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
                       const isBlocked = room.status === 'out_of_order' || room.status === 'maintenance';
                       const disabled = isConflict || isBlocked;
                       return (
-                        <label
+                        <button
+                          type="button"
                           key={room.id}
                           data-testid={`form-room-chip-${room.number}`}
                           data-selected={isSelected}
                           data-conflict={isConflict}
+                          disabled={disabled}
+                          onClick={() => {
+                            if (disabled) return;
+                            setForm((f) => {
+                              const next = new Set(f.selectedRoomNumbers);
+                              if (next.has(room.number)) next.delete(room.number);
+                              else next.add(room.number);
+                              const arr = Array.from(next);
+                              return { ...f, selectedRoomNumbers: arr, roomNumber: arr[0] ?? '' };
+                            });
+                          }}
                           className={cn(
-                            'relative flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all select-none cursor-pointer',
+                            'relative flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all select-none text-left',
                             isSelected
                               ? 'bg-violet-50 border-violet-400 text-violet-700'
                               : disabled
                                 ? 'bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed line-through'
-                                : 'bg-white border-gray-200 text-gray-700 hover:border-violet-300 hover:bg-violet-50/40',
+                                : 'bg-white border-gray-200 text-gray-700 hover:border-violet-300 hover:bg-violet-50/40 cursor-pointer',
                           )}
                         >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            disabled={disabled}
-                            onChange={(e) => {
-                              if (disabled) return;
-                              setForm((f) => {
-                                const set = new Set(f.selectedRoomNumbers);
-                                if (e.target.checked) set.add(room.number); else set.delete(room.number);
-                                const arr = Array.from(set);
-                                return { ...f, selectedRoomNumbers: arr, roomNumber: arr[0] ?? '' };
-                              });
-                            }}
-                            className="w-4 h-4 accent-violet-600"
-                          />
+                          <span
+                            aria-hidden
+                            className={cn(
+                              'w-4 h-4 rounded grid place-items-center border-2 shrink-0',
+                              isSelected
+                                ? 'bg-violet-600 border-violet-600 text-white'
+                                : 'bg-white border-gray-300',
+                            )}
+                          >
+                            {isSelected && <Check size={11} strokeWidth={3} />}
+                          </span>
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-black tabular-nums leading-tight">{room.number}</p>
                             <p className="text-[10px] font-bold truncate text-gray-400 leading-tight">
@@ -671,7 +679,7 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
                             </p>
                           </div>
                           {isConflict && <AlertTriangle size={12} className="text-rose-400 shrink-0" />}
-                        </label>
+                        </button>
                       );
                     })}
                 </div>
