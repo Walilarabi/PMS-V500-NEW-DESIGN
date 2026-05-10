@@ -13,6 +13,13 @@ import {
   listDisputeStatusHistory,
   loadReliability,
 } from './repository';
+import {
+  listReminders,
+  listRemindersByDispute,
+  markReminderSent,
+  skipReminder,
+  type ReminderRow,
+} from './reminders';
 import type { CreateDisputeInput, DisputeRow, DisputeStatus, DraftEmail, ReliabilityRow } from './types';
 
 const ODMS_KEY = ['odms'] as const;
@@ -88,5 +95,41 @@ export function useChangeDisputeStatus() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ODMS_KEY });
     },
+  });
+}
+
+/* -------------------- Reminders ---------------------------------- */
+
+export function useReminders() {
+  const { status } = useAuth();
+  return useQuery<ReminderRow[]>({
+    queryKey: [...ODMS_KEY, 'reminders'],
+    queryFn: listReminders,
+    enabled: status === 'authenticated',
+    staleTime: 15_000,
+  });
+}
+
+export function useRemindersByDispute(disputeId: string | null) {
+  return useQuery<ReminderRow[]>({
+    queryKey: [...ODMS_KEY, 'reminders', disputeId],
+    queryFn: () => listRemindersByDispute(disputeId as string),
+    enabled: !!disputeId,
+  });
+}
+
+export function useMarkReminderSent() {
+  const qc = useQueryClient();
+  return useMutation<ReminderRow, Error, string>({
+    mutationFn: (id) => markReminderSent(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ODMS_KEY }),
+  });
+}
+
+export function useSkipReminder() {
+  const qc = useQueryClient();
+  return useMutation<ReminderRow, Error, string>({
+    mutationFn: (id) => skipReminder(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ODMS_KEY }),
   });
 }

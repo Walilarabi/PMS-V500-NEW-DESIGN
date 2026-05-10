@@ -13,6 +13,7 @@ import React, { useMemo, useState } from 'react';
 import {
   ShieldAlert, Mail, FileDown, Send, RefreshCw, Plus, X,
   Clock, CheckCircle2, XCircle, Eye, Banknote, Lock, Building2, TrendingDown,
+  Bell, SkipForward,
 } from 'lucide-react';
 
 import { useToast } from '@/src/hooks/use-toast';
@@ -23,12 +24,18 @@ import {
   useDisputeTimeline,
   useChangeDisputeStatus,
   usePartnerReliability,
+  useReminders,
+  useRemindersByDispute,
+  useMarkReminderSent,
+  useSkipReminder,
 } from '@/src/domains/odms/hooks';
 import { useRieConfiguration } from '@/src/domains/rie/hooks';
 import { DisputeWorkflowEngine } from '@/src/domains/odms/engines';
 import { downloadDisputePdf } from '@/src/domains/odms/pdf';
 import type { DisputeRow, DisputeStatus, DraftEmail } from '@/src/domains/odms/types';
+import type { ReminderRow } from '@/src/domains/odms/reminders';
 import { CreateDisputeModal } from '@/src/components/modals/CreateDisputeModal';
+import { supabase } from '@/src/lib/supabase';
 
 const fmtEUR = (n: number | null | undefined, currency = 'EUR'): string =>
   typeof n === 'number'
@@ -137,6 +144,9 @@ export const OtaDisputeCenter: React.FC = () => {
 
         {/* Smart RIE - Partner reliability */}
         <PartnerReliabilitySection rows={reliabilityQ.data ?? []} partnerById={partnerById} />
+
+        {/* ODMS Reminders queue (J+2 / J+5 / J+10) */}
+        <RemindersQueueSection />
 
         {/* Two-pane: list + drawer */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -523,6 +533,9 @@ const DisputeDrawer: React.FC<{
               <Timeline data={timelineQ.data} disputeStatus={dispute.status} />
             </div>
 
+            {/* Per-dispute reminders */}
+            <DrawerReminders disputeId={dispute.id} />
+
             {/* Status FSM */}
             <div className="border-t border-gray-100 pt-4">
               <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2">Actions</p>
@@ -622,3 +635,163 @@ const Timeline: React.FC<{
 };
 
 export default OtaDisputeCenter;
+
+/* -------------------------------------- Reminders queue --- */
+
+const DrawerReminders: React.FC<{ disputeId: string }> = ({ disputeId }) => {
+  const q = useRemindersByDispute(disputeId);
+  const reminders = q.data ?? [];
+  if (reminders.length === 0) return null;
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2 flex items-center gap-1">
+        <Bell size={11} className="text-amber-500" /> Relances planifiées
+      </p>
+      <ul className="space-y-1.5">
+        {reminders.map((r) => (
+          <li key={r.id} className="flex items-center justify-between gap-2 text-[11px] bg-amber-50/40 border border-amber-100 rounded-lg px-2 py-1.5">
+            <span className="font-bold text-amber-700">J+{[2, 5, 10][r.step - 1] ?? '?'}</span>
+            <span className="text-gray-600 flex-1 truncate">{new Date(r.due_at).toLocaleString('fr-FR')}</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+              r.status === 'PENDING' ? 'bg-amber-100 text-amber-700'
+              : r.status === 'SENT' ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-gray-200 text-gray-500'
+            }`}>
+              {r.status === 'PENDING' ? 'En attente' : r.status === 'SENT' ? 'Envoyée' : 'Ignorée'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+const REMINDER_STEP_DAYS = [2, 5, 10] as const;
+
+const RemindersQueueSection: React.FC = () => {
+  const remQ = useReminders();
+  const markSent = useMarkReminderSent();
+  const skip = useSkipReminder();
+  const { toast } = useToast();
+  const all = remQ.data ?? [];
+  const pending = all.filter((r) => r.status === 'PENDING');
+
+  const handleMarkSent = async (r: ReminderRow) => {
+    try {
+      await markSent.mutateAsync(r.id);
+      // schedule the next step if any
+      if (r.step < 3) {
+        const nextStep = (r.step + 1) as 2 | 3;
+        const days = REMINDER_STEP_DAYS[r.step] ?? 5;
+        const due = new Date(Date.now() + days * 86_400_000).toISOString();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const builder = supabase.from('ota_dispute_reminders') as any;
+        const payload = r.email_payload as DraftEmail | null;
+        const stepDays = REMINDER_STEP_DAYS[nextStep - 1];
+        await builder.insert({
+          hotel_id: r.hotel_id,
+          dispute_id: r.dispute_id,
+          step: nextStep,
+          due_at: due,
+          status: 'PENDING',
+          email_payload: payload
+            ? { ...payload, subject: `[RELANCE J+${stepDays}] ${payload.subject.replace(/^\[RELANCE J\+\d+\] /, '')}` }
+            : null,
+        });
+      }
+      void remQ.refetch();
+      toast({
+        title: 'Relance marquée envoyée',
+        description: r.step < 3 ? `Prochaine relance planifiée à J+${REMINDER_STEP_DAYS[r.step]}` : 'Cycle de relances terminé',
+        variant: 'success',
+      });
+    } catch (e) {
+      toast({ title: 'Échec', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    }
+  };
+
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm" data-testid="odms-reminders-queue">
+      <header className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+          <Bell size={14} className="text-amber-500" /> File de relances ODMS
+        </h2>
+        <span className="text-[10px] font-semibold uppercase tracking-wider bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
+          {pending.length} en attente
+        </span>
+      </header>
+      {all.length === 0 ? (
+        <p className="text-xs text-gray-400 py-4 text-center">
+          Aucune relance planifiée. Une relance J+2 est créée automatiquement à chaque transition DRAFT → SENT.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-100">
+          <table className="min-w-full text-sm" data-testid="odms-reminders-table">
+            <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50/70">
+              <tr>
+                <th className="text-left px-3 py-2 font-semibold">Litige</th>
+                <th className="text-center px-3 py-2 font-semibold">Étape</th>
+                <th className="text-left px-3 py-2 font-semibold">Échéance</th>
+                <th className="text-left px-3 py-2 font-semibold">Statut</th>
+                <th className="text-left px-3 py-2 font-semibold">Sujet email</th>
+                <th className="text-right px-3 py-2 font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {all.map((r) => {
+                const payload = r.email_payload as DraftEmail | null;
+                const overdue = r.status === 'PENDING' && new Date(r.due_at) < new Date();
+                return (
+                  <tr key={r.id} className="border-t border-gray-100" data-testid={`odms-reminder-${r.id}`}>
+                    <td className="px-3 py-2 font-mono text-[11px] text-gray-600">{r.dispute_id.slice(0, 8)}</td>
+                    <td className="px-3 py-2 text-center font-bold text-violet-700">J+{REMINDER_STEP_DAYS[r.step - 1] ?? '?'}</td>
+                    <td className="px-3 py-2 text-[11px]">
+                      <span className={overdue ? 'text-rose-600 font-bold' : 'text-gray-600'}>
+                        {new Date(r.due_at).toLocaleString('fr-FR')}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                        r.status === 'PENDING'
+                          ? 'bg-amber-50 text-amber-700 border-amber-100'
+                          : r.status === 'SENT'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                          : 'bg-gray-100 text-gray-500 border-gray-200'
+                      }`}>
+                        {r.status === 'PENDING' ? 'En attente' : r.status === 'SENT' ? 'Envoyée' : 'Ignorée'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-[11px] text-gray-600 max-w-[280px] truncate">
+                      {payload?.subject ?? '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {r.status === 'PENDING' && (
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleMarkSent(r)}
+                            data-testid={`odms-reminder-sent-${r.id}`}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-violet-600 hover:bg-violet-700 text-white"
+                          >
+                            <Send size={11} /> Marquer envoyée
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => skip.mutate(r.id)}
+                            data-testid={`odms-reminder-skip-${r.id}`}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 text-gray-600"
+                          >
+                            <SkipForward size={11} /> Ignorer
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+};

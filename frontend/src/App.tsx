@@ -2,7 +2,7 @@ import React from 'react';
 import { Sidebar } from '@/src/components/layout/Sidebar';
 import { Topbar } from '@/src/components/layout/Topbar';
 import { TodayView } from '@/src/pages/TodayView';
-import { PlanningView } from '@/src/pages/PlanningView';
+import PlanningViewLive from '@/src/pages/PlanningViewLive';
 import { ReservationsView } from '@/src/pages/ReservationsView';
 import { ClientsView } from '@/src/pages/ClientsView';
 import { RevenueView } from '@/src/pages/RevenueView';
@@ -12,6 +12,7 @@ import { FlowboardView } from '@/src/pages/FlowboardView';
 import { SettingsView } from '@/src/pages/SettingsView';
 import RevenueIntegrityView from '@/src/pages/RevenueIntegrityView';
 import OtaDisputeCenter from '@/src/pages/OtaDisputeCenter';
+import ReconciliationView from '@/src/pages/ReconciliationView';
 import { PageId } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -33,7 +34,7 @@ const App = () => {
     switch (activePage) {
       case 'today': return <TodayView />;
       case 'flowboard': return <FlowboardView />;
-      case 'planning': return <PlanningView />;
+      case 'planning': return <PlanningViewLive />;
       case 'reservations': 
       case 'calendrier':
       case 'mouvements':
@@ -71,6 +72,8 @@ const App = () => {
       case 'odms':
       case 'litiges':
         return <OtaDisputeCenter />;
+      case 'reconciliation':
+        return <ReconciliationView />;
       case 'settings': 
       case 'annulations':
       case 'supplements':

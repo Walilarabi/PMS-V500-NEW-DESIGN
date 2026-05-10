@@ -46,3 +46,23 @@ export function useCreateReservation() {
     },
   });
 }
+
+export function useReservationsByRange(params: repo.ListReservationsByRangeParams) {
+  const { status } = useAuth();
+  return useQuery<ReservationRow[]>({
+    queryKey: [...RESERVATIONS_KEY, 'range', params.rangeStart, params.rangeEnd],
+    queryFn: () => repo.listReservationsByRange(params),
+    enabled: status === 'authenticated',
+    staleTime: 15_000,
+  });
+}
+
+export function useMoveReservation() {
+  const qc = useQueryClient();
+  return useMutation<ReservationRow, Error, repo.MoveReservationInput>({
+    mutationFn: (input) => repo.moveReservation(input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+    },
+  });
+}

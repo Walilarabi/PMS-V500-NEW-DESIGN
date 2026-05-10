@@ -38,6 +38,7 @@ export const reservationRowSchema = z
     special_requests: z.string().nullable(),
     room_type: z.string().nullable(),
     room_category: z.string().nullable(),
+    version: z.number().int().nullable().default(1),
     created_at: z.string().nullable(),
     updated_at: z.string().nullable(),
   })

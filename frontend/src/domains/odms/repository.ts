@@ -161,7 +161,7 @@ export async function changeDisputeStatus(
     by_user_id: userId,
   });
 
-  // 3) when SENT, log the outbound email as a message
+  // 3) when SENT, log the outbound email as a message + schedule J+2 reminder
   if (to === 'SENT' && email) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const msgBuilder = supabase.from('ota_dispute_messages') as any;
@@ -176,6 +176,22 @@ export async function changeDisputeStatus(
       body_text: email.body_text,
       body_html: email.body_html,
       metadata: { attachments: email.attachments },
+    });
+
+    // Schedule first reminder J+2 (step=1) — pure time math, no engine import here
+    const dueAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const remBuilder = supabase.from('ota_dispute_reminders') as any;
+    await remBuilder.insert({
+      hotel_id: hotelId,
+      dispute_id: disputeId,
+      step: 1,
+      due_at: dueAt,
+      status: 'PENDING',
+      email_payload: {
+        ...email,
+        subject: `[RELANCE J+2] ${email.subject}`,
+      },
     });
   }
 

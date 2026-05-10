@@ -110,3 +110,70 @@ export async function updateReservationStatus(
   if (!data) throw new NotFoundError('Reservation', id);
   return reservationRowSchema.parse(data);
 }
+
+/* ----------------------------------------------------------------------- */
+/*   Date-range listing for the Planning grid (rooms x dates)              */
+/* ----------------------------------------------------------------------- */
+
+export interface ListReservationsByRangeParams {
+  rangeStart: string; // YYYY-MM-DD inclusive
+  rangeEnd: string;   // YYYY-MM-DD inclusive
+}
+
+export async function listReservationsByRange(
+  params: ListReservationsByRangeParams,
+): Promise<ReservationRow[]> {
+  // overlap test: check_in <= rangeEnd AND check_out >= rangeStart
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('*')
+    .lte('check_in', params.rangeEnd)
+    .gte('check_out', params.rangeStart)
+    .order('check_in', { ascending: true });
+  if (error) throw mapSupabaseError(error);
+  return (data ?? []).map((d) => reservationRowSchema.parse(d));
+}
+
+/* ----------------------------------------------------------------------- */
+/*   Drag&drop : move a reservation (room and/or dates) with optimistic    */
+/*   locking via the `version` column.                                     */
+/* ----------------------------------------------------------------------- */
+
+export interface MoveReservationInput {
+  id: string;
+  fromVersion: number;
+  roomId?: string | null;
+  checkIn?: string;
+  checkOut?: string;
+}
+
+export async function moveReservation(input: MoveReservationInput): Promise<ReservationRow> {
+  const updates: Record<string, unknown> = {};
+  if (input.roomId !== undefined) updates.room_id = input.roomId;
+  if (input.checkIn) updates.check_in = input.checkIn;
+  if (input.checkOut) updates.check_out = input.checkOut;
+  if (input.checkIn && input.checkOut) {
+    const a = new Date(input.checkIn);
+    const b = new Date(input.checkOut);
+    updates.nights = Math.max(1, Math.round((b.getTime() - a.getTime()) / 86_400_000));
+  }
+  if (Object.keys(updates).length === 0) {
+    throw new Error('Aucun changement à appliquer');
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const builder = supabase.from('reservations') as any;
+  const { data, error } = await builder
+    .update(updates)
+    .eq('id', input.id)
+    .eq('version', input.fromVersion)
+    .select('*')
+    .maybeSingle();
+  if (error) throw mapSupabaseError(error);
+  if (!data) {
+    throw new Error(
+      'Réservation modifiée par un autre utilisateur, recharge le planning et réessaie.',
+    );
+  }
+  return reservationRowSchema.parse(data);
+}

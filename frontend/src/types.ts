@@ -22,6 +22,7 @@ export type PageId =
   | 'revenue-integrity'
   | 'odms'
   | 'litiges'
+  | 'reconciliation'
   | 'fiches'
   | 'fidelite'
   | 'yield'
