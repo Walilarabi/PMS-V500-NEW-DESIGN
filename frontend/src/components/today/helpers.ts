@@ -64,3 +64,15 @@ export const getSortValue = (row: RoomRow, key: SortKey) => {
   if (key === 'nights') return row.nights;
   return String(row[key] ?? '').toLowerCase();
 };
+
+/* -------- Today-date helpers (used across TodayView + OperationsTable) -------- */
+
+const _now = new Date();
+export const currentDateLong = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(_now);
+export const currentDateShort = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }).format(_now);
+export const currentDateKey = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+export const getDateKey = (dateTime: string) => dateTime.split(' ')[0];
+
+/* -------- Demo / fallback rooms dataset (used by OperationsTable when no live rows) -------- */
+
+export const roomsData: RoomRow[] = [];

@@ -106,6 +106,69 @@ export async function matchStatement(
 }
 
 
+/* ============================================================
+ *  CSV import mapping templates (saved per-hotel)
+ * ============================================================ */
+
+export type ColumnMapping = Record<string, string[]>;
+
+export interface CsvTemplate {
+  id: string;
+  hotel_id: string;
+  name: string;
+  source: string;
+  mapping: ColumnMapping;
+  default_currency: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listCsvTemplates(): Promise<CsvTemplate[]> {
+  const { data, error } = await supabase
+    .from('csv_import_templates')
+    .select('*')
+    .order('is_default', { ascending: false })
+    .order('updated_at', { ascending: false });
+  if (error) throw mapSupabaseError(error);
+  return (data ?? []) as CsvTemplate[];
+}
+
+export interface UpsertCsvTemplateInput {
+  name: string;
+  source: string;
+  mapping: ColumnMapping;
+  defaultCurrency?: string;
+  isDefault?: boolean;
+}
+
+export async function upsertCsvTemplate(hotelId: string, input: UpsertCsvTemplateInput): Promise<CsvTemplate> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const builder = supabase.from('csv_import_templates') as any;
+  const { data, error } = await builder
+    .upsert(
+      {
+        hotel_id: hotelId,
+        name: input.name,
+        source: input.source,
+        mapping: input.mapping,
+        default_currency: input.defaultCurrency ?? 'EUR',
+        is_default: input.isDefault ?? false,
+      },
+      { onConflict: 'hotel_id,name' },
+    )
+    .select('*')
+    .single();
+  if (error) throw mapSupabaseError(error);
+  return data as CsvTemplate;
+}
+
+export async function deleteCsvTemplate(id: string): Promise<void> {
+  const { error } = await supabase.from('csv_import_templates').delete().eq('id', id);
+  if (error) throw mapSupabaseError(error);
+}
+
+
 /**
  * Bulk insert bank statements (CSV import). Deduplicates by (source, external_reference)
  * to keep imports idempotent — if a row with the same external_reference already exists

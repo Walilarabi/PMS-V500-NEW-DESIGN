@@ -24,6 +24,7 @@ export type PageId =
   | 'litiges'
   | 'reconciliation'
   | 'audit'
+  | 'profile'
   | 'users'
   | 'utilisateurs'
   | 'fiches'

@@ -6,7 +6,9 @@ import { useAuth } from '@/src/domains/auth/AuthContext';
 import {
   listUsers, setUserActive, setUserRole,
   listInvitations, createInvitation, revokeInvitation,
+  updateSelfProfile, updateSelfPassword,
   type AppUserRow, type InvitationRow, type AppUserRole, type CreateInvitationInput,
+  type SelfProfilePatch,
 } from './repository';
 
 const KEY = ['users'] as const;
@@ -65,5 +67,20 @@ export function useRevokeInvitation() {
   return useMutation<InvitationRow, Error, string>({
     mutationFn: (id) => revokeInvitation(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: INV_KEY }),
+  });
+}
+
+
+export function useUpdateSelfProfile() {
+  const qc = useQueryClient();
+  return useMutation<AppUserRow, Error, SelfProfilePatch>({
+    mutationFn: (patch) => updateSelfProfile(patch),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
+export function useUpdateSelfPassword() {
+  return useMutation<void, Error, string>({
+    mutationFn: (newPassword) => updateSelfPassword(newPassword),
   });
 }

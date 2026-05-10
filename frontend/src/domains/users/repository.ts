@@ -119,3 +119,53 @@ export async function revokeInvitation(id: string): Promise<InvitationRow> {
   if (error) throw mapSupabaseError(error);
   return invitationRowSchema.parse(data);
 }
+
+
+/* ---------------------------------------------- Self profile ---------- */
+
+export interface SelfProfilePatch {
+  full_name?: string | null;
+}
+
+export async function updateSelfProfile(patch: SelfProfilePatch): Promise<AppUserRow> {
+  // Resolve current auth uid (RLS policy: auth_id = auth.uid()).
+  const { data: sess } = await supabase.auth.getUser();
+  const authId = sess.user?.id;
+  if (!authId) throw new Error('Session non authentifiée');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const builder = supabase.from('users') as any;
+  const { data, error } = await builder
+    .update(patch)
+    .eq('auth_id', authId)
+    .select('id, hotel_id, auth_id, full_name, email, role, is_active, last_login_at, created_at')
+    .single();
+  if (error) throw mapSupabaseError(error);
+  return appUserRowSchema.parse(data);
+}
+
+export async function updateSelfPassword(newPassword: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
+
+/* ---------------------------------------------- Labels ---------- */
+
+export const USER_ROLE_LABEL: Record<string, string> = {
+  reception: 'Réception',
+  gouvernante: 'Gouvernante',
+  femme_de_chambre: 'Femme de chambre',
+  maintenance: 'Maintenance',
+  breakfast: 'Restauration',
+  direction: 'Direction',
+  // legacy values kept for tolerance:
+  owner: 'Propriétaire',
+  admin: 'Administrateur',
+  housekeeping: 'Ménage',
+  accountant: 'Comptable',
+  rms: 'RMS',
+};
+
+/** Valid roles for invitations (matches the `admin_user_role` enum in DB). */
+export const ASSIGNABLE_ROLES: AppUserRole[] = [
+  'reception', 'gouvernante', 'femme_de_chambre', 'maintenance', 'breakfast', 'direction',
+] as unknown as AppUserRole[];

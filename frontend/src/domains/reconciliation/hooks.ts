@@ -10,9 +10,14 @@ import {
   createBankStatementsBatch,
   updateStatementStatus,
   matchStatement,
+  listCsvTemplates,
+  upsertCsvTemplate,
+  deleteCsvTemplate,
   type BankStatement,
   type CreateBankStatementInput,
+  type CsvTemplate,
   type ReconStatus,
+  type UpsertCsvTemplateInput,
 } from './repository';
 
 const KEY = ['reconciliation'] as const;
@@ -66,4 +71,34 @@ export function useImportBankStatementsCSV() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
   });
 }
+
+/* ----- CSV mapping templates ----- */
+
+export function useCsvTemplates() {
+  return useQuery<CsvTemplate[]>({
+    queryKey: [...KEY, 'csv-templates'],
+    queryFn: listCsvTemplates,
+  });
+}
+
+export function useUpsertCsvTemplate() {
+  const qc = useQueryClient();
+  const { session } = useAuth();
+  return useMutation<CsvTemplate, Error, UpsertCsvTemplateInput>({
+    mutationFn: async (input) => {
+      if (!session?.tenantId) throw new Error('Hôtel actif inconnu');
+      return upsertCsvTemplate(session.tenantId, input);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: [...KEY, 'csv-templates'] }),
+  });
+}
+
+export function useDeleteCsvTemplate() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (id) => deleteCsvTemplate(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: [...KEY, 'csv-templates'] }),
+  });
+}
+
 

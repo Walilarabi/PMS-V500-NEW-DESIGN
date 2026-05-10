@@ -41,7 +41,7 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
     if (['reservations', 'calendrier', 'mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(page)) return 'reservations';
     if (['revenue', 'yield', 'promotions'].includes(page)) return 'revenue';
     if (['finance', 'facturation', 'caisse', 'impayes', 'cloture', 'rie', 'odms', 'litiges', 'reconciliation', 'audit'].includes(page)) return 'finance';
-    if (['settings', 'annulations', 'supplements', 'fermatures', 'hotel', 'taxe', 'pms', 'api'].includes(page)) return 'settings';
+    if (['settings', 'annulations', 'supplements', 'fermatures', 'hotel', 'taxe', 'pms', 'api', 'users', 'utilisateurs', 'profile'].includes(page)) return 'settings';
     if (page === 'clients') return 'clients';
     if (page === 'analysis') return 'analysis';
     return 'general';
@@ -105,6 +105,8 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
       label: 'Configuration',
       items: [
         { id: 'settings', label: 'Paramètres Généraux', icon: Building2 },
+        { id: 'users', label: 'Utilisateurs & Équipe', icon: Users },
+        { id: 'profile', label: 'Mon profil', icon: ShieldCheck },
         { id: 'annulations', label: 'Politiques Annulation', icon: XCircle },
         { id: 'supplements', label: 'Suppléments & Packs', icon: PlusCircle },
         { id: 'hotel', label: 'Fiche Établissement', icon: Building2 },

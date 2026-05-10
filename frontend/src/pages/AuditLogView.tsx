@@ -7,8 +7,11 @@
 import React, { useMemo, useState } from 'react';
 import {
   RefreshCw, Search, ShieldCheck, User, Clock, Filter, FileText,
-  ArrowDown, ArrowUp, X,
+  ArrowDown, ArrowUp, X, Download,
 } from 'lucide-react';
+import Papa from 'papaparse';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 import { useAuditActors, useAuditEntities, useAuditLogs } from '@/src/domains/audit/hooks';
 import { useActiveHotel } from '@/src/domains/hotel/hooks';
@@ -34,6 +37,12 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleString('fr-FR', {
   day: '2-digit', month: '2-digit', year: '2-digit',
   hour: '2-digit', minute: '2-digit', second: '2-digit',
 });
+
+const resolveActor = (log: AuditLog, actorMap: Record<string, string>): string => {
+  if (log.actor_user_id) return actorMap[log.actor_user_id] ?? log.actor_user_id.slice(0, 8);
+  if (log.actor_label) return log.actor_label;
+  return 'Système';
+};
 
 const renderDiffPreview = (payload: unknown): string => {
   if (!payload || typeof payload !== 'object') return '—';
@@ -68,7 +77,7 @@ const AuditDetailDrawer: React.FC<{ log: AuditLog | null; actorMap: Record<strin
       <div className="overflow-y-auto p-5 space-y-3 flex-1 text-sm">
         <div>
           <p className="text-[10px] uppercase text-gray-500 font-bold tracking-wider">Acteur</p>
-          <p className="text-gray-900 mt-1">{log.actor_user_id ? (actorMap[log.actor_user_id] ?? log.actor_user_id) : 'Système / Cron'}</p>
+          <p className="text-gray-900 mt-1">{resolveActor(log, actorMap)}</p>
         </div>
         <div>
           <p className="text-[10px] uppercase text-gray-500 font-bold tracking-wider">Quand</p>
@@ -146,6 +155,54 @@ const AuditLogView: React.FC = () => {
     setEntity(''); setAction(''); setActor(''); setFromDate(''); setToDate(''); setSearch('');
   };
 
+  const exportCsv = () => {
+    const rows = filtered.map((l) => ({
+      'Date': fmtDate(l.created_at),
+      'Entité': ENTITY_LABEL[l.entity] ?? l.entity,
+      'Entity ID': l.entity_id,
+      'Action': l.action,
+      'Acteur': resolveActor(l, actorMap),
+      'Acteur User ID': l.actor_user_id ?? '',
+      'Détail': renderDiffPreview(l.payload),
+      'Payload JSON': JSON.stringify(l.payload),
+    }));
+    const csv = Papa.unparse(rows, { quotes: true });
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `flowtym-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    doc.setFontSize(14);
+    doc.setTextColor(60, 30, 130);
+    doc.text("FLOWTYM — Journal d'audit", 32, 36);
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(`Hôtel : ${hotelQ.data?.name ?? '—'}`, 32, 54);
+    doc.text(`Exporté le : ${new Date().toLocaleString('fr-FR')}  ·  ${filtered.length} événement(s)`, 32, 68);
+    autoTable(doc, {
+      startY: 86,
+      margin: { left: 32, right: 32 },
+      headStyles: { fillColor: [109, 40, 217], textColor: 255, fontSize: 8 },
+      bodyStyles: { fontSize: 8, cellPadding: 4 },
+      head: [['Date', 'Entité', 'Action', 'Acteur', 'Entity ID', 'Détail']],
+      body: filtered.map((l) => [
+        fmtDate(l.created_at),
+        ENTITY_LABEL[l.entity] ?? l.entity,
+        l.action,
+        resolveActor(l, actorMap),
+        l.entity_id.slice(0, 8),
+        renderDiffPreview(l.payload),
+      ]),
+    });
+    doc.save(`flowtym-audit-${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-[#F8F9FB] font-sans text-gray-900" data-testid="audit-page">
       <main className="min-w-0 flex-1 overflow-x-hidden p-6 md:p-8 w-full space-y-5">
@@ -162,14 +219,36 @@ const AuditLogView: React.FC = () => {
               Trace immuable des opérations métier (création / modification / suppression) — utile pour les contrôles fiscaux et certifications.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void logsQ.refetch()}
-            data-testid="audit-refresh"
-            className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:text-violet-700 px-3 py-2 rounded-xl text-xs font-semibold"
-          >
-            <RefreshCw size={13} className={logsQ.isFetching ? 'animate-spin' : ''} /> Rafraîchir
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={filtered.length === 0}
+              data-testid="audit-export-csv"
+              className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:text-violet-700 disabled:opacity-50 px-3 py-2 rounded-xl text-xs font-semibold"
+              title="Exporter les événements affichés au format CSV"
+            >
+              <Download size={13} /> CSV
+            </button>
+            <button
+              type="button"
+              onClick={exportPdf}
+              disabled={filtered.length === 0}
+              data-testid="audit-export-pdf"
+              className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:text-violet-700 disabled:opacity-50 px-3 py-2 rounded-xl text-xs font-semibold"
+              title="Exporter les événements affichés au format PDF"
+            >
+              <Download size={13} /> PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => void logsQ.refetch()}
+              data-testid="audit-refresh"
+              className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 hover:text-violet-700 px-3 py-2 rounded-xl text-xs font-semibold"
+            >
+              <RefreshCw size={13} className={logsQ.isFetching ? 'animate-spin' : ''} /> Rafraîchir
+            </button>
+          </div>
         </header>
 
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="audit-kpis">
@@ -272,7 +351,7 @@ const AuditLogView: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-700">
-                        <span className="inline-flex items-center gap-1.5"><User size={12} className="text-gray-400" />{log.actor_user_id ? (actorMap[log.actor_user_id] ?? log.actor_user_id.slice(0, 8)) : <em className="text-gray-400 not-italic">Système</em>}</span>
+                        <span className="inline-flex items-center gap-1.5"><User size={12} className="text-gray-400" />{log.actor_user_id ? (actorMap[log.actor_user_id] ?? log.actor_user_id.slice(0, 8)) : <em className="text-gray-400 not-italic">{log.actor_label ?? 'Système'}</em>}</span>
                       </td>
                       <td className="px-4 py-2.5 text-gray-500 text-[12px]">{renderDiffPreview(log.payload)}</td>
                     </tr>

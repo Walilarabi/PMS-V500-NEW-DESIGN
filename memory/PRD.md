@@ -90,8 +90,11 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - [x] **ODMS Relance Engine** (J+2 / J+5 / J+10 — auto-cascade, queue UI) — DONE Feb 2026.
 - [x] **Reconciliation Center** (OTA payouts + BANK_HOTEL ↔ reservations + suggestions auto) — DONE Feb 2026.
 - [x] **ODMS envoi email réel via Resend** — FastAPI endpoint `POST /api/odms/send-reminder` (JWT-protected, hotel-scoped, service-role merge), bouton "Envoyer email" dans le Dispute Center (DONE Feb 2026).
-- [ ] User profile self-update (mot de passe, nom, langue).
+- [x] **User profile self-update** (page `ProfileView` — nom complet + mot de passe via supabase.auth.updateUser) — DONE Feb 2026.
 - [x] **Audit log UI** (filtre entité/période/acteur/action + drawer payload JSON, 7 entités auditées, triggers immutables) — DONE Feb 2026 (migration 0110, domaine `domains/audit/`, page `AuditLogView`).
+- [x] **Audit log enrichi** : `actor_label` pour cron/service-role, export CSV + PDF, triggers sur `payments`/`invoices` (DONE Feb 2026, migration 0120).
+- [x] **Refactor TodayView.OperationsTable** — extraction (TodayView 1188 → 314 lignes, OperationsTable.tsx 763 lignes) — DONE Feb 2026.
+- [x] **CSV import : templates de mapping par hôtel** (migration 0130, RLS hotel-scoped, default star marker) — DONE Feb 2026.
 - [ ] Multi-hôtel switcher pour propriétaires de plusieurs établissements.
 - [x] **Réconciliation — import CSV** (drag&drop CSV Booking/Expedia → batch insert dans bank_statements) — DONE Feb 2026 (papaparse, migration 0090 idempotent index, `ReconciliationCsvImporter` component).
 - [x] **ODMS auto-send via pg_cron** : déclencher l'envoi quand `due_at` < now() — DONE Feb 2026 (migrations 0080/0081, endpoint `/api/odms/send-reminder-cron` avec `X-Cron-Secret`, job toutes les 5 min).

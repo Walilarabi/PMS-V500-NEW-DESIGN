@@ -15,6 +15,7 @@ import OtaDisputeCenter from '@/src/pages/OtaDisputeCenter';
 import ReconciliationView from '@/src/pages/ReconciliationView';
 import AuditLogView from '@/src/pages/AuditLogView';
 import UsersView from '@/src/pages/UsersView';
+import ProfileView from '@/src/pages/ProfileView';
 import { PageId } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -81,6 +82,8 @@ const App = () => {
       case 'users':
       case 'utilisateurs':
         return <UsersView />;
+      case 'profile':
+        return <ProfileView />;
       case 'settings': 
       case 'annulations':
       case 'supplements':

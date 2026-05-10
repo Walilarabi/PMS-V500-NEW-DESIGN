@@ -7,6 +7,7 @@ export const auditLogSchema = z.object({
   id: z.string().uuid(),
   hotel_id: z.string().uuid(),
   actor_user_id: z.string().uuid().nullable(),
+  actor_label: z.string().nullable().optional(),
   entity: z.string(),
   entity_id: z.string().uuid(),
   action: z.string(),

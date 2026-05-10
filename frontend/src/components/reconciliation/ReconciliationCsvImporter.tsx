@@ -10,16 +10,18 @@
  *
  * Source is chosen via dropdown (BOOKING / EXPEDIA / AIRBNB / BANK_HOTEL).
  */
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { Upload, FileText, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, X, Save, Trash2 } from 'lucide-react';
 
 import { useToast } from '@/src/hooks/use-toast';
-import { useImportBankStatementsCSV } from '@/src/domains/reconciliation/hooks';
-import type { CreateBankStatementInput } from '@/src/domains/reconciliation/repository';
+import {
+  useImportBankStatementsCSV, useCsvTemplates, useUpsertCsvTemplate, useDeleteCsvTemplate,
+} from '@/src/domains/reconciliation/hooks';
+import type { CreateBankStatementInput, ColumnMapping } from '@/src/domains/reconciliation/repository';
 
-type ColumnAliases = Record<string, string[]>;
-const ALIASES: ColumnAliases = {
+type ColumnAliases = ColumnMapping;
+const DEFAULT_ALIASES: ColumnAliases = {
   amount: ['amount', 'montant', 'total', 'gross amount', 'net amount'],
   posted_at: ['date', 'posted at', 'payment date', 'booking date', 'check-in', 'arrival'],
   external_reference: ['reference', 'reservation', 'booking id', 'external reference', 'res id', 'booking number'],
@@ -71,11 +73,31 @@ const parseDate = (raw: string): string | null => {
 
 export const ReconciliationCsvImporter: React.FC = () => {
   const importMutation = useImportBankStatementsCSV();
+  const templatesQ = useCsvTemplates();
+  const upsertTemplate = useUpsertCsvTemplate();
+  const deleteTemplate = useDeleteCsvTemplate();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [source, setSource] = useState<(typeof SOURCES)[number]>('BOOKING');
+  const [activeTemplateId, setActiveTemplateId] = useState<string>('');
   const [preview, setPreview] = useState<{ ok: number; bad: number; rows: CreateBankStatementInput[] } | null>(null);
+
+  // Resolved mapping = active template OR defaults
+  const aliases: ColumnAliases = (() => {
+    if (activeTemplateId) {
+      const tpl = (templatesQ.data ?? []).find((t) => t.id === activeTemplateId);
+      if (tpl?.mapping && Object.keys(tpl.mapping).length > 0) return tpl.mapping;
+    }
+    return DEFAULT_ALIASES;
+  })();
+
+  // Auto-pick the user's default template once data arrives.
+  useEffect(() => {
+    if (activeTemplateId || !templatesQ.data) return;
+    const def = templatesQ.data.find((t) => t.source === source && t.is_default) ?? templatesQ.data.find((t) => t.source === source);
+    if (def) setActiveTemplateId(def.id);
+  }, [templatesQ.data, source, activeTemplateId]);
 
   const handleFiles = useCallback((file: File) => {
     Papa.parse<Record<string, string>>(file, {
@@ -85,11 +107,11 @@ export const ReconciliationCsvImporter: React.FC = () => {
         const rows: CreateBankStatementInput[] = [];
         let bad = 0;
         for (const r of res.data) {
-          const amountKey = findKey(r, ALIASES.amount);
-          const dateKey = findKey(r, ALIASES.posted_at);
-          const refKey = findKey(r, ALIASES.external_reference);
-          const descKey = findKey(r, ALIASES.description);
-          const curKey = findKey(r, ALIASES.currency);
+          const amountKey = findKey(r, aliases.amount ?? DEFAULT_ALIASES.amount);
+          const dateKey = findKey(r, aliases.posted_at ?? DEFAULT_ALIASES.posted_at);
+          const refKey = findKey(r, aliases.external_reference ?? DEFAULT_ALIASES.external_reference);
+          const descKey = findKey(r, aliases.description ?? DEFAULT_ALIASES.description);
+          const curKey = findKey(r, aliases.currency ?? DEFAULT_ALIASES.currency);
           if (!amountKey || !dateKey) { bad += 1; continue; }
           const amt = parseAmount(r[amountKey] ?? '');
           const date = parseDate(r[dateKey] ?? '');
@@ -109,7 +131,7 @@ export const ReconciliationCsvImporter: React.FC = () => {
         toast({ title: 'Erreur parsing CSV', description: err.message, variant: 'destructive' });
       },
     });
-  }, [source, toast]);
+  }, [source, toast, aliases]);
 
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -139,18 +161,87 @@ export const ReconciliationCsvImporter: React.FC = () => {
     }
   };
 
+  const onSaveCurrentAsTemplate = async () => {
+    const name = window.prompt('Nom du template (sera réutilisable pour les prochains imports) :', `${source} — ${new Date().toLocaleDateString('fr-FR')}`);
+    if (!name) return;
+    try {
+      await upsertTemplate.mutateAsync({
+        name,
+        source,
+        mapping: aliases,
+        defaultCurrency: 'EUR',
+        isDefault: (templatesQ.data ?? []).filter((t) => t.source === source).length === 0,
+      });
+      toast({ title: 'Template enregistré', description: name, variant: 'success' });
+    } catch (e) {
+      toast({ title: 'Échec', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    }
+  };
+
+  const onDeleteActiveTemplate = async () => {
+    if (!activeTemplateId) return;
+    const tpl = (templatesQ.data ?? []).find((t) => t.id === activeTemplateId);
+    if (!tpl) return;
+    if (!window.confirm(`Supprimer le template "${tpl.name}" ?`)) return;
+    try {
+      await deleteTemplate.mutateAsync(activeTemplateId);
+      setActiveTemplateId('');
+      toast({ title: 'Template supprimé', variant: 'success' });
+    } catch (e) {
+      toast({ title: 'Échec', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    }
+  };
+
   return (
     <section className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm" data-testid="recon-csv-importer">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="text-sm font-bold text-gray-900">Import CSV (Booking / Expedia / Airbnb / Banque)</h3>
-        <select
-          value={source}
-          onChange={(e) => setSource(e.target.value as (typeof SOURCES)[number])}
-          data-testid="recon-csv-source"
-          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
-        >
-          {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={activeTemplateId}
+            onChange={(e) => setActiveTemplateId(e.target.value)}
+            data-testid="recon-csv-template"
+            title="Choisir un template de mapping sauvegardé"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          >
+            <option value="">Template : Mapping par défaut</option>
+            {(templatesQ.data ?? []).filter((t) => t.source === source).map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.is_default ? '★ ' : ''}{t.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={onSaveCurrentAsTemplate}
+            disabled={upsertTemplate.isPending}
+            data-testid="recon-csv-template-save"
+            title="Enregistrer le mapping actuel comme template"
+            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+          >
+            <Save size={12} /> Enregistrer
+          </button>
+          {activeTemplateId && (
+            <button
+              type="button"
+              onClick={onDeleteActiveTemplate}
+              disabled={deleteTemplate.isPending}
+              data-testid="recon-csv-template-delete"
+              title="Supprimer ce template"
+              className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+          <select
+            value={source}
+            onChange={(e) => { setSource(e.target.value as (typeof SOURCES)[number]); setActiveTemplateId(''); }}
+            data-testid="recon-csv-source"
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          >
+            {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
       </div>
 
       <div
