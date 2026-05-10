@@ -7,6 +7,7 @@ import { useAuth } from '@/src/domains/auth/AuthContext';
 import {
   listBankStatements,
   createBankStatement,
+  createBankStatementsBatch,
   updateStatementStatus,
   matchStatement,
   type BankStatement,
@@ -53,3 +54,16 @@ export function useMatchStatement() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
   });
 }
+
+export function useImportBankStatementsCSV() {
+  const qc = useQueryClient();
+  const { session } = useAuth();
+  return useMutation<{ inserted: number; skipped: number }, Error, CreateBankStatementInput[]>({
+    mutationFn: async (rows) => {
+      if (!session?.tenantId) throw new Error('Hôtel actif inconnu');
+      return createBankStatementsBatch(session.tenantId, rows);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
+  });
+}
+

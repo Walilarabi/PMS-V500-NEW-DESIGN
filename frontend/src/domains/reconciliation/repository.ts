@@ -104,3 +104,54 @@ export async function matchStatement(
   if (error) throw mapSupabaseError(error);
   return bankStatementSchema.parse({ ...(data as object), amount: Number((data as { amount: number }).amount) });
 }
+
+
+/**
+ * Bulk insert bank statements (CSV import). Deduplicates by (source, external_reference)
+ * to keep imports idempotent — if a row with the same external_reference already exists
+ * for this hotel + source it is skipped server-side via the unique partial index.
+ *
+ * Returns the number of rows successfully inserted.
+ */
+export async function createBankStatementsBatch(
+  hotelId: string,
+  rows: CreateBankStatementInput[],
+): Promise<{ inserted: number; skipped: number }> {
+  if (rows.length === 0) return { inserted: 0, skipped: 0 };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const builder = supabase.from('bank_statements') as any;
+  const payload = rows.map((input) => ({
+    hotel_id: hotelId,
+    source: input.source,
+    external_reference: input.externalReference ?? null,
+    description: input.description ?? null,
+    amount: input.amount,
+    currency: input.currency ?? 'EUR',
+    posted_at: input.postedAt,
+    status: 'UNMATCHED',
+  }));
+  // PostgREST does not yet support ON CONFLICT DO NOTHING natively for batch inserts
+  // without explicit conflict target — we trust the unique index and capture 23505 as skipped.
+  const { data, error } = await builder
+    .insert(payload, { defaultToNull: true })
+    .select('id');
+  if (error) {
+    // If a partial duplicate occurred, fall back to per-row inserts so successful rows persist.
+    if ((error as { code?: string }).code === '23505') {
+      let inserted = 0;
+      let skipped = 0;
+      for (const r of rows) {
+        try {
+          await createBankStatement(hotelId, r);
+          inserted += 1;
+        } catch (e) {
+          if ((e as { code?: string }).code === '23505') skipped += 1;
+          else throw e;
+        }
+      }
+      return { inserted, skipped };
+    }
+    throw mapSupabaseError(error);
+  }
+  return { inserted: (data ?? []).length, skipped: rows.length - (data ?? []).length };
+}

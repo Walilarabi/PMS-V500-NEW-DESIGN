@@ -33,6 +33,7 @@ import {
 import { supabase } from '@/src/lib/supabase';
 import { useQuery } from '@tanstack/react-query';
 import type { BankStatement, ReconStatus } from '@/src/domains/reconciliation/repository';
+import { ReconciliationCsvImporter } from '@/src/components/reconciliation/ReconciliationCsvImporter';
 
 const fmtEUR = (n: number, c = 'EUR'): string =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: c, maximumFractionDigits: 2 }).format(n);
@@ -195,6 +196,8 @@ export const ReconciliationView: React.FC = () => {
           <Kpi testid="recon-kpi-pct" label="Couverture" value={`${kpis.matchedPct}%`} hint={`${statements.length} lignes`} icon={TrendingUp} tone="violet" />
           <Kpi testid="recon-kpi-suggestions" label="Suggestions auto" value={String(suggestions.length)} hint="Confiance > 40" icon={Banknote} tone="sky" />
         </section>
+
+        <ReconciliationCsvImporter />
 
         <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden" data-testid="recon-table">
           <header className="flex items-center justify-between p-5 border-b border-gray-100 flex-wrap gap-3">
