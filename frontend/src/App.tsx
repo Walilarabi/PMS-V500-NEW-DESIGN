@@ -13,6 +13,7 @@ import { SettingsView } from '@/src/pages/SettingsView';
 import RevenueIntegrityView from '@/src/pages/RevenueIntegrityView';
 import OtaDisputeCenter from '@/src/pages/OtaDisputeCenter';
 import ReconciliationView from '@/src/pages/ReconciliationView';
+import UsersView from '@/src/pages/UsersView';
 import { PageId } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -74,6 +75,9 @@ const App = () => {
         return <OtaDisputeCenter />;
       case 'reconciliation':
         return <ReconciliationView />;
+      case 'users':
+      case 'utilisateurs':
+        return <UsersView />;
       case 'settings': 
       case 'annulations':
       case 'supplements':

@@ -23,6 +23,8 @@ export type PageId =
   | 'odms'
   | 'litiges'
   | 'reconciliation'
+  | 'users'
+  | 'utilisateurs'
   | 'fiches'
   | 'fidelite'
   | 'yield'
