@@ -36,10 +36,14 @@ import ReservationFormModal, { ReservationFormData } from '@/src/components/moda
 import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
 import { useConfigStore, HotelEvent } from '@/src/store/configStore';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
+import { useCreateReservationFromForm } from '@/src/domains/reservations/useCreateReservationFromForm';
+import { useToast } from '@/src/hooks/use-toast';
 
 export const PlanningView = () => {
   const { addReservation, reservations: contextReservations } = useReservations();
   const { rooms: storeRooms, events: storeEvents } = useConfigStore();
+  const { createFromForm, isPending: isCreatingResa } = useCreateReservationFromForm();
+  const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date(2026, 4, 1));
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -781,38 +785,58 @@ export const PlanningView = () => {
       <ReservationFormModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        onSave={(data: ReservationFormData) => {
-          const newRes: Reservation = {
-            id: data.reference,
-            priority: 'Moyenne',
-            room: data.roomNumber,
-            roomType: 'STD/DLX', // fallback
-            status: 'Arrivée < 1h',
-            statusColor: 'text-orange-500/80',
-            dotColor: 'bg-orange-400',
-            client: data.guestName,
-            arrival: `${data.checkIn} 16:00`,
-            departure: `${data.checkOut} 11:00`,
-            source: data.channel.toUpperCase(),
-            sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
-            action: 'Check-in',
-            governess: 'À faire',
-            vip: data.segment === 'VIP',
-            payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
-            totalAmount: data.totalTTC,
-            ownerFeeRate: 0.20,
-            pmsFeeRate: 0.15,
-            cleaningFee: 50,
-            email: data.email,
-            phone: data.phone,
-            nationality: data.nationality,
-            guests: { adults: data.adults, children: data.children },
-            notes: data.notes
-          };
-          addReservation(newRes);
-          setIsModalOpen(false);
+        onSave={async (data: ReservationFormData) => {
+          try {
+            const created = await createFromForm(data);
+            const newRes: Reservation = {
+              id: created.reference ?? data.reference,
+              priority: 'Moyenne',
+              room: data.roomNumber,
+              roomType: 'STD/DLX',
+              status: 'Arrivée < 1h',
+              statusColor: 'text-orange-500/80',
+              dotColor: 'bg-orange-400',
+              client: data.guestName,
+              arrival: `${data.checkIn} 16:00`,
+              departure: `${data.checkOut} 11:00`,
+              source: data.channel.toUpperCase(),
+              sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
+              action: 'Check-in',
+              governess: 'À faire',
+              vip: data.segment === 'VIP',
+              payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
+              totalAmount: data.totalTTC,
+              ownerFeeRate: 0.20,
+              pmsFeeRate: 0.15,
+              cleaningFee: 50,
+              email: data.email,
+              phone: data.phone,
+              nationality: data.nationality,
+              guests: { adults: data.adults, children: data.children },
+              notes: data.notes,
+            };
+            addReservation(newRes);
+            toast({
+              title: 'Réservation créée',
+              description: `${created.reference} · ${data.guestName} · ${data.checkIn} → ${data.checkOut}`,
+            });
+            setIsModalOpen(false);
+          } catch (err) {
+            toast({
+              title: 'Échec de création',
+              description: err instanceof Error ? err.message : 'Erreur inconnue',
+              variant: 'destructive',
+            });
+          }
         }} 
       />
+      {isCreatingResa && (
+        <div data-testid="creating-reservation-overlay" className="fixed inset-0 z-[200] grid place-items-center bg-slate-900/40 backdrop-blur-sm">
+          <div className="rounded-2xl bg-white px-6 py-4 shadow-xl text-sm font-semibold text-slate-700">
+            Création en cours…
+          </div>
+        </div>
+      )}
       <EventManagerModal 
         isOpen={isEventModalOpen} 
         onClose={() => setIsEventModalOpen(false)}

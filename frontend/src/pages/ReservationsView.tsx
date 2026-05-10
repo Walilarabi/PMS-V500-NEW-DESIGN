@@ -34,27 +34,77 @@ import { cn } from '@/src/lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { motion } from 'motion/react';
 
-import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
+import { useReservations as useLegacyReservations, Reservation } from '@/src/contexts/ReservationContext';
 import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
-import { LiveReservationsBanner } from '@/src/domains/reservations/LiveReservationsBanner';
+import { useCreateReservationFromForm } from '@/src/domains/reservations/useCreateReservationFromForm';
+import { useReservations as useSupabaseReservations } from '@/src/domains/reservations/hooks';
+import { useActiveHotel } from '@/src/domains/hotel/hooks';
+import { useToast } from '@/src/hooks/use-toast';
 
-const STATUS_DATA = [
+const STATUS_DATA_FALLBACK = [
   { name: 'Confirmées', value: 4, color: '#10B981' },
   { name: 'Check-in', value: 2, color: '#8B5CF6' },
   { name: 'En attente', value: 3, color: '#F59E0B' },
   { name: 'Annulées', value: 1, color: '#EF4444' },
 ];
 
+const STATUS_LABEL: Record<string, string> = {
+  confirmed: 'CONFIRMÉE',
+  checked_in: 'CHECK-IN',
+  checked_out: 'CHECK-OUT',
+  cancelled: 'ANNULÉE',
+};
+
+const STATUS_PIE_COLOR: Record<string, string> = {
+  confirmed: '#10B981',
+  checked_in: '#8B5CF6',
+  checked_out: '#64748B',
+  cancelled: '#EF4444',
+};
+
 export const ReservationsView = () => {
-  const { reservations, addReservation } = useReservations();
+  const { addReservation } = useLegacyReservations();
   const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const { createFromForm, isPending: isCreatingResa } = useCreateReservationFromForm();
+  const { toast } = useToast();
+  const supabaseQ = useSupabaseReservations({ limit: 200 });
+  const hotelQ = useActiveHotel();
+  const liveRows = supabaseQ.data?.rows ?? [];
+
+  const todayKey = React.useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  const STATUS_DATA = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const r of liveRows) {
+      const k = (r.status ?? 'confirmed').toLowerCase();
+      counts[k] = (counts[k] ?? 0) + 1;
+    }
+    return Object.entries(counts).map(([k, v]) => ({
+      name: STATUS_LABEL[k] ?? k,
+      value: v,
+      color: STATUS_PIE_COLOR[k] ?? '#94A3B8',
+    }));
+  }, [liveRows]);
+
+  const fmtEUR = (n: number | null | undefined): string =>
+    typeof n === 'number'
+      ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n)
+      : '—';
+
+  const totalCa = liveRows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
+  const confirmedCount = liveRows.filter((r) => r.status === 'confirmed').length;
+  const checkinCount = liveRows.filter((r) => r.status === 'checked_in').length;
+  const pendingCount = liveRows.filter((r) => r.payment_status !== 'paid').length;
 
   const stats = [
-    { label: 'Dossiers', value: reservations.length.toString(), sub: 'Actifs', icon: CheckCircle2, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
-    { label: 'Confirmée', value: '1', sub: '+ 2 aujourd\'hui', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { label: 'Check-in', value: '2', sub: 'Aujourd\'hui', icon: Clock, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
-    { label: 'CA total', value: '2 950 €', sub: '+ 8.3% vs hier', icon: ArrowUpRight, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { label: 'En attente', value: '3', sub: 'Action requise', icon: HelpCircle, color: 'text-amber-500', bg: 'bg-amber-50' },
+    { label: 'Dossiers', value: liveRows.length.toString(), sub: hotelQ.data?.name ?? 'Actifs', icon: CheckCircle2, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
+    { label: 'Confirmée', value: confirmedCount.toString(), sub: 'Live · Supabase', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+    { label: 'Check-in', value: checkinCount.toString(), sub: "Aujourd'hui", icon: Clock, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
+    { label: 'CA total', value: fmtEUR(totalCa), sub: 'Tous séjours', icon: ArrowUpRight, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+    { label: 'À encaisser', value: pendingCount.toString(), sub: 'Action requise', icon: HelpCircle, color: 'text-amber-500', bg: 'bg-amber-50' },
   ];
 
   const paymentFollowUps = [
@@ -68,36 +118,39 @@ export const ReservationsView = () => {
   const [channelFilter, setChannelFilter] = React.useState('ALL');
   const [roomTypeFilter, setRoomTypeFilter] = React.useState('ALL');
 
-  const filteredReservations = reservations.map(res => ({
-    ref: res.id,
-    status: res.status.toUpperCase(),
-    client: res.client,
-    email: res.email || 'contact@client.com',
-    pers: res.guests?.adults || 2,
-    checkin: res.arrival,
-    checkout: res.departure,
-    nights: 1, // simplified
-    amount: '400.50 €',
-    solde: res.payment === 'Payé' ? '0 €' : '400.50 €',
-    soldeColor: res.payment === 'Payé' ? 'emerald' : 'red',
-    channel: (res.source || 'DIRECT').toUpperCase(),
-    room: res.room,
-    roomType: res.roomType
-  })).filter(res => {
-    const matchesSearch = res.client.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         res.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         res.room.includes(searchQuery);
-    
+  const filteredReservations = liveRows.map((res) => {
+    const total = res.total_amount ?? 0;
+    const paid = res.paid_amount ?? 0;
+    const remaining = Math.max(0, total - paid);
+    const paid0 = paid >= total && total > 0;
+    return {
+      ref: res.reference ?? res.id.slice(0, 8).toUpperCase(),
+      status: STATUS_LABEL[(res.status ?? 'confirmed').toLowerCase()] ?? (res.status ?? 'CONFIRMÉE').toUpperCase(),
+      client: res.guest_name ?? '—',
+      email: res.guest_email ?? '—',
+      pers: res.pax ?? (res.adults ?? 1),
+      checkin: res.check_in,
+      checkout: res.check_out,
+      nights: res.nights ?? 1,
+      amount: fmtEUR(total),
+      solde: paid0 ? '0 €' : fmtEUR(remaining),
+      soldeColor: paid0 ? 'emerald' : 'red',
+      channel: (res.source ?? 'DIRECT').toUpperCase(),
+      room: res.room_number ?? '—',
+      roomType: res.room_type ?? 'STD/DLX',
+    };
+  }).filter((res) => {
+    const matchesSearch = res.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      res.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      res.room.includes(searchQuery);
     const matchesStatus = statusFilter === 'ALL' || res.status === statusFilter;
     const matchesChannel = channelFilter === 'ALL' || res.channel === channelFilter;
     const matchesRoomType = roomTypeFilter === 'ALL' || res.roomType === roomTypeFilter;
-
     return matchesSearch && matchesStatus && matchesChannel && matchesRoomType;
   });
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-[#F8F9FD]">
-      <LiveReservationsBanner />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -519,37 +572,59 @@ export const ReservationsView = () => {
       <ReservationFormModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSave={(data: ReservationFormData) => {
-          const newRes: Reservation = {
-            id: data.reference,
-            priority: 'Moyenne',
-            room: data.roomNumber,
-            roomType: 'STD/DLX', // fallback
-            status: 'CONFORMÉE',
-            statusColor: 'text-emerald-500',
-            dotColor: 'bg-emerald-400',
-            client: data.guestName,
-            arrival: `${data.checkIn} 16:00`,
-            departure: `${data.checkOut} 11:00`,
-            source: data.channel.toUpperCase(),
-            sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
-            action: 'Check-in',
-            governess: 'À faire',
-            vip: data.segment === 'VIP',
-            payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
-            totalAmount: data.totalTTC,
-            ownerFeeRate: 0.20,
-            pmsFeeRate: 0.15,
-            cleaningFee: 50,
-            email: data.email,
-            phone: data.phone,
-            nationality: data.nationality,
-            guests: { adults: data.adults, children: data.children },
-            notes: data.notes
-          };
-          addReservation(newRes);
+        onSave={async (data: ReservationFormData) => {
+          try {
+            const created = await createFromForm(data);
+            // Mirror into legacy mock context so the in-memory legacy table stays consistent
+            const legacy: Reservation = {
+              id: created.reference ?? data.reference,
+              priority: 'Moyenne',
+              room: data.roomNumber,
+              roomType: 'STD/DLX',
+              status: 'CONFIRMÉE',
+              statusColor: 'text-emerald-500',
+              dotColor: 'bg-emerald-400',
+              client: data.guestName,
+              arrival: `${data.checkIn} 16:00`,
+              departure: `${data.checkOut} 11:00`,
+              source: data.channel.toUpperCase(),
+              sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
+              action: 'Check-in',
+              governess: 'À faire',
+              vip: data.segment === 'VIP',
+              payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
+              totalAmount: data.totalTTC,
+              ownerFeeRate: 0.20,
+              pmsFeeRate: 0.15,
+              cleaningFee: 50,
+              email: data.email,
+              phone: data.phone,
+              nationality: data.nationality,
+              guests: { adults: data.adults, children: data.children },
+              notes: data.notes,
+            };
+            addReservation(legacy);
+            toast({
+              title: 'Réservation créée',
+              description: `${created.reference} · ${data.guestName} · ${data.checkIn} → ${data.checkOut}`,
+            });
+            setIsModalOpen(false);
+          } catch (err) {
+            toast({
+              title: 'Échec de création',
+              description: err instanceof Error ? err.message : 'Erreur inconnue',
+              variant: 'destructive',
+            });
+          }
         }}
       />
+      {isCreatingResa && (
+        <div data-testid="creating-reservation-overlay" className="fixed inset-0 z-[200] grid place-items-center bg-slate-900/40 backdrop-blur-sm">
+          <div className="rounded-2xl bg-white px-6 py-4 shadow-xl text-sm font-semibold text-slate-700">
+            Création en cours…
+          </div>
+        </div>
+      )}
     </div>
   );
 };

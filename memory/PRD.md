@@ -9,18 +9,19 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 | Layer | Tech |
 | ----- | ---- |
 | Frontend | React 19 + Vite 6 + TypeScript + TailwindCSS 4 + Zustand + TanStack Query/Table + Zod |
-| Auth + DB | Supabase (Postgres + Auth + RLS) — project `hzrzkvdebaadditvbqis` |
+| Auth + DB | Supabase (Postgres + Auth + RLS + **Realtime**) — project `hzrzkvdebaadditvbqis` |
 | Backend stub | FastAPI placeholder (kept for future BullMQ/PDP webhooks) |
 
 ## 3. Architecture
 
-- DDD by domain: `src/domains/{auth, reservations, hotel, _shared}/`
-- Each domain: `schemas.ts` (Zod), `repository.ts` (Supabase), `hooks.ts` (TanStack Query)
+- DDD by domain: `src/domains/{auth, reservations, guests, hotel, flowday, _shared}/`
+- Each domain: `schemas.ts` (Zod), `repository.ts` (Supabase), `hooks.ts` (TanStack Query) + optional `realtime.ts`, dedicated UI banners/components.
 - Strict tenant isolation via `hotel_id` + RLS policies (`get_user_hotel_id()`)
 - Branded types (`TenantId`, `HotelId`, …) for compile-time safety
-- Domain errors (`DomainError`, `NotFoundError`, `ConflictError`, …)
-- All currency values stored in cents server-side, displayed in EUR via `Intl`
+- Domain errors (`DomainError`, `NotFoundError`, `ConflictError`, …) + Postgrest mapping
+- All currency values stored in numeric, displayed in EUR via `Intl.NumberFormat`
 - Audit logs immutable via Postgres triggers
+- Realtime invalidation through a single mounted bridge (`RealtimeBridge`) listening to `postgres_changes` on `reservations`/`rooms`.
 
 ## 4. What is implemented (Jan 2026)
 
@@ -29,58 +30,74 @@ FLOWTYM is a mission-critical SaaS PMS for hotel groups. Architecture must be pr
 - Supervisor wired (`yarn start` on port 3000, FastAPI on 8001).
 - Existing 9-page UI (Flowday, Planning, Reservations, Clients, Revenue, Finance, Analysis, Flowboard, Settings) running.
 
-### Phase 2 — Supabase integration
-- Migration `0010_flowtym_align.sql`: creates `public.users`, `public.audit_logs`, fixes `get_user_hotel_id()` / `get_user_role()` helpers, adds RPC `provision_user_for_hotel`, applies hotel-scoped RLS policies on every business table.
-- Migration runner / auditor / inspector scripts (`yarn db:audit`, `yarn db:migrate`, `yarn tsx scripts/seed-admin.ts`).
-- Typed Supabase client (`src/lib/supabase.ts` + `supabase.types.ts`).
-- Auth domain with `loginWithPassword`, `getCurrentSession`, `onAuthStateChange`, `signOut`.
-- LoginPage with split-screen brand panel + form (data-testid'd).
-- AuthProvider + RootGate gate.
-- Reservations domain: `listReservations`, `getReservation`, `createReservation`, `updateReservationStatus` + Zod row schema + TanStack hooks.
-- Hotel domain: `useActiveHotel`, `useRooms`.
-- LiveReservationsBanner injected at top of ReservationsView showing real Supabase rows for the active hotel.
-- Logout button in Topbar (`data-testid="logout-button"`).
+### Phase 2 — Supabase fundations
+- Migration `0010_flowtym_align.sql`: `public.users`, `public.audit_logs`, fixed helpers, RPC `provision_user_for_hotel`, hotel-scoped RLS policies on every business table.
+- Migration `0011_realtime.sql`: enable Postgres logical replication on `reservations`, `rooms`, `guests`, `invoices`, `payments`.
+- Scripts: `yarn db:audit`, `yarn db:migrate`, `yarn tsx scripts/seed-admin.ts`.
+- Typed client (`src/lib/supabase.ts` + `supabase.types.ts`).
 
-### State
-- 5 hotels exist in Supabase, "Mas Provencal Aix" has 10 rooms + 4 reservations (live data flowing into the UI).
-- 9 auth users — only `walilarabi@gmail.com` is provisioned in `public.users` so far.
+### Phase 3 — Domains live
+- **Auth**: login, getCurrentSession, onAuthStateChange, signOut, LoginPage premium, AuthProvider, RootGate, Topbar logout.
+- **Hotel**: `useActiveHotel`, `useRooms`.
+- **Reservations**: list/get/create/updateStatus + Zod schemas + TanStack hooks; `useCreateReservationFromForm` orchestrates guest find-or-create + reservation insert; `LiveReservationsBanner` (KPI + table snapshot).
+- **Guests**: `findOrCreateGuest` repository.
+- **Flowday adapter**: `useFlowdayDataset` maps reservations + rooms + guests into `FlowdayRoomRow[]` consumed by the new design (KPIs occupation/dirty rooms/arrivals/unpaid + operations table).
+- **Realtime**: `useReservationsRealtime` subscribes to `postgres_changes` on `reservations` and `rooms`, invalidates TanStack Query caches automatically.
+
+### Pages migrated to Supabase
+- ✅ **Flowday** : KPIs, table d'opérations (Ali Larabi, Sophie Dubois, Pierre Bernard, Marie Martin), titre dynamique avec hôtel actif.
+- ✅ **Reservations** : header, 5 KPIs (4 dossiers / 1 confirmée / 2 check-in / 2950€ / 1 à encaisser), pie chart dynamique par statut, tableau live avec 4 lignes, search + filters, Nouvelle réservation modal branché.
+- ✅ **Planning** : Nouvelle réservation modal branché à Supabase (autres parties UI à migrer).
+- ⬜ Clients, Revenue, Finance, Analyse, Flowboard, Settings : encore mock.
+
+### UI components
+- `Toaster` global + `useToast` hook (success / destructive variants, auto-dismiss 4 s).
+- Brand-aligned LoginPage (split-screen, violet accents).
+- Logout button in Topbar with `data-testid`.
+
+### State Supabase
+- 5 hôtels en base ; "Mas Provencal Aix" : 10 chambres, 4 réservations (data live affichée partout).
+- 9 utilisateurs auth — `walilarabi@gmail.com` (rôle `direction`) provisionné dans `public.users`.
 
 ## 5. Backlog (priority order)
 
-### P0 — must have before public demo
-- [ ] Replace mock data on Flowday/Today/Planning views with Supabase domain hooks.
-- [ ] Wire ReservationFormModal to `useCreateReservation` (currently writes to local context only).
-- [ ] User-management UI for `direction` role (list, invite, suspend) using `attach_user_to_tenant` RPC pattern.
+### P0
+- [x] **b** Wire ReservationFormModal to `useCreateReservation` (DONE — Reservations + Planning).
+- [x] **c** Migrate Reservations page to live Supabase data (DONE).
+- [x] **f** Realtime subscriptions on reservations/rooms (DONE).
+- [ ] **a** Migrer la page Planning à Supabase (calendrier des chambres × dates avec drag & drop).
+- [ ] **d** Module gestion des utilisateurs (rôle direction): liste collaborateurs + invitation + désactivation.
+- [ ] **e** Domaine Billing (factures + paiements immuables, écritures inversées).
 
-### P1 — value adds
-- [ ] Domain `billing` (invoices, payments) with immutable writes + correction entries.
-- [ ] Domain `housekeeping` (room_cleaning_tasks, maintenance_tasks).
-- [ ] Realtime subscription on `reservations` (Supabase channels) for live status updates.
-- [ ] Optimistic locking via `version` column on `reservations` (currently absent in legacy schema; add via migration).
+### P1
+- [ ] Optimistic locking sur `reservations` (ajouter colonne `version` via migration + bump trigger).
+- [ ] User profile self-update (mot de passe, nom, langue).
+- [ ] Audit log UI (filtre par entité, période, acteur).
+- [ ] Multi-hôtel switcher pour propriétaires de plusieurs établissements.
 
 ### P2 — compliance & ops
-- [ ] FEC + UBL 2.1 export jobs (BullMQ once a Node backend is wired).
-- [ ] PPF/PDP webhook receiver (HMAC verified) → `pdp_exchange_logs`.
-- [ ] Audit log UI & retention policy.
-- [ ] Multi-hotel switcher for owners managing multiple properties.
+- [ ] FEC + UBL 2.1 export jobs (BullMQ + Node sidecar).
+- [ ] PPF/PDP webhook receiver (HMAC verified).
+- [ ] Performance: TanStack Virtual sur tableaux >200 lignes, Planning >365 jours.
+- [ ] i18n (FR/EN), gestion devise non EUR.
 
 ## 6. Personas
 
-- **Direction / owner**: full read+write across the hotel + user management.
-- **Receptionist**: reservations, guests, daily ops, no finance settings.
-- **Housekeeping** (`gouvernante`, `femme_de_chambre`): room cleaning tasks + status updates.
+- **Direction / owner**: full read+write, user management, exports fiscaux.
+- **Receptionist**: réservations, guests, daily ops, pas de finance settings.
+- **Housekeeping** (`gouvernante`, `femme_de_chambre`): tâches ménage + statut chambres.
 - **Maintenance**: maintenance_tasks + room out-of-order toggles.
-- **Accountant** (mapped to `direction` for now): invoices, payments, exports.
 
-## 7. Known issues
+## 7. Known issues / quirks
 
-- ESLint complains about TS parser (cosmetic, no runtime impact). The `tsc --noEmit` lint passes.
+- ESLint complains about TS parser (cosmetic, no runtime impact). `tsc --noEmit` passes.
 - Self-service signup is disabled until a multi-tenant `provision_tenant_with_first_hotel` RPC is wired.
-- Reservation create flow on the legacy modal still writes to local mock context, not Supabase.
-- Database password reset can take ~30 s to propagate to the pooler — documented in test_credentials.md.
+- Database password reset can take ~30 s to propagate to the pooler.
+- The legacy `ReservationContext` mock still mirrors creates, so legacy Flowday/Planning sections that read from it stay consistent with Supabase (will be removed when those sections are fully migrated).
 
 ## 8. Operational notes
 
 - Database password rotations: update `/app/backend/.env` `DATABASE_URL` and `/app/memory/test_credentials.md`.
 - All migrations live in `/app/frontend/supabase/migrations/*.sql`. Run `yarn db:migrate`.
 - Frontend hot reloads via Vite; supervisor restarts only needed on `.env` changes or new deps.
+- Realtime requires the `supabase_realtime` publication to include the table — handled by migration `0011`.
