@@ -22,7 +22,8 @@ import {
   ChevronRight,
   Sparkles,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  ShieldCheck
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -70,6 +71,7 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
         { id: 'impayes', label: 'Impayés / Débiteurs', icon: AlertCircle },
         { id: 'proprietaires', label: 'Propriétaires', icon: Users },
         { id: 'cloture', label: 'Clôture & Audit', icon: Lock },
+        { id: 'rie', label: 'Revenue Integrity (SAS)', icon: ShieldCheck },
       ]
     },
     revenue: {

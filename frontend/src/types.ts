@@ -16,7 +16,10 @@ export type PageId =
   | 'groupes'
   | 'paiements'
   | 'relances'
-  | 'anomalies';
+  | 'anomalies'
+  | 'rie'
+  | 'sas'
+  | 'revenue-integrity';
 
 export interface Reservation {
   id: string;

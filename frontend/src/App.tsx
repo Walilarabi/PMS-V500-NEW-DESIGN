@@ -10,6 +10,7 @@ import { FinanceView } from '@/src/pages/FinanceView';
 import { AnalysisView } from '@/src/pages/AnalysisView';
 import { FlowboardView } from '@/src/pages/FlowboardView';
 import { SettingsView } from '@/src/pages/SettingsView';
+import RevenueIntegrityView from '@/src/pages/RevenueIntegrityView';
 import { PageId } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -62,6 +63,10 @@ const App = () => {
       case 'proprietaires':
         return <FinanceView activeTab={activePage} />;
       case 'operations': return <PlaceholderPage name="Opérations" />;
+      case 'rie':
+      case 'sas':
+      case 'revenue-integrity':
+        return <RevenueIntegrityView />;
       case 'settings': 
       case 'annulations':
       case 'supplements':
