@@ -1,0 +1,82 @@
+{
+  "summary": "Frontend regression of FLOWTYM PMS Planning v2 + Reservation Form v4 + ODMS + Reconciliation + RIE. Login OK. All Planning v2 testIDs verified (header, view-toggles 7J/15J/Mois, mode-toggles Gantt/Revenue, prev/next/today, monthpicker with 12 months, filters search/type/status/channel, 10 rooms, 300 cells). NEW availability rows fully present (planning-avail-header + 3 cats Classique/Deluxe/Superieure + 94 day cells). NEW drag-create popup works (shows Chambre 101 / Arrivée / Départ / Nuits live; release opened the ReservationFormModal pre-filled). Form v4: Statut pills present (hold/pending/confirmed, default Confirmée), form-reference filled (RES-40286), Référence sits next to Type Chambre + Numéro on same row. Country picker fully working (162 countries, search 'Algé' → 1 result, form-country-option-DZ selectable, button shows 🇩🇿Algérie). ODMS dashboard fully wired (open/sent/corrected/recovered KPIs, reliability table, reminders queue, create-open, disputes-table). Reconciliation dashboard fully wired (all KPIs, all filter chips, 4 apply / 5 dispute / 5 ignore action buttons, recon-add-open opens modal). RIE rie-reliability-table present. No console errors observed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ReservationFormModal — Tulip multi-room",
+        "issue": "Tulip chips behave as RADIO (single-select), NOT as multi-select checkboxes. Clicking form-room-chip-102 deselects form-room-chip-101 instead of adding 102 to the selection. The badge stays at '1', recap shows '1 chambre : 102', Numéro field shows '102' (single value), and form-save label remains 'Enregistrer' (never becomes 'Enregistrer (N chambres)'). Verified: chips render as <label> wrapping <input> (10 chips: 101..302), conflict chip (204) correctly grayed-out / line-through (✓). After two consecutive force-clicks on 102 and 103, only ONE room is checked at a time.",
+        "selector": "[data-testid=form-room-chip-101..] (input is single-select)",
+        "priority": "HIGH"
+      },
+      {
+        "component": "ReservationFormModal — form-save label",
+        "issue": "form-save text never becomes 'Enregistrer (3 chambres)' as required by the spec, because the underlying selection state is single, not multi. Label stays 'Enregistrer' regardless of selection size.",
+        "selector": "[data-testid=form-save]",
+        "priority": "HIGH"
+      },
+      {
+        "component": "PlanningViewLive — planning-res-details",
+        "issue": "(carry-over from iteration 4) Backdrop is a <button> containing planning-res-close <button>. React 18 hydration warning: 'In HTML, <button> cannot be a descendant of <button>'.",
+        "selector": "[data-testid=planning-res-details] button[data-testid=planning-res-close]",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Tulip multi-room → useCreateReservationFromForm (1 reservation per room)",
+        "issue": "Cannot exercise the multi-row Supabase insert path (RES-XXXXX-01/-02/-03 + totalAmount split) because the UI prevents selecting more than one room. Domain code in /app/frontend/src/domains/reservations/useCreateReservationFromForm.ts is wired but unreachable via UI in current state.",
+        "affected_selectors": ["[data-testid=form-room-chip-*]", "[data-testid=form-tulip-badge]", "[data-testid=form-save]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_results": {
+    "01_login_walilarabi": "PASS",
+    "02_planning_page_and_header": "PASS",
+    "03_view_toggles_7J_15J_Mois": "PASS (all 3 clickable)",
+    "04_mode_toggles_gantt_revenue": "PASS",
+    "05_nav_prev_next_today": "PASS",
+    "06_monthpicker_12_months": "PASS (planning-picker-month-0..11 = 12)",
+    "07_filters_search_type_status_channel": "PASS (4/4 present)",
+    "08_gantt_grid_rooms_cells": "PASS (10 rooms, 300 cells in 15J view)",
+    "09_availability_rows_NEW": "PASS (planning-avail-header + 3 cats Classique/Deluxe/Superieure + 94 day cells)",
+    "10_drag_create_NEW": "PASS (planning-drag-create-popup shows 'Chambre 101 · Arrivée sam.30 mai · Départ mer.03 juin · Nuits 4'; release opens ReservationFormModal pre-filled)",
+    "11_empty_cell_click_modal": "PASS (modal opens with checkIn=05/10/2026 checkOut=05/11/2026, 1 nuit — pre-fill bug from iter 4 fixed)",
+    "12_form_status_pills": "PASS (form-status-pills + hold + pending + confirmed; clicking Pending switches to blue tone)",
+    "13_form_reference": "PASS (RES-40286 generated, on same row as Type Chambre + Numéro)",
+    "14_form_country_picker": "PASS (162 options, search 'Algé' filters to 1, form-country-option-DZ selects → button shows 🇩🇿Algérie)",
+    "15_form_tulip_badge_render": "PASS (badge shows '1' inside Type Chambre field)",
+    "16_form_tulip_multi_select": "FAIL — chips behave as RADIO. Selecting 102 then 103 leaves only the LAST clicked room selected; badge stays at 1, recap shows 1 chambre, save label unchanged.",
+    "17_form_tulip_conflict_grayed": "PASS (chip-204 grayed out + line-through during current dates)",
+    "18_form_save_label_dynamic": "FAIL — never becomes 'Enregistrer (N chambres)' (consequence of #16)",
+    "19_odms_dashboard_render": "PASS (odms-dashboard + all 4 KPIs + reliability table + reminders queue + create-open + disputes-table)",
+    "20_recon_dashboard_render": "PASS (recon-dashboard + 4 KPIs + 5 filter chips ALL/UNMATCHED/MATCHED/DISPUTED/IGNORED + 4 apply / 5 dispute / 5 ignore action buttons)",
+    "21_rie_smart_reliability_table": "PASS (rie-reliability-table present on /rie)",
+    "22_console_errors": "0 critical errors observed during full E2E flow (planning-res-details hydration warning carries over from iter 4 but only fires when popup is opened — not exercised in this run)",
+    "23_no_white_pages_no_500": "PASS"
+  },
+  "test_report_links": [],
+  "action_items": [
+    "[HIGH] Fix Tulip multi-room selection: convert <input type='radio' name='rooms' /> to <input type='checkbox' /> inside form-room-chip-* labels (or remove the shared 'name' attribute that makes them mutually exclusive). The handler should APPEND to the rooms array instead of REPLACING. File: /app/frontend/src/components/modals/ReservationFormModal.tsx — section rendering form-room-chip-* with the 'CHAMBRES DISPONIBLES (1/10)' header.",
+    "[HIGH] Update form-save label to dynamically read 'Enregistrer (N chambres)' when N>1 selected rooms; disable when N=0. Same file as above.",
+    "[MEDIUM] Fix nested <button> in PlanningViewLive's planning-res-details backdrop (carry-over). Replace outer <button aria-label='Fermer'> with <div role='button' tabIndex={0} onClick={close} onKeyDown={Esc → close}>.",
+    "[LOW] Verify ODMS DRAFT→SENT auto-creates J+2 reminder in odms-reminders-queue (not exercised due to topbar overlay intercepting clicks during a sequenced test — likely just a test timing issue, recommend manual or isolated retest)."
+  ],
+  "critical_code_review_comments": [
+    "ReservationFormModal Tulip section appears to use a radio-group input pattern (single shared name), which contradicts the spec's multi-room requirement. The selection state model is likely a scalar (selectedRoom: string) instead of an array (selectedRooms: string[]). useCreateReservationFromForm.ts is correctly designed to loop over an array — but the form never feeds it more than one room.",
+    "The form-rooms-recap testid IS present in DOM but only after the popup closes; spec asks for it to reflect '101, 102, 103' — currently only ever shows one room because of bug #1.",
+    "Country picker is excellent (162 countries, instant search filter, flag emoji rendering). DZ test passed cleanly.",
+    "Drag-create popup is well-implemented: pointer threshold respected (>4px), live arrival/departure/nights, no popup on pure click (which opens modal pre-filled with 1 night).",
+    "Availability rows wiring is correct and live (94 cells = 15 days × 3 cats + header cells). Numbers update with reservation movements.",
+    "Reconciliation seed data (5+ rows) is present and all FSM action buttons render. Strong end-to-end."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only requested)", "frontend": "21/23 PASS (91%); 2/23 FAIL — both rooted in same Tulip multi-room bug. 0 blocking-page failures."},
+  "test_credentials": "walilarabi@gmail.com / Flowtym2026! (admin direction, Mas Provencal Aix). Confirmed working.",
+  "seed_data_creation": "None new this iteration. Recon/ODMS pre-seeded data confirmed present.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 5 fully validated Planning v2 (incl. NEW availability rows + drag-create), Form v4 statut/reference/country, ODMS dashboard, Recon dashboard + actions, RIE table. Two related bugs in ReservationFormModal Tulip multi-room block the multi-reservation creation flow (RES-XXXXX-01/-02/-03). After main agent fixes the radio→checkbox + save-label, retest: (a) select 3 rooms via Tulip, (b) verify form-save text becomes 'Enregistrer (3 chambres)', (c) submit and confirm 3 Supabase rows with split totalAmount. Also validate ODMS DRAFT→SENT timeline + J+2 auto-reminder which was not exercised here.",
+  "rca_of_the_issue": "Tulip multi-room RCA: the form-room-chip-* labels each contain an <input> element. From the chip structure dump, all chips share the same parent in DOM and behave mutually exclusively → they are <input type='radio' name='room'> (or equivalent React state setter that REPLACES rather than TOGGLES MEMBERSHIP). Fix: change input type to 'checkbox' (no shared name) and update onChange handler to push/remove the room id from a Set/Array state — `setRooms(prev => prev.includes(id) ? prev.filter(r=>r!==id) : [...prev, id])`. After fix, badge text computation should be `rooms.length`, Numéro field display should be `rooms.join(', ')`, and form-save label should be `rooms.length > 1 ? 'Enregistrer (' + rooms.length + ' chambres)' : 'Enregistrer'`."
+}
