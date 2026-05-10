@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from odms_emails import router as odms_emails_router
+from fec import router as fec_router
 
 app = FastAPI(title="FLOWTYM Backend", version="0.2.0")
 
@@ -28,6 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(odms_emails_router)
+app.include_router(fec_router)
 
 
 @app.get("/api/health")
