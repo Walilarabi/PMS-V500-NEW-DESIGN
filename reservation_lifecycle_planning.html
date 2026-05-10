@@ -1,0 +1,603 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:var(--font-sans,'Inter',sans-serif)}
+:root{
+  --v:#8B5CF6;--vl:#EDE9FE;--vd:#6D28D9;
+  --g:#16a34a;--gl:#dcfce7;
+  --r:#dc2626;--rl:#fee2e2;
+  --a:#d97706;--al:#fef3c7;
+  --b:#2563eb;--bl:#dbeafe;
+  --gray:#6b7280;--gray-l:#f9fafb;--gray-b:#e5e7eb;
+  --text:var(--color-text-primary);--text2:var(--color-text-secondary);
+  --bg:var(--color-background-primary);--bg2:var(--color-background-secondary);
+}
+.wrap{padding:12px 0;font-size:13px}
+.section-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.tab{padding:7px 14px;border-radius:20px;border:1.5px solid var(--gray-b);background:var(--bg2);
+  color:var(--text2);cursor:pointer;font-size:12px;font-weight:500;transition:all .15s}
+.tab.active{background:var(--vl);color:var(--vd);border-color:var(--v)}
+.panel{display:none}.panel.active{display:block}
+
+/* PLANNING GRID */
+.plan-wrap{overflow-x:auto;border:1px solid var(--gray-b);border-radius:12px}
+.plan-grid{min-width:700px;border-collapse:collapse;width:100%}
+.plan-grid th{font-size:11px;font-weight:600;color:var(--text2);padding:8px 6px;
+  border-bottom:1px solid var(--gray-b);text-align:center;white-space:nowrap}
+.plan-grid th.today-h{background:var(--vl);color:var(--vd)}
+.plan-grid th.wknd-h{background:var(--gray-l)}
+.plan-grid td{border:1px solid var(--gray-b);padding:4px;min-width:80px;height:44px;vertical-align:top;cursor:pointer;position:relative}
+.plan-grid td.today-c{background:rgba(139,92,246,.04)}
+.plan-grid td.wknd-c{background:var(--gray-l)}
+.plan-grid td.occupied{background:rgba(139,92,246,.02)}
+.plan-grid td.drag-over{background:var(--vl)!important;outline:2px dashed var(--v)}
+.plan-grid td.room-lbl{font-size:11px;font-weight:600;color:var(--text);min-width:90px;
+  background:var(--bg2);position:sticky;left:0;z-index:2;padding:6px 8px;cursor:default}
+.plan-grid td.room-lbl span{display:block;font-size:9px;font-weight:400;color:var(--text2)}
+.plan-bar{display:inline-flex;align-items:center;gap:3px;padding:3px 6px;border-radius:5px;
+  font-size:10px;font-weight:600;cursor:grab;user-select:none;white-space:nowrap;max-width:100%;
+  transition:opacity .15s;border-left:3px solid transparent}
+.plan-bar:active{cursor:grabbing;opacity:.7}
+.plan-bar.direct{background:#d1fae5;color:#065f46;border-color:#16a34a}
+.plan-bar.booking{background:#dbeafe;color:#1e40af;border-color:#2563eb}
+.plan-bar.expedia{background:#fef3c7;color:#92400e;border-color:#d97706}
+.plan-bar.airbnb{background:#fee2e2;color:#991b1b;border-color:#dc2626}
+.plan-bar.walkin{background:#ede9fe;color:#4c1d95;border-color:#7c3aed}
+.plan-bar.arrival{border-radius:5px 0 0 5px}
+.plan-bar.departure{border-radius:0 5px 5px 0}
+.plan-bar.dummy{opacity:.6;border-style:dashed}
+.plan-bar.dragging{opacity:.4}
+.kpi-row td{font-size:10px;text-align:center;padding:5px 4px;background:var(--bg2);color:var(--text2)}
+.kpi-row td strong{font-size:11px}
+
+/* STATUS BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;
+  font-size:10px;font-weight:700;white-space:nowrap}
+.badge.confirmed{background:var(--gl);color:var(--g)}
+.badge.checkin{background:var(--vl);color:var(--vd)}
+.badge.checkout{background:var(--gray-l);color:var(--gray)}
+.badge.annulee{background:var(--rl);color:var(--r)}
+.badge.noshow{background:var(--al);color:var(--a)}
+.badge.pending{background:var(--al);color:#92400e}
+.badge.expired{background:var(--rl);color:var(--r)}
+.badge.paid{background:var(--gl);color:var(--g)}
+
+/* LIFECYCLE FLOW */
+.flow{display:flex;flex-direction:column;gap:0}
+.flow-step{display:flex;gap:12px;align-items:flex-start;padding:12px 0;
+  border-bottom:1px solid var(--gray-b);cursor:pointer;transition:background .1s;border-radius:8px;padding:10px 12px}
+.flow-step:hover{background:var(--bg2)}
+.flow-step.active-step{background:var(--vl)}
+.flow-num{width:28px;height:28px;border-radius:50%;background:var(--v);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.flow-content{flex:1}
+.flow-title{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px}
+.flow-desc{font-size:11px;color:var(--text2);line-height:1.5}
+.flow-detail{margin-top:8px;padding:10px;background:var(--bg2);border-radius:8px;
+  font-size:11px;color:var(--text);display:none;line-height:1.6}
+.flow-detail.open{display:block}
+.flow-arrow{font-size:16px;color:var(--v);margin:2px 0;text-align:center;padding-left:26px}
+.trigger-list{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.trigger{padding:2px 8px;border-radius:4px;background:var(--bg2);border:1px solid var(--gray-b);
+  font-size:10px;font-family:monospace;color:var(--text2)}
+
+/* ACTIONS GRID */
+.actions-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.action-card{border:1px solid var(--gray-b);border-radius:10px;padding:10px 12px;cursor:pointer;
+  transition:all .15s;background:var(--bg)}
+.action-card:hover{border-color:var(--v);background:var(--vl)}
+.action-card h4{font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px}
+.action-card p{font-size:11px;color:var(--text2);line-height:1.4}
+.action-card .icon{font-size:18px;margin-bottom:6px}
+
+/* PAYMENT STATE */
+.state-machine{display:flex;flex-direction:column;gap:8px}
+.state-node{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;
+  border:1.5px solid var(--gray-b);background:var(--bg)}
+.state-node.active-state{border-color:var(--v);background:var(--vl)}
+.state-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.state-content{flex:1}
+.state-title{font-size:12px;font-weight:600;color:var(--text)}
+.state-desc{font-size:10px;color:var(--text2)}
+.state-arrow{text-align:center;font-size:12px;color:var(--text2);padding:2px 0}
+.state-select{padding:6px 12px;border-radius:8px;border:1px solid var(--gray-b);
+  background:var(--bg2);font-size:12px;color:var(--text);outline:none;cursor:pointer}
+
+/* DRAG MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;
+  justify-content:center;z-index:100;display:none}
+.overlay.open{display:flex}
+.modal-box{background:var(--bg);border-radius:16px;padding:20px 24px;max-width:320px;width:90%;
+  box-shadow:0 8px 32px rgba(0,0,0,.15)}
+.modal-icon{font-size:28px;text-align:center;margin-bottom:8px}
+.modal-title{font-size:15px;font-weight:700;text-align:center;margin-bottom:6px;color:var(--text)}
+.modal-msg{font-size:12px;text-align:center;color:var(--text2);margin-bottom:16px;line-height:1.5}
+.modal-btns{display:flex;gap:8px}
+.btn{padding:9px 16px;border-radius:10px;border:none;font-size:12px;font-weight:600;cursor:pointer;flex:1;transition:all .15s}
+.btn-confirm{background:linear-gradient(135deg,var(--v),var(--vd));color:#fff}
+.btn-cancel{background:var(--bg2);color:var(--text2);border:1px solid var(--gray-b)}
+
+/* TOAST */
+.toast-area{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:6px;z-index:200}
+.toast-msg{background:#1f2937;color:#fff;padding:9px 14px;border-radius:9px;font-size:11px;
+  font-weight:500;display:flex;align-items:center;gap:7px;animation:tin .2s ease;max-width:260px}
+.toast-msg.ok{background:#14532d}.toast-msg.err{background:#7f1d1d}
+@keyframes tin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+</style>
+
+<div class="wrap">
+  <div class="section-tabs">
+    <div class="tab active" onclick="showPanel('planning')">Planning & DnD</div>
+    <div class="tab" onclick="showPanel('lifecycle')">Cycle de vie</div>
+    <div class="tab" onclick="showPanel('actions')">Actions disponibles</div>
+    <div class="tab" onclick="showPanel('payment')">Paiement & Statuts</div>
+  </div>
+
+  <!-- PANEL 1 : PLANNING INTERACTIF -->
+  <div class="panel active" id="panel-planning">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:12px;color:var(--text2)">Glisser-déposer une réservation sur une autre chambre</div>
+      <div style="display:flex;gap:6px">
+        <span class="badge confirmed">Confirmée</span>
+        <span class="badge checkin">En séjour</span>
+        <span class="badge pending">Paiement att.</span>
+      </div>
+    </div>
+    <div class="plan-wrap">
+      <table class="plan-grid" id="planTable"></table>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--text2)">
+      <span>🟢 Arrivée</span><span>🟠 Départ</span><span>⚪ Nuit</span>
+      <span style="margin-left:auto">Cliquez sur une cellule vide pour créer · Cliquez sur une barre pour voir la fiche</span>
+    </div>
+  </div>
+
+  <!-- PANEL 2 : CYCLE DE VIE -->
+  <div class="panel" id="panel-lifecycle">
+    <div class="flow" id="lifecycle-flow"></div>
+  </div>
+
+  <!-- PANEL 3 : ACTIONS -->
+  <div class="panel" id="panel-actions">
+    <div style="margin-bottom:12px;font-size:12px;color:var(--text2)">
+      Actions disponibles selon le statut de la réservation
+    </div>
+    <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:12px;font-weight:500;color:var(--text)">Statut :</span>
+      <select class="state-select" onchange="renderActions(this.value)">
+        <option value="Confirmee">Confirmée</option>
+        <option value="checked_in">En séjour (checked_in)</option>
+        <option value="checked_out">Check-out effectué</option>
+        <option value="Annulee">Annulée</option>
+        <option value="pending_payment">Paiement en attente</option>
+      </select>
+    </div>
+    <div class="actions-grid" id="actions-grid"></div>
+    <div id="action-detail" style="margin-top:12px;padding:12px;background:var(--bg2);border-radius:10px;
+      font-size:11px;display:none;line-height:1.7;color:var(--text)"></div>
+  </div>
+
+  <!-- PANEL 4 : PAIEMENT -->
+  <div class="panel" id="panel-payment">
+    <div style="margin-bottom:12px;font-size:12px;color:var(--text2)">
+      Machine à états du paiement — cliquez sur un état pour voir les transitions
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+      <div class="state-machine" id="state-machine"></div>
+      <div id="state-detail" style="padding:14px;border:1.5px solid var(--v);border-radius:12px;
+        background:var(--vl);display:none;font-size:11px;line-height:1.7;color:var(--vd)"></div>
+    </div>
+    <div style="margin-top:16px;padding:12px 14px;background:var(--al);border-radius:10px;
+      border:1px solid #fde68a;font-size:11px;color:#92400e">
+      <strong>Chambre fictive (isDummyRoom) :</strong><br>
+      Quand le lien expire → la chambre réelle est libérée → assignée à un code fictif (ex: RES-D1).
+      Quand le paiement est confirmé → une vraie chambre disponible de la bonne catégorie est réassignée automatiquement.
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DELOGEMENT -->
+<div class="overlay" id="delog-modal">
+  <div class="modal-box">
+    <div class="modal-icon" id="modal-icon">✨</div>
+    <div class="modal-title" id="modal-title">Upgrade détecté !</div>
+    <div class="modal-msg" id="modal-msg"></div>
+    <div class="modal-btns">
+      <button class="btn btn-cancel" onclick="cancelDelog()">Annuler</button>
+      <button class="btn btn-confirm" onclick="confirmDelog()">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-area" id="toast-area"></div>
+
+<script>
+const TODAY_IDX = 2;
+const DAYS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const dates = [
+  {label:'Lun 28 avr', wknd:false, today:false},
+  {label:'Mar 29 avr', wknd:false, today:false},
+  {label:'Mer 30 avr', wknd:false, today:true},
+  {label:'Jeu 01 mai', wknd:false, today:false},
+  {label:'Ven 02 mai', wknd:false, today:false},
+  {label:'Sam 03 mai', wknd:true,  today:false},
+];
+
+const rooms = [
+  {num:'101', type:'Double Classique', price:99,  level:1},
+  {num:'202', type:'Double Deluxe',    price:149, level:2},
+  {num:'301', type:'Suite Premium',    price:249, level:3},
+  {num:'104', type:'Double Classique', price:99,  level:1},
+];
+
+const resas = [
+  {id:'RES-1001',room:'101',name:'Martin D.',canal:'direct', status:'checked_in',  pay:'paid',        start:0,end:3, arr:true},
+  {id:'RES-1002',room:'202',name:'Sophie L.',canal:'booking',status:'Confirmee',   pay:'pending_payment',start:1,end:4,arr:false},
+  {id:'RES-1003',room:'301',name:'Clara M.', canal:'expedia',status:'Confirmee',   pay:'confirmed',   start:2,end:5,arr:true},
+  {id:'RES-1004',room:'101',name:'Paul B.',  canal:'walkin', status:'Confirmee',   pay:'confirmed',   start:3,end:5,arr:false},
+  {id:'RES-1005',room:'104',name:'Anna K.',  canal:'airbnb', status:'Confirmee',   pay:'expired',     start:1,end:3,arr:false, dummy:true},
+];
+
+let dragId = null;
+let delogCb = null;
+let resasState = JSON.parse(JSON.stringify(resas));
+
+function toast(msg, type=''){
+  const el=document.createElement('div');
+  el.className='toast-msg'+(type?' '+type:'');
+  el.textContent=msg;
+  document.getElementById('toast-area').appendChild(el);
+  setTimeout(()=>el.remove(),3000);
+}
+
+function roomLevel(num){
+  return rooms.find(r=>r.num===num)?.level||1;
+}
+
+function resasForCell(roomNum, dayIdx){
+  return resasState.filter(r=>{
+    if(r.room!==roomNum) return false;
+    return dayIdx>=r.start && dayIdx<r.end;
+  });
+}
+
+function kpiForDay(dayIdx){
+  let occ=0, rev=0;
+  rooms.forEach(rm=>{
+    if(resasForCell(rm.num,dayIdx).length){ occ++; rev+=rm.price; }
+  });
+  const to = rooms.length>0?Math.round(occ/rooms.length*100):0;
+  const adr = occ>0?Math.round(rev/occ):0;
+  const col = to>=80?'var(--g)':to<40?'var(--r)':'var(--v)';
+  return {to,adr,free:rooms.length-occ,col};
+}
+
+function renderPlanning(){
+  let html='<thead><tr><th style="text-align:left;min-width:90px;position:sticky;left:0;background:var(--bg2);z-index:3">Chambre</th>';
+  dates.forEach((d,i)=>{
+    const cls=d.today?'today-h':d.wknd?'wknd-h':'';
+    html+=`<th class="${cls}">${d.label}</th>`;
+  });
+  html+='</tr></thead><tbody>';
+
+  rooms.forEach(room=>{
+    html+=`<tr><td class="room-lbl">Ch. <strong>${room.num}</strong><span>${room.type} · ${room.price}€</span></td>`;
+    dates.forEach((d,di)=>{
+      const cls=d.today?' today-c':d.wknd?' wknd-c':'';
+      const celResas=resasForCell(room.num,di);
+      const occCls=celResas.length?' occupied':'';
+      html+=`<td class="plan-cell${cls}${occCls}"
+        ondragover="event.preventDefault();this.classList.add('drag-over')"
+        ondragleave="this.classList.remove('drag-over')"
+        ondrop="handleDrop(event,'${room.num}',${di})"
+        onclick="cellClick('${room.num}',${di})">`;
+      celResas.forEach(r=>{
+        const isArr=di===r.start, isDep=di===r.end-1;
+        const badge=isArr?'🟢':isDep?'🟠':'⚪';
+        const arrCls=isArr?' arrival':isDep?' departure':'';
+        const dummyCls=r.dummy?' dummy':'';
+        const payBorder=r.pay==='pending_payment'?'outline:1.5px solid var(--a);outline-offset:-1px':'';
+        html+=`<div class="plan-bar ${r.canal}${arrCls}${dummyCls}" draggable="true"
+          id="bar-${r.id}"
+          ondragstart="startDrag(event,'${r.id}')"
+          ondragend="endDrag('${r.id}')"
+          onclick="event.stopPropagation();openResaDetail('${r.id}')"
+          style="${payBorder}">
+          ${badge} ${r.name}${r.dummy?' 🔷':''}
+        </div>`;
+      });
+      html+='</td>';
+    });
+    html+='</tr>';
+  });
+
+  // KPI row
+  html+='<tr class="kpi-row"><td class="room-lbl" style="font-size:10px;color:var(--text2)">📊 TO% / ADR</td>';
+  dates.forEach((_,di)=>{
+    const k=kpiForDay(di);
+    html+=`<td><span style="color:var(--text2)">${k.free}/${rooms.length}</span> <strong style="color:${k.col}">${k.to}%</strong><br>${k.adr>0?k.adr+'€':'—'}</td>`;
+  });
+  html+='</tr></tbody>';
+  document.getElementById('planTable').innerHTML=html;
+}
+
+function startDrag(e, id){
+  dragId=id;
+  document.getElementById('bar-'+id)?.classList.add('dragging');
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',id);
+}
+
+function endDrag(id){
+  document.getElementById('bar-'+id)?.classList.remove('dragging');
+}
+
+function handleDrop(e, toRoom, dayIdx){
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if(!dragId) return;
+  const r = resasState.find(x=>x.id===dragId);
+  if(!r){dragId=null;return;}
+  const fromRoom = r.room;
+  if(fromRoom===toRoom){dragId=null;return;}
+
+  // Conflit ?
+  const conflict = resasState.filter(x=>x.id!==r.id&&x.room===toRoom)
+    .some(x=>dayIdx>=x.start&&dayIdx<x.end);
+  if(conflict){ toast('❌ Conflit : chambre occupée','err'); dragId=null; return; }
+
+  const fLvl=roomLevel(fromRoom), tLvl=roomLevel(toRoom);
+  const fromName=rooms.find(x=>x.num===fromRoom)?.type;
+  const toName=rooms.find(x=>x.num===toRoom)?.type;
+
+  if(tLvl===fLvl){
+    r.room=toRoom; toast(`✅ ${r.name} → Ch. ${toRoom}`,'ok');
+    renderPlanning(); dragId=null;
+  } else {
+    const isUp=tLvl>fLvl;
+    document.getElementById('modal-icon').textContent=isUp?'✨':'📉';
+    document.getElementById('modal-title').textContent=isUp?'Upgrade détecté !':'Downgrade';
+    document.getElementById('modal-msg').innerHTML=
+      `Déplacer <strong>${r.name}</strong> vers Ch. <strong>${toRoom}</strong><br>
+       <em style="font-size:10px">${fromName} → ${toName}</em><br><br>
+       <span style="color:${isUp?'var(--g)':'var(--r)'};">${isUp?'↑ Upgrade — vérifier tarif':'↓ Downgrade — perte de revenu possible'}</span>`;
+    document.getElementById('delog-modal').classList.add('open');
+    delogCb=()=>{r.room=toRoom;toast(`${isUp?'✨':'📉'} ${r.name} → Ch. ${toRoom}`,'ok');renderPlanning();};
+  }
+}
+
+function confirmDelog(){
+  document.getElementById('delog-modal').classList.remove('open');
+  if(delogCb){delogCb();delogCb=null;}
+  dragId=null;
+}
+function cancelDelog(){
+  document.getElementById('delog-modal').classList.remove('open');
+  delogCb=null;dragId=null;
+}
+
+function cellClick(room, dayIdx){
+  if(dragId) return;
+  toast(`📅 Nouvelle réservation — Ch. ${room} · ${dates[dayIdx].label}`,'');
+}
+
+function openResaDetail(id){
+  const r=resasState.find(x=>x.id===id);
+  if(!r) return;
+  const payLabels={paid:'Payé',confirmed:'Confirmé',pending_payment:'En attente paiement',expired:'Lien expiré',payment_link_expired:'Lien expiré'};
+  toast(`📋 ${r.id} — ${r.name} — Statut: ${r.status} — Paiement: ${payLabels[r.pay]||r.pay}`,'');
+}
+
+// LIFECYCLE
+const steps=[
+  {n:1,title:'Saisie réservation',desc:'Depuis Planning (clic cellule) / Vue Jour / Module Réservations',
+   detail:`Déclencheurs :<br><code>planCellClick(room, dateStr)</code> → openResaModal(null, {room, date})<br>
+   <code>resaNewBtn</code> → openResaModal(null)<br>
+   <code>openResaModal(id)</code> → mode édition<br><br>
+   Le formulaire pré-remplit : chambre, date, canal si disponibles.<br>
+   <code>saveResa()</code> → écrit dans reservations[] + clients[] + renderResas() + renderPlanning() + renderCheckin()`,
+   triggers:['planCellClick','openResaModal','saveResa']},
+  {n:2,title:'Génération lien paiement',desc:'Stripe / PayPal via Edge Function Supabase',
+   detail:`<code>pmGenerate()</code> → appel Edge Function → URL Stripe<br>
+   paymentStatus = 'pending_payment'<br>
+   paymentLinkExpiry = maintenant + 48h<br>
+   isDummyRoom = false (chambre réelle conservée)<br><br>
+   Polling toutes 60s : <code>startExpiryPolling()</code><br>
+   Si expiration < 6h → toast préventif<br>
+   Si expiré → chambre fictive + alerte rouge 30s`,
+   triggers:['pmGenerate','startExpiryPolling','pmSendReminderById']},
+  {n:3,title:'Confirmation email',desc:'Resend via Edge Function — template HTML complet',
+   detail:`<code>pmSendFull()</code> → confirmation + lien paiement<br>
+   ou auto si <code>sendConfirmation = true</code> dans saveResa()<br><br>
+   Contenu email : nom, dates, chambre, montant TTC, lien Stripe, détails hôtel`,
+   triggers:['pmSendFull','resaSendConfirmationById']},
+  {n:4,title:'Paiement reçu',desc:'Confirmation manuelle ou webhook Stripe',
+   detail:`<code>pmConfirmPaymentById(id)</code><br>
+   Si isDummyRoom → chercher chambre réelle disponible de la bonne catégorie<br>
+   paymentStatus = 'confirmed'<br>
+   paymentLink = null<br>
+   paymentLinkExpiry = null<br><br>
+   Production : webhook Stripe → Edge Function → upsert Supabase`,
+   triggers:['pmConfirmPaymentById','webhook']},
+  {n:5,title:'Check-in',desc:'Scan ID OCR (Tesseract.js) + signature électronique',
+   detail:`<code>openCheckinModal(clientId)</code><br>
+   Nouveau client → scanMode = 'required'<br>
+   Client connu → scanMode = 'optional'<br><br>
+   <code>confirmCheckin(clientId, scanMode)</code><br>
+   c.status = 'checked_in' · c.hasVisited = true · c.visits++<br>
+   resa.status = 'checked_in' · resa.checkinAt = ISO timestamp`,
+   triggers:['openCheckinModal','confirmCheckin','processOCR']},
+  {n:6,title:'Séjour en cours',desc:'Client visible dans Planning + Vue Jour · Actions disponibles',
+   detail:`Barre planning : badge ⚪ sur chaque nuit de séjour<br>
+   Vue Jour : liste "En séjour" avec bouton Check-out<br>
+   Actions disponibles : Fiche client | Check-out | Proforma`,
+   triggers:['renderPlanning','renderCheckin','resaQuickAction']},
+  {n:7,title:'Check-out',desc:'→ Statut "checked_out" + Facturation + Ménage',
+   detail:`<code>doCheckout(clientId)</code> (actuellement avec confirm() navigateur)<br>
+   c.status = 'checked_out'<br>
+   resa.status = 'checked_out' · resa.checkoutAt = ISO<br><br>
+   ⚠️ À IMPLÉMENTER EN PROD :<br>
+   → Génération facture FA-YYYY-XXXX (module Facturation)<br>
+   → rooms.status = 'to_clean'<br>
+   → Créer tâche room_cleaning_tasks (priorité haute)`,
+   triggers:['doCheckout','resaSetStatus']},
+];
+
+function renderLifecycle(){
+  const cont=document.getElementById('lifecycle-flow');
+  cont.innerHTML=steps.map((s,i)=>`
+    <div class="flow-step" id="step-${s.n}" onclick="toggleStep(${s.n})">
+      <div class="flow-num">${s.n}</div>
+      <div class="flow-content">
+        <div class="flow-title">${s.title}</div>
+        <div class="flow-desc">${s.desc}</div>
+        <div class="flow-detail" id="detail-${s.n}">${s.detail}
+          <div class="trigger-list">${s.triggers.map(t=>`<span class="trigger">${t}()</span>`).join('')}</div>
+        </div>
+      </div>
+    </div>
+    ${i<steps.length-1?'<div class="flow-arrow">↓</div>':''}
+  `).join('');
+}
+
+function toggleStep(n){
+  const d=document.getElementById('detail-'+n);
+  const s=document.getElementById('step-'+n);
+  d.classList.toggle('open');
+  s.classList.toggle('active-step');
+}
+
+// ACTIONS
+const ACTIONS={
+  Confirmee:[
+    {icon:'✏️',title:'Modifier',desc:'Ouvre le formulaire complet. Modifie dates, chambre, tarif, canal.',fn:'openResaModal(id)'},
+    {icon:'↗',title:'Check-in direct',desc:'Passe le statut à checked_in sans modal OCR.',fn:'resaSetStatus(id,"checked_in")'},
+    {icon:'📄',title:'Proforma PDF',desc:'Génère et ouvre le PDF proforma dans un nouvel onglet.',fn:'resaProformaById(id)'},
+    {icon:'✉️',title:'Confirmation email',desc:'Envoie email de confirmation + lien de paiement au client.',fn:'resaSendConfirmationById(id)'},
+    {icon:'🔗',title:'Générer lien paiement',desc:'Crée un Payment Link Stripe/PayPal et l\'envoie au client.',fn:'pmGenerate()'},
+    {icon:'✕',title:'Annuler',desc:'Passe le statut à Annulee. Libère la chambre dans le planning.',fn:'resaSetStatus(id,"Annulee")'},
+  ],
+  checked_in:[
+    {icon:'✏️',title:'Modifier',desc:'Modification limitée : notes, prolongation séjour.',fn:'openResaModal(id)'},
+    {icon:'👤',title:'Fiche client',desc:'Ouvre le cardex client (historique, préférences).',fn:'openClientModal(clientId)'},
+    {icon:'↙',title:'Check-out direct',desc:'Passe en checked_out. À coupler avec facturation.',fn:'doCheckout(clientId)'},
+    {icon:'📄',title:'Facture',desc:'Accès au module facturation pour émettre FA-YYYY-XXXX.',fn:'openFacturation(id)'},
+    {icon:'⬆',title:'Upgrade chambre',desc:'Glisser-déposer vers chambre de niveau supérieur.',fn:'planDrop → upgrade'},
+    {icon:'⬇',title:'Downgrade chambre',desc:'Glisser-déposer vers chambre de niveau inférieur.',fn:'planDrop → downgrade'},
+  ],
+  checked_out:[
+    {icon:'📄',title:'Facture définitive',desc:'Consulter ou régénérer la facture FA-YYYY-XXXX.',fn:'openFacturation(id)'},
+    {icon:'👤',title:'Fiche client',desc:'Voir l\'historique mis à jour avec ce séjour.',fn:'openClientModal(clientId)'},
+    {icon:'🔁',title:'Nouvelle réservation',desc:'Créer une nouvelle résa pour ce même client.',fn:'openResaModal(null,{clientId})'},
+  ],
+  Annulee:[
+    {icon:'🔁',title:'Réactiver',desc:'Remettre en Confirmee (si chambre disponible).',fn:'resaSetStatus(id,"Confirmee")'},
+    {icon:'📄',title:'Note d\'annulation',desc:'Générer document annulation pour le client.',fn:'resaProformaById(id)'},
+  ],
+  pending_payment:[
+    {icon:'⏰',title:'Rappel paiement',desc:'Envoie un nouveau lien +48h et marque reminder_sent.',fn:'pmSendReminderById(id)'},
+    {icon:'✅',title:'Confirmer paiement',desc:'Marque comme payé et réassigne la chambre réelle.',fn:'pmConfirmPaymentById(id)'},
+    {icon:'🔗',title:'Régénérer lien',desc:'Crée un nouveau lien (incrémente paymentLinkVersion).',fn:'pmGenerate()'},
+    {icon:'✕',title:'Annuler',desc:'Libère la chambre fictive et annule la réservation.',fn:'resaSetStatus(id,"Annulee")'},
+  ],
+};
+
+function renderActions(status){
+  const list=ACTIONS[status]||[];
+  document.getElementById('actions-grid').innerHTML=list.map((a,i)=>`
+    <div class="action-card" onclick="showActionDetail(${i},'${status}')">
+      <div class="icon">${a.icon}</div>
+      <h4>${a.title}</h4>
+      <p>${a.desc}</p>
+    </div>
+  `).join('');
+  document.getElementById('action-detail').style.display='none';
+}
+
+function showActionDetail(i, status){
+  const a=ACTIONS[status]?.[i];
+  if(!a) return;
+  const el=document.getElementById('action-detail');
+  el.innerHTML=`<strong>${a.icon} ${a.title}</strong><br>${a.desc}<br><br>
+    <span style="font-family:monospace;background:var(--bg);padding:2px 6px;border-radius:4px;font-size:10px">${a.fn}</span>`;
+  el.style.display='block';
+}
+
+// PAYMENT STATES
+const STATES=[
+  {id:'pending_payment',label:'En attente',color:'#d97706',bg:'#fef3c7',
+   desc:'Lien généré · expiration 48h · chambre réelle conservée',
+   detail:`<strong>Entrée :</strong> pmGenerate() → paymentStatus='pending_payment'<br>
+   <strong>Monitoring :</strong> setInterval 60s → pmHoursLeft()<br>
+   <strong>Alerte < 6h :</strong> toast préventif (flag _alerted)<br>
+   <strong>Transitions :</strong><br>
+   → pmConfirmPaymentById() → 'confirmed'<br>
+   → Expiration → 'payment_link_expired'<br>
+   → pmSendReminderById() → 'payment_reminder_sent'`},
+  {id:'payment_reminder_sent',label:'Rappel envoyé',color:'#2563eb',bg:'#dbeafe',
+   desc:'Nouveau lien v2 envoyé · paymentLinkVersion++ · +48h',
+   detail:`<strong>Entrée :</strong> pmSendReminderById()<br>
+   paymentLinkVersion++ · reminderCount++<br>
+   Nouveau lien avec +48h d'expiration<br><br>
+   <strong>Transitions :</strong><br>
+   → paiement reçu → 'confirmed'<br>
+   → nouvelle expiration → 'payment_link_expired'`},
+  {id:'payment_link_expired',label:'Lien expiré',color:'#dc2626',bg:'#fee2e2',
+   desc:'Chambre fictive assignée · alerte rouge 30s',
+   detail:`<strong>Entrée :</strong> Polling → pmHoursLeft() <= 0<br>
+   isDummyRoom = true<br>
+   room = DUMMY_ROOMS[category] (ex: RES-D1)<br>
+   Chambre réelle libérée pour autres réservations<br><br>
+   Alerte visuelle persistante 30s avec clic → rappel<br><br>
+   <strong>Transitions :</strong><br>
+   → pmSendReminderById() → 'payment_reminder_sent'<br>
+   → Annulation manuelle → status='Annulee'`},
+  {id:'confirmed',label:'Paiement confirmé',color:'#16a34a',bg:'#dcfce7',
+   desc:'Chambre réelle réassignée · paymentLink=null',
+   detail:`<strong>Entrée :</strong> pmConfirmPaymentById() (manuel)<br>
+   ou webhook Stripe → Edge Function (prod)<br><br>
+   Si isDummyRoom → chercher chambre réelle dispo<br>
+   de la bonne catégorie → réassigner<br><br>
+   paymentStatus = 'confirmed'<br>
+   paymentLink = null<br>
+   paymentLinkExpiry = null<br><br>
+   <strong>État final :</strong> aucune transition automatique`},
+];
+
+function renderStateMachine(){
+  document.getElementById('state-machine').innerHTML=STATES.map((s,i)=>`
+    <div class="state-node" id="sn-${s.id}" onclick="showStateDetail('${s.id}')"
+      style="cursor:pointer">
+      <div class="state-dot" style="background:${s.color}"></div>
+      <div class="state-content">
+        <div class="state-title">${s.label}</div>
+        <div class="state-desc">${s.desc}</div>
+      </div>
+    </div>
+    ${i<STATES.length-1?`<div class="state-arrow">↓</div>`:''}
+  `).join('');
+}
+
+function showStateDetail(id){
+  STATES.forEach(s=>{
+    document.getElementById('sn-'+s.id)?.classList.remove('active-state');
+  });
+  document.getElementById('sn-'+id)?.classList.add('active-state');
+  const s=STATES.find(x=>x.id===id);
+  if(!s) return;
+  const el=document.getElementById('state-detail');
+  el.innerHTML=`<strong style="display:block;margin-bottom:6px">${s.label}</strong>${s.detail}`;
+  el.style.display='block';
+}
+
+function showPanel(id){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('panel-'+id)?.classList.add('active');
+  event.target.classList.add('active');
+}
+
+renderPlanning();
+renderLifecycle();
+renderActions('Confirmee');
+renderStateMachine();
+</script>
