@@ -19,7 +19,27 @@ export type PageId =
   | 'anomalies'
   | 'rie'
   | 'sas'
-  | 'revenue-integrity';
+  | 'revenue-integrity'
+  | 'odms'
+  | 'litiges'
+  | 'fiches'
+  | 'fidelite'
+  | 'yield'
+  | 'promotions'
+  | 'performance'
+  | 'forecast'
+  | 'facturation'
+  | 'caisse'
+  | 'impayes'
+  | 'cloture'
+  | 'proprietaires'
+  | 'annulations'
+  | 'supplements'
+  | 'fermatures'
+  | 'hotel'
+  | 'taxe'
+  | 'pms'
+  | 'api';
 
 export interface Reservation {
   id: string;

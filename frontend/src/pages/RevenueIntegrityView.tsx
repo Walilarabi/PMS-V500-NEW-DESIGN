@@ -24,6 +24,7 @@ import {
   useRunValidation,
   useResolveQuarantine,
 } from '@/src/domains/rie/hooks';
+import { usePartnerReliability } from '@/src/domains/odms/hooks';
 import type { Decision, OtaPayload, Severity, ValidationOutcome } from '@/src/domains/rie/types';
 import { useToast } from '@/src/hooks/use-toast';
 import { useActiveHotel } from '@/src/domains/hotel/hooks';
@@ -225,6 +226,8 @@ export const RevenueIntegrityView: React.FC = () => {
         </div>
 
         <QuarantineSection rows={quarantine} />
+
+        <PartnerReliabilityRieSection partnerById={partnerById} />
 
         <SimulatorPanel />
       </main>
@@ -591,5 +594,66 @@ const Row: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value
     <dd className="tabular-nums">{value}</dd>
   </div>
 );
+
+/* --------------------------------------------------- Smart RIE --------- */
+/*  Partner reliability (rolling 30 days) — read from partner_reliability_view  */
+
+const PartnerReliabilityRieSection: React.FC<{ partnerById: Record<string, string> }> = ({ partnerById }) => {
+  const q = usePartnerReliability();
+  const rows = q.data ?? [];
+  return (
+    <section className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm" data-testid="rie-reliability">
+      <header className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+          <GaugeCircle size={14} className="text-violet-600" /> Smart RIE — Fiabilité partenaires (30j)
+        </h2>
+        <span className="text-[10px] text-gray-400">{rows.length} partenaires suivis</span>
+      </header>
+      {rows.length === 0 ? (
+        <p className="text-xs text-gray-400 py-4 text-center">
+          Pas encore d'historique. Les validations alimentent automatiquement cette table.
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-100">
+          <table className="min-w-full text-sm" data-testid="rie-reliability-table">
+            <thead className="text-[10px] uppercase tracking-wider text-gray-500 bg-gray-50/70">
+              <tr>
+                <th className="text-left px-3 py-2 font-semibold">Partenaire</th>
+                <th className="text-right px-3 py-2 font-semibold">Runs</th>
+                <th className="text-right px-3 py-2 font-semibold">Score</th>
+                <th className="text-right px-3 py-2 font-semibold">Auto</th>
+                <th className="text-right px-3 py-2 font-semibold">Vigilance</th>
+                <th className="text-right px-3 py-2 font-semibold">Manuel</th>
+                <th className="text-right px-3 py-2 font-semibold">Quarantaine</th>
+                <th className="text-right px-3 py-2 font-semibold">Δ cumulé</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const score = r.avg_score_30d ?? 0;
+                const tone = score >= 90 ? 'text-emerald-600' : score >= 70 ? 'text-amber-600' : 'text-rose-600';
+                const code = r.partner_id ? partnerById[r.partner_id] ?? '—' : '—';
+                return (
+                  <tr key={r.partner_id ?? 'unknown'} className="border-t border-gray-100" data-testid={`rie-reliability-${code}`}>
+                    <td className="px-3 py-2 font-semibold text-gray-800">{code}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{r.runs}</td>
+                    <td className={`px-3 py-2 text-right tabular-nums font-bold ${tone}`}>{score.toFixed(1)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-emerald-700">{r.auto_count}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-amber-700">{r.warning_count}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-violet-700">{r.manual_count}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-rose-700">{r.quarantine_count}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {fmtEUR(r.cumulative_delta_30d)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+};
 
 export default RevenueIntegrityView;

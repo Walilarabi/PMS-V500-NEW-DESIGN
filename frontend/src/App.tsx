@@ -11,6 +11,7 @@ import { AnalysisView } from '@/src/pages/AnalysisView';
 import { FlowboardView } from '@/src/pages/FlowboardView';
 import { SettingsView } from '@/src/pages/SettingsView';
 import RevenueIntegrityView from '@/src/pages/RevenueIntegrityView';
+import OtaDisputeCenter from '@/src/pages/OtaDisputeCenter';
 import { PageId } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -67,6 +68,9 @@ const App = () => {
       case 'sas':
       case 'revenue-integrity':
         return <RevenueIntegrityView />;
+      case 'odms':
+      case 'litiges':
+        return <OtaDisputeCenter />;
       case 'settings': 
       case 'annulations':
       case 'supplements':

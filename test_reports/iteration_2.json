@@ -1,0 +1,60 @@
+{
+  "summary": "Frontend-only E2E testing of FLOWTYM ODMS (OTA Dispute Management) UI. Login OK, navigation Finance → Litiges OTA reaches the Dispute Center successfully. ALL data-testid anchors required by the request are present (odms-dashboard, odms-title, 4 KPIs, reliability table with 2 partner rows BOOKING+EXPEDIA, all 6 status filter chips with active styling on click, odms-create-open, odms-disputes-table, rie-reliability + rie-reliability-table on the RIE page). The 'Nouveau litige' modal opens, lists 2 validation rows (odms-pick-validation-*), pre-fills subject + description correctly, and the email preview is generated client-side. HOWEVER dispute creation fails with HTTP 409 — Supabase rejects the insert with: 'insert or update on table \"ota_disputes\" violates foreign key constraint \"ota_disputes_created_by_fkey\"'. As a consequence the modal does not close, no row is added to odms-disputes-table, the right drawer (odms-drawer) and the FSM transition (odms-action-SENT, odms-action-pdf, odms-timeline) cannot be exercised end-to-end. RCA: AuthContext stores session.userId = auth.users.id, but the FK on ota_disputes.created_by points to public.users.id (different UUID). Because public.users.id is the same as the auth_id in this seed, but the FK target in migration 0030_odms.sql is public.users(id) NOT public.users(auth_id), the insert fails when created_by is set to the auth.users UUID.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Create OTA Dispute (odms-create-submit)",
+        "issue": "Supabase returns 409 / FK violation 'ota_disputes_created_by_fkey'. The dispute is never persisted, modal stays open, error toast 'Échec — insert or update on table ota_disputes violates foreign key constraint ota_disputes_created_by_fkey' is shown. Blocks the rest of the flow (drawer, SENT transition, PDF, timeline).",
+        "affected_selectors": ["odms-create-submit", "odms-create-modal", "odms-disputes-table", "odms-row-*", "odms-drawer", "odms-action-SENT", "odms-action-pdf", "odms-timeline"]
+      }
+    ],
+    "design_issues": [
+      {"screen": "Flowday dashboard", "issues": ["(carry-over from iteration_1) Recharts warning 'width(-1) and height(-1) of chart should be greater than 0' still logged in console — non-blocking."]}
+    ]
+  },
+  "test_results": {
+    "1_login_walilarabi": "PASS",
+    "2_finance_topbar_then_odms_sidebar": "PASS (Litiges OTA (ODMS) reachable)",
+    "3_odms_dashboard_and_title_testids": "PASS",
+    "4_kpi_tiles_open_sent_corrected_recovered": "PASS (4/4 testids render)",
+    "5_smart_rie_partner_reliability_table": "PASS (odms-reliability + odms-reliability-table; 2 partner rows BOOKING & EXPEDIA visible)",
+    "6_filter_chips_all_states": "PASS (all 6 chips present; clicking DRAFT applies active style 'bg-violet-600 text-white')",
+    "7_open_create_modal": "PASS (odms-create-modal opens; 2 odms-pick-validation-* rows; subject + description pre-filled with composed FR text)",
+    "8_submit_creates_dispute": "FAIL — 409 FK constraint violation (ota_disputes_created_by_fkey). Dispute not persisted.",
+    "9_dispute_appears_in_table_and_drawer_opens": "BLOCKED by step 8",
+    "10_fsm_DRAFT_to_SENT_and_timeline_event": "BLOCKED by step 8",
+    "11_pdf_download_action": "BLOCKED by step 8",
+    "12_rie_dashboard_smart_rie_section": "PASS (rie-reliability + rie-reliability-table render on Revenue Integrity page)",
+    "13_no_console_errors": "FAIL (1 console error: the 409 response from Supabase /rest/v1/ota_disputes)"
+  },
+  "rca_of_the_issue": {
+    "symptom": "POST /rest/v1/ota_disputes returns 409 with code 23503 message 'insert or update on table \"ota_disputes\" violates foreign key constraint \"ota_disputes_created_by_fkey\"'.",
+    "root_cause": "frontend/src/domains/auth/repository.ts buildSession() sets session.userId = authUserId (i.e. auth.users.id = 7afa461c-71a9-4a89-bca0-9de08e405bc7). useCreateDispute() forwards this value to repository.createDispute() which inserts it into ota_disputes.created_by. The FK in migration 0030_odms.sql declares ota_disputes.created_by REFERENCES public.users(id) — and public.users.id is NOT the same UUID as auth.users.id (public.users has a separate primary key with auth_id = auth.users.id). Therefore Postgres rejects the insert.",
+    "reproduction": "1) Login as walilarabi@gmail.com. 2) Finance topbar → Litiges OTA. 3) Click 'Nouveau litige'. 4) Click 'Créer le brouillon'. 5) Observe red toast 'Échec — insert or update on table ota_disputes violates foreign key constraint ota_disputes_created_by_fkey'. Network tab shows HTTP 409 from supabase /rest/v1/ota_disputes.",
+    "suggested_fix": "Option A (recommended, minimal frontend change): in /app/frontend/src/domains/auth/repository.ts, change buildSession() so that userId is taken from profile.id (the public.users.id) when the profile exists, and only fall back to authUserId if profile is null. This aligns with the FK target. Option B: change the migration so created_by references auth.users(id) instead of public.users(id). Option C (workaround already supported by the code path): pass null for created_by — but it would lose the audit trail and breaks dispute_events.by_user_id semantics."
+  },
+  "test_report_links": [],
+  "action_items": [
+    "URGENT: fix dispute creation FK mismatch — change session.userId to public.users.id in /app/frontend/src/domains/auth/repository.ts buildSession() (use profile.id when available). This will also fix dispute_events.by_user_id (changeDisputeStatus) and ota_dispute_messages.author_user_id, which all share the same foreign key target.",
+    "After fix, re-test: dispute creation, row appearance in odms-disputes-table, drawer open, odms-action-SENT FSM transition (badge 'Envoyé' + new timeline event), odms-action-pdf download.",
+    "(Carry-over) Fix Recharts container sizing warning on Flowday."
+  ],
+  "critical_code_review_comments": [
+    "session.userId must be the public.users.id (FK target across odms tables), not the auth.users UUID. Currently every write that includes created_by / by_user_id / author_user_id is at risk of FK violation for any tenant whose public.users.id != auth.users.id.",
+    "useCreateDispute and useChangeDisputeStatus accept session.userId ?? null — defensive but masks the real issue: when null, audit trail is lost. The fix should make userId always reflect the public.users.id when a profile exists.",
+    "compose.ts pre-fills subject/description deterministically — good. Email simulation pipeline (logged into ota_dispute_messages) is wired but cannot be validated until creation flow works.",
+    "All required data-testid attributes are correctly present on the ODMS dashboard, modal, filters, reliability table, and the new RIE Smart RIE section — testability is excellent."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only requested)", "frontend": "8/13 PASS, 2/13 FAIL, 3/13 BLOCKED by the FK bug (~62% PASS rate; UI scaffolding 100%, write path 0%)"},
+  "test_credentials": "walilarabi@gmail.com / Flowtym2026! (admin direction, Mas Provencal Aix, hotel_id 00000000-0000-0000-0000-000000000001)",
+  "seed_data_creation": "None — relied on existing 2 QUARANTINE validations (5accd7 HOTEL_COLLECT 34€ EXPEDIA, d1994c HOTEL_COLLECT -132€ BOOKING) which appear in odms-pick-validation-* list. The Smart RIE table also already reflects 2 partner rows.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All UI/data-testid wiring is correct (KPIs, reliability tables on both ODMS and RIE pages, filter chips, modal pre-fill, empty state copy 'Aucun litige correspondant. Crée-en un depuis une validation à risque.'). The single blocker is the FK mismatch on ota_disputes.created_by (and equivalently dispute_events.by_user_id, ota_dispute_messages.author_user_id). Once /app/frontend/src/domains/auth/repository.ts buildSession() uses profile.id (public.users.id) for session.userId, re-run the create → drawer → SENT → PDF flow. The 2 seeded QUARANTINE validations will be reusable for the next attempt."
+}
