@@ -3,7 +3,10 @@
  *
  * Glue between the legacy `ReservationFormModal` payload and the strongly
  * typed Supabase repositories. Owns the "create guest if needed → create
- * reservation" use case + cache invalidation + toast feedback.
+ * reservation(s)" use case + cache invalidation + toast feedback.
+ *
+ * If the form payload contains multiple `selectedRoomNumbers`, ONE reservation
+ * per room is created (shared guest, dates, channel — different room + ref).
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -40,7 +43,13 @@ export function useCreateReservationFromForm(): {
       const hotelId = session?.tenantId;
       if (!hotelId) throw new Error('Hôtel actif inconnu — reconnecte-toi.');
 
-      // 1. Guest (find by email or create)
+      // Determine the room numbers to create reservations for (multi-select aware)
+      const roomNumbers = form.selectedRoomNumbers && form.selectedRoomNumbers.length > 0
+        ? form.selectedRoomNumbers
+        : [form.roomNumber];
+      if (roomNumbers.length === 0) throw new Error('Aucune chambre sélectionnée.');
+
+      // 1. Guest (find by email or create) — shared across all reservations
       const guest = await findOrCreateGuest({
         hotelId,
         fullName: form.guestName.trim() || 'Walk-in',
@@ -50,25 +59,36 @@ export function useCreateReservationFromForm(): {
         segment: form.segment?.trim() || null,
       });
 
-      // 2. Resolve room id from room number when possible
-      const roomId = (roomsQ.data ?? []).find((r) => r.number === form.roomNumber)?.id ?? null;
+      // 2. Pre-resolve room ids
+      const rooms = roomsQ.data ?? [];
+      const baseRef = normalizeReference(form.reference);
+      const totalRooms = roomNumbers.length;
+      const totalPerRoom = totalRooms > 0 ? form.totalTTC / totalRooms : form.totalTTC;
 
-      // 3. Build + validate the typed insert payload
-      const payload = createReservationInputSchema.parse({
-        reference: normalizeReference(form.reference),
-        guestId: guest.id,
-        roomId,
-        checkIn: form.checkIn,
-        checkOut: form.checkOut,
-        adults: form.adults,
-        children: form.children ?? 0,
-        source: form.channel || 'Direct',
-        totalAmount: form.totalTTC,
-        notes: form.notes ?? null,
-        guestName: form.guestName,
-      });
-
-      return createReservation(hotelId, payload);
+      // 3. Create one reservation per selected room
+      let firstRow: ReservationRow | null = null;
+      for (let i = 0; i < roomNumbers.length; i++) {
+        const number = roomNumbers[i];
+        const room = rooms.find((r) => r.number === number);
+        const ref = roomNumbers.length === 1 ? baseRef : `${baseRef}-${String(i + 1).padStart(2, '0')}`;
+        const payload = createReservationInputSchema.parse({
+          reference: ref,
+          guestId: guest.id,
+          roomId: room?.id ?? null,
+          checkIn: form.checkIn,
+          checkOut: form.checkOut,
+          adults: form.adults,
+          children: form.children ?? 0,
+          source: form.channel || 'Direct',
+          totalAmount: totalPerRoom,
+          notes: form.notes ?? null,
+          guestName: form.guestName,
+        });
+        const row = await createReservation(hotelId, payload);
+        if (!firstRow) firstRow = row;
+      }
+      if (!firstRow) throw new Error('Aucune réservation créée.');
+      return firstRow;
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['reservations'] });

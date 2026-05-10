@@ -7,9 +7,12 @@ import {
   X, User, Mail, Phone, Users, Building2, Calendar, 
   Globe, Bed, Hash, Coffee, ShieldCheck, Tag, CreditCard, 
   Zap, Upload, FileText, Check, 
-  ChevronDown, ArrowRight, Wallet, Info, FilePlus
+  ChevronDown, ArrowRight, Wallet, Info, FilePlus,
+  CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { useRooms } from '@/src/domains/hotel/hooks';
+import { useReservationsByRange } from '@/src/domains/reservations/hooks';
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 export interface ReservationFormData {
@@ -27,6 +30,8 @@ export interface ReservationFormData {
   checkOut: string;
   roomType: string;
   roomNumber: string;
+  /* Multi-room selection — if length > 1, parent creates one reservation per room */
+  selectedRoomNumbers: string[];
   board: string;
   cancelPolicy: string;
   ratePlanId: string;
@@ -173,6 +178,7 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
     checkOut: new Date(Date.now() + 8 * 86400000).toISOString().split('T')[0],
     roomType: 'Double Classique',
     roomNumber: '101',
+    selectedRoomNumbers: ['101'],
     board: 'Room Only',
     cancelPolicy: 'flexible',
     ratePlanId: 'RACK-RO',
@@ -197,9 +203,61 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
   /* Sync form state when caller passes new initialData (e.g. empty-cell click in Planning) */
   useEffect(() => {
     if (isOpen && initialData) {
-      setForm(prev => ({ ...prev, ...initialData }));
+      setForm(prev => ({
+        ...prev,
+        ...initialData,
+        // Keep selectedRoomNumbers in sync with roomNumber when initialData provides one
+        selectedRoomNumbers: initialData.selectedRoomNumbers
+          ? initialData.selectedRoomNumbers
+          : initialData.roomNumber
+            ? [initialData.roomNumber]
+            : prev.selectedRoomNumbers,
+      }));
     }
   }, [isOpen, initialData]);
+
+  /* Live rooms inventory (Supabase) */
+  const liveRoomsQ = useRooms();
+  const liveRooms = liveRoomsQ.data ?? [];
+
+  /* Conflict detection : reservations overlapping the picked window */
+  const conflictWindowQ = useReservationsByRange({
+    rangeStart: form.checkIn,
+    rangeEnd: form.checkOut,
+  });
+  const conflictRoomNumbers = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of conflictWindowQ.data ?? []) {
+      // exclude the reservation being edited
+      if (editId && r.id === editId) continue;
+      const cancelled = (r.status ?? '').toLowerCase();
+      if (cancelled === 'cancelled' || cancelled === 'no_show') continue;
+      if (r.room_number) set.add(r.room_number);
+      else if (r.room_id) {
+        const room = liveRooms.find((x) => x.id === r.room_id);
+        if (room?.number) set.add(room.number);
+      }
+    }
+    return set;
+  }, [conflictWindowQ.data, editId, liveRooms]);
+
+  /* Toggle helpers (single-click = toggle off if selected, double-click = add) */
+  const toggleRoom = (number: string, isDoubleClick: boolean) => {
+    if (conflictRoomNumbers.has(number)) return; // can't pick a conflicting room
+    setForm((f) => {
+      const set = new Set(f.selectedRoomNumbers);
+      if (isDoubleClick) {
+        set.add(number);
+      } else if (set.has(number)) {
+        set.delete(number);
+      } else {
+        // single-click on an unselected room is a no-op per spec ("double-clic pour sélectionner")
+        return f;
+      }
+      const arr = Array.from(set);
+      return { ...f, selectedRoomNumbers: arr, roomNumber: arr[0] ?? '' };
+    });
+  };
 
   // Filtered Lists
   const filteredRooms = useMemo(() => 
@@ -230,6 +288,7 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
     const room = ROOMS_DEFAULT.find(r => r.number === form.roomNumber);
     const plan = RATE_PLANS.find(p => p.id === form.ratePlanId);
     const pricePerNight = (room?.price || 100) * (plan?.mult || 1);
+    const roomsCount = Math.max(1, form.selectedRoomNumbers.length);
     
     const rows = [];
     const startDate = new Date(form.checkIn);
@@ -238,17 +297,17 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
       date.setDate(startDate.getDate() + i);
       rows.push({
         date: date.toLocaleDateString('fr-FR'),
-        label: `Nuitée — ${form.roomType}`,
-        price: pricePerNight
+        label: `Nuitée — ${form.roomType}${roomsCount > 1 ? ` × ${roomsCount}` : ''}`,
+        price: pricePerNight * roomsCount
       });
     }
 
-    const subtotal = pricePerNight * nights;
+    const subtotal = pricePerNight * nights * roomsCount;
     const vat = subtotal * (form.vatRate / 100);
-    const totalTTC = subtotal + vat + form.stayTax;
+    const totalTTC = subtotal + vat + form.stayTax * roomsCount;
 
-    return { nights, pricePerNight, rows, subtotal, vat, totalTTC };
-  }, [form.checkIn, form.checkOut, form.roomNumber, form.ratePlanId, form.vatRate, form.stayTax, form.roomType]);
+    return { nights, pricePerNight, rows, subtotal, vat, totalTTC, roomsCount };
+  }, [form.checkIn, form.checkOut, form.roomNumber, form.ratePlanId, form.vatRate, form.stayTax, form.roomType, form.selectedRoomNumbers]);
 
   if (!isOpen) return null;
 
@@ -387,21 +446,87 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
                className="col-span-12 md:col-span-4"
              />
              <CustomSelect 
-               label="Chambre" 
-               icon={Hash} 
-               value={form.roomNumber} 
-               onChange={(v: string) => set('roomNumber', v)}
-               options={filteredRooms.map(r => ({ value: r.number, label: `${r.number} — ${r.type}` }))}
-               className="col-span-12 md:col-span-4"
-             />
-             <CustomSelect 
                label="Pension" 
                icon={Coffee} 
                value={form.board} 
                onChange={(v: string) => set('board', v)}
                options={BOARDS}
-               className="col-span-12 md:col-span-4"
+               className="col-span-12 md:col-span-8"
              />
+          </div>
+
+          {/* Multi-room picker (replaces single Chambre dropdown) */}
+          <div data-testid="form-rooms-picker">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[10px] uppercase tracking-widest font-black text-gray-500 flex items-center gap-2">
+                <Hash size={12} className="text-violet-500" />
+                Chambres à réserver
+                <span className="text-[9px] text-gray-300 font-bold normal-case tracking-normal">
+                  · double-clic pour ajouter, simple-clic pour retirer
+                </span>
+              </label>
+              {form.selectedRoomNumbers.length > 0 && (
+                <span className="px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full text-[10px] font-black tabular-nums">
+                  {form.selectedRoomNumbers.length} sélectionnée{form.selectedRoomNumbers.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <div className="rounded-2xl border border-gray-100 bg-gray-50/50 p-3 max-h-44 overflow-y-auto">
+              {liveRooms.length === 0 ? (
+                <p className="text-[11px] text-gray-400 text-center py-4">Aucune chambre dans l'inventaire — synchronise Supabase.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+                  {liveRooms
+                    .slice()
+                    .sort((a, b) => (a.number ?? '').localeCompare(b.number ?? '', 'fr', { numeric: true }))
+                    .map((room) => {
+                      const isSelected = form.selectedRoomNumbers.includes(room.number);
+                      const isConflict = conflictRoomNumbers.has(room.number) && !isSelected;
+                      const isBlocked = room.status === 'out_of_order' || room.status === 'maintenance';
+                      const disabled = isConflict || isBlocked;
+                      return (
+                        <button
+                          key={room.id}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => toggleRoom(room.number, false)}
+                          onDoubleClick={() => toggleRoom(room.number, true)}
+                          data-testid={`form-room-chip-${room.number}`}
+                          data-selected={isSelected}
+                          data-conflict={isConflict}
+                          className={cn(
+                            'relative px-3 py-2 rounded-xl border-2 text-left transition-all select-none',
+                            isSelected
+                              ? 'bg-violet-600 border-violet-700 text-white shadow-md shadow-violet-200 hover:bg-violet-700'
+                              : disabled
+                                ? 'bg-gray-100 border-gray-200 text-gray-300 cursor-not-allowed line-through'
+                                : 'bg-white border-gray-200 text-gray-700 hover:border-violet-300 hover:bg-violet-50/40 cursor-pointer',
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-sm font-black tabular-nums">{room.number}</span>
+                            {isSelected && <CheckCircle2 size={14} className="shrink-0" />}
+                            {isConflict && !isSelected && <AlertTriangle size={12} className="shrink-0 text-rose-400" />}
+                          </div>
+                          <p className={`text-[10px] font-bold truncate mt-0.5 ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
+                            {room.type ?? '—'} · {room.category ?? ''}
+                          </p>
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+            {form.selectedRoomNumbers.length > 0 ? (
+              <p className="mt-2 text-[11px] text-gray-600" data-testid="form-rooms-recap">
+                <span className="font-black text-violet-700">{form.selectedRoomNumbers.length} chambre{form.selectedRoomNumbers.length > 1 ? 's' : ''} sélectionnée{form.selectedRoomNumbers.length > 1 ? 's' : ''} :</span>{' '}
+                <span className="tabular-nums font-bold">{form.selectedRoomNumbers.join(', ')}</span>
+              </p>
+            ) : (
+              <p className="mt-2 text-[11px] text-rose-500 font-bold" data-testid="form-rooms-empty">
+                ⚠ Aucune chambre sélectionnée — la réservation ne peut pas être enregistrée.
+              </p>
+            )}
           </div>
 
           {/* Section 4: Policy and Rate Plan */}
@@ -584,14 +709,17 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
                    Annuler
                 </button>
                 <button 
+                  disabled={form.selectedRoomNumbers.length === 0}
+                  data-testid="form-save"
                   onClick={() => {
+                    if (form.selectedRoomNumbers.length === 0) return;
                     onSave({ ...form, totalTTC: pricingBreakdown.totalTTC, nights: pricingBreakdown.nights });
                     onClose();
                   }}
-                  className="px-10 py-3 bg-[#8B5CF6] text-white rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-xl shadow-[#8B5CF6]/30 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
+                  className="px-10 py-3 bg-[#8B5CF6] text-white rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-xl shadow-[#8B5CF6]/30 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
                    <Check size={18} strokeWidth={3} />
-                   Enregistrer
+                   {form.selectedRoomNumbers.length > 1 ? `Enregistrer (${form.selectedRoomNumbers.length} chambres)` : 'Enregistrer'}
                 </button>
              </div>
           </div>
