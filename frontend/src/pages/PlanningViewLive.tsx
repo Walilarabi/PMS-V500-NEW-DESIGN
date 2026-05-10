@@ -323,10 +323,12 @@ const PlanningView: React.FC = () => {
 
       {/* Lightweight reservation details popover (replaces legacy ReservationDetailsModal for now) */}
       {resDetails && (
-        <button
-          type="button"
-          aria-label="Fermer"
+        <div
+          role="button"
+          tabIndex={0}
+          aria-label="Fermer le détail"
           onClick={() => setResDetails(null)}
+          onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') setResDetails(null); }}
           className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
           data-testid="planning-res-details"
         >
@@ -347,7 +349,7 @@ const PlanningView: React.FC = () => {
               <button type="button" onClick={() => setResDetails(null)} data-testid="planning-res-close" className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white">Fermer</button>
             </div>
           </div>
-        </button>
+        </div>
       )}
 
       {/* Hint banner when there's no reservation visible */}

@@ -194,6 +194,13 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
 
   const set = (k: keyof ReservationFormData, v: any) => setForm(f => ({ ...f, [k]: v }));
 
+  /* Sync form state when caller passes new initialData (e.g. empty-cell click in Planning) */
+  useEffect(() => {
+    if (isOpen && initialData) {
+      setForm(prev => ({ ...prev, ...initialData }));
+    }
+  }, [isOpen, initialData]);
+
   // Filtered Lists
   const filteredRooms = useMemo(() => 
     ROOMS_DEFAULT.filter(r => r.type === form.roomType), 
