@@ -13,6 +13,11 @@ import { SettingsView } from '@/src/pages/SettingsView';
 import { AuditLogView } from '@/src/pages/finance/AuditLogView';
 import { ReconciliationView } from '@/src/pages/finance/ReconciliationView';
 import { RevenueIntegrityView } from '@/src/pages/finance/RevenueIntegrityView';
+import {
+  useReservationsRealtime,
+  useReconciliationRealtime,
+  useRevenueAnomaliesRealtime,
+} from '@/src/hooks/useRealtimeChannels';
 import { PageId } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -29,6 +34,11 @@ const PlaceholderPage = ({ name }: { name: string }) => (
 const App = () => {
   const [activePage, setActivePage] = React.useState<PageId>('today');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
+
+  // ── Canaux Supabase Realtime (une seule instance, haut dans l'arbre) ──────
+  useReservationsRealtime();
+  useReconciliationRealtime();
+  useRevenueAnomaliesRealtime();
 
   const renderPage = () => {
     switch (activePage) {

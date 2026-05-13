@@ -33,12 +33,24 @@ import { Badge } from '@/src/components/ui/Badge';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
-import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
+import { useReservations as useContextReservations, Reservation } from '@/src/contexts/ReservationContext';
+import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
+import { useRooms } from '@/src/domains/hotel/hooks';
+import { useAuth } from '@/src/domains/auth/AuthContext';
 import { useConfigStore, HotelEvent } from '@/src/store/configStore';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 
 export const PlanningView = () => {
-  const { addReservation, reservations: contextReservations } = useReservations();
+  // ── Données réelles Supabase ──────────────────────────────────────────────
+  const { session } = useAuth();
+  const { data: supabaseData } = useReservations({ limit: 200 });
+  const { data: supabaseRooms = [] } = useRooms();
+  const createReservation = useCreateReservation();
+
+  // Context mock — gardé temporairement pour la compatibilité du planning visuel
+  // TODO P1: supprimer quand le Gantt sera branché sur supabaseData
+  const { addReservation, reservations: contextReservations } = useContextReservations();
+
   const { rooms: storeRooms, events: storeEvents } = useConfigStore();
   const [currentDate, setCurrentDate] = useState(new Date(2026, 4, 1));
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -781,35 +793,58 @@ export const PlanningView = () => {
       <ReservationFormModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        onSave={(data: ReservationFormData) => {
-          const newRes: Reservation = {
-            id: data.reference,
-            priority: 'Moyenne',
-            room: data.roomNumber,
-            roomType: 'STD/DLX', // fallback
-            status: 'Arrivée < 1h',
-            statusColor: 'text-orange-500/80',
-            dotColor: 'bg-orange-400',
-            client: data.guestName,
-            arrival: `${data.checkIn} 16:00`,
-            departure: `${data.checkOut} 11:00`,
-            source: data.channel.toUpperCase(),
-            sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
-            action: 'Check-in',
-            governess: 'À faire',
-            vip: data.segment === 'VIP',
-            payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
-            totalAmount: data.totalTTC,
-            ownerFeeRate: 0.20,
-            pmsFeeRate: 0.15,
-            cleaningFee: 50,
-            email: data.email,
-            phone: data.phone,
-            nationality: data.nationality,
-            guests: { adults: data.adults, children: data.children },
-            notes: data.notes
-          };
-          addReservation(newRes);
+        onSave={async (data: ReservationFormData) => {
+          if (!session?.tenantId) return;
+
+          try {
+            // ── Écriture réelle Supabase ──────────────────────────────────
+            await createReservation.mutateAsync({
+              reference: data.reference,
+              guestName: data.guestName || null,
+              checkIn: data.checkIn,
+              checkOut: data.checkOut,
+              adults: data.adults,
+              children: data.children,
+              source: data.channel,
+              totalAmount: data.totalTTC,
+              notes: data.notes || null,
+              roomId: null,   // TODO: résoudre depuis supabaseRooms par data.roomNumber
+              guestId: null,
+            });
+          } catch (err) {
+            console.error('[PlanningView] createReservation failed:', err);
+            // Fallback visuel temporaire : on ajoute au context mock
+            // pour que le Gantt reste cohérent en attendant le refactor P0-B
+            const newRes: Reservation = {
+              id: data.reference,
+              priority: 'Moyenne',
+              room: data.roomNumber,
+              roomType: 'STD/DLX',
+              status: 'Arrivée < 1h',
+              statusColor: 'text-orange-500/80',
+              dotColor: 'bg-orange-400',
+              client: data.guestName,
+              arrival: `${data.checkIn} 16:00`,
+              departure: `${data.checkOut} 11:00`,
+              source: data.channel.toUpperCase(),
+              sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
+              action: 'Check-in',
+              governess: 'À faire',
+              vip: data.segment === 'VIP',
+              payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
+              totalAmount: data.totalTTC,
+              ownerFeeRate: 0.20,
+              pmsFeeRate: 0.15,
+              cleaningFee: 50,
+              email: data.email,
+              phone: data.phone,
+              nationality: data.nationality,
+              guests: { adults: data.adults, children: data.children },
+              notes: data.notes,
+            };
+            addReservation(newRes);
+          }
+
           setIsModalOpen(false);
         }} 
       />

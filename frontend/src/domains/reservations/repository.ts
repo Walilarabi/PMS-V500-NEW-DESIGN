@@ -31,6 +31,10 @@ export interface ListReservationsParams {
   limit?: number;
   offset?: number;
   status?: string[];
+  /** YYYY-MM-DD — filtre check_in >= dateFrom */
+  dateFrom?: string;
+  /** YYYY-MM-DD — filtre check_out <= dateTo */
+  dateTo?: string;
 }
 
 export async function listReservations(
@@ -46,11 +50,13 @@ export async function listReservations(
     .range(offset, offset + limit - 1);
 
   if (params.status?.length) q = q.in('status', params.status);
+  if (params.dateFrom) q = q.gte('check_in', params.dateFrom);
+  if (params.dateTo) q = q.lte('check_out', params.dateTo);
 
   const { data, error, count } = await q;
   if (error) throw mapSupabaseError(error);
 
-  const rows = (data ?? []).map((d) => reservationRowSchema.parse(d));
+  const rows = (data ?? []).map((d: unknown) => reservationRowSchema.parse(d));
   return { rows, total: count ?? rows.length };
 }
 

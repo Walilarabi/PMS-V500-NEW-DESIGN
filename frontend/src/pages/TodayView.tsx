@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import * as React from 'react';
 import {
   Menu, Calendar, Users, TrendingUp, DollarSign, BarChart2, Settings,
@@ -12,6 +12,9 @@ import {
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { useReservations } from '@/src/domains/reservations/hooks';
+import { useCheckIn, useCheckOut } from '@/src/domains/reservations/hooks';
+import type { ReservationRow } from '@/src/domains/reservations/schemas';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -26,7 +29,93 @@ const currentDateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padSta
 
 const getDateKey = (dateTime: string) => dateTime.split(' ')[0];
 
-// --- MOCK DATA ---
+// ─── Adaptateur ReservationRow (Supabase) → RoomRow (TodayView UI) ───────────
+// Convertit le format PMS domain vers le format attendu par la table opérationnelle.
+// Utilisé quand des données réelles sont disponibles ; le mock sert de fallback.
+let _roomRowIdCounter = 1000;
+
+function adaptReservationToRoomRow(r: ReservationRow): RoomRow {
+  const checkInDate = r.check_in ?? '';
+  const checkOutDate = r.check_out ?? '';
+  const todayKey = currentDateKey;
+
+  // Détermination du mouvement du jour
+  const arrivalKey = checkInDate.split('T')[0];
+  const departureKey = checkOutDate.split('T')[0];
+  let movement = 'inhouse';
+  if (arrivalKey === todayKey) movement = 'arrival';
+  else if (departureKey === todayKey) movement = 'departure';
+
+  // Statut chambre dérivé du statut PMS
+  const statusMap: Record<string, string> = {
+    confirmed: 'Arrivée < 1h',
+    checked_in: 'Occupée',
+    checked_out: 'Check-out fait',
+    cancelled: 'Bloquée',
+    pending: 'Non prête',
+    hold: 'Non prête',
+  };
+  const status = statusMap[r.status ?? 'pending'] ?? 'Non prête';
+
+  // Paiement
+  const paid = r.paid_amount ?? 0;
+  const total = r.total_amount ?? 0;
+  const paymentLabel = paid >= total && total > 0 ? 'Payé' : paid > 0 ? 'Partiel' : 'En attente';
+
+  // Initiales guest
+  const guestName = r.guest_name ?? 'Inconnu';
+  const parts = guestName.trim().split(' ');
+  const initials = parts.length >= 2
+    ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+    : guestName.slice(0, 2).toUpperCase();
+
+  // Nuits
+  const nights = r.nights
+    ?? Math.max(1, Math.round(
+        (new Date(checkOutDate).getTime() - new Date(checkInDate).getTime())
+        / 86_400_000
+       ));
+
+  return {
+    id: _roomRowIdCounter++,
+    // Store real UUID for mutations
+    _uuid: r.id,
+    _version: (r as any).version ?? 1,
+    priority: 'Moyenne',
+    room: r.room_number ?? '—',
+    type: r.room_type ?? r.room_category ?? 'STD',
+    status,
+    guest: guestName,
+    initials,
+    reservationId: r.reference ?? r.id.slice(0, 8).toUpperCase(),
+    guestCount: (r.adults ?? 1) + (r.children ?? 0),
+    etaTime: movement === 'arrival' ? '16:00' : movement === 'departure' ? '11:00' : '—',
+    etaNote: movement === 'arrival' ? 'fenêtre 14h-22h' : movement === 'departure' ? 'départ avant 11h' : 'in-house',
+    movement,
+    nights,
+    stayAmount: total > 0
+      ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(total)
+      : '—',
+    vip: null,
+    payment: paymentLabel,
+    arrival: `${arrivalKey} 16:00`,
+    departure: `${departureKey} 11:00`,
+    source: r.source?.toUpperCase() ?? 'DIRECT',
+    action: movement === 'departure' ? 'Check-out' : 'Lancer ménage',
+    taskStatus: 'À faire',
+    email: r.guest_email ?? undefined,
+    phone: r.guest_phone ?? undefined,
+    adults: r.adults ?? 1,
+    children: r.children ?? 0,
+    nationality: undefined,
+    bookingRef: r.reference ?? undefined,
+    ratePlan: undefined,
+    isGroup: false,
+    category: r.room_category ?? undefined,
+  };
+}
+
+// --- MOCK DATA (fallback tant que la DB est vide) ---
 const roomsData: RoomRow[] = [
   {
     id: 1,
@@ -164,6 +253,10 @@ const roomsData: RoomRow[] = [
 
 type RoomRow = {
   id: number;
+  /** UUID Supabase réel — présent quand la ligne vient de Supabase */
+  _uuid?: string;
+  /** Version pour optimistic locking */
+  _version?: number;
   priority: string;
   room: string;
   type: string;
@@ -754,7 +847,30 @@ const getSortValue = (row: RoomRow, key: SortKey) => {
 };
 
 const OperationsTable = () => {
+  // ── Données Supabase (réservations du jour + j-1 + j+1) ──────────────────
+  const { data: supabaseData, isLoading: supabaseLoading } = useReservations({
+    limit: 200,
+    dateFrom: new Date(Date.now() - 86_400_000).toISOString().split('T')[0],
+    dateTo: new Date(Date.now() + 86_400_000).toISOString().split('T')[0],
+  });
+  const checkIn = useCheckIn();
+  const checkOut = useCheckOut();
+
+  // Adaptation Supabase → RoomRow ; fallback sur mock si DB vide
+  const supabaseRows = React.useMemo(() => {
+    const rows = supabaseData?.rows ?? [];
+    if (rows.length === 0) return null;           // DB vide → utiliser mock
+    return rows.map(adaptReservationToRoomRow);
+  }, [supabaseData]);
+
   const [rooms, setRooms] = useState<RoomRow[]>(roomsData);
+
+  // Sync Supabase → local state (merge : Supabase prioritaire)
+  useEffect(() => {
+    if (supabaseRows && supabaseRows.length > 0) {
+      setRooms(supabaseRows);
+    }
+  }, [supabaseRows]);
   const [reservationModal, setReservationModal] = useState<ReservationModalState | null>(null);
   const [roomChangeModal, setRoomChangeModal] = useState<RoomRow | null>(null);
   const [communicationModal, setCommunicationModal] = useState<RoomRow | null>(null);
