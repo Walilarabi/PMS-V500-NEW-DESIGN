@@ -3,9 +3,23 @@
  *
  * RLS guarantees hotel_id isolation; we never inject hotel_id manually here
  * (except on insert where the column is nullable and required for FK).
+ *
+ * Audit trail: every mutation calls writeAuditLog() as a non-blocking
+ * side-effect. The DB trigger trg_reservations_audit (migration 0030)
+ * is the authoritative source — the client-side call is belt-and-suspenders
+ * for cases where the trigger cannot resolve auth.uid() (e.g. service role).
+ *
+ * Optimistic locking: updateReservationStatus / updateReservation accept an
+ * optional `expectedVersion` to prevent lost updates. If the row version
+ * doesn't match, a ConflictError is thrown.
  */
 import { supabase } from '@/src/lib/supabase';
-import { mapSupabaseError, NotFoundError } from '@/src/domains/_shared/errors';
+import {
+  mapSupabaseError,
+  NotFoundError,
+  ConflictError,
+} from '@/src/domains/_shared/errors';
+import { writeAuditLog } from '@/src/domains/finance/repository';
 
 import {
   type CreateReservationInput,
@@ -92,21 +106,130 @@ export async function createReservation(
     .select('*')
     .single();
   if (error) throw mapSupabaseError(error);
-  return reservationRowSchema.parse(data);
+
+  const row = reservationRowSchema.parse(data);
+
+  // Audit trail (belt-and-suspenders — DB trigger is authoritative)
+  await writeAuditLog({
+    entity: 'reservation',
+    entity_id: row.id,
+    action: 'INSERT',
+    payload: {
+      reference: row.reference,
+      guest_name: row.guest_name,
+      check_in: row.check_in,
+      check_out: row.check_out,
+      total_amount: row.total_amount,
+      source: row.source,
+      status: row.status,
+    },
+  });
+
+  return row;
 }
 
 export async function updateReservationStatus(
   id: string,
   status: string,
+  expectedVersion?: number,
 ): Promise<ReservationRow> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const builder = supabase.from('reservations') as any;
-  const { data, error } = await builder
+  let builder = (supabase.from('reservations') as any)
     .update({ status })
-    .eq('id', id)
-    .select('*')
-    .maybeSingle();
+    .eq('id', id);
+
+  // Optimistic locking : on n'écrase pas si version a changé entre-temps
+  if (expectedVersion !== undefined) {
+    builder = builder.eq('version', expectedVersion);
+  }
+
+  const { data, error } = await builder.select('*').maybeSingle();
   if (error) throw mapSupabaseError(error);
+
+  // Si expectedVersion fourni et aucune ligne retournée → conflit
+  if (!data && expectedVersion !== undefined) {
+    throw new ConflictError(
+      `Version conflict on reservation ${id} — expected v${expectedVersion}. Reload and retry.`,
+    );
+  }
   if (!data) throw new NotFoundError('Reservation', id);
-  return reservationRowSchema.parse(data);
+
+  const row = reservationRowSchema.parse(data);
+
+  // Audit trail
+  await writeAuditLog({
+    entity: 'reservation',
+    entity_id: id,
+    action: `STATUS_${status.toUpperCase()}`,
+    payload: {
+      new_status: status,
+      version: row.version ?? null,
+      expected_version: expectedVersion ?? null,
+    },
+  });
+
+  return row;
+}
+
+/**
+ * checkIn — Statut confirmed → checked_in
+ * Exige expectedVersion pour éviter double check-in concurrent.
+ */
+export async function checkInReservation(
+  id: string,
+  expectedVersion: number,
+): Promise<ReservationRow> {
+  const row = await updateReservationStatus(id, 'checked_in', expectedVersion);
+
+  await writeAuditLog({
+    entity: 'reservation',
+    entity_id: id,
+    action: 'CHECK_IN',
+    payload: { checked_in_at: new Date().toISOString(), version: row.version ?? null },
+  });
+
+  return row;
+}
+
+/**
+ * checkOut — Statut checked_in → checked_out
+ */
+export async function checkOutReservation(
+  id: string,
+  expectedVersion: number,
+): Promise<ReservationRow> {
+  const row = await updateReservationStatus(id, 'checked_out', expectedVersion);
+
+  await writeAuditLog({
+    entity: 'reservation',
+    entity_id: id,
+    action: 'CHECK_OUT',
+    payload: { checked_out_at: new Date().toISOString(), version: row.version ?? null },
+  });
+
+  return row;
+}
+
+/**
+ * cancelReservation — Annulation avec motif obligatoire pour l'audit.
+ */
+export async function cancelReservation(
+  id: string,
+  reason: string,
+  expectedVersion?: number,
+): Promise<ReservationRow> {
+  const row = await updateReservationStatus(id, 'cancelled', expectedVersion);
+
+  await writeAuditLog({
+    entity: 'reservation',
+    entity_id: id,
+    action: 'CANCEL',
+    payload: {
+      reason,
+      cancelled_at: new Date().toISOString(),
+      version: row.version ?? null,
+    },
+  });
+
+  return row;
 }

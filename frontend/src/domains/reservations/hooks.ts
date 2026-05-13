@@ -46,3 +46,63 @@ export function useCreateReservation() {
     },
   });
 }
+
+export function useUpdateReservationStatus() {
+  const qc = useQueryClient();
+  return useMutation<
+    ReservationRow,
+    Error,
+    { id: string; status: string; expectedVersion?: number }
+  >({
+    mutationFn: ({ id, status, expectedVersion }) =>
+      repo.updateReservationStatus(id, status, expectedVersion),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
+      void qc.invalidateQueries({ queryKey: [...RESERVATIONS_KEY, 'one', vars.id] });
+    },
+  });
+}
+
+export function useCheckIn() {
+  const qc = useQueryClient();
+  return useMutation<ReservationRow, Error, { id: string; expectedVersion: number }>({
+    mutationFn: ({ id, expectedVersion }) =>
+      repo.checkInReservation(id, expectedVersion),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
+      void qc.invalidateQueries({ queryKey: [...RESERVATIONS_KEY, 'one', vars.id] });
+    },
+  });
+}
+
+export function useCheckOut() {
+  const qc = useQueryClient();
+  return useMutation<ReservationRow, Error, { id: string; expectedVersion: number }>({
+    mutationFn: ({ id, expectedVersion }) =>
+      repo.checkOutReservation(id, expectedVersion),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
+      void qc.invalidateQueries({ queryKey: [...RESERVATIONS_KEY, 'one', vars.id] });
+    },
+  });
+}
+
+export function useCancelReservation() {
+  const qc = useQueryClient();
+  return useMutation<
+    ReservationRow,
+    Error,
+    { id: string; reason: string; expectedVersion?: number }
+  >({
+    mutationFn: ({ id, reason, expectedVersion }) =>
+      repo.cancelReservation(id, reason, expectedVersion),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
+      void qc.invalidateQueries({ queryKey: [...RESERVATIONS_KEY, 'one', vars.id] });
+    },
+  });
+}
