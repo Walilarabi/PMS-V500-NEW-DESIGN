@@ -68,7 +68,9 @@ UPDATE public.bank_statements
 DELETE FROM public.reservations WHERE hotel_id = v_hotel_id;
 
 -- 4. Reservations
--- checkin_status: 'pending' ou 'completed' uniquement
+-- status          : 'confirmed' | 'pending' | 'cheque'
+-- checkin_status  : 'pending'   | 'completed' | NULL
+-- payment_status  : 'pending'   | 'paid'      | 'cheque'
 INSERT INTO public.reservations (
   id, hotel_id, room_id, guest_id,
   reference, guest_name, guest_email, guest_phone,
@@ -82,13 +84,13 @@ INSERT INTO public.reservations (
   (gen_random_uuid(), v_hotel_id, r103, g3,
    'RES-001', 'Emma Wilson', 'emma.wilson@gmail.com', '+447911123456',
    '103', 'SGL', 'CL', v_today, v_today+3, 3,
-   1, 0, 1, 'confirmed', 'pending', 'unpaid',
+   1, 0, 1, 'confirmed', 'pending', 'pending',
    360.00, 0.00, 360.00, 'BOOKING', 'loisir', 'Arrivee 15h', 1),
 
   (gen_random_uuid(), v_hotel_id, r201, g4,
    'RES-002', 'Thomas Muller', 'thomas.muller@web.de', '+491701234567',
    '201', 'DBL', 'SUP', v_today, v_today+2, 2,
-   2, 0, 2, 'confirmed', 'pending', 'partial',
+   2, 0, 2, 'confirmed', 'pending', 'cheque',
    440.00, 220.00, 220.00, 'EXPEDIA', 'loisir', 'Oreillers synthetiques', 1),
 
   (gen_random_uuid(), v_hotel_id, r402, g9,
@@ -100,31 +102,31 @@ INSERT INTO public.reservations (
   (gen_random_uuid(), v_hotel_id, r101, g1,
    'RES-004', 'Sophie Dubois', 'sophie.dubois@email.fr', '+33612345678',
    '101', 'DBL', 'CL', v_today-2, v_today, 2,
-   2, 0, 2, 'checked_in', 'completed', 'paid',
+   2, 0, 2, 'confirmed', 'completed', 'paid',
    360.00, 360.00, 0.00, 'DIRECT', 'loisir', 'Depart avant 11h', 1),
 
   (gen_random_uuid(), v_hotel_id, r301, g5,
    'RES-005', 'Isabella Rossi', 'i.rossi@mail.it', '+393331234567',
    '301', 'DBL', 'DLX', v_today-4, v_today, 4,
-   2, 1, 3, 'checked_in', 'completed', 'paid',
+   2, 1, 3, 'confirmed', 'completed', 'paid',
    1120.00, 1120.00, 0.00, 'BOOKING', 'loisir', 'VIP excellent sejour', 1),
 
   (gen_random_uuid(), v_hotel_id, r102, g2,
    'RES-006', 'Marc Laurent', 'marc.laurent@company.com', '+33623456789',
    '102', 'DBL', 'CL', v_today-1, v_today+2, 3,
-   1, 0, 1, 'checked_in', 'completed', 'partial',
+   1, 0, 1, 'confirmed', 'completed', 'cheque',
    540.00, 270.00, 270.00, 'DIRECT', 'affaires', 'Chambre calme', 1),
 
   (gen_random_uuid(), v_hotel_id, r202, g7,
    'RES-007', 'Yuki Tanaka', 'y.tanaka@softbank.jp', '+819012345678',
    '202', 'DBL', 'SUP', v_today-2, v_today+1, 3,
-   2, 0, 2, 'checked_in', 'completed', 'paid',
+   2, 0, 2, 'confirmed', 'completed', 'paid',
    660.00, 660.00, 0.00, 'EXPEDIA', 'affaires', 'PDJ en chambre 7h30', 1),
 
   (gen_random_uuid(), v_hotel_id, r401, g6,
    'RES-008', 'Jean-Paul Bertrand', 'jpbertrand@groupe.fr', '+33645678901',
    '401', 'STE', 'JS', v_today-1, v_today+3, 4,
-   3, 1, 4, 'checked_in', 'completed', 'unpaid',
+   3, 1, 4, 'confirmed', 'completed', 'pending',
    1680.00, 0.00, 1680.00, 'DIRECT', 'groupe', 'Seminaire facturation societe', 1),
 
   (gen_random_uuid(), v_hotel_id, r203, g8,
@@ -136,25 +138,25 @@ INSERT INTO public.reservations (
   (gen_random_uuid(), v_hotel_id, r302, g10,
    'RES-010', 'Lea Fontaine', 'lea.fontaine@media.fr', '+33667890123',
    '302', 'DBL', 'DLX', v_today+1, v_today+3, 2,
-   2, 0, 2, 'confirmed', 'pending', 'unpaid',
+   2, 0, 2, 'confirmed', 'pending', 'pending',
    560.00, 0.00, 560.00, 'BOOKING', 'loisir', NULL, 1),
 
   (gen_random_uuid(), v_hotel_id, r101, g1,
    'RES-011', 'Sophie Dubois', 'sophie.dubois@email.fr', '+33612345678',
    '101', 'DBL', 'CL', v_today+7, v_today+10, 3,
-   2, 0, 2, 'confirmed', 'pending', 'partial',
+   2, 0, 2, 'confirmed', 'pending', 'cheque',
    540.00, 270.00, 270.00, 'DIRECT', 'loisir', 'Meme chambre', 1),
 
   (gen_random_uuid(), v_hotel_id, r104, g4,
    'RES-012', 'Thomas Muller', 'thomas.muller@web.de', '+491701234567',
    '104', 'TWN', 'CL', v_today+5, v_today+8, 3,
-   2, 1, 3, 'confirmed', 'pending', 'unpaid',
+   2, 1, 3, 'confirmed', 'pending', 'pending',
    570.00, 0.00, 570.00, 'EXPEDIA', 'loisir', NULL, 1),
 
   (gen_random_uuid(), v_hotel_id, r204, NULL,
    'RES-013', 'Client Annule', NULL, NULL,
    '204', 'DBL', 'SUP', v_today, v_today+2, 2,
-   2, 0, 2, 'cancelled', NULL, 'unpaid',
+   2, 0, 2, 'pending', NULL, 'pending',
    440.00, 0.00, 440.00, 'BOOKING', 'loisir', 'Annulation J-1', 1);
 
 -- 5. Reconciliation
