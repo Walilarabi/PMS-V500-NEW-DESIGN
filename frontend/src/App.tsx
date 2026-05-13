@@ -10,6 +10,9 @@ import { FinanceView } from '@/src/pages/FinanceView';
 import { AnalysisView } from '@/src/pages/AnalysisView';
 import { FlowboardView } from '@/src/pages/FlowboardView';
 import { SettingsView } from '@/src/pages/SettingsView';
+import { AuditLogView } from '@/src/pages/finance/AuditLogView';
+import { ReconciliationView } from '@/src/pages/finance/ReconciliationView';
+import { RevenueIntegrityView } from '@/src/pages/finance/RevenueIntegrityView';
 import { PageId } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -54,6 +57,13 @@ const App = () => {
       case 'performance':
       case 'forecast':
         return <AnalysisView />;
+      // Finance sub-modules
+      case 'journal_audit':
+        return <AuditLogView />;
+      case 'rapprochement':
+        return <ReconciliationView />;
+      case 'revenue_integrity':
+        return <RevenueIntegrityView />;
       case 'finance': 
       case 'facturation':
       case 'caisse':

@@ -16,7 +16,33 @@ export type PageId =
   | 'groupes'
   | 'paiements'
   | 'relances'
-  | 'anomalies';
+  | 'anomalies'
+  // Finance sub-pages
+  | 'facturation'
+  | 'caisse'
+  | 'impayes'
+  | 'proprietaires'
+  | 'cloture'
+  | 'revenue_integrity'
+  | 'rapprochement'
+  | 'journal_audit'
+  // Revenue sub-pages
+  | 'yield'
+  | 'promotions'
+  // Clients sub-pages
+  | 'fiches'
+  | 'fidelite'
+  // Settings sub-pages
+  | 'annulations'
+  | 'supplements'
+  | 'fermatures'
+  | 'hotel'
+  | 'taxe'
+  | 'pms'
+  | 'api'
+  // Analysis sub-pages
+  | 'performance'
+  | 'forecast';
 
 export interface Reservation {
   id: string;

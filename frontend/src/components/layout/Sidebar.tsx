@@ -22,7 +22,9 @@ import {
   ChevronRight,
   Sparkles,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Shield,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -35,14 +37,13 @@ interface SidebarProps {
 }
 
 export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed }: SidebarProps) => {
-  // Determine the "parent" category to show the right sub-menu
   const getCategory = (page: PageId) => {
     if (['reservations', 'calendrier', 'mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(page)) return 'reservations';
     if (['revenue', 'yield', 'promotions'].includes(page)) return 'revenue';
-    if (['finance', 'facturation', 'caisse', 'impayes', 'cloture'].includes(page)) return 'finance';
+    if (['finance', 'facturation', 'caisse', 'impayes', 'cloture', 'proprietaires', 'revenue_integrity', 'rapprochement', 'journal_audit'].includes(page)) return 'finance';
     if (['settings', 'annulations', 'supplements', 'fermatures', 'hotel', 'taxe', 'pms', 'api'].includes(page)) return 'settings';
-    if (page === 'clients') return 'clients';
-    if (page === 'analysis') return 'analysis';
+    if (['clients', 'fiches', 'fidelite'].includes(page)) return 'clients';
+    if (['analysis', 'performance', 'forecast'].includes(page)) return 'analysis';
     return 'general';
   };
 
@@ -70,6 +71,9 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
         { id: 'impayes', label: 'Impayés / Débiteurs', icon: AlertCircle },
         { id: 'proprietaires', label: 'Propriétaires', icon: Users },
         { id: 'cloture', label: 'Clôture & Audit', icon: Lock },
+        { id: 'revenue_integrity', label: 'Revenue Integrity (SAS)', icon: Shield },
+        { id: 'rapprochement', label: 'Rapprochement', icon: RefreshCw },
+        { id: 'journal_audit', label: 'Journal d\'audit', icon: History },
       ]
     },
     revenue: {
