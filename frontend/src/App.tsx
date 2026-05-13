@@ -13,6 +13,7 @@ import { SettingsView } from '@/src/pages/SettingsView';
 import { AuditLogView } from '@/src/pages/finance/AuditLogView';
 import { ReconciliationView } from '@/src/pages/finance/ReconciliationView';
 import { RevenueIntegrityView } from '@/src/pages/finance/RevenueIntegrityView';
+import { FacturationView } from '@/src/pages/finance/FacturationView';
 import {
   useReservationsRealtime,
   useReconciliationRealtime,
@@ -74,8 +75,9 @@ const App = () => {
         return <ReconciliationView />;
       case 'revenue_integrity':
         return <RevenueIntegrityView />;
-      case 'finance': 
       case 'facturation':
+        return <FacturationView />;
+      case 'finance':
       case 'caisse':
       case 'impayes':
       case 'cloture':
