@@ -420,8 +420,7 @@ export async function writeAuditLog(entry: {
     entity_id: entry.entity_id,
     action: entry.action,
     payload: entry.payload ?? {},
-    correlation_id: entry.correlation_id ?? null,
-    // hotel_id is filled by RLS trigger / DB default via get_user_hotel_id()
+    correlation_id: null,   // uuid généré DB-side par le trigger
     hotel_id: (await supabase.rpc('get_user_hotel_id')).data ?? '',
     actor_user_id: (await supabase.auth.getUser()).data.user?.id ?? null,
   });

@@ -23,19 +23,19 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_hotel_id  uuid;
-  v_entity_id text;
+  v_entity_id uuid;
   v_action    text;
   v_payload   jsonb;
 BEGIN
   -- Résolution hotel_id et action
   IF TG_OP = 'INSERT' THEN
     v_hotel_id  := NEW.hotel_id;
-    v_entity_id := NEW.id::text;
+    v_entity_id := NEW.id;
     v_action    := 'INSERT';
     v_payload   := to_jsonb(NEW);
   ELSIF TG_OP = 'UPDATE' THEN
     v_hotel_id  := NEW.hotel_id;
-    v_entity_id := NEW.id::text;
+    v_entity_id := NEW.id;
     -- Action sémantique selon le changement de statut
     v_action := CASE
       WHEN OLD.status IS DISTINCT FROM NEW.status THEN
@@ -64,7 +64,7 @@ BEGIN
     );
   ELSIF TG_OP = 'DELETE' THEN
     v_hotel_id  := OLD.hotel_id;
-    v_entity_id := OLD.id::text;
+    v_entity_id := OLD.id;
     v_action    := 'DELETE';
     v_payload   := to_jsonb(OLD);
   END IF;
@@ -91,7 +91,7 @@ BEGIN
       v_entity_id,
       v_action,
       v_payload,
-      gen_random_uuid()::text
+      gen_random_uuid()
     );
   END IF;
 
@@ -117,16 +117,16 @@ AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
     INSERT INTO public.audit_logs (hotel_id, actor_user_id, entity, entity_id, action, payload)
-    VALUES (OLD.hotel_id, auth.uid(), 'payment', OLD.id::text, 'DELETE', to_jsonb(OLD));
+    VALUES (OLD.hotel_id, auth.uid(), 'payment', OLD.id, 'DELETE', to_jsonb(OLD));
     RETURN OLD;
   END IF;
 
   INSERT INTO public.audit_logs (hotel_id, actor_user_id, entity, entity_id, action, payload)
   VALUES (
-    CASE WHEN TG_OP = 'INSERT' THEN NEW.hotel_id ELSE NEW.hotel_id END,
+    NEW.hotel_id,
     auth.uid(),
     'payment',
-    NEW.id::text,
+    NEW.id,
     TG_OP,
     CASE WHEN TG_OP = 'INSERT' THEN to_jsonb(NEW)
          ELSE jsonb_build_object('before', to_jsonb(OLD), 'after', to_jsonb(NEW))
