@@ -39,25 +39,116 @@ import { useRooms } from '@/src/domains/hotel/hooks';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 import { useConfigStore, HotelEvent } from '@/src/store/configStore';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
+import type { ReservationRow } from '@/src/domains/reservations/schemas';
+
+// ─── Type interne du Gantt — découplé de ReservationRow et du mock context ───
+interface GanttReservation {
+  id: string;
+  room: string;           // numéro de chambre (ex: "101")
+  client: string;         // nom client
+  arrival: string;        // ISO datetime ou "YYYY-MM-DD HH:mm"
+  departure: string;
+  source: string;         // DIRECT | BOOKING | AIRBNB | EXPEDIA
+  status: string;         // label UI (ex: "Arrivée < 1h", "Occupée")
+  totalAmount: number;
+  nights: number;
+  payment: string;
+  vip: boolean;
+  _uuid?: string;         // UUID Supabase pour mutations
+  _version?: number;
+}
+
+/** Convertit un ReservationRow Supabase → GanttReservation */
+function adaptToGantt(r: ReservationRow): GanttReservation {
+  const statusMap: Record<string, string> = {
+    confirmed: 'Arrivée < 1h',
+    checked_in: 'Occupée',
+    checked_out: 'Départ',
+    cancelled: 'Annulée',
+    pending: 'Non confirmée',
+    hold: 'Option',
+  };
+
+  const paid = r.paid_amount ?? 0;
+  const total = r.total_amount ?? 0;
+
+  return {
+    id: r.id,
+    room: r.room_number ?? '—',
+    client: r.guest_name ?? 'Client inconnu',
+    arrival: r.check_in.includes('T') ? r.check_in : `${r.check_in} 16:00`,
+    departure: r.check_out.includes('T') ? r.check_out : `${r.check_out} 11:00`,
+    source: r.source?.toUpperCase() ?? 'DIRECT',
+    status: statusMap[r.status ?? 'pending'] ?? 'Confirmée',
+    totalAmount: total,
+    nights: r.nights ?? Math.max(1, Math.round(
+      (new Date(r.check_out).getTime() - new Date(r.check_in).getTime()) / 86_400_000
+    )),
+    payment: paid >= total && total > 0 ? 'Payé' : paid > 0 ? 'Partiel' : 'En attente',
+    vip: false,
+    _uuid: r.id,
+    _version: (r as any).version ?? 1,
+  };
+}
+
+/** Convertit un mock Reservation (context) → GanttReservation (fallback) */
+function adaptMockToGantt(r: Reservation): GanttReservation {
+  return {
+    id: r.id,
+    room: r.room,
+    client: r.client,
+    arrival: r.arrival,
+    departure: r.departure,
+    source: r.source,
+    status: r.status,
+    totalAmount: r.totalAmount,
+    nights: 1,
+    payment: r.payment,
+    vip: r.vip,
+  };
+}
 
 export const PlanningView = () => {
   // ── Données réelles Supabase ──────────────────────────────────────────────
   const { session } = useAuth();
-  const { data: supabaseData } = useReservations({ limit: 200 });
+  const { data: supabaseData } = useReservations({ limit: 500 });
   const { data: supabaseRooms = [] } = useRooms();
   const createReservation = useCreateReservation();
 
-  // Context mock — gardé temporairement pour la compatibilité du planning visuel
-  // TODO P1: supprimer quand le Gantt sera branché sur supabaseData
+  // Context mock — gardé uniquement comme fallback si DB vide
   const { addReservation, reservations: contextReservations } = useContextReservations();
 
+  // ── Source unifiée pour le Gantt ──────────────────────────────────────────
+  // Priorité : Supabase si données disponibles, mock sinon
+  const ganttReservations = React.useMemo<GanttReservation[]>(() => {
+    const rows = supabaseData?.rows ?? [];
+    if (rows.length > 0) return rows.map(adaptToGantt);
+    return contextReservations.map(adaptMockToGantt);
+  }, [supabaseData, contextReservations]);
+
+  // ── Rooms : Supabase prioritaire, store mock sinon ────────────────────────
   const { rooms: storeRooms, events: storeEvents } = useConfigStore();
+
+  const effectiveRooms = React.useMemo(() => {
+    if (supabaseRooms.length > 0) {
+      return supabaseRooms.map((r) => ({
+        id: r.id,
+        number: r.number,
+        type: r.type ?? 'DBL',
+        category: r.category ?? 'STD',
+        floor: String(r.floor ?? '1'),
+        status: (r.housekeeping_status ?? r.status ?? 'clean') as
+          'clean' | 'dirty' | 'inspected' | 'out_of_order' | 'maintenance',
+      }));
+    }
+    return storeRooms;
+  }, [supabaseRooms, storeRooms]);
   const [currentDate, setCurrentDate] = useState(new Date(2026, 4, 1));
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [selectedEventDate, setSelectedEventDate] = useState<string | null>(null);
-  const [hoveredRes, setHoveredRes] = useState<Reservation | null>(null);
+  const [hoveredRes, setHoveredRes] = useState<GanttReservation | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState<'7J' | '15J' | 'Mois'>('15J');
   const [displayMode, setDisplayMode] = useState<'Gantt' | 'Calendar'>('Gantt');
@@ -74,13 +165,13 @@ export const PlanningView = () => {
   const [hoveredEvents, setHoveredEvents] = useState<HotelEvent[] | null>(null);
 
   // Constants for filters
-  const roomTypes = Array.from(new Set(storeRooms.map(r => r.type))).sort();
-  const roomScales = Array.from(new Set(storeRooms.map(r => r.category))).sort();
+  const roomTypes = Array.from(new Set(effectiveRooms.map(r => r.type))).sort();
+  const roomScales = Array.from(new Set(effectiveRooms.map(r => r.category))).sort();
   const channels = ['DIRECT', 'BOOKING', 'AIRBNB', 'EXPEDIA', 'AGODA', 'HOTELBEDS', 'CTRIP'];
   const statuses = ['Arrivées', 'Départs', 'Occupées', 'Libres', 'Ménage'];
 
   // Filter Rooms
-  const rooms = storeRooms.filter(r => {
+  const rooms = effectiveRooms.filter(r => {
     const passFloor = floorFilter === 'Tous' || r.floor.toString() === floorFilter;
     const passType = typeFilter === 'Tous Types' || r.type === typeFilter || r.category === typeFilter;
     const passSearch = searchQuery === '' || 
@@ -92,16 +183,18 @@ export const PlanningView = () => {
     if (statusFilter === 'Libres') passStatus = r.status === 'clean';
     if (statusFilter === 'Ménage') passStatus = r.status === 'dirty';
     if (statusFilter === 'Occupées') {
-       const todayStr = new Date(2026, 4, 1).toISOString().split('T')[0];
-       passStatus = contextReservations.some(res => 
-         res.room === r.number && todayStr >= res.arrival.split(' ')[0] && todayStr < res.departure.split(' ')[0]
+       const todayStr = new Date().toISOString().split('T')[0];
+       passStatus = ganttReservations.some(res => 
+         res.room === r.number &&
+         todayStr >= res.arrival.split(' ')[0] &&
+         todayStr < res.departure.split(' ')[0]
        );
     }
     
     return passFloor && passType && passSearch && passStatus;
   });
 
-  const floors = Array.from(new Set(storeRooms.map(r => r.floor.toString()))).sort();
+  const floors = Array.from(new Set(effectiveRooms.map(r => r.floor.toString()))).sort();
 
   // Navigation handlers
   const handlePrev = () => {
@@ -127,7 +220,7 @@ export const PlanningView = () => {
       date.setDate(currentDate.getDate() + i);
       const dateStr = date.toISOString().split('T')[0];
       
-      const occupiedCount = contextReservations.filter(res => {
+      const occupiedCount = ganttReservations.filter(res => {
         try {
           const start = new Date(res.arrival).getTime();
           const end = new Date(res.departure).getTime();
@@ -156,7 +249,7 @@ export const PlanningView = () => {
         adr: 120 + Math.floor(Math.random() * 40)
       };
     });
-  }, [contextReservations, storeEvents, rooms, currentDate, viewLength]);
+  }, [ganttReservations, storeEvents, rooms, currentDate, viewLength]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (hoveredRes) {
@@ -352,7 +445,7 @@ export const PlanningView = () => {
 
            <div ref={sidebarRef} className="flex-1 overflow-hidden scrollbar-hide pointer-events-none">
               {rooms.map(room => {
-                const todayRes = contextReservations.find(res => {
+                const todayRes = ganttReservations.find(res => {
                   const now = new Date().getTime();
                   return res.room === room.number && now >= new Date(res.arrival).getTime() && now <= new Date(res.departure).getTime();
                 });
@@ -501,7 +594,7 @@ export const PlanningView = () => {
                  <div className="relative z-10 pb-20 w-full">
                     {rooms.map((room) => (
                       <div key={`row-${room.id}`} className="h-20 border-b border-gray-50/60 relative hover:bg-gray-50/10 transition-colors w-full">
-                        {contextReservations.filter(res => res.room === room.number).map((res, idx) => {
+                        {ganttReservations.filter(res => res.room === room.number).map((res, idx) => {
                           const arrivalDate = new Date(res.arrival);
                           const departureDate = new Date(res.departure);
                           const arrivalTime = arrivalDate.getTime();
@@ -707,7 +800,7 @@ export const PlanningView = () => {
                       <span className="text-[11px] font-bold">Occupants</span>
                    </div>
                    <span className="text-[11px] font-black text-gray-900">
-                      {hoveredRes.guests?.adults || 2} Adultes, {hoveredRes.guests?.children || 0} Enfants
+                      {hoveredRes.nights} nuit{hoveredRes.nights > 1 ? 's' : ''}
                    </span>
                 </div>
                 <div className="flex items-center justify-between px-1">
@@ -796,8 +889,10 @@ export const PlanningView = () => {
         onSave={async (data: ReservationFormData) => {
           if (!session?.tenantId) return;
 
+          // Résolution room_id depuis les chambres Supabase
+          const matchedRoom = effectiveRooms.find(r => r.number === data.roomNumber);
+
           try {
-            // ── Écriture réelle Supabase ──────────────────────────────────
             await createReservation.mutateAsync({
               reference: data.reference,
               guestName: data.guestName || null,
@@ -808,41 +903,11 @@ export const PlanningView = () => {
               source: data.channel,
               totalAmount: data.totalTTC,
               notes: data.notes || null,
-              roomId: null,   // TODO: résoudre depuis supabaseRooms par data.roomNumber
+              roomId: matchedRoom?.id ?? null,
               guestId: null,
             });
           } catch (err) {
             console.error('[PlanningView] createReservation failed:', err);
-            // Fallback visuel temporaire : on ajoute au context mock
-            // pour que le Gantt reste cohérent en attendant le refactor P0-B
-            const newRes: Reservation = {
-              id: data.reference,
-              priority: 'Moyenne',
-              room: data.roomNumber,
-              roomType: 'STD/DLX',
-              status: 'Arrivée < 1h',
-              statusColor: 'text-orange-500/80',
-              dotColor: 'bg-orange-400',
-              client: data.guestName,
-              arrival: `${data.checkIn} 16:00`,
-              departure: `${data.checkOut} 11:00`,
-              source: data.channel.toUpperCase(),
-              sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
-              action: 'Check-in',
-              governess: 'À faire',
-              vip: data.segment === 'VIP',
-              payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
-              totalAmount: data.totalTTC,
-              ownerFeeRate: 0.20,
-              pmsFeeRate: 0.15,
-              cleaningFee: 50,
-              email: data.email,
-              phone: data.phone,
-              nationality: data.nationality,
-              guests: { adults: data.adults, children: data.children },
-              notes: data.notes,
-            };
-            addReservation(newRes);
           }
 
           setIsModalOpen(false);

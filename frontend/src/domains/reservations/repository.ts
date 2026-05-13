@@ -75,13 +75,12 @@ export async function createReservation(
   hotelId: string,
   input: CreateReservationInput,
 ): Promise<ReservationRow> {
-  const adults = input.adults;
-  const children = input.children ?? 0;
-  const checkIn = new Date(input.checkIn);
-  const checkOut = new Date(input.checkOut);
   const nights = Math.max(
     1,
-    Math.round((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)),
+    Math.round(
+      (new Date(input.checkOut).getTime() - new Date(input.checkIn).getTime()) /
+        86_400_000,
+    ),
   );
 
   const insertPayload = {
@@ -89,20 +88,18 @@ export async function createReservation(
     reference: input.reference,
     guest_id: input.guestId ?? null,
     room_id: input.roomId ?? null,
-    guest_name: input.guestName ?? null,
     check_in: input.checkIn,
     check_out: input.checkOut,
     nights,
-    adults,
-    children,
-    pax: adults + children,
+    adults: input.adults,
+    children: input.children ?? 0,
+    source: input.source,
     total_amount: input.totalAmount,
-    paid_amount: 0,
-    solde: input.totalAmount,
-    source: input.source ?? 'Direct',
-    status: 'confirmed',
-    payment_status: 'unpaid',
     notes: input.notes ?? null,
+    guest_name: input.guestName ?? null,
+    status: 'confirmed',
+    payment_status: 'pending',
+    version: 1,
   };
 
   const { data, error } = await supabase
@@ -111,11 +108,23 @@ export async function createReservation(
     .insert(insertPayload as any)
     .select('*')
     .single();
-  if (error) throw mapSupabaseError(error);
+
+  if (error) {
+    // Erreur overbooking : code 23P01 (exclusion_violation) ou message OVERBOOKING_CONFLICT
+    if (
+      error.code === '23P01' ||
+      error.message?.includes('OVERBOOKING_CONFLICT')
+    ) {
+      throw new ConflictError(
+        `Overbooking détecté : la chambre est déjà réservée sur cette période. Choisissez une autre chambre ou modifiez les dates.`,
+      );
+    }
+    throw mapSupabaseError(error);
+  }
 
   const row = reservationRowSchema.parse(data);
 
-  // Audit trail (belt-and-suspenders — DB trigger is authoritative)
+  // Audit trail (belt-and-suspenders — DB trigger est autoritaire)
   await writeAuditLog({
     entity: 'reservation',
     entity_id: row.id,

@@ -906,7 +906,7 @@ const OperationsTable = () => {
     setRooms((current) => current.map((row) => row.id === roomId ? { ...row, ...updater(row) } : row));
   };
 
-  const handleReservationValidation = (state: ReservationModalState) => {
+  const handleReservationValidation = async (state: ReservationModalState) => {
     if (state.mode === 'arrival' && getDateKey(state.row.arrival) === currentDateKey) {
       const sameDayDeparture = rooms.find((row) => row.id !== state.row.id && row.room === state.row.room && row.movement === 'departure' && getDateKey(row.departure) === currentDateKey);
       const liveArrival = rooms.find((row) => row.id === state.row.id) ?? state.row;
@@ -922,6 +922,33 @@ const OperationsTable = () => {
       }
     }
 
+    // ── Mutation Supabase si UUID disponible (données réelles) ────────────
+    if (state.row._uuid && state.row._version !== undefined) {
+      try {
+        if (state.mode === 'arrival') {
+          await checkIn.mutateAsync({
+            id: state.row._uuid,
+            expectedVersion: state.row._version,
+          });
+        } else {
+          await checkOut.mutateAsync({
+            id: state.row._uuid,
+            expectedVersion: state.row._version,
+          });
+        }
+      } catch (err: any) {
+        // ConflictError : version obsolète
+        if (err?.name === 'ConflictError') {
+          showToast('⚠️ Données modifiées par un autre utilisateur — actualisation en cours…');
+          return;
+        }
+        console.error('[TodayView] check-in/out failed:', err);
+        showToast(`Erreur serveur : ${err?.message ?? 'impossible de valider'}`);
+        return;
+      }
+    }
+
+    // Mise à jour optimiste locale (affichage immédiat)
     updateRoom(state.row.id, () => state.mode === 'arrival'
       ? { movement: 'inhouse', status: 'Occupée', action: 'Inspection', taskStatus: 'À faire' }
       : { status: 'Propre', taskStatus: 'Validé', action: 'Demande Inspection' }
