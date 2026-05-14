@@ -33,6 +33,7 @@ import { Badge } from '@/src/components/ui/Badge';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
+import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
 import { useReservations as useContextReservations, Reservation } from '@/src/contexts/ReservationContext';
 import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
 import { useRooms } from '@/src/domains/hotel/hooks';
@@ -164,6 +165,24 @@ export const PlanningView = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [hoveredEvents, setHoveredEvents] = useState<HotelEvent[] | null>(null);
 
+  // ── Drag-to-create state ──────────────────────────────────────────────────
+  const [dragState, setDragState] = useState<{
+    active: boolean;
+    roomId: string;
+    roomNumber: string;
+    startDayIndex: number;
+    endDayIndex: number;
+    cursorX: number;
+    cursorY: number;
+  } | null>(null);
+  const [dragConflict, setDragConflict] = useState(false);
+  const [newResModal, setNewResModal] = useState<{
+    roomId: string;
+    roomNumber: string;
+    checkIn: string;
+    checkOut: string;
+  } | null>(null);
+
   // Constants for filters
   const roomTypes = Array.from(new Set(effectiveRooms.map(r => r.type))).sort();
   const roomScales = Array.from(new Set(effectiveRooms.map(r => r.category))).sort();
@@ -251,9 +270,47 @@ export const PlanningView = () => {
     });
   }, [ganttReservations, storeEvents, rooms, currentDate, viewLength]);
 
+  const checkDragConflict = (roomNumber: string, startIdx: number, endIdx: number): boolean => {
+    const start = Math.min(startIdx, endIdx);
+    const end = Math.max(startIdx, endIdx);
+    const dragStart = new Date(currentDate.getTime() + start * 86_400_000);
+    const dragEnd = new Date(currentDate.getTime() + (end + 1) * 86_400_000);
+    return ganttReservations.some(res => {
+      if (res.room !== roomNumber) return false;
+      const resStart = new Date(res.arrival).getTime();
+      const resEnd = new Date(res.departure).getTime();
+      return dragStart.getTime() < resEnd && dragEnd.getTime() > resStart;
+    });
+  };
+
+  const handleDragStart = (e: React.MouseEvent, roomId: string, roomNumber: string, dayIndex: number) => {
+    e.preventDefault();
+    setDragState({ active: true, roomId, roomNumber, startDayIndex: dayIndex, endDayIndex: dayIndex, cursorX: e.clientX, cursorY: e.clientY });
+    setDragConflict(false);
+  };
+
+  const handleDragEnd = () => {
+    if (!dragState?.active) return;
+    const start = Math.min(dragState.startDayIndex, dragState.endDayIndex);
+    const end = Math.max(dragState.startDayIndex, dragState.endDayIndex);
+    if (!dragConflict) {
+      const checkIn = new Date(currentDate.getTime() + start * 86_400_000);
+      const checkOut = new Date(currentDate.getTime() + (end + 1) * 86_400_000);
+      setNewResModal({ roomId: dragState.roomId, roomNumber: dragState.roomNumber, checkIn: checkIn.toISOString().split('T')[0], checkOut: checkOut.toISOString().split('T')[0] });
+    }
+    setDragState(null);
+    setDragConflict(false);
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (hoveredRes) {
-      setTooltipPos({ x: e.clientX + 15, y: e.clientY + 15 });
+    if (hoveredRes) setTooltipPos({ x: e.clientX + 15, y: e.clientY + 15 });
+    if (dragState?.active && gridRef.current) {
+      const rect = gridRef.current.getBoundingClientRect();
+      const relX = e.clientX - rect.left;
+      const dayIndex = Math.max(0, Math.min(viewLength - 1, Math.floor((relX / rect.width) * viewLength)));
+      const hasConflict = checkDragConflict(dragState.roomNumber, dragState.startDayIndex, dayIndex);
+      setDragConflict(hasConflict);
+      setDragState(prev => prev ? { ...prev, endDayIndex: dayIndex, cursorX: e.clientX, cursorY: e.clientY } : null);
     }
   };
 
@@ -264,7 +321,60 @@ export const PlanningView = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#F8FAFC] overflow-hidden font-sans select-none" onMouseMove={handleMouseMove}>
+    <div className="flex-1 flex flex-col h-full bg-[#F8FAFC] overflow-hidden font-sans select-none" onMouseMove={handleMouseMove} onMouseUp={handleDragEnd} onMouseLeave={handleDragEnd}>
+
+      {/* Drag-to-create floating popup */}
+      {dragState?.active && (
+        <div
+          className="fixed z-[999] pointer-events-none"
+          style={{ left: dragState.cursorX + 16, top: dragState.cursorY - 60 }}
+        >
+          <div className={`px-4 py-3 rounded-2xl shadow-2xl border text-sm font-bold backdrop-blur-sm ${
+            dragConflict
+              ? 'bg-red-500 border-red-400 text-white'
+              : 'bg-[#1E3A5F] border-indigo-400 text-white'
+          }`}>
+            {dragConflict ? (
+              <div className="flex items-center gap-2">
+                <span>⚠️</span>
+                <span>Conflit de réservation</span>
+              </div>
+            ) : (() => {
+              const s = Math.min(dragState.startDayIndex, dragState.endDayIndex);
+              const e = Math.max(dragState.startDayIndex, dragState.endDayIndex);
+              const nights = e - s + 1;
+              const ci = new Date(currentDate.getTime() + s * 86_400_000);
+              const co = new Date(currentDate.getTime() + (e + 1) * 86_400_000);
+              return (
+                <div className="space-y-1">
+                  <div className="text-xs font-black uppercase tracking-widest text-indigo-200">Chambre {dragState.roomNumber}</div>
+                  <div className="flex items-center gap-3">
+                    <span>{ci.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>
+                    <span className="text-indigo-300">→</span>
+                    <span>{co.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>
+                  </div>
+                  <div className="text-xs text-indigo-200">{nights} nuit{nights > 1 ? 's' : ''}</div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Drag selection overlay on grid */}
+      {dragState?.active && !dragConflict && (() => {
+        const s = Math.min(dragState.startDayIndex, dragState.endDayIndex);
+        const e = Math.max(dragState.startDayIndex, dragState.endDayIndex);
+        return (
+          <div
+            className="fixed pointer-events-none z-[100] bg-indigo-400/20 border-2 border-indigo-400 rounded-lg"
+            style={{
+              left: `calc(${s * colWidth}% + 4px)`,
+              width: `calc(${(e - s + 1) * colWidth}% - 8px)`,
+            }}
+          />
+        );
+      })()}
       {/* Top Header Bar */}
       <div className="h-[72px] shrink-0 border-b border-gray-100 flex items-center justify-between px-6 bg-white z-[60]">
         <div className="flex items-center gap-6">
@@ -593,7 +703,40 @@ export const PlanningView = () => {
 
                  <div className="relative z-10 pb-20 w-full">
                     {rooms.map((room) => (
-                      <div key={`row-${room.id}`} className="h-20 border-b border-gray-50/60 relative hover:bg-gray-50/10 transition-colors w-full">
+                      <div key={`row-${room.id}`} className="h-20 border-b border-gray-50/60 relative hover:bg-indigo-50/5 transition-colors w-full">
+                        {/* Drag-to-create zones — one per day */}
+                        <div className="absolute inset-0 flex z-10">
+                          {days.map((d, dayIdx) => (
+                            <div
+                              key={`drag-${room.id}-${dayIdx}`}
+                              className={`h-full shrink-0 cursor-crosshair ${dragState?.active && dragState.roomId === room.id ? '' : 'hover:bg-indigo-50/20'}`}
+                              style={{ width: `${colWidth}%` }}
+                              onMouseDown={(e) => handleDragStart(e, room.id, room.number, dayIdx)}
+                            />
+                          ))}
+                        </div>
+                        {/* Drag selection highlight for this room */}
+                        {dragState?.active && dragState.roomId === room.id && !dragConflict && (() => {
+                          const s = Math.min(dragState.startDayIndex, dragState.endDayIndex);
+                          const e = Math.max(dragState.startDayIndex, dragState.endDayIndex);
+                          return (
+                            <div
+                              className="absolute top-2 bottom-2 bg-indigo-400/25 border-2 border-indigo-400 rounded-xl z-20 pointer-events-none"
+                              style={{ left: `calc(${s * colWidth}% + 4px)`, width: `calc(${(e - s + 1) * colWidth}% - 8px)` }}
+                            />
+                          );
+                        })()}
+                        {/* Conflict highlight */}
+                        {dragState?.active && dragState.roomId === room.id && dragConflict && (() => {
+                          const s = Math.min(dragState.startDayIndex, dragState.endDayIndex);
+                          const e = Math.max(dragState.startDayIndex, dragState.endDayIndex);
+                          return (
+                            <div
+                              className="absolute top-2 bottom-2 bg-red-400/20 border-2 border-red-400 rounded-xl z-20 pointer-events-none"
+                              style={{ left: `calc(${s * colWidth}% + 4px)`, width: `calc(${(e - s + 1) * colWidth}% - 8px)` }}
+                            />
+                          );
+                        })()}
                         {ganttReservations.filter(res => res.room === room.number).map((res, idx) => {
                           const arrivalDate = new Date(res.arrival);
                           const departureDate = new Date(res.departure);
@@ -888,10 +1031,7 @@ export const PlanningView = () => {
         onClose={() => setIsModalOpen(false)} 
         onSave={async (data: ReservationFormData) => {
           if (!session?.tenantId) return;
-
-          // Résolution room_id depuis les chambres Supabase
           const matchedRoom = effectiveRooms.find(r => r.number === data.roomNumber);
-
           try {
             await createReservation.mutateAsync({
               reference: data.reference,
@@ -909,9 +1049,35 @@ export const PlanningView = () => {
           } catch (err) {
             console.error('[PlanningView] createReservation failed:', err);
           }
-
           setIsModalOpen(false);
         }} 
+      />
+
+      {/* New Reservation Modal — from drag-to-create */}
+      <NewReservationModal
+        isOpen={!!newResModal}
+        onClose={() => setNewResModal(null)}
+        prefill={newResModal ?? undefined}
+        onSave={async (data) => {
+          try {
+            await createReservation.mutateAsync({
+              reference: `RES-${Date.now().toString().slice(-6)}`,
+              guestName: data.guestName || null,
+              checkIn: data.checkIn,
+              checkOut: data.checkOut,
+              adults: data.adults,
+              children: data.children,
+              source: data.source ?? 'DIRECT',
+              totalAmount: data.totalTTC ?? 0,
+              notes: data.notes || null,
+              roomId: data.roomId || null,
+              guestId: null,
+            });
+          } catch (err) {
+            console.error('[PlanningView] drag-create failed:', err);
+          }
+          setNewResModal(null);
+        }}
       />
       <EventManagerModal 
         isOpen={isEventModalOpen} 
