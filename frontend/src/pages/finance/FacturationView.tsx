@@ -446,7 +446,7 @@ function CreateInvoiceModal({
           { key: 'billToName', label: 'Nom client / société', placeholder: 'Ex: Société Dupont SAS' },
           { key: 'billToAddress', label: 'Adresse', placeholder: 'Adresse de facturation' },
           { key: 'billToVat', label: 'N° TVA intracommunautaire', placeholder: 'FR00000000000' },
-          { key: 'dueDate', label: 'Date d'échéance', placeholder: '', type: 'date' },
+          { key: 'dueDate', label: "Date d'échéance", placeholder: '', type: 'date' },
           { key: 'notes', label: 'Notes', placeholder: 'Observations internes' },
         ].map(f => (
           <div key={f.key}>
