@@ -68,14 +68,14 @@ export const useConfigStore = create<ConfigState>()(
   persist(
     (set) => ({
       hotel: {
-        name: 'Flowtym Premium Resort',
+        name: 'Flowtym Demo Hotel',
         stars: 4,
-        address: '123 Avenue des Champs-Élysées',
+        address: '12 Rue de la Paix',
         city: 'Paris',
-        zip: '75008',
+        zip: '75001',
         country: 'France',
-        phone: '+33 1 23 45 67 89',
-        email: 'contact@flowtym.com',
+        phone: '+33 1 00 00 00 00',
+        email: 'demo@flowtym.com',
         logo: '',
       },
       taxes: {

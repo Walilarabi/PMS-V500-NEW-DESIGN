@@ -13,7 +13,7 @@ export const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('walilarabi@gmail.com');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('Wali Larabi');
-  const [hotelName, setHotelName] = useState('Flowtym Premium Resort');
+  const [hotelName, setHotelName] = useState('Flowtym Demo Hotel');
   const [tenantSlug, setTenantSlug] = useState('flowtym');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

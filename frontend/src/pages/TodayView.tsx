@@ -310,7 +310,7 @@ const Header = () => (
         {/* Mobile menu button */}
         <button className="md:hidden p-2 -ml-2 text-gray-500"><Menu size={20} /></button>
         <div>
-          <h1 className="font-semibold text-gray-900 text-lg leading-tight">Flowtym Premium Resort</h1>
+          <h1 className="font-semibold text-gray-900 text-lg leading-tight">Flowtym PMS</h1>
           <p className="text-xs text-gray-500 uppercase tracking-wider">Paris</p>
         </div>
       </div>

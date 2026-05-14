@@ -10,7 +10,7 @@ export const ConfigTemplates: React.FC<{ toast: any }> = ({ toast }) => {
   const handleGenerateAI = () => {
     setIsGenerating(true);
     setTimeout(() => {
-      setContent('Bonjour {{guest_name}},\n\nC\'est avec un immense plaisir que nous confirmons votre réservation au Flowtym Premium Resort...\n\nDates : {{arrival}} au {{departure}}\nChambre : {{room_number}}\n\nÀ très vite !');
+      setContent('Bonjour {{guest_name}},\n\nC\'est avec un immense plaisir que nous confirmons votre réservation à {{hotel_name}}...\n\nDates : {{arrival}} au {{departure}}\nChambre : {{room_number}}\n\nÀ très vite !');
       setIsGenerating(false);
       toast('Template généré par IA ✨', 'success');
     }, 1500);
