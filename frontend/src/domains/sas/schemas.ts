@@ -10,8 +10,8 @@ export const partnerStatusSchema = z.enum(['active', 'suspended', 'inactive']);
 export type PartnerStatus = z.infer<typeof partnerStatusSchema>;
 
 export const sasPartnerRowSchema = z.object({
-  id:           z.string().uuid(),
-  hotel_id:     z.string().uuid(),
+  id:           z.string(),
+  hotel_id:     z.string(),
   code:         z.string(),
   name:         z.string(),
   status:       partnerStatusSchema,
@@ -31,9 +31,9 @@ export const collectionTypeSchema = z.enum([
 export type CollectionType = z.infer<typeof collectionTypeSchema>;
 
 export const sasPaymentModelRowSchema = z.object({
-  id:               z.string().uuid(),
-  hotel_id:         z.string().uuid(),
-  partner_id:       z.string().uuid(),
+  id:               z.string(),
+  hotel_id:         z.string(),
+  partner_id:       z.string(),
   collection_type:  collectionTypeSchema,
   commission_mode:  z.enum(['PERCENTAGE','FIXED','HYBRID']).nullable(),
   commission_value: z.number().nullable(),
@@ -46,9 +46,9 @@ export const sasPaymentModelRowSchema = z.object({
 export type SasPaymentModelRow = z.infer<typeof sasPaymentModelRowSchema>;
 
 export const sasCommissionRowSchema = z.object({
-  id:           z.string().uuid(),
-  hotel_id:     z.string().uuid(),
-  partner_id:   z.string().uuid(),
+  id:           z.string(),
+  hotel_id:     z.string(),
+  partner_id:   z.string(),
   rate:         z.number(),
   fixed_amount: z.number().nullable(),
   valid_from:   z.string(),
@@ -67,9 +67,9 @@ export const rieStatusSchema = z.enum([
 export type RieStatus = z.infer<typeof rieStatusSchema>;
 
 export const sasIncomingRowSchema = z.object({
-  id:              z.string().uuid(),
-  hotel_id:        z.string().uuid(),
-  partner_id:      z.string().uuid().nullable(),
+  id:              z.string(),
+  hotel_id:        z.string(),
+  partner_id:      z.string().nullable(),
   ota_reference:   z.string(),
   raw_payload:     z.record(z.unknown()),
   guest_name:      z.string().nullable(),
@@ -84,7 +84,7 @@ export const sasIncomingRowSchema = z.object({
   collection_type: z.string().nullable(),
   rie_status:      rieStatusSchema,
   rie_score:       z.number().nullable(),
-  reservation_id:  z.string().uuid().nullable(),
+  reservation_id:  z.string().nullable(),
   received_at:     z.string(),
   processed_at:    z.string().nullable(),
   created_at:      z.string(),
@@ -114,10 +114,10 @@ export const anomalySchema = z.object({
 export type Anomaly = z.infer<typeof anomalySchema>;
 
 export const sasValidationRowSchema = z.object({
-  id:                  z.string().uuid(),
-  hotel_id:            z.string().uuid(),
-  incoming_id:         z.string().uuid(),
-  partner_id:          z.string().uuid().nullable(),
+  id:                  z.string(),
+  hotel_id:            z.string(),
+  incoming_id:         z.string(),
+  partner_id:          z.string().nullable(),
   pms_base_rate:       z.number().nullable(),
   promo_deduction:     z.number().nullable(),
   tax_amount:          z.number().nullable(),
@@ -146,16 +146,16 @@ export const quarantineStatusSchema = z.enum([
 export type QuarantineStatus = z.infer<typeof quarantineStatusSchema>;
 
 export const sasQuarantineRowSchema = z.object({
-  id:              z.string().uuid(),
-  hotel_id:        z.string().uuid(),
-  incoming_id:     z.string().uuid(),
-  validation_id:   z.string().uuid().nullable(),
+  id:              z.string(),
+  hotel_id:        z.string(),
+  incoming_id:     z.string(),
+  validation_id:   z.string().nullable(),
   virtual_room:    z.string().nullable(),
   reason:          z.string(),
   quarantined_at:  z.string(),
   quarantined_by:  z.string().nullable(),
   released_at:     z.string().nullable(),
-  released_by:     z.string().uuid().nullable(),
+  released_by:     z.string().nullable(),
   release_note:    z.string().nullable(),
   status:          quarantineStatusSchema,
 }).passthrough();
@@ -169,12 +169,12 @@ export const disputeStatusSchema = z.enum([
 export type DisputeStatus = z.infer<typeof disputeStatusSchema>;
 
 export const sasDisputeRowSchema = z.object({
-  id:               z.string().uuid(),
-  hotel_id:         z.string().uuid(),
+  id:               z.string(),
+  hotel_id:         z.string(),
   reference:        z.string(),
-  incoming_id:      z.string().uuid().nullable(),
-  validation_id:    z.string().uuid().nullable(),
-  partner_id:       z.string().uuid().nullable(),
+  incoming_id:      z.string().nullable(),
+  validation_id:    z.string().nullable(),
+  partner_id:       z.string().nullable(),
   expected_amount:  z.number().nullable(),
   received_amount:  z.number().nullable(),
   claimed_amount:   z.number().nullable(),
@@ -190,33 +190,33 @@ export const sasDisputeRowSchema = z.object({
   resolved_at:      z.string().nullable(),
   next_followup_at: z.string().nullable(),
   followup_count:   z.number(),
-  created_by:       z.string().uuid().nullable(),
+  created_by:       z.string().nullable(),
   created_at:       z.string(),
   updated_at:       z.string(),
 }).passthrough();
 export type SasDisputeRow = z.infer<typeof sasDisputeRowSchema>;
 
 export const sasDisputeMessageRowSchema = z.object({
-  id:          z.string().uuid(),
-  hotel_id:    z.string().uuid(),
-  dispute_id:  z.string().uuid(),
+  id:          z.string(),
+  hotel_id:    z.string(),
+  dispute_id:  z.string(),
   direction:   z.enum(['OUTBOUND','INBOUND','INTERNAL']),
   content:     z.string(),
   attachments: z.array(z.unknown()).nullable(),
   sent_at:     z.string().nullable(),
-  created_by:  z.string().uuid().nullable(),
+  created_by:  z.string().nullable(),
   created_at:  z.string(),
 }).passthrough();
 export type SasDisputeMessageRow = z.infer<typeof sasDisputeMessageRowSchema>;
 
 export const sasStatusHistoryRowSchema = z.object({
-  id:          z.string().uuid(),
-  hotel_id:    z.string().uuid(),
-  dispute_id:  z.string().uuid(),
+  id:          z.string(),
+  hotel_id:    z.string(),
+  dispute_id:  z.string(),
   old_status:  z.string().nullable(),
   new_status:  z.string(),
   reason:      z.string().nullable(),
-  changed_by:  z.string().uuid().nullable(),
+  changed_by:  z.string().nullable(),
   changed_at:  z.string(),
 }).passthrough();
 export type SasStatusHistoryRow = z.infer<typeof sasStatusHistoryRowSchema>;
@@ -224,9 +224,9 @@ export type SasStatusHistoryRow = z.infer<typeof sasStatusHistoryRowSchema>;
 // ─── Scoring Rules ────────────────────────────────────────────────────────────
 
 export const sasScoringRuleRowSchema = z.object({
-  id:                       z.string().uuid(),
-  hotel_id:                 z.string().uuid(),
-  partner_id:               z.string().uuid().nullable(),
+  id:                       z.string(),
+  hotel_id:                 z.string(),
+  partner_id:               z.string().nullable(),
   rule_name:                z.string(),
   auto_approve_min:         z.number(),
   warning_min:              z.number(),
@@ -241,9 +241,9 @@ export type SasScoringRuleRow = z.infer<typeof sasScoringRuleRowSchema>;
 // ─── Partner Reliability ──────────────────────────────────────────────────────
 
 export const sasReliabilityRowSchema = z.object({
-  id:                   z.string().uuid(),
-  hotel_id:             z.string().uuid(),
-  partner_id:           z.string().uuid(),
+  id:                   z.string(),
+  hotel_id:             z.string(),
+  partner_id:           z.string(),
   period_start:         z.string(),
   period_end:           z.string(),
   total_validations:    z.number(),
@@ -259,7 +259,7 @@ export type SasReliabilityRow = z.infer<typeof sasReliabilityRowSchema>;
 // ─── Nav Badge ────────────────────────────────────────────────────────────────
 
 export const sasNavBadgeSchema = z.object({
-  hotel_id:      z.string().uuid(),
+  hotel_id:      z.string(),
   pending_count: z.number(),    // bulle verte
   anomaly_count: z.number(),    // bulle rouge
 });
@@ -268,7 +268,7 @@ export type SasNavBadge = z.infer<typeof sasNavBadgeSchema>;
 // ─── Input types ──────────────────────────────────────────────────────────────
 
 export const createIncomingReservationSchema = z.object({
-  partnerId:      z.string().uuid().optional(),
+  partnerId:      z.string().optional(),
   otaReference:   z.string().min(1),
   rawPayload:     z.record(z.unknown()),
   guestName:      z.string().optional(),
@@ -284,9 +284,9 @@ export const createIncomingReservationSchema = z.object({
 export type CreateIncomingReservationInput = z.infer<typeof createIncomingReservationSchema>;
 
 export const createDisputeSchema = z.object({
-  incomingId:      z.string().uuid().optional(),
-  validationId:    z.string().uuid().optional(),
-  partnerId:       z.string().uuid().optional(),
+  incomingId:      z.string().optional(),
+  validationId:    z.string().optional(),
+  partnerId:       z.string().optional(),
   expectedAmount:  z.number().optional(),
   receivedAmount:  z.number().optional(),
   claimedAmount:   z.number().optional(),
