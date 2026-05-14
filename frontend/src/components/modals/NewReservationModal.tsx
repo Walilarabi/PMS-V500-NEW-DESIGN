@@ -6,12 +6,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   X, User, Mail, Phone, Users, ChevronDown, Hash, Search,
   Check, Loader2, Upload, FileText, Link2, Lock, Send,
-  Clock, Circle, CheckCircle2, Baby,
+  Clock, Circle, CheckCircle2, Baby, Save,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { supabase } from '@/src/lib/supabase';
 import { WORLD_COUNTRIES, OTA_SOURCES } from '@/src/data/reservationData';
+import { ProformaModal } from '@/src/components/modals/ProformaModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ROOM_TYPES   = ['Single', 'Double', 'Twin', 'Suite', 'Familiale', 'Junior Suite', 'Duplex'];
@@ -117,6 +118,8 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
   const [sendConfirm,   setSendConfirm]  = useState(true);
   const [saving,        setSaving]       = useState(false);
   const [linkDone,      setLinkDone]     = useState(false);
+  const [showProforma,   setShowProforma]  = useState(false);
+  const [paymentLink,    setPaymentLink]   = useState<string|null>(null);
 
   const [suggestions,   setSuggestions]  = useState<any[]>([]);
   const [showSugg,      setShowSugg]     = useState(false);
@@ -224,12 +227,20 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
         partnerRef: partnerRef || null,
         notes, totalTTC: ttc, sendConfirm,
         guarantee: { types: guarantees, amount: guaranteeAmt, preauth },
+        paymentLink: paymentLink ?? null,
+        sendPaymentLink: paymentLink !== null && sendConfirm,
       });
       onClose();
     } finally { setSaving(false); }
   };
 
-  const genLink = () => { setLinkDone(true); setTimeout(() => setLinkDone(false), 3000); };
+  const genLink = () => {
+    // Simulate Stripe/PayPal link generation
+    const link = `https://pay.flowtym.com/checkout/${flowtymRef.current.toLowerCase()}-${Date.now().toString(36)}`;
+    setPaymentLink(link);
+    setLinkDone(true);
+    setTimeout(() => setLinkDone(false), 3000);
+  };
 
   if (!isOpen) return null;
 
@@ -372,10 +383,18 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
 
           {/* DATES */}
           <div className="grid grid-cols-2 gap-2">
-            {[
-              { lbl: 'ARRIVÉE', val: checkIn,  set: setCheckIn,  min: '', t: 10 },
-              { lbl: 'DÉPART',  val: checkOut, set: setCheckOut, min: checkIn, t: 11 },
-            ].map(({ lbl, val, set, min, t }) => (
+            {(() => {
+              // Min date: yesterday if 0h-6h (last-minute), else today
+              const now = new Date();
+              const isLateNight = now.getHours() < 6;
+              const minArrival = isLateNight
+                ? new Date(now.getTime() - 86_400_000).toISOString().split('T')[0]
+                : now.toISOString().split('T')[0];
+              return [
+                { lbl: 'ARRIVÉE', val: checkIn,  set: setCheckIn,  min: minArrival, t: 10 },
+                { lbl: 'DÉPART',  val: checkOut, set: setCheckOut, min: checkIn || minArrival, t: 11 },
+              ];
+            })().map(({ lbl, val, set, min, t }) => (
               <div key={lbl} className="relative">
                 <span className="absolute -top-2 left-3 z-10 bg-white px-1 text-[9px] font-bold text-violet-500 uppercase tracking-widest leading-none">{lbl}</span>
                 <input type="date" value={val} min={min} onChange={e => set(e.target.value)} tabIndex={t}
@@ -545,11 +564,13 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
               </div>
               {/* Générer lien */}
               <button type="button" onClick={genLink}
-                className={cn('w-full h-10 rounded-xl font-semibold text-[12.5px] flex items-center justify-center gap-2 transition-all',
+                className={cn('w-full h-10 rounded-xl font-semibold text-[12.5px] flex items-center justify-center gap-2 transition-all relative',
                   linkDone ? 'bg-emerald-500 text-white' : 'bg-violet-600 hover:bg-violet-700 text-white shadow-md shadow-violet-200')}>
-                {linkDone ? <Check size={14} /> : <Link2 size={14} />}
-                {linkDone ? 'Lien généré !' : 'Générer le lien de paiement'}
-                <span className="ml-auto text-[11px] opacity-70">{guaranteeAmt.toFixed(0)}€</span>
+                <span className="flex items-center justify-center gap-2">
+                  {linkDone ? <Check size={14} /> : <Link2 size={14} />}
+                  {linkDone ? 'Lien généré !' : 'Générer le lien de paiement'}
+                </span>
+                <span className="absolute right-3 text-[11px] opacity-70">{guaranteeAmt.toFixed(0)}€</span>
               </button>
               {/* Icônes garantie */}
               <div className="flex items-center gap-1 flex-wrap">
@@ -629,7 +650,7 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
 
         {/* FOOTER */}
         <div className="px-6 py-3.5 border-t border-[#EDE9FE] flex items-center gap-3 bg-white shrink-0">
-          <button type="button" title="Générer PDF"
+          <button type="button" title="Facture proforma" onClick={() => setShowProforma(true)}
             className="w-8 h-8 rounded-xl border border-[#EDE9FE] bg-[#F5F3FF] flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition-all">
             <FileText size={14} className="text-red-400" />
           </button>
@@ -653,11 +674,37 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
           <button type="button" onClick={handleSave} tabIndex={19}
             disabled={saving || !guestName || !checkIn || !checkOut}
             className="flex items-center gap-2 px-6 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-xl font-semibold text-[12.5px] transition-all shadow-lg shadow-violet-200">
-            {saving ? <Loader2 size={13} className="animate-spin" /> : <span>💾</span>}
+            {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
             Enregistrer
           </button>
         </div>
       </motion.div>
+
+      {/* Proforma Modal */}
+      {showProforma && (
+        <ProformaModal
+          isOpen={showProforma}
+          onClose={() => setShowProforma(false)}
+          data={{
+            reference: refType === 'flowtym' ? flowtymRef.current : (partnerRef || flowtymRef.current),
+            guestName: guestName || 'Client',
+            email: email || undefined,
+            phone: phone || undefined,
+            nationality: country.name,
+            adults, children,
+            checkIn, checkOut, nights,
+            roomNumber: roomSels[0]?.numbers[0] || undefined,
+            roomType: roomSels[0]?.type || undefined,
+            arrangement, ratePlan,
+            source: OTA_SOURCES.find(s => s.id === source)?.label || source,
+            pricePerNight: prixNuit,
+            totalHT: ht, tva, taxeSejour: taxe, totalTTC: ttc,
+            notes: notes || undefined,
+            hotelName: 'Flowtym PMS',
+            paymentLink: paymentLink,
+          }}
+        />
+      )}
     </div>
   );
 }
