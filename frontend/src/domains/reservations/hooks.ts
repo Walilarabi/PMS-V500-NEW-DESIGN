@@ -20,9 +20,8 @@ export function useReservations(params: repo.ListReservationsParams = {}) {
     queryKey: [...RESERVATIONS_KEY, 'list', params],
     queryFn: () => repo.listReservations(params),
     enabled: status === 'authenticated',
-    staleTime: 0,              // toujours re-fetch si data potentiellement stale
-    refetchOnWindowFocus: true,// rafraîchir quand l'onglet reprend le focus
-    refetchInterval: 30_000,   // poll toutes les 30s en fallback au realtime
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 }
 
