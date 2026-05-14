@@ -53,7 +53,12 @@ export const createReservationInputSchema = z
       .max(40)
       .regex(/^[A-Z0-9-]+$/, 'Référence en majuscules, chiffres et tirets'),
     guestId: uuidLoose.nullable().optional(),
+    guestEmail: z.string().email().nullable().optional(),
+    guestPhone: z.string().nullable().optional(),
     roomId: uuidLoose.nullable().optional(),
+    roomNumber: z.string().nullable().optional(),
+    roomType: z.string().nullable().optional(),
+    roomCategory: z.string().nullable().optional(),
     checkIn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format YYYY-MM-DD'),
     checkOut: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format YYYY-MM-DD'),
     adults: z.number().int().min(1).max(20),
