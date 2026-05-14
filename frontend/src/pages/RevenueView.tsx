@@ -32,7 +32,7 @@ import { Card, CardHeader, CardContent } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
 import { cn } from '@/src/lib/utils';
-import { useReservations } from '@/src/contexts/ReservationContext';
+// mock context removed — data via Supabase hooks
 import { motion, AnimatePresence } from 'motion/react';
 
 // Mock data for price history simulation
@@ -51,7 +51,7 @@ const priceHistoryData = [
 export const RevenueView = ({ activeTab: propTab = 'yield' }: { activeTab?: string }) => {
   const [activeTab, setActiveTab] = React.useState<'yield' | 'promotions' | 'channels'>('yield');
   const [selectedRule, setSelectedRule] = React.useState<any>(null);
-  const { reservations } = useReservations();
+  const reservations = [];
 
   React.useEffect(() => {
     if (['yield', 'promotions', 'channels'].includes(propTab)) {

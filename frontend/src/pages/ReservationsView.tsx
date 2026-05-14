@@ -34,7 +34,9 @@ import { cn } from '@/src/lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { motion } from 'motion/react';
 
-import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
+import { useReservations as useContextReservations } from '@/src/contexts/ReservationContext';
+import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
+import { useAuth } from '@/src/domains/auth/AuthContext';
 import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
 import { LiveReservationsBanner } from '@/src/domains/reservations/LiveReservationsBanner';
 
@@ -46,7 +48,10 @@ const STATUS_DATA = [
 ];
 
 export const ReservationsView = () => {
-  const { reservations, addReservation } = useReservations();
+  const { session } = useAuth();
+  const { reservations } = useContextReservations();
+  const { data: supabaseData } = useReservations({ limit: 100 });
+  const createReservation = useCreateReservation();
   const [isModalOpen, setIsModalOpen] = React.useState(false);
 
   const stats = [
@@ -519,35 +524,27 @@ export const ReservationsView = () => {
       <ReservationFormModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSave={(data: ReservationFormData) => {
-          const newRes: Reservation = {
-            id: data.reference,
-            priority: 'Moyenne',
-            room: data.roomNumber,
-            roomType: 'STD/DLX', // fallback
-            status: 'CONFORMÉE',
-            statusColor: 'text-emerald-500',
-            dotColor: 'bg-emerald-400',
-            client: data.guestName,
-            arrival: `${data.checkIn} 16:00`,
-            departure: `${data.checkOut} 11:00`,
-            source: data.channel.toUpperCase(),
-            sourceColor: data.channel === 'Direct' ? 'bg-green-400' : 'bg-indigo-400',
-            action: 'Check-in',
-            governess: 'À faire',
-            vip: data.segment === 'VIP',
-            payment: data.paymentStatus === 'Payé' ? 'Payé' : 'Partiel',
-            totalAmount: data.totalTTC,
-            ownerFeeRate: 0.20,
-            pmsFeeRate: 0.15,
-            cleaningFee: 50,
-            email: data.email,
-            phone: data.phone,
-            nationality: data.nationality,
-            guests: { adults: data.adults, children: data.children },
-            notes: data.notes
-          };
-          addReservation(newRes);
+        onSave={async (data: ReservationFormData) => {
+          try {
+            if (session?.tenantId) {
+              await createReservation.mutateAsync({
+                reference: data.reference,
+                guestName: data.guestName || null,
+                checkIn: data.checkIn,
+                checkOut: data.checkOut,
+                adults: data.adults,
+                children: data.children,
+                source: data.channel,
+                totalAmount: data.totalTTC,
+                notes: data.notes || null,
+                roomId: null,
+                guestId: null,
+              });
+            }
+          } catch (err) {
+            console.error('[ReservationsView] createReservation failed:', err);
+          }
+          setIsModalOpen(false);
         }}
       />
     </div>

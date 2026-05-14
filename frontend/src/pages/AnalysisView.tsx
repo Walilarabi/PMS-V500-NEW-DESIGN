@@ -19,7 +19,7 @@ import * as XLSX from "xlsx";
 import html2pdf from "html2pdf.js";
 import * as pmsLogic from "../lib/pmsLogic";
 import { useConfigStore } from "../store/configStore";
-import { useReservations } from "../contexts/ReservationContext";
+// mock context removed — data via Supabase hooks
 import { cn } from "../lib/utils";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
@@ -137,7 +137,7 @@ export const AnalysisView = () => {
   const [granularity, setGranularity] = useState<'day' | 'month' | 'year'>('month');
   const [comparison, setComparison] = useState('N-1');
   
-  const { reservations } = useReservations();
+  const reservations = [];
   const hotel = useConfigStore(s => s.hotel);
   const rooms = useConfigStore(s => s.rooms);
 

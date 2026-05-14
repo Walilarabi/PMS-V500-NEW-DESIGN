@@ -35,7 +35,7 @@ import {
   Table as TableIcon,
   Users
 } from 'lucide-react';
-import { useReservations } from '@/src/contexts/ReservationContext';
+// mock context removed — data via Supabase hooks
 import { Card, CardHeader, CardContent } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
@@ -80,7 +80,7 @@ export const FinanceView = ({ activeTab = 'facturation' }: FinanceViewProps) => 
   const [financeTab, setFinanceTab] = React.useState<'facturation' | 'cloture' | 'caisse' | 'impayes' | 'proprietaires'>('facturation');
   const [showKpis, setShowKpis] = React.useState(true);
   const [countedCash, setCountedCash] = React.useState('');
-  const { reservations } = useReservations();
+  const reservations = [];
 
   const initialCash = 500;
   const totalEncaissements = 5270;

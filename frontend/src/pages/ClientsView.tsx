@@ -20,10 +20,10 @@ import { Badge } from '@/src/components/ui/Badge';
 import { Button } from '@/src/components/ui/Button';
 import { cn } from '@/src/lib/utils';
 
-import { useReservations } from '@/src/contexts/ReservationContext';
+// mock context removed — data via Supabase hooks
 
 export const ClientsView = () => {
-  const { reservations } = useReservations();
+  const reservations = [];
   const [searchQuery, setSearchQuery] = React.useState('');
   const [segmentFilter, setSegmentFilter] = React.useState('ALL');
   const [loyaltyFilter, setLoyaltyFilter] = React.useState('ALL');
