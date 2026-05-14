@@ -14,6 +14,7 @@ import { AuditLogView } from '@/src/pages/finance/AuditLogView';
 import { ReconciliationView } from '@/src/pages/finance/ReconciliationView';
 import { RevenueIntegrityView } from '@/src/pages/finance/RevenueIntegrityView';
 import { FacturationView } from '@/src/pages/finance/FacturationView';
+import { OdmsView } from '@/src/pages/sas/OdmsView';
 
 // SAS pages (Phase 1 — placeholder, Phase 2 les implémente)
 const SasPlaceholder = ({ title }: { title: string }) => (
@@ -108,7 +109,7 @@ const App = () => {
       case 'sas_quarantine':
         return <SasPlaceholder title="File quarantaine" />;
       case 'sas_odms':
-        return <SasPlaceholder title="OTA Dispute Center" />;
+        return <OdmsView />;
       case 'sas_reconciliation':
         return <ReconciliationView />;
       case 'sas_audit':
