@@ -18,6 +18,22 @@ import {
   type RieDecision, type DisputeStatus,
 } from './schemas';
 
+// ─── Helper : résoudre hotel_id depuis auth.uid() ────────────────────────────
+async function resolveHotelId(hotelId?: string): Promise<string> {
+  if (hotelId && hotelId !== '') return hotelId;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user?.id) throw new Error('Non authentifié');
+  const { data: profile } = await supabase
+    .from('users')
+    .select('hotel_id')
+    .eq('auth_id', user.id)
+    .maybeSingle();
+  const hid = (profile as any)?.hotel_id ?? '';
+  if (!hid) throw new Error("Hôtel introuvable pour cet utilisateur");
+  return hid;
+}
+
+
 // ─── Nav Badges ───────────────────────────────────────────────────────────────
 
 export async function getSasNavBadges(): Promise<SasNavBadge> {
@@ -403,30 +419,31 @@ export async function createDispute(
   hotelId: string,
   input: CreateDisputeInput,
 ): Promise<SasDisputeRow> {
-  // ── Résolution hotel_id robuste ───────────────────────────────────────────
-  // Si tenantId est absent de la session (user sans profil provisioned),
-  // on le récupère directement via get_user_hotel_id()
+  // ── Résolution hotel_id — source of truth : public.users ─────────────────
+  // session.tenantId peut être null si le profil n'est pas encore chargé.
+  // On le résout directement depuis la DB avec l'auth.uid() courant.
   let resolvedHotelId = hotelId;
-  if (!resolvedHotelId) {
-    const { data: hid } = await supabase.rpc('get_user_hotel_id');
-    resolvedHotelId = hid as string ?? '';
+
+  if (!resolvedHotelId || resolvedHotelId === '') {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('hotel_id')
+        .eq('auth_id', user.id)
+        .maybeSingle();
+      resolvedHotelId = (profile as any)?.hotel_id ?? '';
+    }
+  }
+
+  if (!resolvedHotelId || resolvedHotelId === '') {
+    throw new Error('Impossible de déterminer l\'hôtel. Reconnectez-vous.');
   }
 
   // ── Génération référence ──────────────────────────────────────────────────
-  // Tente d'abord via RPC (si migration 0090 appliquée)
-  // Sinon fallback local timestamp-based
-  let reference: string;
-  try {
-    const { data: refData, error: refErr } = await supabase
-      .rpc('next_dispute_reference', { p_hotel_id: resolvedHotelId });
-    if (refErr || !refData) throw new Error('rpc_unavailable');
-    reference = refData as string;
-  } catch {
-    // Fallback : DISP-YYYY-XXXXX (timestamp-based, collision-safe en démo)
-    const year = new Date().getFullYear();
-    const seq = String(Date.now()).slice(-5);
-    reference = `DISP-${year}-${seq}`;
-  }
+  const year = new Date().getFullYear();
+  const seq = String(Date.now()).slice(-5);
+  const reference = `DISP-${year}-${seq}`;
 
   // ── Insert ────────────────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -452,10 +469,10 @@ export async function createDispute(
 
   const dispute = sasDisputeRowSchema.parse(data);
 
-  // Historique statut (best-effort — peut échouer si table absente)
+  // Historique statut (best-effort)
   try {
     await addDisputeStatusHistory(resolvedHotelId, dispute.id, null, 'DRAFT', 'Création du litige');
-  } catch { /* migration 0090 pas encore appliquée */ }
+  } catch { /* ignore */ }
 
   return dispute;
 }
