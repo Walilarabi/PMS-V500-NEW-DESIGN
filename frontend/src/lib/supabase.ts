@@ -16,6 +16,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from './supabase.types';
 
+// SECURITY: env vars obligatoires — aucun fallback hardcodé (SECURITY_RULES §6)
+// Conflit résolu en faveur de Phase 1 : Cursor réintroduisait les credentials
+// hardcodés que Phase 1 a explicitement supprimés. Notre version est supérieure.
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
