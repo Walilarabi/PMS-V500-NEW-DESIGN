@@ -1064,6 +1064,7 @@ export const PlanningView = () => {
             });
           } catch (err) {
             console.error('[PlanningView] createReservation failed:', err);
+            throw err;
           }
           setIsModalOpen(false);
         }} 
@@ -1102,6 +1103,7 @@ export const PlanningView = () => {
             setNewResModal(null);
           } catch (err) {
             console.error('[PlanningView] drag-create failed:', err);
+            throw err;
           }
         }}
       />

@@ -621,6 +621,7 @@ export const ReservationsView = () => {
             });
           } catch (err) {
             console.error('[ReservationsView] createReservation failed:', err);
+            throw err;
           }
         }}
       />
