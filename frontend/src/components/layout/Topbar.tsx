@@ -63,7 +63,7 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
   const { logout } = useAuth();
   const { data: sasBadges } = useSasNavBadges();
 
-  const activeNav = PAGE_TO_NAV[activePage] ?? 'flowday';
+  const activeNav = activePage.startsWith('settings') ? 'settings' : PAGE_TO_NAV[activePage] ?? 'flowday';
   const pendingCount = sasBadges?.pending_count ?? 0;
   const anomalyCount = sasBadges?.anomaly_count ?? 0;
 

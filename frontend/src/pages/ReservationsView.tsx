@@ -36,9 +36,9 @@ import { motion } from 'motion/react';
 
 import { useReservations as useContextReservations } from '@/src/contexts/ReservationContext';
 import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
-import { useAuth } from '@/src/domains/auth/AuthContext';
 import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
 import { LiveReservationsBanner } from '@/src/domains/reservations/LiveReservationsBanner';
+import type { ReservationRow } from '@/src/domains/reservations/schemas';
 
 const STATUS_DATA = [
   { name: 'Confirmées', value: 4, color: '#10B981' },
@@ -47,20 +47,72 @@ const STATUS_DATA = [
   { name: 'Annulées', value: 1, color: '#EF4444' },
 ];
 
+interface ReservationTableRow {
+  ref: string;
+  status: string;
+  client: string;
+  email: string;
+  pers: number;
+  checkin: string;
+  checkout: string;
+  nights: number;
+  amount: string;
+  solde: string;
+  soldeColor: 'emerald' | 'red';
+  channel: string;
+  room: string;
+  roomType: string;
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  confirmed: 'CONFIRMÉE',
+  checked_in: 'CHECK-IN',
+  checked_out: 'CHECK-OUT',
+  cancelled: 'ANNULÉE',
+  pending: 'EN ATTENTE',
+  hold: 'OPTION',
+};
+
+const formatDate = (value: string | null | undefined) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const formatMoney = (value: number | null | undefined) =>
+  typeof value === 'number'
+    ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value)
+    : '—';
+
+const mapSupabaseReservation = (row: ReservationRow): ReservationTableRow => {
+  const total = row.total_amount ?? 0;
+  const paid = row.paid_amount ?? 0;
+  const balance = row.solde ?? Math.max(0, total - paid);
+
+  return {
+    ref: row.reference ?? row.id.slice(0, 8),
+    status: STATUS_LABEL[row.status ?? ''] ?? (row.status ?? '—').toUpperCase(),
+    client: row.guest_name ?? 'Client inconnu',
+    email: row.guest_email ?? 'contact@client.com',
+    pers: row.pax ?? (row.adults ?? 1) + (row.children ?? 0),
+    checkin: formatDate(row.check_in),
+    checkout: formatDate(row.check_out),
+    nights: row.nights ?? 1,
+    amount: formatMoney(row.total_amount),
+    solde: formatMoney(balance),
+    soldeColor: balance <= 0 ? 'emerald' : 'red',
+    channel: (row.source ?? 'DIRECT').toUpperCase(),
+    room: row.room_number ?? '—',
+    roomType: [row.room_category, row.room_type].filter(Boolean).join('/') || '—',
+  };
+};
+
 export const ReservationsView = () => {
-  const { session } = useAuth();
   const { reservations } = useContextReservations();
   const { data: supabaseData } = useReservations({ limit: 100 });
   const createReservation = useCreateReservation();
   const [isModalOpen, setIsModalOpen] = React.useState(false);
-
-  const stats = [
-    { label: 'Dossiers', value: reservations.length.toString(), sub: 'Actifs', icon: CheckCircle2, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
-    { label: 'Confirmée', value: '1', sub: '+ 2 aujourd\'hui', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { label: 'Check-in', value: '2', sub: 'Aujourd\'hui', icon: Clock, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
-    { label: 'CA total', value: '2 950 €', sub: '+ 8.3% vs hier', icon: ArrowUpRight, color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { label: 'En attente', value: '3', sub: 'Action requise', icon: HelpCircle, color: 'text-amber-500', bg: 'bg-amber-50' },
-  ];
 
   const paymentFollowUps = [
     { ref: 'RES-095', client: 'Sophie Dubois', amount: '360 €', status: 'Lien expiré', statusColor: 'red', expire: 'Expiré', room: '102' },
@@ -73,22 +125,45 @@ export const ReservationsView = () => {
   const [channelFilter, setChannelFilter] = React.useState('ALL');
   const [roomTypeFilter, setRoomTypeFilter] = React.useState('ALL');
 
-  const filteredReservations = reservations.map(res => ({
-    ref: res.id,
-    status: res.status.toUpperCase(),
-    client: res.client,
-    email: res.email || 'contact@client.com',
-    pers: res.guests?.adults || 2,
-    checkin: res.arrival,
-    checkout: res.departure,
-    nights: 1, // simplified
-    amount: '400.50 €',
-    solde: res.payment === 'Payé' ? '0 €' : '400.50 €',
-    soldeColor: res.payment === 'Payé' ? 'emerald' : 'red',
-    channel: (res.source || 'DIRECT').toUpperCase(),
-    room: res.room,
-    roomType: res.roomType
-  })).filter(res => {
+  const tableRows = React.useMemo<ReservationTableRow[]>(() => {
+    const liveRows = supabaseData?.rows ?? [];
+    if (liveRows.length > 0) return liveRows.map(mapSupabaseReservation);
+
+    return reservations.map((res) => ({
+      ref: res.id,
+      status: res.status.toUpperCase(),
+      client: res.client,
+      email: res.email || 'contact@client.com',
+      pers: res.guests?.adults || 2,
+      checkin: res.arrival,
+      checkout: res.departure,
+      nights: res.nights ?? 1,
+      amount: formatMoney(res.totalTTC ?? res.totalAmount),
+      solde: res.payment === 'Payé' ? formatMoney(0) : formatMoney(res.totalTTC ?? res.totalAmount),
+      soldeColor: res.payment === 'Payé' ? 'emerald' : 'red',
+      channel: (res.source || 'DIRECT').toUpperCase(),
+      room: res.room,
+      roomType: res.roomType,
+    }));
+  }, [supabaseData, reservations]);
+
+  const stats = React.useMemo(() => {
+    const confirmed = tableRows.filter((row) => row.status === 'CONFIRMÉE').length;
+    const checkedIn = tableRows.filter((row) => row.status === 'CHECK-IN').length;
+    const pending = tableRows.filter((row) =>
+      row.status === 'EN ATTENTE' || row.status === 'OPTION'
+    ).length;
+
+    return [
+      { label: 'Dossiers', value: tableRows.length.toString(), sub: 'Actifs', icon: CheckCircle2, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
+      { label: 'Confirmée', value: confirmed.toString(), sub: 'Réservations live', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+      { label: 'Check-in', value: checkedIn.toString(), sub: 'En séjour', icon: Clock, color: 'text-[#8B5CF6]', bg: 'bg-[#8B5CF6]/5' },
+      { label: 'CA total', value: formatMoney((supabaseData?.rows ?? []).reduce((sum, row) => sum + (row.total_amount ?? 0), 0)), sub: 'Données Supabase', icon: ArrowUpRight, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+      { label: 'En attente', value: pending.toString(), sub: 'Action requise', icon: HelpCircle, color: 'text-amber-500', bg: 'bg-amber-50' },
+    ];
+  }, [supabaseData, tableRows]);
+
+  const filteredReservations = tableRows.filter(res => {
     const matchesSearch = res.client.toLowerCase().includes(searchQuery.toLowerCase()) || 
                          res.ref.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          res.room.includes(searchQuery);
@@ -529,6 +604,8 @@ export const ReservationsView = () => {
             await createReservation.mutateAsync({
               reference: data.reference,
               guestName: data.guestName || null,
+              guestEmail: data.email || null,
+              guestPhone: data.phone || null,
               checkIn: data.checkIn,
               checkOut: data.checkOut,
               adults: data.adults ?? 1,
@@ -537,10 +614,14 @@ export const ReservationsView = () => {
               totalAmount: data.totalTTC ?? 0,
               notes: data.notes || null,
               roomId: data.roomIds?.[0] ?? null,
+              roomNumber: data.roomNumbers?.[0] ?? null,
+              roomType: data.roomSelections?.[0]?.type ?? null,
+              roomCategory: null,
               guestId: null,
             });
           } catch (err) {
             console.error('[ReservationsView] createReservation failed:', err);
+            throw err;
           }
         }}
       />

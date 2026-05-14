@@ -20,6 +20,7 @@ const RATE_PLANS   = ['Flexible (72h)', 'Rack', 'Non remboursable', 'Corporate',
 const SEGMENTS     = ['Loisir', 'Affaires', 'Groupe', 'VIP', 'Corporate', 'OTA', 'Famille', 'Événement'];
 const TAXE_SEJOUR  = 5.0;
 const TVA          = 0.10;
+const SAVE_TIMEOUT_MS = 15_000;
 
 // Icônes de garantie identiques à la maquette
 const GUARANTEE_ICONS = [
@@ -116,6 +117,8 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
   const [dragging,      setDragging]     = useState(false);
   const [sendConfirm,   setSendConfirm]  = useState(true);
   const [saving,        setSaving]       = useState(false);
+  const [saveError,     setSaveError]    = useState<string | null>(null);
+  const [saveTimedOut,  setSaveTimedOut] = useState(false);
   const [linkDone,      setLinkDone]     = useState(false);
 
   const [suggestions,   setSuggestions]  = useState<any[]>([]);
@@ -126,11 +129,16 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
 
   const flowtymRef  = useRef(`RES-${Math.floor(1000 + Math.random() * 9000)}`);
   const countryRef  = useRef<HTMLInputElement>(null);
+  const saveAttemptRef = useRef(0);
   const totalRooms  = roomSels.reduce((s, r) => s + r.qty, 0);
 
   // Sync prefill
   useEffect(() => {
+    saveAttemptRef.current += 1;
     if (!isOpen) return;
+    setSaving(false);
+    setSaveError(null);
+    setSaveTimedOut(false);
     if (prefill?.checkIn)    setCheckIn(prefill.checkIn);
     if (prefill?.checkOut)   setCheckOut(prefill.checkOut);
     if (prefill?.roomNumber) setRoomSels([{ type: '', qty: 1, numbers: [prefill.roomNumber] }]);
@@ -212,6 +220,20 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
+    setSaveTimedOut(false);
+    let timedOut = false;
+    const attemptId = ++saveAttemptRef.current;
+    const timeoutId = setTimeout(() => {
+      if (saveAttemptRef.current !== attemptId) return;
+      timedOut = true;
+      setSaving(false);
+      setSaveTimedOut(true);
+      setSaveError(
+        'Enregistrement toujours en cours côté serveur. Patientez : le bouton est bloqué pour éviter un doublon.',
+      );
+    }, SAVE_TIMEOUT_MS);
+
     try {
       const allNums = roomSels.flatMap(r => r.numbers).filter(Boolean);
       const allIds  = allNums.map(n => rooms.find(r => r.number === n)?.id).filter(Boolean);
@@ -225,8 +247,17 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
         notes, totalTTC: ttc, sendConfirm,
         guarantee: { types: guarantees, amount: guaranteeAmt, preauth },
       });
+      clearTimeout(timeoutId);
+      if (saveAttemptRef.current !== attemptId) return;
       onClose();
-    } finally { setSaving(false); }
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (saveAttemptRef.current !== attemptId) return;
+      setSaveTimedOut(false);
+      setSaveError(err instanceof Error ? err.message : 'Impossible d’enregistrer la réservation.');
+    } finally {
+      if (!timedOut && saveAttemptRef.current === attemptId) setSaving(false);
+    }
   };
 
   const genLink = () => { setLinkDone(true); setTimeout(() => setLinkDone(false), 3000); };
@@ -632,6 +663,12 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
             {SEGMENTS.map(s => <option key={s}>{s}</option>)}
           </FSelect>
 
+          {saveError && (
+            <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] font-semibold text-red-600">
+              {saveError}
+            </div>
+          )}
+
         </div>
 
         {/* FOOTER */}
@@ -658,13 +695,14 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
             <X size={12} />Annuler
           </button>
           <button type="button" onClick={handleSave} tabIndex={19}
-            disabled={saving || !guestName || !checkIn || !checkOut}
+            disabled={saving || saveTimedOut || !guestName || !checkIn || !checkOut}
             className="flex items-center gap-2 px-6 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-xl font-semibold text-[12.5px] transition-all shadow-lg shadow-violet-200">
             {saving ? <Loader2 size={13} className="animate-spin" /> : <span>💾</span>}
-            Enregistrer
+            {saveTimedOut ? 'En cours...' : 'Enregistrer'}
           </button>
         </div>
       </motion.div>
     </div>
   );
 }
+
