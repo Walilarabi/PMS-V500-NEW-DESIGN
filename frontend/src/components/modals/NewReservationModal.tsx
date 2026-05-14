@@ -84,8 +84,22 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
   const [adults,        setAdults]       = useState(2);
   const [children,      setChildren]     = useState(0);
   const [source,        setSource]       = useState('DIRECT');
-  const [checkIn,       setCheckIn]      = useState('');
-  const [checkOut,      setCheckOut]     = useState('');
+  // Date par défaut = aujourd'hui (ou hier si 0h-6h = réservation dernière minute)
+  const getDefaultCheckIn = () => {
+    const now = new Date();
+    const h = now.getHours();
+    const d = h < 6 ? new Date(now.getTime() - 86_400_000) : now;
+    return d.toISOString().split('T')[0];
+  };
+  const [checkIn,       setCheckIn]      = useState(getDefaultCheckIn);
+  const getDefaultCheckOut = () => {
+    const now = new Date();
+    const h = now.getHours();
+    const base = h < 6 ? new Date(now.getTime() - 86_400_000) : now;
+    const next = new Date(base.getTime() + 86_400_000);
+    return next.toISOString().split('T')[0];
+  };
+  const [checkOut,      setCheckOut]     = useState(getDefaultCheckOut);
   const [roomSels,      setRoomSels]     = useState<RoomSel[]>([]);
   const [arrangement,   setArrangement]  = useState('Room Only');
   const [ratePlan,      setRatePlan]     = useState('Flexible (72h)');
@@ -294,7 +308,7 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
               <button type="button" tabIndex={2}
                 onClick={() => { setShowCountry(!showCountry); setTimeout(() => countryRef.current?.focus(), 50); }}
                 className="w-full h-9 bg-[#F5F3FF] border border-[#EDE9FE] rounded-xl text-[12.5px] px-3 flex items-center gap-2 hover:border-violet-300 transition-all">
-                <span className="text-[16px] leading-none">{country.flag}</span>
+                <img src={`https://flagcdn.com/24x18/${country.code.toLowerCase()}.png`} alt={country.name} className="w-6 h-4 object-cover rounded-sm shrink-0" />
                 <span className="flex-1 text-left text-gray-600 truncate">{country.name}</span>
                 <ChevronDown size={11} className="text-violet-300 shrink-0" />
               </button>
@@ -315,7 +329,7 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
                         <button key={c.code} type="button"
                           onMouseDown={() => { setCountry(c); setShowCountry(false); setCountryQ(''); }}
                           className="w-full text-left px-3 py-2 hover:bg-violet-50 flex items-center gap-2 text-[12.5px]">
-                          <span className="text-[15px]">{c.flag}</span>
+                          <img src={`https://flagcdn.com/24x18/${c.code.toLowerCase()}.png`} alt={c.name} className="w-6 h-4 object-cover rounded-sm shrink-0" />
                           <span className="text-gray-700">{c.name}</span>
                           {country.code === c.code && <Check size={11} className="ml-auto text-violet-500" />}
                         </button>

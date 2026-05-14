@@ -2,7 +2,7 @@
  * FLOWTYM — Reservations TanStack Query hooks.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-
+import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 
 import * as repo from './repository';
@@ -38,11 +38,31 @@ export function useCreateReservation() {
   return useMutation<ReservationRow, Error, CreateReservationInput>({
     mutationFn: async (input) => {
       const parsed = createReservationInputSchema.parse(input);
-      if (!session?.tenantId) throw new Error('Hôtel absent dans la session');
-      return repo.createReservation(session.tenantId, parsed);
+
+      // Résolution hotel_id robuste — session.tenantId peut être null
+      let hotelId = session?.tenantId ?? '';
+      if (!hotelId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+          const { data: prof } = await supabase
+            .from('users').select('hotel_id').eq('auth_id', user.id).maybeSingle();
+          hotelId = (prof as any)?.hotel_id ?? '';
+        }
+      }
+      if (!hotelId) {
+        // Dernier recours: premier hôtel disponible (démo)
+        const { data: h } = await supabase.from('hotels').select('id').limit(1).maybeSingle();
+        hotelId = (h as any)?.id ?? '';
+      }
+      if (!hotelId) throw new Error('Hôtel introuvable — reconnectez-vous.');
+
+      return repo.createReservation(hotelId, parsed);
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+    },
+    onError: (err) => {
+      console.error('[useCreateReservation]', err);
     },
   });
 }

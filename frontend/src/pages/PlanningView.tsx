@@ -1061,22 +1061,22 @@ export const PlanningView = () => {
         onSave={async (data) => {
           try {
             await createReservation.mutateAsync({
-              reference: `RES-${Date.now().toString().slice(-6)}`,
+              reference: data.reference ?? `RES-${Date.now().toString().slice(-6)}`,
               guestName: data.guestName || null,
               checkIn: data.checkIn,
               checkOut: data.checkOut,
-              adults: data.adults,
-              children: data.children,
+              adults: data.adults ?? 1,
+              children: data.children ?? 0,
               source: data.source ?? 'DIRECT',
               totalAmount: data.totalTTC ?? 0,
               notes: data.notes || null,
-              roomId: data.roomId || null,
+              roomId: data.roomIds?.[0] ?? data.roomId ?? null,
               guestId: null,
             });
+            setNewResModal(null);
           } catch (err) {
             console.error('[PlanningView] drag-create failed:', err);
           }
-          setNewResModal(null);
         }}
       />
       <EventManagerModal 

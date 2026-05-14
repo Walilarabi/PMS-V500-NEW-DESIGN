@@ -37,7 +37,7 @@ import { motion } from 'motion/react';
 import { useReservations as useContextReservations } from '@/src/contexts/ReservationContext';
 import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
 import { useAuth } from '@/src/domains/auth/AuthContext';
-import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
+import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
 import { LiveReservationsBanner } from '@/src/domains/reservations/LiveReservationsBanner';
 
 const STATUS_DATA = [
@@ -521,30 +521,27 @@ export const ReservationsView = () => {
            </div>
         </div>
       </div>
-      <ReservationFormModal 
+      <NewReservationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSave={async (data: ReservationFormData) => {
+        onSave={async (data) => {
           try {
-            if (session?.tenantId) {
-              await createReservation.mutateAsync({
-                reference: data.reference,
-                guestName: data.guestName || null,
-                checkIn: data.checkIn,
-                checkOut: data.checkOut,
-                adults: data.adults,
-                children: data.children,
-                source: data.channel,
-                totalAmount: data.totalTTC,
-                notes: data.notes || null,
-                roomId: null,
-                guestId: null,
-              });
-            }
+            await createReservation.mutateAsync({
+              reference: data.reference,
+              guestName: data.guestName || null,
+              checkIn: data.checkIn,
+              checkOut: data.checkOut,
+              adults: data.adults ?? 1,
+              children: data.children ?? 0,
+              source: data.source ?? 'DIRECT',
+              totalAmount: data.totalTTC ?? 0,
+              notes: data.notes || null,
+              roomId: data.roomIds?.[0] ?? null,
+              guestId: null,
+            });
           } catch (err) {
             console.error('[ReservationsView] createReservation failed:', err);
           }
-          setIsModalOpen(false);
         }}
       />
     </div>
