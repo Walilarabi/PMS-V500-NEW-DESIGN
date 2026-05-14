@@ -195,11 +195,17 @@ export function useCreateDispute() {
   const qc = useQueryClient();
   const { session } = useAuth();
   return useMutation({
-    mutationFn: (input: CreateDisputeInput) =>
-      repo.createDispute(session?.tenantId ?? '', input),
+    mutationFn: async (input: CreateDisputeInput) => {
+      // tenantId peut être null si le user n'est pas provisionné dans public.users
+      // On passe '' et le repository le résoudra via get_user_hotel_id()
+      return repo.createDispute(session?.tenantId ?? '', input);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: DISPUTE_KEY });
       void qc.invalidateQueries({ queryKey: STATS_KEY });
+    },
+    onError: (err) => {
+      console.error('[useCreateDispute] error:', err);
     },
   });
 }

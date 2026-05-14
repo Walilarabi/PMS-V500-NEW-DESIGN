@@ -327,11 +327,13 @@ function CreateDisputeModal({
   onClose,
   onCreate,
   isLoading,
+  error,
 }: {
   partners: any[];
   onClose: () => void;
   onCreate: (input: any) => Promise<void>;
   isLoading: boolean;
+  error?: string | null;
 }) {
   const [form, setForm] = useState({
     partnerId: '',
@@ -492,18 +494,26 @@ function CreateDisputeModal({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-100 flex gap-3">
-          <Button variant="ghost" onClick={onClose} className="flex-1 font-bold">
-            Annuler
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={isLoading || !form.subject}
-            className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20"
-          >
-            {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            Créer le litige
-          </Button>
+        <div className="p-6 border-t border-gray-100 space-y-3">
+          {error && (
+            <div className="p-3 bg-red-50 rounded-xl text-xs text-red-600 font-medium flex items-start gap-2">
+              <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Button variant="ghost" onClick={onClose} className="flex-1 font-bold">
+              Annuler
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={isLoading || !form.subject}
+              className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20"
+            >
+              {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              Créer le litige
+            </Button>
+          </div>
         </div>
       </motion.div>
     </div>
@@ -785,9 +795,15 @@ export const OdmsView = () => {
             partners={partners}
             onClose={() => setShowCreate(false)}
             isLoading={createDispute.isPending}
+            error={createDispute.error ? String((createDispute.error as any)?.message ?? createDispute.error) : null}
             onCreate={async (input) => {
-              await createDispute.mutateAsync(input);
-              setShowCreate(false);
+              try {
+                await createDispute.mutateAsync(input);
+                setShowCreate(false);
+              } catch (err: any) {
+                console.error('[ODMS] createDispute failed:', err);
+                // L'erreur est affichée dans le modal via la prop error
+              }
             }}
           />
         )}
