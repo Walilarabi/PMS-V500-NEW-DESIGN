@@ -332,7 +332,7 @@ export const PlanningView = () => {
           <div className={`px-4 py-3 rounded-2xl shadow-2xl border text-sm font-bold backdrop-blur-sm ${
             dragConflict
               ? 'bg-red-500 border-red-400 text-white'
-              : 'bg-[#1E3A5F] border-indigo-400 text-white'
+              : 'bg-violet-600 border-violet-500 text-white'
           }`}>
             {dragConflict ? (
               <div className="flex items-center gap-2">
@@ -347,13 +347,13 @@ export const PlanningView = () => {
               const co = new Date(currentDate.getTime() + (e + 1) * 86_400_000);
               return (
                 <div className="space-y-1">
-                  <div className="text-xs font-black uppercase tracking-widest text-indigo-200">Chambre {dragState.roomNumber}</div>
+                  <div className="text-xs font-black uppercase tracking-widest text-violet-200">Chambre {dragState.roomNumber}</div>
                   <div className="flex items-center gap-3">
                     <span>{ci.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>
-                    <span className="text-indigo-300">→</span>
+                    <span className="text-violet-300">→</span>
                     <span>{co.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</span>
                   </div>
-                  <div className="text-xs text-indigo-200">{nights} nuit{nights > 1 ? 's' : ''}</div>
+                  <div className="text-xs text-violet-200">{nights} nuit{nights > 1 ? 's' : ''}</div>
                 </div>
               );
             })()}
@@ -367,7 +367,7 @@ export const PlanningView = () => {
         const e = Math.max(dragState.startDayIndex, dragState.endDayIndex);
         return (
           <div
-            className="fixed pointer-events-none z-[100] bg-indigo-400/20 border-2 border-indigo-400 rounded-lg"
+            className="fixed pointer-events-none z-[100] bg-violet-500/20 border-2 border-violet-500 rounded-xl"
             style={{
               left: `calc(${s * colWidth}% + 4px)`,
               width: `calc(${(e - s + 1) * colWidth}% - 8px)`,
@@ -409,7 +409,7 @@ export const PlanningView = () => {
              <span className="text-xs font-black text-indigo-700 uppercase tracking-widest whitespace-nowrap">
                {days[0]?.dayName.toLowerCase()}. {days[0]?.dateNum} {days[0]?.monthName.toLowerCase()} — {days[days.length-1]?.dayName.toLowerCase()}. {days[days.length-1]?.dateNum} {days[days.length-1]?.monthName.toLowerCase()} {currentDate.getFullYear()}
              </span>
-             <Zap className="text-indigo-300 group-hover:text-indigo-500 transition-colors" size={14} />
+             <Zap className="text-violet-300 group-hover:text-indigo-500 transition-colors" size={14} />
           </div>
         </div>
 
@@ -682,7 +682,7 @@ export const PlanningView = () => {
                         <span className={cn("text-[10px] font-black uppercase tracking-widest mb-1", d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.dayName}</span>
                         <div className="flex items-baseline gap-1.5 leading-none">
                            <span className={cn("text-[17px] font-black", i === 0 ? "text-indigo-400" : d.isWeekend ? "text-orange-400" : "text-gray-900")}>{d.dateNum}</span>
-                           <span className={cn("text-[11px] font-black uppercase tracking-tighter opacity-70", i === 0 ? "text-indigo-300" : d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.monthName}</span>
+                           <span className={cn("text-[11px] font-black uppercase tracking-tighter opacity-70", i === 0 ? "text-violet-300" : d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.monthName}</span>
                         </div>
                       </div>
                     ))}
@@ -721,7 +721,7 @@ export const PlanningView = () => {
                           const e = Math.max(dragState.startDayIndex, dragState.endDayIndex);
                           return (
                             <div
-                              className="absolute top-2 bottom-2 bg-indigo-400/25 border-2 border-indigo-400 rounded-xl z-20 pointer-events-none"
+                              className="absolute top-2 bottom-2 bg-violet-500/20 border-2 border-violet-500 rounded-xl z-20 pointer-events-none"
                               style={{ left: `calc(${s * colWidth}% + 4px)`, width: `calc(${(e - s + 1) * colWidth}% - 8px)` }}
                             />
                           );
@@ -732,7 +732,7 @@ export const PlanningView = () => {
                           const e = Math.max(dragState.startDayIndex, dragState.endDayIndex);
                           return (
                             <div
-                              className="absolute top-2 bottom-2 bg-red-400/20 border-2 border-red-400 rounded-xl z-20 pointer-events-none"
+                              className="absolute top-2 bottom-2 bg-red-500/20 border-2 border-red-500 rounded-xl z-20 pointer-events-none"
                               style={{ left: `calc(${s * colWidth}% + 4px)`, width: `calc(${(e - s + 1) * colWidth}% - 8px)` }}
                             />
                           );
@@ -793,7 +793,7 @@ export const PlanningView = () => {
                              {days.map(d => (
                                 <div 
                                   key={`sum-${cat}-${d.id}`} 
-                                  className={cn("shrink-0 border-r border-gray-50 flex items-center justify-center text-[11px] font-black text-gray-300", d.isWeekend ? "text-indigo-200" : "")}
+                                  className={cn("shrink-0 border-r border-gray-50 flex items-center justify-center text-[11px] font-black text-gray-300", d.isWeekend ? "text-violet-200" : "")}
                                   style={{ width: `${colWidth}%` }}
                                 >
                                    {idx === 2 ? 2 : 1}
@@ -859,7 +859,7 @@ export const PlanningView = () => {
                              <div>
                                 <h4 className="text-[14px] font-black text-gray-900">{room.type}</h4>
                                 <div className="flex items-center gap-1.5">
-                                   {i % 2 === 0 ? <Users size={10} className="text-indigo-300" /> : <CheckCircle2 size={10} className="text-emerald-300" />}
+                                   {i % 2 === 0 ? <Users size={10} className="text-violet-300" /> : <CheckCircle2 size={10} className="text-emerald-300" />}
                                    <span className="text-[10px] font-bold text-gray-400 italic">
                                       {i % 2 === 0 ? 'Occupée' : 'Propre / Libre'}
                                    </span>

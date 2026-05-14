@@ -1,704 +1,635 @@
 /**
  * FLOWTYM — NewReservationModal
- * Formulaire de réservation complet : design fidèle à la maquette
- * Auto-complétion client, sélection multi-chambres, calcul tarifaire temps réel
+ * Reproduction IDENTIQUE à la maquette + fonctionnalités intelligentes
  */
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, User, Mail, Phone, Users, Baby, Calendar, Hash, Tag, CreditCard,
-  Upload, ChevronDown, ChevronUp, Search, Check, AlertTriangle, Loader2,
-  Bed, FileText, Zap, Shield } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, User, Mail, Phone, Users, ChevronDown, Hash, Search, Check,
+  Loader2, Upload, FileText, Link2, Lock, Send, Clock, Circle,
+  CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { supabase } from '@/src/lib/supabase';
 
-// ─── Countries list ───────────────────────────────────────────────────────────
+// ─── COUNTRIES ────────────────────────────────────────────────────────────────
 const COUNTRIES = [
-  { code: 'FR', name: 'France', flag: '🇫🇷' },
-  { code: 'DE', name: 'Allemagne', flag: '🇩🇪' },
-  { code: 'GB', name: 'Royaume-Uni', flag: '🇬🇧' },
-  { code: 'ES', name: 'Espagne', flag: '🇪🇸' },
-  { code: 'IT', name: 'Italie', flag: '🇮🇹' },
-  { code: 'CH', name: 'Suisse', flag: '🇨🇭' },
-  { code: 'BE', name: 'Belgique', flag: '🇧🇪' },
-  { code: 'NL', name: 'Pays-Bas', flag: '🇳🇱' },
-  { code: 'US', name: 'États-Unis', flag: '🇺🇸' },
-  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
-  { code: 'JP', name: 'Japon', flag: '🇯🇵' },
-  { code: 'CN', name: 'Chine', flag: '🇨🇳' },
-  { code: 'AE', name: 'Émirats Arabes', flag: '🇦🇪' },
-  { code: 'MA', name: 'Maroc', flag: '🇲🇦' },
-  { code: 'TN', name: 'Tunisie', flag: '🇹🇳' },
   { code: 'DZ', name: 'Algérie', flag: '🇩🇿' },
-  { code: 'PT', name: 'Portugal', flag: '🇵🇹' },
-  { code: 'RU', name: 'Russie', flag: '🇷🇺' },
-  { code: 'BR', name: 'Brésil', flag: '🇧🇷' },
+  { code: 'DE', name: 'Allemagne', flag: '🇩🇪' },
+  { code: 'AD', name: 'Andorre', flag: '🇦🇩' },
+  { code: 'AO', name: 'Angola', flag: '🇦🇴' },
+  { code: 'SA', name: 'Arabie Saoudite', flag: '🇸🇦' },
+  { code: 'AR', name: 'Argentine', flag: '🇦🇷' },
   { code: 'AU', name: 'Australie', flag: '🇦🇺' },
-].sort((a, b) => a.name.localeCompare(b.name));
-
-const RATE_PLANS = [
-  { id: 'rack', label: 'Rack', icon: '🏷️' },
-  { id: 'flexible', label: 'Flexible (72h)', icon: '🔄' },
-  { id: 'non_refundable', label: 'Non remboursable', icon: '🔒' },
-  { id: 'corporate', label: 'Corporate', icon: '🏢' },
-  { id: 'promo', label: 'Promo', icon: '🎯' },
+  { code: 'AT', name: 'Autriche', flag: '🇦🇹' },
+  { code: 'BE', name: 'Belgique', flag: '🇧🇪' },
+  { code: 'BR', name: 'Brésil', flag: '🇧🇷' },
+  { code: 'CA', name: 'Canada', flag: '🇨🇦' },
+  { code: 'CN', name: 'Chine', flag: '🇨🇳' },
+  { code: 'DK', name: 'Danemark', flag: '🇩🇰' },
+  { code: 'EG', name: 'Égypte', flag: '🇪🇬' },
+  { code: 'AE', name: 'Émirats Arabes', flag: '🇦🇪' },
+  { code: 'ES', name: 'Espagne', flag: '🇪🇸' },
+  { code: 'US', name: 'États-Unis', flag: '🇺🇸' },
+  { code: 'FI', name: 'Finlande', flag: '🇫🇮' },
+  { code: 'FR', name: 'France', flag: '🇫🇷' },
+  { code: 'GR', name: 'Grèce', flag: '🇬🇷' },
+  { code: 'IN', name: 'Inde', flag: '🇮🇳' },
+  { code: 'IE', name: 'Irlande', flag: '🇮🇪' },
+  { code: 'IL', name: 'Israël', flag: '🇮🇱' },
+  { code: 'IT', name: 'Italie', flag: '🇮🇹' },
+  { code: 'JP', name: 'Japon', flag: '🇯🇵' },
+  { code: 'KW', name: 'Koweït', flag: '🇰🇼' },
+  { code: 'LB', name: 'Liban', flag: '🇱🇧' },
+  { code: 'LU', name: 'Luxembourg', flag: '🇱🇺' },
+  { code: 'MA', name: 'Maroc', flag: '🇲🇦' },
+  { code: 'MC', name: 'Monaco', flag: '🇲🇨' },
+  { code: 'NO', name: 'Norvège', flag: '🇳🇴' },
+  { code: 'NL', name: 'Pays-Bas', flag: '🇳🇱' },
+  { code: 'PL', name: 'Pologne', flag: '🇵🇱' },
+  { code: 'PT', name: 'Portugal', flag: '🇵🇹' },
+  { code: 'QA', name: 'Qatar', flag: '🇶🇦' },
+  { code: 'GB', name: 'Royaume-Uni', flag: '🇬🇧' },
+  { code: 'RU', name: 'Russie', flag: '🇷🇺' },
+  { code: 'SN', name: 'Sénégal', flag: '🇸🇳' },
+  { code: 'SG', name: 'Singapour', flag: '🇸🇬' },
+  { code: 'SE', name: 'Suède', flag: '🇸🇪' },
+  { code: 'CH', name: 'Suisse', flag: '🇨🇭' },
+  { code: 'TN', name: 'Tunisie', flag: '🇹🇳' },
+  { code: 'TR', name: 'Turquie', flag: '🇹🇷' },
+  { code: 'UA', name: 'Ukraine', flag: '🇺🇦' },
 ];
 
-const SEGMENTS = ['Loisir', 'Affaires', 'Groupe', 'VIP', 'Corporate', 'OTA'];
+const ROOM_TYPES = ['Single','Double','Twin','Suite','Familiale'];
+const ARRANGEMENTS = ['Room Only','Petit-déjeuner','Demi-pension','Pension complète','All Inclusive'];
+const RATE_PLANS = ['Flexible (72h)','Rack','Non remboursable','Corporate','Promo'];
+const SEGMENTS = ['Loisir','Affaires','Groupe','VIP','Corporate','OTA','Famille'];
+const TAXE_SEJOUR = 5.00;
+const TVA = 0.10;
 
-const SOURCES = [
-  { id: 'DIRECT', label: 'Direct', color: 'bg-emerald-500' },
-  { id: 'BOOKING', label: 'Booking.com', color: 'bg-blue-500' },
-  { id: 'EXPEDIA', label: 'Expedia', color: 'bg-yellow-500' },
-  { id: 'AIRBNB', label: 'Airbnb', color: 'bg-rose-500' },
-  { id: 'AGODA', label: 'Agoda', color: 'bg-purple-500' },
-  { id: 'HOTELBEDS', label: 'Hotelbeds', color: 'bg-orange-500' },
-];
-
-const PAYMENT_ICONS = ['💳', '🏦', '💵', '📧', '💰', 'P', 'AX', 'DC', 'JCB', '👤'];
-
-const TVA_RATE = 0.10;
-const TAXE_SEJOUR = 5.00; // par nuit par personne
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface NewReservationModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  prefill?: {
-    roomId?: string;
-    roomNumber?: string;
-    checkIn?: string;
-    checkOut?: string;
-  };
-  onSave: (data: any) => Promise<void>;
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-// Input field
-const Field = ({ label, icon: Icon, error, ...props }: any) => (
+// ─── FIELD — input lilas identique maquette ───────────────────────────────────
+const F = ({ icon: Icon, ...props }: any) => (
   <div className="relative">
-    {Icon && <Icon size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none z-10" />}
+    {Icon && <Icon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-violet-300 pointer-events-none z-10" />}
     <input
       {...props}
       className={cn(
-        'w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm text-[#0F172A] placeholder:text-gray-400 transition-all',
-        'focus:outline-none focus:border-[#7C9D8E] focus:bg-white focus:ring-2 focus:ring-[#7C9D8E]/20',
+        'w-full h-[44px] bg-[#F5F3FF] border border-[#EDE9FE] rounded-xl text-[13px] text-gray-700 placeholder:text-gray-400',
+        'focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all',
         Icon ? 'pl-9 pr-4' : 'px-4',
-        error && 'border-red-300 focus:border-red-400',
       )}
     />
-    {error && <p className="text-[10px] text-red-500 mt-1 ml-1">{error}</p>}
   </div>
 );
 
-// Counter
-const Counter = ({ value, onChange, min = 0, max = 20, icon: Icon, label }: any) => (
-  <div className="h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl flex items-center px-3 gap-3">
-    {Icon && <Icon size={14} className="text-gray-400 shrink-0" />}
-    <span className="text-xs text-gray-400 flex-1">{label}</span>
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() => onChange(Math.max(min, value - 1))}
-        className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:border-[#7C9D8E] hover:text-[#7C9D8E] transition-all"
-      >
-        <ChevronDown size={12} />
-      </button>
-      <span className="w-5 text-center text-sm font-black text-[#1E3A5F]">{value}</span>
-      <button
-        type="button"
-        onClick={() => onChange(Math.min(max, value + 1))}
-        className="w-6 h-6 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-gray-500 hover:border-[#7C9D8E] hover:text-[#7C9D8E] transition-all"
-      >
-        <ChevronUp size={12} />
-      </button>
-    </div>
+// ─── SELECT — select lilas identique maquette ────────────────────────────────
+const S = ({ leftIcon, children, className, ...props }: any) => (
+  <div className={cn('relative', className)}>
+    {leftIcon && (
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10 text-[13px] text-violet-400">
+        {leftIcon}
+      </span>
+    )}
+    <select
+      {...props}
+      className={cn(
+        'w-full h-[44px] bg-[#F5F3FF] border border-[#EDE9FE] rounded-xl text-[13px] text-gray-600 appearance-none',
+        'focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all',
+        leftIcon ? 'pl-8 pr-8' : 'px-4 pr-8',
+      )}
+    >
+      {children}
+    </select>
+    <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-violet-300 pointer-events-none" />
   </div>
 );
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── PROPS ────────────────────────────────────────────────────────────────────
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  prefill?: { roomId?: string; roomNumber?: string; checkIn?: string; checkOut?: string };
+  onSave: (data: any) => Promise<void>;
+}
 
-export function NewReservationModal({ isOpen, onClose, prefill, onSave }: NewReservationModalProps) {
-  // Form state
-  const [status, setStatus] = useState<'option' | 'pending' | 'confirmed'>('confirmed');
+// ─── COMPONENT ───────────────────────────────────────────────────────────────
+export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props) {
+
+  const [status, setStatus] = useState<'option'|'pending'|'confirmed'>('confirmed');
   const [guestName, setGuestName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [nationality, setNationality] = useState({ code: 'FR', name: 'France', flag: '🇫🇷' });
+  const [country, setCountry] = useState({ code:'FR', name:'France', flag:'🇫🇷' });
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
-  const [checkIn, setCheckIn] = useState(prefill?.checkIn ?? '');
-  const [checkOut, setCheckOut] = useState(prefill?.checkOut ?? '');
-  const [roomNumber, setRoomNumber] = useState(prefill?.roomNumber ?? '');
-  const [roomId, setRoomId] = useState(prefill?.roomId ?? '');
+  const [checkIn, setCheckIn] = useState('');
+  const [checkOut, setCheckOut] = useState('');
   const [roomType, setRoomType] = useState('');
-  const [ratePlan, setRatePlan] = useState('flexible');
+  const [roomNumber, setRoomNumber] = useState('');
+  const [roomId, setRoomId] = useState('');
+  const [arrangement, setArrangement] = useState('Room Only');
+  const [ratePlan, setRatePlan] = useState('Flexible (72h)');
+  const [planTarifaire, setPlanTarifaire] = useState('');
   const [segment, setSegment] = useState('Loisir');
-  const [source, setSource] = useState('DIRECT');
+  const [deposit, setDeposit] = useState<'30'|'50'|'100'>('30');
+  const [payMethod, setPayMethod] = useState<'stripe'|'paypal'>('stripe');
+  const [preauth, setPreauth] = useState(false);
   const [notes, setNotes] = useState('');
-  const [depositType, setDepositType] = useState<'30' | '50' | '100'>('30');
-  const [sendConfirmation, setSendConfirmation] = useState(true);
-  const [preauthorization, setPreauthorization] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const [draggingFile, setDraggingFile] = useState(false);
+  const [sendConfirm, setSendConfirm] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // Autocomplete state
-  const [clientSuggestions, setClientSuggestions] = useState<any[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [showNationality, setShowNationality] = useState(false);
-  const [countrySearch, setCountrySearch] = useState('');
-  const [showRoomPicker, setShowRoomPicker] = useState(false);
-  const [availableRooms, setAvailableRooms] = useState<any[]>([]);
+  // autocomplete
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSugg, setShowSugg] = useState(false);
+  const [showCountry, setShowCountry] = useState(false);
+  const [countryQ, setCountryQ] = useState('');
+  const [rooms, setRooms] = useState<any[]>([]);
 
-  // Drag & drop
-  const dropRef = useRef<HTMLDivElement>(null);
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const ref = useRef(`RES-${Math.floor(1000+Math.random()*9000)}`);
 
   // Sync prefill
   useEffect(() => {
-    if (prefill) {
-      if (prefill.checkIn) setCheckIn(prefill.checkIn);
-      if (prefill.checkOut) setCheckOut(prefill.checkOut);
-      if (prefill.roomNumber) setRoomNumber(prefill.roomNumber);
-      if (prefill.roomId) setRoomId(prefill.roomId);
-    }
-  }, [prefill]);
+    if (!isOpen) return;
+    if (prefill?.checkIn)    setCheckIn(prefill.checkIn);
+    if (prefill?.checkOut)   setCheckOut(prefill.checkOut);
+    if (prefill?.roomNumber) setRoomNumber(prefill.roomNumber);
+    if (prefill?.roomId)     setRoomId(prefill.roomId);
+  }, [isOpen, prefill]);
 
-  // Auto-complete client
-  useEffect(() => {
-    if (guestName.length < 3) { setClientSuggestions([]); setShowSuggestions(false); return; }
-    const timer = setTimeout(async () => {
-      const { data } = await supabase
-        .from('guests')
-        .select('id, first_name, last_name, email, phone, nationality')
-        .ilike('last_name', `%${guestName}%`)
-        .limit(5);
-      const results = data ?? [];
-      setClientSuggestions(results);
-      setShowSuggestions(results.length > 0);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [guestName]);
-
-  // Load available rooms when dates change
+  // Load rooms
   useEffect(() => {
     if (!checkIn || !checkOut) return;
-    supabase.from('rooms').select('id, number, type, category, floor, base_price, status').eq('active', true)
-      .then(({ data }) => setAvailableRooms(data ?? []));
+    supabase.from('rooms').select('id,number,type,base_price').eq('active',true)
+      .then(({ data }) => setRooms(data ?? []));
   }, [checkIn, checkOut]);
 
-  // Price calculation
+  // Guest autocomplete
+  useEffect(() => {
+    if (guestName.length < 3) { setSuggestions([]); setShowSugg(false); return; }
+    const t = setTimeout(async () => {
+      const { data } = await supabase.from('guests')
+        .select('id,first_name,last_name,email,phone,nationality')
+        .or(`first_name.ilike.%${guestName}%,last_name.ilike.%${guestName}%`)
+        .limit(5);
+      setSuggestions(data ?? []);
+      setShowSugg((data?.length ?? 0) > 0);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [guestName]);
+
+  const pickGuest = (g: any) => {
+    setGuestName(`${g.first_name} ${g.last_name}`);
+    setEmail(g.email ?? ''); setPhone(g.phone ?? '');
+    const c = COUNTRIES.find(c => c.code === g.nationality);
+    if (c) setCountry(c);
+    setShowSugg(false);
+  };
+
+  // Pricing
   const nights = checkIn && checkOut
-    ? Math.max(0, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86_400_000))
-    : 1;
-  const baseRoom = availableRooms.find(r => r.number === roomNumber);
-  const pricePerNight = baseRoom?.base_price ?? 0;
-  const subtotalHT = pricePerNight * nights;
-  const tva = subtotalHT * TVA_RATE;
-  const taxeSejour = TAXE_SEJOUR * adults * nights;
-  const totalTTC = subtotalHT + tva + taxeSejour;
-  const depositAmount = totalTTC * (parseInt(depositType) / 100);
+    ? Math.max(0, Math.round((new Date(checkOut).getTime()-new Date(checkIn).getTime())/86400000)) : 1;
+  const baseRoom = rooms.find(r => r.number === roomNumber);
+  const prixNuit = baseRoom?.base_price ?? 0;
+  const ht   = parseFloat((prixNuit * nights).toFixed(2));
+  const tva  = parseFloat((ht * TVA).toFixed(2));
+  const taxe = parseFloat((TAXE_SEJOUR * adults * nights).toFixed(2));
+  const ttc  = parseFloat((ht + tva + taxe).toFixed(2));
+  const depAmt = parseFloat((ttc * parseInt(deposit) / 100).toFixed(2));
 
-  // Reference
-  const reference = `RES-${Math.floor(1000 + Math.random() * 9000)}`;
-
-  const selectClient = (guest: any) => {
-    setGuestName(`${guest.first_name} ${guest.last_name}`);
-    setEmail(guest.email ?? '');
-    setPhone(guest.phone ?? '');
-    const country = COUNTRIES.find(c => c.code === guest.nationality);
-    if (country) setNationality(country);
-    setShowSuggestions(false);
-  };
-
-  const filteredCountries = COUNTRIES.filter(c =>
-    c.name.toLowerCase().includes(countrySearch.toLowerCase())
-  );
-
-  const handleFilesDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingFile(false);
-    const dropped = Array.from(e.dataTransfer.files);
-    setFiles(prev => [...prev, ...dropped]);
-  };
+  const filteredC = COUNTRIES.filter(c => c.name.toLowerCase().includes(countryQ.toLowerCase()));
 
   const handleSave = async () => {
-    setIsSaving(true);
+    setSaving(true);
     try {
-      await onSave({
-        status, guestName, email, phone,
-        nationality: nationality.code,
-        adults, children, checkIn, checkOut, nights,
-        roomId, roomNumber, roomType, ratePlan,
-        segment, source, notes, totalTTC,
-        sendConfirmation, reference,
-      });
-    } finally {
-      setIsSaving(false);
-    }
+      await onSave({ status, guestName, email, phone, nationality: country.code, adults, children,
+        checkIn, checkOut, nights, roomId, roomNumber, roomType, arrangement, ratePlan, segment,
+        notes, totalTTC: ttc, reference: ref.current, sendConfirm });
+      onClose();
+    } finally { setSaving(false); }
   };
 
   if (!isOpen) return null;
 
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.96 }}
-          transition={{ duration: 0.2 }}
-          className="bg-white w-full max-w-[860px] rounded-[24px] shadow-2xl overflow-hidden flex flex-col max-h-[95vh]"
-        >
-          {/* Header */}
-          <div className="bg-gradient-to-r from-[#1E3A5F] to-[#2d5a8e] px-7 py-5 flex items-center justify-between shrink-0">
-            <div>
-              <h2 className="text-lg font-black text-white">Nouvelle réservation</h2>
-              <p className="text-xs text-indigo-200 font-medium mt-0.5">Flowtym PMS · {new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+      onClick={onClose}>
+      <motion.div
+        initial={{ opacity:0, scale:0.97, y:8 }}
+        animate={{ opacity:1, scale:1, y:0 }}
+        exit={{ opacity:0 }}
+        transition={{ duration:0.18 }}
+        className="bg-white w-full max-w-[860px] rounded-[20px] shadow-2xl flex flex-col max-h-[95vh] overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+
+        {/* ══ HEADER ══ */}
+        <div className="bg-violet-600 px-6 py-5 flex items-center justify-between shrink-0">
+          <h2 className="text-[17px] font-bold text-white tracking-tight">Nouvelle réservation</h2>
+          <button onClick={onClose}
+            className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-all">
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* ══ BODY ══ */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+
+          {/* STATUT */}
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">
+              STATUT DE LA RÉSERVATION
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { id:'option',    label:'Option (Hold)', Icon:Clock },
+                { id:'pending',   label:'Pending',       Icon:Circle },
+                { id:'confirmed', label:'Confirmée',     Icon:CheckCircle2 },
+              ] as const).map(({ id, label, Icon }) => (
+                <button key={id} type="button" onClick={() => setStatus(id)}
+                  className={cn(
+                    'h-[44px] rounded-xl border text-[13px] font-medium flex items-center justify-center gap-2 transition-all',
+                    status === id && id === 'confirmed'
+                      ? 'border-emerald-400 bg-emerald-50 text-emerald-600'
+                      : status === id
+                      ? 'border-violet-400 bg-violet-50 text-violet-600'
+                      : 'border-[#EDE9FE] bg-[#F5F3FF] text-gray-400 hover:border-violet-300',
+                  )}>
+                  <Icon size={14} />{label}
+                </button>
+              ))}
             </div>
-            <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all">
-              <X size={16} />
-            </button>
           </div>
 
-          {/* Body */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-7 space-y-6">
-
-              {/* Status */}
-              <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">STATUT DE LA RÉSERVATION</p>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { id: 'option', label: 'Option (Hold)', icon: '⏸️' },
-                    { id: 'pending', label: 'Pending', icon: '⏳' },
-                    { id: 'confirmed', label: 'Confirmée', icon: '✅' },
-                  ].map(s => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => setStatus(s.id as any)}
-                      className={cn(
-                        'h-11 rounded-xl border-2 text-sm font-bold transition-all flex items-center justify-center gap-2',
-                        status === s.id
-                          ? s.id === 'confirmed'
-                            ? 'border-[#7C9D8E] bg-[#7C9D8E]/10 text-[#7C9D8E]'
-                            : 'border-[#1E3A5F] bg-[#1E3A5F]/5 text-[#1E3A5F]'
-                          : 'border-[#E2E8F0] bg-[#F8F9FC] text-gray-400 hover:border-gray-300',
-                      )}
-                    >
-                      <span>{s.icon}</span>
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 2 columns */}
-              <div className="grid grid-cols-2 gap-6">
-                {/* LEFT */}
-                <div className="space-y-4">
-                  {/* Guest name + nationality */}
-                  <div className="grid grid-cols-[1fr_160px] gap-3">
-                    <div className="relative">
-                      <User size={14} className="absolute left-3.5 top-3.5 text-gray-400 z-10" />
-                      <input
-                        value={guestName}
-                        onChange={e => setGuestName(e.target.value)}
-                        onFocus={() => clientSuggestions.length > 0 && setShowSuggestions(true)}
-                        placeholder="Nom Complet *"
-                        className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm pl-9 pr-4 focus:outline-none focus:border-[#7C9D8E] focus:ring-2 focus:ring-[#7C9D8E]/20 focus:bg-white"
-                      />
-                      {/* Autocomplete dropdown */}
-                      <AnimatePresence>
-                        {showSuggestions && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute top-12 left-0 right-0 bg-white border border-[#E2E8F0] rounded-xl shadow-xl z-50 overflow-hidden"
-                          >
-                            {clientSuggestions.map(g => (
-                              <button
-                                key={g.id}
-                                type="button"
-                                onClick={() => selectClient(g)}
-                                className="w-full text-left px-4 py-3 hover:bg-[#F8F9FC] flex items-center gap-3 border-b border-gray-50 last:border-0"
-                              >
-                                <div className="w-8 h-8 rounded-full bg-[#1E3A5F]/10 flex items-center justify-center text-xs font-black text-[#1E3A5F]">
-                                  {g.first_name?.[0]}{g.last_name?.[0]}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-bold text-gray-900">{g.first_name} {g.last_name}</p>
-                                  <p className="text-xs text-gray-400">{g.email}</p>
-                                </div>
-                              </button>
-                            ))}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-
-                    {/* Nationality picker */}
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowNationality(!showNationality)}
-                        className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-3 flex items-center gap-2 hover:border-[#7C9D8E] transition-all"
-                      >
-                        <span className="text-base">{nationality.flag}</span>
-                        <span className="flex-1 text-left text-sm font-medium text-gray-700 truncate">{nationality.name}</span>
-                        <ChevronDown size={12} className="text-gray-400 shrink-0" />
-                      </button>
-                      <AnimatePresence>
-                        {showNationality && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
-                            className="absolute top-12 right-0 w-56 bg-white border border-[#E2E8F0] rounded-xl shadow-xl z-50 overflow-hidden"
-                          >
-                            <div className="p-2 border-b border-gray-50">
-                              <div className="relative">
-                                <Search size={12} className="absolute left-2.5 top-2.5 text-gray-400" />
-                                <input
-                                  value={countrySearch}
-                                  onChange={e => setCountrySearch(e.target.value)}
-                                  placeholder="Chercher un pays..."
-                                  className="w-full h-8 pl-7 pr-3 text-xs bg-[#F8F9FC] border border-[#E2E8F0] rounded-lg focus:outline-none"
-                                />
-                              </div>
-                            </div>
-                            <div className="max-h-48 overflow-y-auto">
-                              {filteredCountries.map(c => (
-                                <button
-                                  key={c.code}
-                                  type="button"
-                                  onClick={() => { setNationality(c); setShowNationality(false); setCountrySearch(''); }}
-                                  className="w-full text-left px-3 py-2 hover:bg-[#F8F9FC] flex items-center gap-2.5 text-sm"
-                                >
-                                  <span className="text-base">{c.flag}</span>
-                                  <span className="text-gray-700">{c.name}</span>
-                                  {nationality.code === c.code && <Check size={12} className="ml-auto text-[#7C9D8E]" />}
-                                </button>
-                              ))}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  </div>
-
-                  {/* Email + Phone */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <Field icon={Mail} value={email} onChange={(e: any) => setEmail(e.target.value)} placeholder="Email" type="email" />
-                    <Field icon={Phone} value={phone} onChange={(e: any) => setPhone(e.target.value)} placeholder="Téléphone" />
-                  </div>
-
-                  {/* Adults + Children */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <Counter value={adults} onChange={setAdults} min={1} icon={Users} label="Adultes" />
-                    <Counter value={children} onChange={setChildren} min={0} icon={Baby} label="Enfants" />
-                  </div>
-
-                  {/* Dates */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="relative">
-                      <label className="absolute -top-2 left-3 text-[9px] font-black text-[#1E3A5F] uppercase tracking-widest bg-white px-1 z-10">ARRIVÉE</label>
-                      <input
-                        type="date"
-                        value={checkIn}
-                        onChange={e => setCheckIn(e.target.value)}
-                        className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-4 focus:outline-none focus:border-[#7C9D8E] focus:ring-2 focus:ring-[#7C9D8E]/20 focus:bg-white"
-                      />
-                    </div>
-                    <div className="relative">
-                      <label className="absolute -top-2 left-3 text-[9px] font-black text-[#1E3A5F] uppercase tracking-widest bg-white px-1 z-10">DÉPART</label>
-                      <input
-                        type="date"
-                        value={checkOut}
-                        min={checkIn}
-                        onChange={e => setCheckOut(e.target.value)}
-                        className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-4 focus:outline-none focus:border-[#7C9D8E] focus:ring-2 focus:ring-[#7C9D8E]/20 focus:bg-white"
-                      />
-                    </div>
-                  </div>
-                  {nights > 0 && (
-                    <p className="text-xs text-[#7C9D8E] font-bold -mt-1 ml-1">✓ {nights} nuit{nights > 1 ? 's' : ''}</p>
-                  )}
-
-                  {/* Ref + Type + Numéro */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl flex items-center gap-2 px-3">
-                      <Hash size={13} className="text-gray-400 shrink-0" />
-                      <span className="text-sm font-mono text-[#1E3A5F] font-bold truncate">{reference}</span>
-                    </div>
-                    <div className="relative">
-                      <select
-                        value={roomType}
-                        onChange={e => setRoomType(e.target.value)}
-                        className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-3 appearance-none focus:outline-none focus:border-[#7C9D8E] text-gray-600"
-                      >
-                        <option value="">Type Chambre</option>
-                        {['SGL', 'DBL', 'TWN', 'STE', 'FAM'].map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                      <ChevronDown size={12} className="absolute right-3 top-4 text-gray-400 pointer-events-none" />
-                    </div>
-                    <div className="relative">
-                      <select
-                        value={roomNumber}
-                        onChange={e => {
-                          setRoomNumber(e.target.value);
-                          const r = availableRooms.find(r => r.number === e.target.value);
-                          if (r) setRoomId(r.id);
-                        }}
-                        className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-3 appearance-none focus:outline-none focus:border-[#7C9D8E] text-gray-600"
-                      >
-                        <option value="">Numéro</option>
-                        {availableRooms
-                          .filter(r => !roomType || r.type === roomType)
-                          .map(r => <option key={r.id} value={r.number}>Ch. {r.number} ({r.type})</option>)}
-                      </select>
-                      <ChevronDown size={12} className="absolute right-3 top-4 text-gray-400 pointer-events-none" />
-                    </div>
-                  </div>
-
-                  {/* Arrangement + Plan tarifaire */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="relative">
-                      <select className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-3 appearance-none focus:outline-none focus:border-[#7C9D8E] text-gray-600">
-                        <option>Room Only</option>
-                        <option>Petit-déjeuner</option>
-                        <option>Demi-pension</option>
-                        <option>Pension complète</option>
-                        <option>All Inclusive</option>
-                      </select>
-                      <ChevronDown size={12} className="absolute right-3 top-4 text-gray-400 pointer-events-none" />
-                    </div>
-                    <div className="relative">
-                      <select
-                        value={ratePlan}
-                        onChange={e => setRatePlan(e.target.value)}
-                        className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-3 appearance-none focus:outline-none focus:border-[#7C9D8E] text-gray-600"
-                      >
-                        {RATE_PLANS.map(p => <option key={p.id} value={p.id}>{p.icon} {p.label}</option>)}
-                      </select>
-                      <ChevronDown size={12} className="absolute right-3 top-4 text-gray-400 pointer-events-none" />
-                    </div>
-                    <div className="relative">
-                      <select
-                        value={source}
-                        onChange={e => setSource(e.target.value)}
-                        className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-3 appearance-none focus:outline-none focus:border-[#7C9D8E] text-gray-600"
-                      >
-                        {SOURCES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                      </select>
-                      <ChevronDown size={12} className="absolute right-3 top-4 text-gray-400 pointer-events-none" />
-                    </div>
-                    <div className="relative">
-                      <select
-                        value={segment}
-                        onChange={e => setSegment(e.target.value)}
-                        className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-3 appearance-none focus:outline-none focus:border-[#7C9D8E] text-gray-600"
-                      >
-                        {SEGMENTS.map(s => <option key={s}>{s}</option>)}
-                      </select>
-                      <ChevronDown size={12} className="absolute right-3 top-4 text-gray-400 pointer-events-none" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* RIGHT */}
-                <div className="space-y-4">
-                  {/* Price summary */}
-                  <div className="bg-[#F8F9FC] border border-[#E2E8F0] rounded-2xl p-5 space-y-3">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-black text-[#1E3A5F]">{pricePerNight.toFixed(2).replace('.', ',')}€</span>
-                      <span className="text-xs text-[#7C9D8E] font-bold">PRIX / NUIT</span>
-                      <span className="ml-auto text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg">
-                        ✓ {nights} nuit{nights > 1 ? 's' : ''} · {adults + children} pers.
-                      </span>
-                    </div>
-                    <div className="space-y-2 pt-2 border-t border-[#E2E8F0]">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">HT</span>
-                        <span className="text-gray-700">{subtotalHT.toFixed(2)}€</span>
-                        <span className="text-gray-400">TVA 10%</span>
-                        <span className="text-gray-700">{tva.toFixed(2)}€</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Taxe séjour</span>
-                        <span className="text-gray-700">{taxeSejour.toFixed(2)}€</span>
-                      </div>
-                      <div className="flex justify-between pt-2 border-t border-[#E2E8F0]">
-                        <span className="font-black text-[#1E3A5F]">Total TTC</span>
-                        <span className="text-xl font-black text-[#1E3A5F]">{totalTTC.toFixed(2).replace('.', ',')}€</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Deposit type */}
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { id: '30', label: 'Acompte 30%' },
-                      { id: '50', label: 'Acompte 50%' },
-                      { id: '100', label: 'Totalité 100%' },
-                    ].map(d => (
-                      <button
-                        key={d.id}
-                        type="button"
-                        onClick={() => setDepositType(d.id as any)}
-                        className={cn(
-                          'h-9 rounded-xl text-xs font-bold border-2 transition-all',
-                          depositType === d.id
-                            ? 'border-[#1E3A5F] bg-[#1E3A5F] text-white'
-                            : 'border-[#E2E8F0] bg-white text-gray-500 hover:border-gray-300',
-                        )}
-                      >
-                        {d.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Payment method icons */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {['💳', '🏦', '💵', '📧', '💰'].map((icon, i) => (
-                      <div key={i} className="w-9 h-9 rounded-xl bg-[#F8F9FC] border border-[#E2E8F0] flex items-center justify-center text-sm cursor-pointer hover:border-[#7C9D8E] transition-all">
-                        {icon}
-                      </div>
-                    ))}
-                    {['P', 'AX', 'DC', 'JCB'].map((label, i) => (
-                      <div key={i} className="h-9 px-2 rounded-xl bg-[#F8F9FC] border border-[#E2E8F0] flex items-center justify-center text-[10px] font-black text-gray-500 cursor-pointer hover:border-[#7C9D8E] transition-all">
-                        {label}
-                      </div>
-                    ))}
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                      <span className="text-[10px] font-bold text-amber-600">En attente</span>
-                    </div>
-                  </div>
-
-                  {/* Stripe button */}
-                  <button
-                    type="button"
-                    className="w-full h-11 bg-[#635BFF] hover:bg-[#5750e8] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md shadow-[#635BFF]/20"
-                  >
-                    <span className="text-lg">S</span>
-                    Générer le lien de paiement
-                    <span className="ml-auto text-xs opacity-70">{depositAmount.toFixed(0)}€</span>
-                  </button>
-
-                  {/* Preauthorization */}
-                  <label className="flex items-center gap-2.5 cursor-pointer">
-                    <div
-                      onClick={() => setPreauthorization(!preauthorization)}
-                      className={cn('w-4 h-4 rounded border-2 flex items-center justify-center transition-all', preauthorization ? 'bg-[#1E3A5F] border-[#1E3A5F]' : 'border-gray-300')}
-                    >
-                      {preauthorization && <Check size={10} className="text-white" />}
-                    </div>
-                    <Shield size={13} className="text-gray-400" />
-                    <span className="text-xs text-gray-500 font-medium">Préautorisation : 1ère nuitée</span>
-                  </label>
-
-                  {/* Notes */}
-                  <textarea
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="Notes, demandes spéciales..."
-                    rows={3}
-                    className="w-full bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-4 py-3 resize-none focus:outline-none focus:border-[#7C9D8E] focus:ring-2 focus:ring-[#7C9D8E]/20 focus:bg-white placeholder:text-gray-400"
-                  />
-
-                  {/* File drop zone */}
-                  <div
-                    ref={dropRef}
-                    onDragOver={e => { e.preventDefault(); setIsDraggingFile(true); }}
-                    onDragLeave={() => setIsDraggingFile(false)}
-                    onDrop={handleFilesDrop}
-                    className={cn(
-                      'border-2 border-dashed rounded-xl p-5 text-center transition-all cursor-pointer',
-                      isDraggingFile ? 'border-[#7C9D8E] bg-[#7C9D8E]/5' : 'border-[#E2E8F0] hover:border-[#7C9D8E]/50',
-                    )}
-                    onClick={() => document.getElementById('file-input')?.click()}
-                  >
-                    <input id="file-input" type="file" multiple hidden onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files ?? [])])} />
-                    <Upload size={18} className="text-gray-300 mx-auto mb-2" />
-                    <p className="text-xs text-gray-400 font-medium">Glissez vos fichiers ici</p>
-                    <p className="text-[10px] text-gray-300 mt-0.5">PDF · Image · HTML</p>
-                    <button type="button" className="mt-2 px-3 py-1 bg-white border border-[#E2E8F0] rounded-lg text-xs text-gray-500 hover:border-[#7C9D8E] transition-all">
-                      Parcourir
-                    </button>
-                  </div>
-                  {files.length > 0 && (
-                    <div className="space-y-1">
-                      {files.map((f, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-gray-600 bg-[#F8F9FC] rounded-lg px-3 py-2">
-                          <FileText size={12} className="text-[#7C9D8E]" />
-                          <span className="flex-1 truncate">{f.name}</span>
-                          <button type="button" onClick={() => setFiles(prev => prev.filter((_, j) => j !== i))}>
-                            <X size={12} className="text-gray-400 hover:text-red-400" />
-                          </button>
+          {/* NOM + PAYS */}
+          <div className="grid grid-cols-[1fr_220px] gap-3">
+            {/* Nom avec autocomplete */}
+            <div className="relative">
+              <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-violet-300 pointer-events-none z-10" />
+              <input
+                value={guestName}
+                onChange={e => setGuestName(e.target.value)}
+                onFocus={() => suggestions.length > 0 && setShowSugg(true)}
+                placeholder="Nom Complet *"
+                className="w-full h-[44px] bg-[#F5F3FF] border border-[#EDE9FE] rounded-xl text-[13px] text-gray-700 pl-9 pr-4 placeholder:text-gray-400 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all"
+              />
+              <AnimatePresence>
+                {showSugg && (
+                  <motion.div initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0}}
+                    className="absolute top-[48px] left-0 right-0 bg-white border border-[#EDE9FE] rounded-xl shadow-xl z-50 overflow-hidden">
+                    {suggestions.map(g => (
+                      <button key={g.id} type="button" onClick={() => pickGuest(g)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-violet-50 flex items-center gap-3 border-b border-gray-50 last:border-0 text-[13px]">
+                        <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center text-xs font-bold text-violet-600 shrink-0">
+                          {g.first_name?.[0]}{g.last_name?.[0]}
                         </div>
+                        <div>
+                          <p className="font-semibold text-gray-800">{g.first_name} {g.last_name}</p>
+                          <p className="text-xs text-gray-400">{g.email}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Nationalité */}
+            <div className="relative">
+              <button type="button" onClick={() => setShowCountry(!showCountry)}
+                className="w-full h-[44px] bg-[#F5F3FF] border border-[#EDE9FE] rounded-xl text-[13px] px-3 flex items-center gap-2 hover:border-violet-300 transition-all">
+                <span className="text-[18px] leading-none">{country.flag}</span>
+                <span className="flex-1 text-left text-gray-600 truncate">{country.name}</span>
+                <ChevronDown size={12} className="text-violet-300 shrink-0" />
+              </button>
+              <AnimatePresence>
+                {showCountry && (
+                  <motion.div initial={{opacity:0,y:-4}} animate={{opacity:1,y:0}} exit={{opacity:0}}
+                    className="absolute top-[48px] right-0 w-64 bg-white border border-[#EDE9FE] rounded-xl shadow-xl z-50 overflow-hidden">
+                    <div className="p-2 border-b border-gray-50">
+                      <div className="relative">
+                        <Search size={12} className="absolute left-2.5 top-2.5 text-gray-400" />
+                        <input value={countryQ} onChange={e=>setCountryQ(e.target.value)}
+                          placeholder="Chercher un pays..."
+                          className="w-full h-8 pl-7 pr-3 text-[12px] bg-[#F5F3FF] border border-[#EDE9FE] rounded-lg focus:outline-none" autoFocus />
+                      </div>
+                    </div>
+                    <div className="max-h-52 overflow-y-auto">
+                      {filteredC.map(c => (
+                        <button key={c.code} type="button"
+                          onClick={()=>{setCountry(c);setShowCountry(false);setCountryQ('');}}
+                          className="w-full text-left px-3 py-2 hover:bg-violet-50 flex items-center gap-2.5 text-[13px]">
+                          <span className="text-[16px]">{c.flag}</span>
+                          <span className="text-gray-700">{c.name}</span>
+                          {country.code===c.code && <Check size={11} className="ml-auto text-violet-500"/>}
+                        </button>
                       ))}
                     </div>
-                  )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* EMAIL + TÉLÉPHONE */}
+          <div className="grid grid-cols-2 gap-3">
+            <F icon={Mail} value={email} onChange={(e:any)=>setEmail(e.target.value)} placeholder="Email" type="email" />
+            <F icon={Phone} value={phone} onChange={(e:any)=>setPhone(e.target.value)} placeholder="Téléphone" />
+          </div>
+
+          {/* ADULTES + ENFANTS */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label:'Adultes', val:adults, set:setAdults, min:1 },
+              { label:'Enfants', val:children, set:setChildren, min:0 },
+            ].map(({ label, val, set, min }) => (
+              <div key={label} className="h-[44px] bg-[#F5F3FF] border border-[#EDE9FE] rounded-xl flex items-center px-3 gap-2">
+                <Users size={14} className="text-violet-300 shrink-0" />
+                <span className="text-[14px] font-bold text-violet-500 w-5">{val}</span>
+                <span className="text-[13px] text-gray-400 flex-1">{label}</span>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={()=>set(Math.max(min,val-1))}
+                    className="w-6 h-6 rounded-lg bg-white border border-[#EDE9FE] flex items-center justify-center text-violet-400 hover:border-violet-400 text-sm font-bold leading-none transition-all">−</button>
+                  <button type="button" onClick={()=>set(val+1)}
+                    className="w-6 h-6 rounded-lg bg-white border border-[#EDE9FE] flex items-center justify-center text-violet-400 hover:border-violet-400 text-sm font-bold leading-none transition-all">+</button>
                 </div>
               </div>
+            ))}
+          </div>
 
-              {/* Segment selector */}
-              <div className="relative">
-                <select
-                  value={segment}
-                  onChange={e => setSegment(e.target.value)}
-                  className="w-full h-11 bg-[#F8F9FC] border border-[#E2E8F0] rounded-xl text-sm px-4 appearance-none focus:outline-none focus:border-[#7C9D8E] text-gray-600"
-                >
-                  {SEGMENTS.map(s => <option key={s}>{s}</option>)}
-                </select>
-                <ChevronDown size={12} className="absolute right-4 top-4 text-gray-400 pointer-events-none" />
+          {/* DATES */}
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { lbl:'ARRIVÉE', val:checkIn, set:setCheckIn, min:'' },
+              { lbl:'DÉPART',  val:checkOut, set:setCheckOut, min:checkIn },
+            ].map(({ lbl, val, set, min }) => (
+              <div key={lbl} className="relative pt-1">
+                <span className="absolute -top-0 left-3 z-10 bg-white px-1 text-[9px] font-bold text-violet-500 uppercase tracking-widest leading-none">
+                  {lbl}
+                </span>
+                <input type="date" value={val} min={min} onChange={e=>set(e.target.value)}
+                  className="w-full h-[44px] bg-[#F5F3FF] border border-[#EDE9FE] rounded-xl text-[13px] text-gray-600 px-4 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all" />
+              </div>
+            ))}
+          </div>
+
+          {/* RÉF + TYPE CHAMBRE + NUMÉRO */}
+          <div className="grid grid-cols-3 gap-3">
+            {/* Réf */}
+            <div className="h-[44px] bg-[#F5F3FF] border border-[#EDE9FE] rounded-xl flex items-center gap-2 px-3">
+              <div className="w-[22px] h-[22px] rounded-md bg-violet-100 flex items-center justify-center shrink-0">
+                <span className="text-[10px]">🏷</span>
+              </div>
+              <span className="text-[13px] font-semibold text-violet-600 truncate">{ref.current}</span>
+            </div>
+            {/* Type chambre */}
+            <S leftIcon="≋" value={roomType} onChange={(e:any)=>setRoomType(e.target.value)}>
+              <option value="">Type Chambre</option>
+              {ROOM_TYPES.map(t=><option key={t}>{t}</option>)}
+            </S>
+            {/* Numéro */}
+            <S leftIcon="#" value={roomNumber} onChange={(e:any)=>{
+              setRoomNumber(e.target.value);
+              const r=rooms.find(r=>r.number===e.target.value);
+              if(r) setRoomId(r.id);
+            }}>
+              <option value="">Numéro</option>
+              {rooms.filter(r=>!roomType||r.type===roomType).map(r=><option key={r.id} value={r.number}>Ch. {r.number}</option>)}
+            </S>
+          </div>
+
+          {/* ARRANGEMENT + PLAN TARIFAIRE */}
+          <div className="grid grid-cols-3 gap-3">
+            <S leftIcon="☕" value={arrangement} onChange={(e:any)=>setArrangement(e.target.value)}>
+              {ARRANGEMENTS.map(a=><option key={a}>{a}</option>)}
+            </S>
+            <S leftIcon="🛡" value={ratePlan} onChange={(e:any)=>setRatePlan(e.target.value)}>
+              {RATE_PLANS.map(p=><option key={p}>{p}</option>)}
+            </S>
+            <S leftIcon="🏷" value={planTarifaire} onChange={(e:any)=>setPlanTarifaire(e.target.value)}>
+              <option value="">Plan tarifaire</option>
+              <option>Standard</option>
+              <option>Promotionnel</option>
+              <option>Contrat agence</option>
+            </S>
+          </div>
+
+          {/* ═══ BLOC PRIX ═══ */}
+          <div className="bg-white border border-[#EDE9FE] rounded-2xl px-5 py-4">
+            {/* Prix nuit + nuits */}
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
+                <span className="text-[11px] text-violet-500">€</span>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">PRIX / NUIT</span>
+                <span className="text-[22px] font-bold text-violet-600 leading-none">
+                  {prixNuit.toFixed(2).replace('.',',')}€
+                </span>
+                <span className="text-[12px] text-emerald-500 font-semibold">
+                  ✓ {nights} nuit{nights>1?'s':''} · {adults} pers.
+                </span>
+              </div>
+            </div>
+            {/* Lignes prix */}
+            <div className="space-y-1.5 text-[13px] border-t border-[#EDE9FE] pt-3">
+              <div className="flex items-center justify-between text-gray-500">
+                <span>HT</span>
+                <div className="flex items-center gap-6">
+                  <span>{ht.toFixed(2)}€</span>
+                  <span>TVA 10%</span>
+                  <span className="font-semibold text-gray-700">{tva.toFixed(2)}€</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-gray-500">
+                <span>Taxe séjour</span>
+                <span className="text-gray-700">{taxe.toFixed(2)}€</span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-[#EDE9FE]">
+                <span className="font-bold text-gray-800 text-[14px]">Total TTC</span>
+                <span className="text-[20px] font-bold text-violet-600">
+                  {ttc.toFixed(2).replace('.',',')}€
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="px-7 py-4 border-t border-[#E2E8F0] flex items-center gap-4 bg-white shrink-0">
-            {/* Left icons */}
-            <div className="flex items-center gap-3">
-              <button type="button" className="w-9 h-9 rounded-xl border border-[#E2E8F0] bg-[#F8F9FC] flex items-center justify-center text-red-400 hover:border-red-200 hover:bg-red-50 transition-all">
-                <FileText size={15} />
+          {/* ═══ PAIEMENT + NOTES (2 colonnes) ═══ */}
+          <div className="grid grid-cols-2 gap-5">
+
+            {/* Gauche — paiement */}
+            <div className="space-y-3">
+              {/* 3 boutons acompte */}
+              <div className="grid grid-cols-3 gap-2">
+                {(['30','50','100'] as const).map(d => (
+                  <button key={d} type="button" onClick={()=>setDeposit(d)}
+                    className={cn(
+                      'h-9 rounded-xl border-2 text-[12px] font-semibold transition-all',
+                      deposit===d
+                        ? 'border-violet-500 bg-white text-violet-600'
+                        : 'border-[#EDE9FE] bg-[#F5F3FF] text-gray-400 hover:border-violet-300',
+                    )}>
+                    {d==='100'?'Totalité 100%':`Acompte ${d}%`}
+                  </button>
+                ))}
+              </div>
+              {/* Stripe + PayPal */}
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={()=>setPayMethod('stripe')}
+                  className={cn(
+                    'h-10 rounded-xl border-2 text-[13px] font-bold flex items-center justify-center gap-2 transition-all',
+                    payMethod==='stripe'
+                      ? 'bg-violet-600 border-violet-600 text-white'
+                      : 'border-[#EDE9FE] bg-[#F5F3FF] text-gray-500 hover:border-violet-400',
+                  )}>
+                  <span className="text-[16px] font-black">S</span> Stripe
+                </button>
+                <button type="button" onClick={()=>setPayMethod('paypal')}
+                  className={cn(
+                    'h-10 rounded-xl border-2 text-[13px] font-bold flex items-center justify-center gap-2 transition-all',
+                    payMethod==='paypal'
+                      ? 'bg-[#003087] border-[#003087] text-white'
+                      : 'border-[#EDE9FE] bg-[#F5F3FF] text-gray-500 hover:border-blue-400',
+                  )}>
+                  <span className="italic font-black">P</span> PayPal
+                </button>
+              </div>
+              {/* Générer lien */}
+              <button type="button"
+                className="w-full h-11 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-semibold text-[13px] flex items-center justify-center gap-2 transition-all shadow-md shadow-violet-200">
+                <Link2 size={14} />
+                Générer le lien de paiement
               </button>
-              <button type="button" className="w-9 h-9 rounded-xl border border-[#E2E8F0] bg-[#F8F9FC] flex items-center justify-center text-[#7C9D8E] hover:border-[#7C9D8E] hover:bg-[#7C9D8E]/5 transition-all">
-                <Zap size={15} />
-              </button>
+              {/* Icônes CB */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  {label:'⊘', title:'Cash'},
+                  {label:'▭', title:'CB'},
+                  {label:'⊟', title:'Chèque'},
+                  {label:'⊡', title:'Virement'},
+                  {label:'📄', title:'Facture'},
+                  {label:'P', title:'PayPal'},
+                  {label:'AX', title:'Amex'},
+                  {label:'DC', title:'Diners'},
+                  {label:'JCB', title:'JCB'},
+                  {label:'👤', title:'Compte'},
+                ].map((ic,i) => (
+                  <div key={i} title={ic.title}
+                    className="h-8 min-w-[32px] px-1.5 rounded-lg border border-[#EDE9FE] bg-[#F5F3FF] flex items-center justify-center cursor-pointer hover:border-violet-400 transition-all text-[11px] text-gray-500 font-bold">
+                    {ic.label}
+                  </div>
+                ))}
+              </div>
+              {/* En attente */}
+              <div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 text-orange-500 text-[12px] font-semibold rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-orange-400 inline-block"/>
+                  En attente
+                </span>
+              </div>
+              {/* Préautorisation */}
               <label className="flex items-center gap-2 cursor-pointer">
-                <div
-                  onClick={() => setSendConfirmation(!sendConfirmation)}
-                  className={cn('w-4 h-4 rounded border-2 flex items-center justify-center transition-all', sendConfirmation ? 'bg-[#1E3A5F] border-[#1E3A5F]' : 'border-gray-300')}
-                >
-                  {sendConfirmation && <Check size={10} className="text-white" />}
+                <div onClick={()=>setPreauth(!preauth)}
+                  className={cn(
+                    'w-4 h-4 rounded border-2 flex items-center justify-center transition-all shrink-0',
+                    preauth ? 'bg-violet-600 border-violet-600' : 'border-[#EDE9FE] bg-[#F5F3FF]',
+                  )}>
+                  {preauth && <Check size={9} className="text-white"/>}
                 </div>
-                <span className="text-xs text-gray-500 font-medium">Envoyer confirmation</span>
+                <Lock size={12} className="text-gray-400"/>
+                <span className="text-[12px] text-gray-500">Préautorisation : 1ère nuitée</span>
+                <div className="ml-auto w-5 h-5 rounded border border-[#EDE9FE] flex items-center justify-center">
+                  <span className="text-[9px] text-gray-400">✎</span>
+                </div>
               </label>
             </div>
 
-            <div className="flex-1" />
-
-            <button type="button" onClick={onClose} className="flex items-center gap-1.5 px-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 font-bold transition-colors">
-              <X size={14} /> Annuler
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || !guestName || !checkIn || !checkOut}
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#1E3A5F] hover:bg-[#2d5a8e] disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-[#1E3A5F]/20"
-            >
-              {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-              Enregistrer
-            </button>
+            {/* Droite — notes + fichiers */}
+            <div className="flex flex-col gap-3">
+              {/* Notes */}
+              <div className="relative flex-1">
+                <FileText size={13} className="absolute left-3 top-3.5 text-violet-300 pointer-events-none z-10" />
+                <textarea value={notes} onChange={e=>setNotes(e.target.value)}
+                  placeholder="Notes, demandes spéciales..."
+                  rows={5}
+                  className="w-full bg-[#F5F3FF] border border-[#EDE9FE] rounded-xl text-[13px] text-gray-600 pl-8 pr-4 pt-3 pb-3 resize-none placeholder:text-gray-400 focus:outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all" />
+              </div>
+              {/* Drop zone */}
+              <div
+                onDragOver={e=>{e.preventDefault();setDraggingFile(true);}}
+                onDragLeave={()=>setDraggingFile(false)}
+                onDrop={e=>{e.preventDefault();setDraggingFile(false);setFiles(prev=>[...prev,...Array.from(e.dataTransfer.files)]);}}
+                onClick={()=>document.getElementById('res-files')?.click()}
+                className={cn(
+                  'border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all',
+                  draggingFile ? 'border-violet-400 bg-violet-50' : 'border-[#EDE9FE] bg-[#F5F3FF] hover:border-violet-300',
+                )}
+              >
+                <input id="res-files" type="file" multiple hidden
+                  onChange={e=>setFiles(prev=>[...prev,...Array.from(e.target.files??[])])} />
+                <div className="flex flex-col items-center gap-1">
+                  <Upload size={18} className="text-violet-300 mb-1" />
+                  <p className="text-[12px] text-violet-400 font-medium">Glissez vos fichiers ici</p>
+                  <p className="text-[10px] text-gray-400">PDF · Image · HTML</p>
+                  <button type="button"
+                    className="mt-2 px-4 py-1.5 bg-white border border-[#EDE9FE] rounded-lg text-[12px] text-gray-500 hover:border-violet-400 transition-all">
+                    Parcourir
+                  </button>
+                </div>
+              </div>
+              {files.length > 0 && (
+                <div className="space-y-1">
+                  {files.map((f,i)=>(
+                    <div key={i} className="flex items-center gap-2 text-[12px] text-gray-600 bg-[#F5F3FF] rounded-lg px-3 py-1.5">
+                      <FileText size={11} className="text-violet-400"/>
+                      <span className="flex-1 truncate">{f.name}</span>
+                      <button type="button" onClick={()=>setFiles(prev=>prev.filter((_,j)=>j!==i))}>
+                        <X size={11} className="text-gray-300 hover:text-red-400"/>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </motion.div>
-      </div>
-    </AnimatePresence>
+
+          {/* SEGMENT pleine largeur */}
+          <S leftIcon="◎" value={segment} onChange={(e:any)=>setSegment(e.target.value)}>
+            {SEGMENTS.map(s=><option key={s}>{s}</option>)}
+          </S>
+
+        </div>
+
+        {/* ══ FOOTER ══ */}
+        <div className="px-6 py-4 border-t border-[#EDE9FE] flex items-center gap-3 bg-white shrink-0">
+          <button type="button"
+            className="w-9 h-9 rounded-xl border border-[#EDE9FE] bg-[#F5F3FF] flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition-all">
+            <FileText size={15} className="text-red-400"/>
+          </button>
+          <button type="button"
+            className="w-9 h-9 rounded-xl border border-[#EDE9FE] bg-[#F5F3FF] flex items-center justify-center hover:bg-emerald-50 hover:border-emerald-200 transition-all">
+            <Send size={15} className="text-emerald-400"/>
+          </button>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <div onClick={()=>setSendConfirm(!sendConfirm)}
+              className={cn('w-4 h-4 rounded border-2 flex items-center justify-center transition-all shrink-0',
+                sendConfirm?'bg-violet-600 border-violet-600':'border-[#EDE9FE] bg-[#F5F3FF]')}>
+              {sendConfirm && <Check size={9} className="text-white"/>}
+            </div>
+            <span className="text-[13px] text-gray-500">Envoyer confirmation</span>
+          </label>
+          <div className="flex-1"/>
+          <button type="button" onClick={onClose}
+            className="flex items-center gap-1.5 px-4 py-2.5 text-[13px] text-gray-500 hover:text-gray-700 font-medium transition-colors">
+            <X size={13}/> Annuler
+          </button>
+          <button type="button" onClick={handleSave} disabled={saving||!guestName||!checkIn||!checkOut}
+            className="flex items-center gap-2 px-6 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-xl font-semibold text-[13px] transition-all shadow-lg shadow-violet-200">
+            {saving ? <Loader2 size={13} className="animate-spin"/> : <span>💾</span>}
+            Enregistrer
+          </button>
+        </div>
+
+      </motion.div>
+    </div>
   );
 }
