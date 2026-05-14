@@ -17,15 +17,23 @@ export type PageId =
   | 'paiements'
   | 'relances'
   | 'anomalies'
-  // Finance sub-pages
+  // Finance sub-pages (Finance garde : Facturation, Caisse, Impayés, Clôture, Propriétaires)
   | 'facturation'
   | 'caisse'
   | 'impayes'
   | 'proprietaires'
   | 'cloture'
-  | 'revenue_integrity'
-  | 'rapprochement'
-  | 'journal_audit'
+  // SAS — module à part entière dans la nav principale
+  | 'sas'
+  | 'sas_incoming'       // Réservations entrantes (bulle verte)
+  | 'sas_rie'            // Revenue Integrity Engine dashboard
+  | 'sas_anomalies'      // Liste anomalies
+  | 'sas_quarantine'     // File quarantaine
+  | 'sas_odms'           // OTA Dispute Center
+  | 'sas_dispute_detail' // Détail litige
+  | 'sas_reconciliation' // Reconciliation Center
+  | 'sas_audit'          // Journal d'audit (déplacé depuis Finance)
+  | 'sas_partners'       // Configuration partenaires OTA
   // Revenue sub-pages
   | 'yield'
   | 'promotions'

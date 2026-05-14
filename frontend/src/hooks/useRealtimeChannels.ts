@@ -118,6 +118,47 @@ export function useReconciliationRealtime() {
 }
 
 /**
+ * useSasIncomingRealtime
+ * Canal sur sas_incoming_reservations — mise à jour bulle nav en temps réel.
+ */
+export function useSasIncomingRealtime() {
+  const qc = useQueryClient();
+  const { status } = useAuth();
+  const channelRef = useRef<RealtimeChannel | null>(null);
+
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    const channel = supabase
+      .channel('flowtym:sas-incoming:live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sas_incoming_reservations' },
+        () => {
+          void qc.invalidateQueries({ queryKey: ['sas', 'nav'] });
+          void qc.invalidateQueries({ queryKey: ['sas', 'incoming'] });
+          void qc.invalidateQueries({ queryKey: ['sas', 'stats'] });
+        },
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [status, qc]);
+}
+
+/**
  * useRevenueAnomaliesRealtime
  * Canal sur revenue_anomalies — utilisé par RevenueIntegrityView.
  */

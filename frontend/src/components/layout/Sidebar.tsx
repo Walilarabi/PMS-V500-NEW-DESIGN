@@ -1,30 +1,10 @@
 import React from 'react';
 import { 
-  Calendar,
-  RefreshCcw,
-  Hash,
-  Monitor,
-  Users,
-  CreditCard,
-  Send,
-  AlertCircle,
-  FileText,
-  Banknote,
-  Lock,
-  History,
-  TrendingUp,
-  Percent,
-  XCircle,
-  PlusCircle,
-  Building2,
-  Database,
-  Cloud,
-  ChevronRight,
-  Sparkles,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Shield,
-  RefreshCw,
+  Calendar, RefreshCcw, Hash, Monitor, Users, CreditCard, Send,
+  AlertCircle, FileText, Banknote, Lock, History, TrendingUp, Percent,
+  XCircle, PlusCircle, Building2, Database, Cloud, ChevronRight,
+  Sparkles, PanelLeftClose, PanelLeftOpen, Shield, RefreshCw,
+  ShieldAlert, GitMerge, Search, Settings2,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -40,10 +20,11 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
   const getCategory = (page: PageId) => {
     if (['reservations', 'calendrier', 'mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(page)) return 'reservations';
     if (['revenue', 'yield', 'promotions'].includes(page)) return 'revenue';
-    if (['finance', 'facturation', 'caisse', 'impayes', 'cloture', 'proprietaires', 'revenue_integrity', 'rapprochement', 'journal_audit'].includes(page)) return 'finance';
+    if (['finance', 'facturation', 'caisse', 'impayes', 'cloture', 'proprietaires'].includes(page)) return 'finance';
     if (['settings', 'annulations', 'supplements', 'fermatures', 'hotel', 'taxe', 'pms', 'api'].includes(page)) return 'settings';
     if (['clients', 'fiches', 'fidelite'].includes(page)) return 'clients';
     if (['analysis', 'performance', 'forecast'].includes(page)) return 'analysis';
+    if (page.startsWith('sas')) return 'sas';
     return 'general';
   };
 
@@ -63,61 +44,71 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
         { id: 'anomalies', label: 'Anomalies', icon: AlertCircle },
       ]
     },
+    sas: {
+      label: 'SAS — Système d\'Acquisition',
+      items: [
+        { id: 'sas_incoming',       label: 'Réservations entrantes', icon: RefreshCw },
+        { id: 'sas_rie',            label: 'Revenue Integrity (RIE)', icon: Shield },
+        { id: 'sas_anomalies',      label: 'Anomalies détectées', icon: ShieldAlert },
+        { id: 'sas_quarantine',     label: 'File quarantaine', icon: AlertCircle },
+        { id: 'sas_odms',           label: 'OTA Dispute Center', icon: GitMerge },
+        { id: 'sas_reconciliation', label: 'Rapprochement', icon: RefreshCw },
+        { id: 'sas_audit',          label: 'Journal d\'audit', icon: History },
+        { id: 'sas_partners',       label: 'Config. partenaires OTA', icon: Settings2 },
+      ]
+    },
     finance: {
       label: 'Finance',
       items: [
-        { id: 'finance', label: 'Facturation', icon: FileText },
-        { id: 'caisse', label: 'Caisse', icon: Banknote },
-        { id: 'impayes', label: 'Impayés / Débiteurs', icon: AlertCircle },
-        { id: 'proprietaires', label: 'Propriétaires', icon: Users },
-        { id: 'cloture', label: 'Clôture & Audit', icon: Lock },
-        { id: 'revenue_integrity', label: 'Revenue Integrity (SAS)', icon: Shield },
-        { id: 'rapprochement', label: 'Rapprochement', icon: RefreshCw },
-        { id: 'journal_audit', label: 'Journal d\'audit', icon: History },
+        { id: 'facturation',  label: 'Facturation', icon: FileText },
+        { id: 'caisse',       label: 'Caisse', icon: Banknote },
+        { id: 'impayes',      label: 'Impayés / Débiteurs', icon: AlertCircle },
+        { id: 'proprietaires',label: 'Propriétaires', icon: Users },
+        { id: 'cloture',      label: 'Clôture & Audit', icon: Lock },
       ]
     },
     revenue: {
       label: 'Revenue Management',
       items: [
-        { id: 'revenue', label: 'Dashboard', icon: TrendingUp },
-        { id: 'yield', label: 'Yield Management', icon: Percent },
-        { id: 'promotions', label: 'Offres & Promos', icon: PlusCircle },
+        { id: 'revenue',     label: 'Dashboard', icon: TrendingUp },
+        { id: 'yield',       label: 'Yield Management', icon: Percent },
+        { id: 'promotions',  label: 'Offres & Promos', icon: PlusCircle },
       ]
     },
     clients: {
       label: 'Clients',
       items: [
-        { id: 'clients', label: 'Base Clients', icon: Users },
-        { id: 'fiches', label: 'Fiches de Police', icon: FileText },
+        { id: 'clients',  label: 'Base Clients', icon: Users },
+        { id: 'fiches',   label: 'Fiches de Police', icon: FileText },
         { id: 'fidelite', label: 'Fidélité', icon: Sparkles },
       ]
     },
     analysis: {
       label: 'Analyse & Rapports',
       items: [
-        { id: 'analysis', label: 'Dashboard KPI', icon: TrendingUp },
+        { id: 'analysis',    label: 'Dashboard KPI', icon: TrendingUp },
         { id: 'performance', label: 'Performance', icon: Percent },
-        { id: 'forecast', label: 'Prévisionnel', icon: Cloud },
+        { id: 'forecast',    label: 'Prévisionnel', icon: Cloud },
       ]
     },
     settings: {
       label: 'Configuration',
       items: [
-        { id: 'settings', label: 'Paramètres Généraux', icon: Building2 },
-        { id: 'annulations', label: 'Politiques Annulation', icon: XCircle },
-        { id: 'supplements', label: 'Suppléments & Packs', icon: PlusCircle },
-        { id: 'hotel', label: 'Fiche Établissement', icon: Building2 },
-        { id: 'taxe', label: 'Taxe de Séjour', icon: Database },
-        { id: 'pms', label: 'Connectivité PMS', icon: Cloud },
-        { id: 'api', label: 'Intégrations API', icon: Database },
+        { id: 'settings',   label: 'Paramètres Généraux', icon: Building2 },
+        { id: 'annulations',label: 'Politiques Annulation', icon: XCircle },
+        { id: 'supplements',label: 'Suppléments & Packs', icon: PlusCircle },
+        { id: 'hotel',      label: 'Fiche Établissement', icon: Building2 },
+        { id: 'taxe',       label: 'Taxe de Séjour', icon: Database },
+        { id: 'pms',        label: 'Connectivité PMS', icon: Cloud },
+        { id: 'api',        label: 'Intégrations API', icon: Database },
       ]
     },
     general: {
       label: 'Navigation',
       items: [
         { id: 'flowboard', label: 'Flowboard', icon: TrendingUp },
-        { id: 'planning', label: 'Planning', icon: Calendar },
-        { id: 'today', label: 'Flowday', icon: RefreshCcw },
+        { id: 'planning',  label: 'Planning', icon: Calendar },
+        { id: 'today',     label: 'Flowday', icon: RefreshCcw },
       ]
     }
   };

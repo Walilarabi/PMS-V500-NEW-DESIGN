@@ -14,10 +14,22 @@ import { AuditLogView } from '@/src/pages/finance/AuditLogView';
 import { ReconciliationView } from '@/src/pages/finance/ReconciliationView';
 import { RevenueIntegrityView } from '@/src/pages/finance/RevenueIntegrityView';
 import { FacturationView } from '@/src/pages/finance/FacturationView';
+
+// SAS pages (Phase 1 — placeholder, Phase 2 les implémente)
+const SasPlaceholder = ({ title }: { title: string }) => (
+  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+    <div className="w-20 h-20 bg-[#8B5CF6]/10 rounded-3xl flex items-center justify-center mb-6">
+      <span className="text-4xl">🛡️</span>
+    </div>
+    <h1 className="text-xl font-bold text-gray-900 mb-2">{title}</h1>
+    <p className="text-gray-400 text-sm max-w-md">Module SAS en cours d'implémentation — Phase 2</p>
+  </div>
+);
 import {
   useReservationsRealtime,
   useReconciliationRealtime,
   useRevenueAnomaliesRealtime,
+  useSasIncomingRealtime,
 } from '@/src/hooks/useRealtimeChannels';
 import { PageId } from '@/src/types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -40,6 +52,7 @@ const App = () => {
   useReservationsRealtime();
   useReconciliationRealtime();
   useRevenueAnomaliesRealtime();
+  useSasIncomingRealtime();
 
   const renderPage = () => {
     switch (activePage) {
@@ -83,6 +96,27 @@ const App = () => {
       case 'cloture':
       case 'proprietaires':
         return <FinanceView activeTab={activePage} />;
+
+      // SAS module — Phase 1 (placeholders → Phase 2 les remplacera)
+      case 'sas':
+      case 'sas_incoming':
+        return <SasPlaceholder title="Réservations entrantes OTA" />;
+      case 'sas_rie':
+        return <SasPlaceholder title="Revenue Integrity Engine" />;
+      case 'sas_anomalies':
+        return <SasPlaceholder title="Anomalies détectées" />;
+      case 'sas_quarantine':
+        return <SasPlaceholder title="File quarantaine" />;
+      case 'sas_odms':
+        return <SasPlaceholder title="OTA Dispute Center" />;
+      case 'sas_reconciliation':
+        return <ReconciliationView />;
+      case 'sas_audit':
+        return <AuditLogView />;
+      case 'sas_partners':
+        return <SasPlaceholder title="Configuration partenaires OTA" />;
+      case 'sas_dispute_detail':
+        return <SasPlaceholder title="Détail litige" />;
       case 'operations': return <PlaceholderPage name="Opérations" />;
       case 'settings': 
       case 'annulations':

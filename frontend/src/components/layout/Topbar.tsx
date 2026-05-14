@@ -14,13 +14,15 @@ import {
   Zap,
   RefreshCcw,
   LayoutGrid,
-  Settings
+  Settings,
+  Shield,
+  LogOut
 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { PageId } from '@/src/types';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/AuthContext';
-import { LogOut } from 'lucide-react';
+import { useSasNavBadges } from '@/src/domains/sas/hooks';
 
 interface TopbarProps {
   activePage: PageId;
@@ -31,8 +33,9 @@ import { useConfigStore } from '@/src/store/configStore';
 
 export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
   const hotel = useConfigStore(s => s.hotel);
-  const user = useConfigStore(s => s.users[0]); // Mock getting first user
   const { session, logout } = useAuth();
+  const { data: sasBadges } = useSasNavBadges();
+
   const getCategory = (page: PageId): string => {
     if (['today', 'flowboard', 'planning'].includes(page)) return 'today';
     if (['reservations', 'calendrier', 'mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(page)) return 'reservations';
@@ -41,16 +44,21 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
     if (['analysis', 'performance', 'forecast'].includes(page)) return 'analysis';
     if (['clients', 'fiches', 'fidelite'].includes(page)) return 'clients';
     if (['settings', 'annulations', 'supplements', 'hotel', 'taxe', 'pms', 'api'].includes(page)) return 'settings';
+    if (page.startsWith('sas')) return 'sas';
     return 'today';
   };
 
   const activeCategory = getCategory(activePage);
 
+  const pendingCount = sasBadges?.pending_count ?? 0;
+  const anomalyCount = sasBadges?.anomaly_count ?? 0;
+
   const mainNavItems = [
     { id: 'today', label: 'Flowday', icon: Zap },
-    { id: 'reservations', label: 'Reservation', icon: Calendar },
+    { id: 'reservations', label: 'Réservations', icon: Calendar },
     { id: 'clients', label: 'Clients', icon: Users },
     { id: 'revenue', label: 'Revenue', icon: TrendingUp },
+    { id: 'sas', label: 'SAS', icon: Shield, hasBadge: true },
     { id: 'finance', label: 'Finance', icon: CreditCard },
     { id: 'analysis', label: 'Analyse', icon: BarChart2 },
     { id: 'settings', label: 'Paramètres', icon: Settings },
@@ -78,12 +86,13 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
         <nav className="hidden xl:flex items-center gap-1 bg-gray-50/50 p-1 rounded-2xl border border-gray-100">
           {mainNavItems.map((item) => {
             const isActive = activeCategory === item.id;
+            const isSas = item.id === 'sas';
             return (
               <button
                 key={item.id}
                 onClick={() => setActivePage(item.id as PageId)}
                 className={cn(
-                  "flex items-center gap-2.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300",
+                  "relative flex items-center gap-2.5 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all duration-300",
                   isActive 
                     ? "bg-white text-[#8B5CF6] shadow-sm shadow-[#8B5CF6]/10 ring-1 ring-gray-100" 
                     : "text-gray-400 hover:text-gray-600 hover:bg-white/50"
@@ -91,6 +100,22 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
               >
                 <item.icon size={14} className={isActive ? "text-[#8B5CF6]" : "text-gray-400"} />
                 {item.label}
+
+                {/* Double badge SAS : vert (entrants) + rouge (anomalies) */}
+                {isSas && (pendingCount > 0 || anomalyCount > 0) && (
+                  <span className="flex items-center gap-0.5 ml-0.5">
+                    {pendingCount > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 bg-emerald-500 text-white text-[9px] font-black rounded-full leading-none">
+                        {pendingCount > 99 ? '99+' : pendingCount}
+                      </span>
+                    )}
+                    {anomalyCount > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[16px] h-4 px-1 bg-red-500 text-white text-[9px] font-black rounded-full leading-none">
+                        {anomalyCount > 99 ? '99+' : anomalyCount}
+                      </span>
+                    )}
+                  </span>
+                )}
               </button>
             );
           })}
