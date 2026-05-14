@@ -20,8 +20,7 @@ export function useReservations(params: repo.ListReservationsParams = {}) {
     queryKey: [...RESERVATIONS_KEY, 'list', params],
     queryFn: () => repo.listReservations(params),
     enabled: status === 'authenticated',
-    staleTime: 10_000,
-    refetchOnWindowFocus: true,
+    staleTime: 15_000,
   });
 }
 

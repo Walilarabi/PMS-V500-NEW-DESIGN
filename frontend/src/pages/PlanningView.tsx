@@ -32,6 +32,7 @@ import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
 import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
 import { useReservations as useContextReservations, Reservation } from '@/src/contexts/ReservationContext';
 import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
@@ -143,14 +144,7 @@ export const PlanningView = () => {
     }
     return storeRooms;
   }, [supabaseRooms, storeRooms]);
-  // Date initiale = aujourd'hui (ou hier si clôture pas faite, détecté via data)
-  const getInitialDate = () => {
-    const now = new Date();
-    // On centre le planning sur aujourd'hui
-    now.setHours(0, 0, 0, 0);
-    return now;
-  };
-  const [currentDate, setCurrentDate] = useState(getInitialDate);
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 4, 1));
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
@@ -233,7 +227,7 @@ export const PlanningView = () => {
     setCurrentDate(next);
   };
   const handleToday = () => {
-    const today = new Date(); today.setHours(0,0,0,0); setCurrentDate(today); // Retour à aujourd'hui
+    setCurrentDate(new Date(2026, 4, 1)); // Anchor at May 1st 2026 for demo data visibility
   };
 
   const viewLength = activeView === '7J' ? 7 : activeView === '15J' ? 15 : 31;
@@ -1032,33 +1026,31 @@ export const PlanningView = () => {
         )}
       </AnimatePresence>
 
-      <NewReservationModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={async (data) => {
+      <ReservationFormModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onSave={async (data: ReservationFormData) => {
+          if (!session?.tenantId) return;
+          const matchedRoom = effectiveRooms.find(r => r.number === data.roomNumber);
           try {
             await createReservation.mutateAsync({
-              reference: data.reference ?? `RES-${Date.now().toString().slice(-6)}`,
+              reference: data.reference,
               guestName: data.guestName || null,
               checkIn: data.checkIn,
               checkOut: data.checkOut,
-              adults: data.adults ?? 1,
-              children: data.children ?? 0,
-              source: data.source ?? 'DIRECT',
-              totalAmount: data.totalTTC ?? 0,
+              adults: data.adults,
+              children: data.children,
+              source: data.channel,
+              totalAmount: data.totalTTC,
               notes: data.notes || null,
-              roomId: data.roomIds?.[0] ?? null,
+              roomId: matchedRoom?.id ?? null,
               guestId: null,
             });
-            if (data.checkIn) {
-              const d = new Date(data.checkIn); d.setHours(0,0,0,0);
-              setCurrentDate(d);
-            }
-            setIsModalOpen(false);
           } catch (err) {
             console.error('[PlanningView] createReservation failed:', err);
           }
-        }}
+          setIsModalOpen(false);
+        }} 
       />
 
       {/* New Reservation Modal — from drag-to-create */}
@@ -1081,12 +1073,6 @@ export const PlanningView = () => {
               roomId: data.roomIds?.[0] ?? data.roomId ?? null,
               guestId: null,
             });
-            // Naviguer vers la date d'arrivée de la réservation créée
-            if (data.checkIn) {
-              const arrivalDate = new Date(data.checkIn);
-              arrivalDate.setHours(0, 0, 0, 0);
-              setCurrentDate(arrivalDate);
-            }
             setNewResModal(null);
           } catch (err) {
             console.error('[PlanningView] drag-create failed:', err);
