@@ -233,6 +233,13 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
 
   if (!isOpen) return null;
 
+  // Min date pour les calendriers (hier si 0h-6h, sinon aujourd'hui)
+  const _now = new Date();
+  const minDate = (_now.getHours() < 6
+    ? new Date(_now.getTime() - 86_400_000)
+    : _now
+  ).toISOString().split('T')[0];
+
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/50 backdrop-blur-sm p-3"
       onClick={onClose}>
@@ -373,8 +380,8 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
           {/* DATES */}
           <div className="grid grid-cols-2 gap-2">
             {[
-              { lbl: 'ARRIVÉE', val: checkIn,  set: setCheckIn,  min: '', t: 10 },
-              { lbl: 'DÉPART',  val: checkOut, set: setCheckOut, min: checkIn, t: 11 },
+              { lbl: 'ARRIVÉE', val: checkIn,  set: setCheckIn,  min: minDate, t: 10 },
+              { lbl: 'DÉPART',  val: checkOut, set: setCheckOut, min: checkIn || minDate, t: 11 },
             ].map(({ lbl, val, set, min, t }) => (
               <div key={lbl} className="relative">
                 <span className="absolute -top-2 left-3 z-10 bg-white px-1 text-[9px] font-bold text-violet-500 uppercase tracking-widest leading-none">{lbl}</span>

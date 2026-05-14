@@ -144,7 +144,9 @@ export const PlanningView = () => {
     }
     return storeRooms;
   }, [supabaseRooms, storeRooms]);
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 4, 1));
+  const [currentDate, setCurrentDate] = useState(() => {
+    const d = new Date(); d.setHours(0,0,0,0); return d;
+  });
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
