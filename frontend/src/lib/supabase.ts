@@ -12,13 +12,24 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from './supabase.types';
 
-const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL ??
-  'https://hzrzkvdebaadditvbqis.supabase.co';
-
-const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ??
+const DEFAULT_SUPABASE_URL = 'https://hzrzkvdebaadditvbqis.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6cnprdmRlYmFhZGRpdHZicWlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMjEwMTQsImV4cCI6MjA5MjY5NzAxNH0.IDFFWHNNIeBReWRTeVj8RlRpyz5J4XaStFhGVEYEBU8';
+
+const envOrDefault = (value: string | undefined, fallback: string) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : fallback;
+};
+
+const SUPABASE_URL = envOrDefault(
+  import.meta.env.VITE_SUPABASE_URL,
+  DEFAULT_SUPABASE_URL,
+);
+
+const SUPABASE_ANON_KEY = envOrDefault(
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
+  DEFAULT_SUPABASE_ANON_KEY,
+);
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
