@@ -56,6 +56,7 @@ interface GanttReservation {
   payment: string;
   vip: boolean;
   _uuid?: string;         // UUID Supabase pour mutations
+  _roomId?: string;
   _version?: number;
 }
 
@@ -88,6 +89,7 @@ function adaptToGantt(r: ReservationRow): GanttReservation {
     payment: paid >= total && total > 0 ? 'Payé' : paid > 0 ? 'Partiel' : 'En attente',
     vip: false,
     _uuid: r.id,
+    _roomId: r.room_id ?? undefined,
     _version: (r as any).version ?? 1,
   };
 }
@@ -107,6 +109,13 @@ function adaptMockToGantt(r: Reservation): GanttReservation {
     payment: r.payment,
     vip: r.vip,
   };
+}
+
+function reservationMatchesRoom(
+  reservation: GanttReservation,
+  room: { id: string; number: string },
+): boolean {
+  return reservation.room === room.number || reservation._roomId === room.id;
 }
 
 export const PlanningView = () => {
@@ -206,7 +215,7 @@ export const PlanningView = () => {
     if (statusFilter === 'Occupées') {
        const todayStr = new Date().toISOString().split('T')[0];
        passStatus = ganttReservations.some(res => 
-         res.room === r.number &&
+         reservationMatchesRoom(res, r) &&
          todayStr >= res.arrival.split(' ')[0] &&
          todayStr < res.departure.split(' ')[0]
        );
@@ -272,13 +281,13 @@ export const PlanningView = () => {
     });
   }, [ganttReservations, storeEvents, rooms, currentDate, viewLength]);
 
-  const checkDragConflict = (roomNumber: string, startIdx: number, endIdx: number): boolean => {
+  const checkDragConflict = (roomId: string, roomNumber: string, startIdx: number, endIdx: number): boolean => {
     const start = Math.min(startIdx, endIdx);
     const end = Math.max(startIdx, endIdx);
     const dragStart = new Date(currentDate.getTime() + start * 86_400_000);
     const dragEnd = new Date(currentDate.getTime() + (end + 1) * 86_400_000);
     return ganttReservations.some(res => {
-      if (res.room !== roomNumber) return false;
+      if (res.room !== roomNumber && res._roomId !== roomId) return false;
       const resStart = new Date(res.arrival).getTime();
       const resEnd = new Date(res.departure).getTime();
       return dragStart.getTime() < resEnd && dragEnd.getTime() > resStart;
@@ -310,7 +319,7 @@ export const PlanningView = () => {
       const rect = gridRef.current.getBoundingClientRect();
       const relX = e.clientX - rect.left;
       const dayIndex = Math.max(0, Math.min(viewLength - 1, Math.floor((relX / rect.width) * viewLength)));
-      const hasConflict = checkDragConflict(dragState.roomNumber, dragState.startDayIndex, dayIndex);
+      const hasConflict = checkDragConflict(dragState.roomId, dragState.roomNumber, dragState.startDayIndex, dayIndex);
       setDragConflict(hasConflict);
       setDragState(prev => prev ? { ...prev, endDayIndex: dayIndex, cursorX: e.clientX, cursorY: e.clientY } : null);
     }
@@ -559,7 +568,7 @@ export const PlanningView = () => {
               {rooms.map(room => {
                 const todayRes = ganttReservations.find(res => {
                   const now = new Date().getTime();
-                  return res.room === room.number && now >= new Date(res.arrival).getTime() && now <= new Date(res.departure).getTime();
+                  return reservationMatchesRoom(res, room) && now >= new Date(res.arrival).getTime() && now <= new Date(res.departure).getTime();
                 });
 
                 return (
@@ -739,7 +748,7 @@ export const PlanningView = () => {
                             />
                           );
                         })()}
-                        {ganttReservations.filter(res => res.room === room.number).map((res, idx) => {
+                        {ganttReservations.filter(res => reservationMatchesRoom(res, room)).map((res, idx) => {
                           const arrivalDate = new Date(res.arrival);
                           const departureDate = new Date(res.departure);
                           const arrivalTime = arrivalDate.getTime();
@@ -1038,6 +1047,8 @@ export const PlanningView = () => {
             await createReservation.mutateAsync({
               reference: data.reference,
               guestName: data.guestName || null,
+              guestEmail: data.email || null,
+              guestPhone: data.phone || null,
               checkIn: data.checkIn,
               checkOut: data.checkOut,
               adults: data.adults,
@@ -1046,6 +1057,9 @@ export const PlanningView = () => {
               totalAmount: data.totalTTC,
               notes: data.notes || null,
               roomId: matchedRoom?.id ?? null,
+              roomNumber: data.roomNumber || matchedRoom?.number || null,
+              roomType: data.roomType || matchedRoom?.type || null,
+              roomCategory: matchedRoom?.category ?? null,
               guestId: null,
             });
           } catch (err) {
@@ -1062,9 +1076,16 @@ export const PlanningView = () => {
         prefill={newResModal ?? undefined}
         onSave={async (data) => {
           try {
+            const roomId = data.roomIds?.[0] ?? data.roomId ?? newResModal?.roomId ?? null;
+            const roomNumber = data.roomNumbers?.[0] ?? data.roomNumber ?? newResModal?.roomNumber ?? null;
+            const matchedRoom = effectiveRooms.find((room) =>
+              (roomId && room.id === roomId) || (roomNumber && room.number === roomNumber)
+            );
             await createReservation.mutateAsync({
               reference: data.reference ?? `RES-${Date.now().toString().slice(-6)}`,
               guestName: data.guestName || null,
+              guestEmail: data.email || null,
+              guestPhone: data.phone || null,
               checkIn: data.checkIn,
               checkOut: data.checkOut,
               adults: data.adults ?? 1,
@@ -1072,7 +1093,10 @@ export const PlanningView = () => {
               source: data.source ?? 'DIRECT',
               totalAmount: data.totalTTC ?? 0,
               notes: data.notes || null,
-              roomId: data.roomIds?.[0] ?? data.roomId ?? null,
+              roomId,
+              roomNumber,
+              roomType: data.roomSelections?.[0]?.type || matchedRoom?.type || null,
+              roomCategory: matchedRoom?.category ?? null,
               guestId: null,
             });
             setNewResModal(null);

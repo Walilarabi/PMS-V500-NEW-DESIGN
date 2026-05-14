@@ -83,11 +83,35 @@ export async function createReservation(
     ),
   );
 
+  let roomSnapshot: { number: string | null; type: string | null; category: string | null } | null = null;
+  if (input.roomId) {
+    const { data, error } = await supabase
+      .from('rooms')
+      .select('number,type,category')
+      .eq('id', input.roomId)
+      .maybeSingle();
+
+    if (error) {
+      throw mapSupabaseError(error);
+    } else {
+      roomSnapshot = data ?? null;
+    }
+  }
+
+  if (input.roomId && !roomSnapshot?.number) {
+    throw new NotFoundError('Room', input.roomId);
+  }
+
   const insertPayload = {
     hotel_id: hotelId,
     reference: input.reference,
     guest_id: input.guestId ?? null,
+    guest_email: input.guestEmail ?? null,
+    guest_phone: input.guestPhone ?? null,
     room_id: input.roomId ?? null,
+    room_number: roomSnapshot?.number ?? input.roomNumber ?? null,
+    room_type: roomSnapshot?.type ?? input.roomType ?? null,
+    room_category: roomSnapshot?.category ?? input.roomCategory ?? null,
     check_in: input.checkIn,
     check_out: input.checkOut,
     nights,
