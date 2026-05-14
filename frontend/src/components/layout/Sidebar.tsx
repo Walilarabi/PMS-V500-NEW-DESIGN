@@ -30,7 +30,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
 
   flowday: [
     {
-      label: 'Flowday',
+      label: 'Pilotage opérationnel',
       items: [
         { id: 'flowboard',   label: 'Flowboard',    icon: LayoutDashboard },
         { id: 'planning',    label: 'Planning',     icon: CalendarDays },
@@ -39,6 +39,9 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
         { id: 'maintenance', label: 'Maintenance',  icon: Wrench },
       ],
     },
+  ],
+
+  sas: [
     {
       label: 'SAS — Revenue Integrity',
       items: [
@@ -223,9 +226,9 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
 const PAGE_TO_CATEGORY: Record<string, string> = {
   flowboard: 'flowday', planning: 'flowday', today: 'flowday',
   housekeeping: 'flowday', maintenance: 'flowday',
-  sas: 'flowday', sas_incoming: 'flowday', sas_rie: 'flowday',
-  sas_anomalies: 'flowday', sas_quarantine: 'flowday', sas_odms: 'flowday',
-  sas_reconciliation: 'flowday', sas_audit: 'flowday', sas_partners: 'flowday',
+  sas: 'sas', sas_incoming: 'sas', sas_rie: 'sas',
+  sas_anomalies: 'sas', sas_quarantine: 'sas', sas_odms: 'sas',
+  sas_reconciliation: 'sas', sas_audit: 'sas', sas_partners: 'sas',
   reservations: 'reservations', res_confirmed: 'reservations', res_hold: 'reservations',
   res_pending: 'reservations', groupes: 'reservations', res_payments: 'reservations',
   res_anomalies: 'reservations', res_relances: 'reservations',

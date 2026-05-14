@@ -14,14 +14,14 @@ interface TopbarProps {
   setActivePage: (page: PageId) => void;
 }
 
-// Mapping page → catégorie nav
 const PAGE_TO_NAV: Record<string, string> = {
   // Flowday
   flowboard: 'flowday', planning: 'flowday', today: 'flowday',
   housekeeping: 'flowday', maintenance: 'flowday',
-  sas: 'flowday', sas_incoming: 'flowday', sas_rie: 'flowday',
-  sas_anomalies: 'flowday', sas_quarantine: 'flowday', sas_odms: 'flowday',
-  sas_reconciliation: 'flowday', sas_audit: 'flowday', sas_partners: 'flowday',
+  // SAS
+  sas: 'sas', sas_incoming: 'sas', sas_rie: 'sas',
+  sas_anomalies: 'sas', sas_quarantine: 'sas', sas_odms: 'sas',
+  sas_reconciliation: 'sas', sas_audit: 'sas', sas_partners: 'sas',
   // Réservations
   reservations: 'reservations', res_confirmed: 'reservations',
   res_hold: 'reservations', res_pending: 'reservations',
@@ -49,6 +49,7 @@ const PAGE_TO_NAV: Record<string, string> = {
 
 const NAV_ITEMS = [
   { id: 'flowday',      label: 'Flowday',       icon: Zap,        defaultPage: 'flowboard' as PageId },
+  { id: 'sas',         label: 'SAS',            icon: Shield,     defaultPage: 'sas_incoming' as PageId, hasBadge: true },
   { id: 'reservations', label: 'Réservations',  icon: Calendar,   defaultPage: 'reservations' as PageId },
   { id: 'clients',      label: 'Clients',       icon: Users,      defaultPage: 'clients' as PageId },
   { id: 'revenue',      label: 'Revenue',       icon: TrendingUp, defaultPage: 'revenue' as PageId },
@@ -86,7 +87,7 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
         <div className="flex items-center gap-0.5 bg-gray-50 p-1 rounded-2xl border border-gray-100">
           {NAV_ITEMS.map((item) => {
             const isActive = activeNav === item.id;
-            const isSas = item.id === 'flowday';
+            const isSas = item.id === 'sas';
 
             return (
               <button
