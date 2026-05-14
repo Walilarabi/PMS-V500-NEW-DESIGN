@@ -1,189 +1,155 @@
-import React from 'react';
-import { Sidebar } from '@/src/components/layout/Sidebar';
+import React, { useState } from 'react';
 import { Topbar } from '@/src/components/layout/Topbar';
-import { TodayView } from '@/src/pages/TodayView';
-import { PlanningView } from '@/src/pages/PlanningView';
+import { Sidebar } from '@/src/components/layout/Sidebar';
+import { PageId } from '@/src/types';
+
+// Pages existantes
+import { TodayView }        from '@/src/pages/TodayView';
+import { PlanningView }     from '@/src/pages/PlanningView';
 import { ReservationsView } from '@/src/pages/ReservationsView';
-import { ClientsView } from '@/src/pages/ClientsView';
-import { RevenueView } from '@/src/pages/RevenueView';
-import { FinanceView } from '@/src/pages/FinanceView';
-import { AnalysisView } from '@/src/pages/AnalysisView';
-import { FlowboardView } from '@/src/pages/FlowboardView';
-import { SettingsView } from '@/src/pages/SettingsView';
-import { AuditLogView } from '@/src/pages/finance/AuditLogView';
+import { ClientsView }      from '@/src/pages/ClientsView';
+import { RevenueView }      from '@/src/pages/RevenueView';
+import { FinanceView }      from '@/src/pages/FinanceView';
+import { AnalysisView }     from '@/src/pages/AnalysisView';
+import { FlowboardView }    from '@/src/pages/FlowboardView';
+import { SettingsView }     from '@/src/pages/SettingsView';
+import { FacturationView }  from '@/src/pages/finance/FacturationView';
+import { AuditLogView }     from '@/src/pages/finance/AuditLogView';
 import { ReconciliationView } from '@/src/pages/finance/ReconciliationView';
 import { RevenueIntegrityView } from '@/src/pages/finance/RevenueIntegrityView';
-import { FacturationView } from '@/src/pages/finance/FacturationView';
-import { OdmsView } from '@/src/pages/sas/OdmsView';
+import { OdmsView }         from '@/src/pages/sas/OdmsView';
 
-// SAS pages (Phase 1 — placeholder, Phase 2 les implémente)
-const SasPlaceholder = ({ title }: { title: string }) => (
-  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-    <div className="w-20 h-20 bg-[#8B5CF6]/10 rounded-3xl flex items-center justify-center mb-6">
-      <span className="text-4xl">🛡️</span>
-    </div>
-    <h1 className="text-xl font-bold text-gray-900 mb-2">{title}</h1>
-    <p className="text-gray-400 text-sm max-w-md">Module SAS en cours d'implémentation — Phase 2</p>
-  </div>
-);
+// Realtime hooks
 import {
   useReservationsRealtime,
   useReconciliationRealtime,
   useRevenueAnomaliesRealtime,
   useSasIncomingRealtime,
 } from '@/src/hooks/useRealtimeChannels';
-import { PageId } from '@/src/types';
-import { motion, AnimatePresence } from 'motion/react';
 
-const PlaceholderPage = ({ name }: { name: string }) => (
-  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-in fade-in zoom-in duration-500">
-    <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center mb-6">
-       <span className="text-4xl">🏗️</span>
+// Placeholder universel
+const Placeholder = ({ title, icon }: { title: string; icon?: string }) => (
+  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#F9FAFB]">
+    <div className="w-20 h-20 bg-[#8B5CF6]/8 rounded-3xl flex items-center justify-center mb-6">
+      <span className="text-4xl">{icon ?? '🏗️'}</span>
     </div>
-    <h1 className="text-2xl font-bold text-gray-900 mb-2">{name}</h1>
-    <p className="text-gray-500 max-w-md">Cette page est actuellement en cours de modernisation. Elle conservera toutes ses fonctionnalités existantes avec un design rafraîchi.</p>
+    <h1 className="text-xl font-bold text-gray-900 mb-2">{title}</h1>
+    <p className="text-sm text-gray-400 max-w-sm">
+      Ce module est en cours de développement et sera disponible prochainement.
+    </p>
+    <div className="mt-6 px-4 py-2 bg-[#8B5CF6]/8 rounded-xl text-xs font-bold text-[#8B5CF6] uppercase tracking-widest">
+      Coming soon
+    </div>
   </div>
 );
 
-const App = () => {
-  const [activePage, setActivePage] = React.useState<PageId>('today');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
+function renderPage(page: PageId): React.ReactNode {
+  switch (page) {
+    // ── FLOWDAY ───────────────────────────────────────────────────────────────
+    case 'flowboard':   return <FlowboardView />;
+    case 'planning':    return <PlanningView />;
+    case 'today':       return <TodayView />;
+    case 'housekeeping':return <Placeholder title="Housekeeping" icon="🛏️" />;
+    case 'maintenance': return <Placeholder title="Maintenance" icon="🔧" />;
 
-  // ── Canaux Supabase Realtime (une seule instance, haut dans l'arbre) ──────
+    // ── SAS ───────────────────────────────────────────────────────────────────
+    case 'sas':
+    case 'sas_incoming':       return <Placeholder title="Réservations entrantes OTA" icon="📥" />;
+    case 'sas_rie':            return <RevenueIntegrityView />;
+    case 'sas_anomalies':      return <Placeholder title="Anomalies détectées" icon="⚠️" />;
+    case 'sas_quarantine':     return <Placeholder title="File quarantaine" icon="🔒" />;
+    case 'sas_odms':           return <OdmsView />;
+    case 'sas_reconciliation': return <ReconciliationView />;
+    case 'sas_audit':          return <AuditLogView />;
+    case 'sas_partners':       return <Placeholder title="Config. partenaires OTA" icon="⚙️" />;
+
+    // ── RÉSERVATIONS ──────────────────────────────────────────────────────────
+    case 'reservations':  return <ReservationsView />;
+    case 'res_confirmed': return <Placeholder title="Réservations confirmées" icon="✅" />;
+    case 'res_hold':      return <Placeholder title="En option (Hold)" icon="⏸️" />;
+    case 'res_pending':   return <Placeholder title="Pending" icon="⏳" />;
+    case 'groupes':       return <Placeholder title="Groupes" icon="👥" />;
+    case 'res_payments':  return <Placeholder title="Suivi des paiements" icon="💳" />;
+    case 'res_anomalies': return <Placeholder title="Anomalies financières" icon="🚨" />;
+    case 'res_relances':  return <Placeholder title="Relances" icon="📨" />;
+
+    // ── CLIENTS ───────────────────────────────────────────────────────────────
+    case 'clients':           return <ClientsView />;
+    case 'clients_cardex':    return <Placeholder title="Particuliers (Cardex)" icon="👤" />;
+    case 'clients_companies': return <Placeholder title="Sociétés / Agences" icon="🏢" />;
+    case 'clients_segments':  return <Placeholder title="Segments marketing" icon="🎯" />;
+    case 'clients_merge':     return <Placeholder title="Fusion / Dédoublonnage" icon="🔀" />;
+    case 'clients_documents': return <Placeholder title="Documents & signatures" icon="📄" />;
+    case 'clients_blacklist': return <Placeholder title="Blacklist / Watchlist" icon="🚫" />;
+    case 'clients_tiers':     return <Placeholder title="Tiers / Prescripteurs" icon="🤝" />;
+
+    // ── REVENUE ───────────────────────────────────────────────────────────────
+    case 'revenue':        return <RevenueView />;
+    case 'rev_calendar':   return <Placeholder title="Calendrier tarifaire" icon="📅" />;
+    case 'rev_grid':       return <Placeholder title="Grille tarifaire" icon="📊" />;
+    case 'rev_forecast':   return <Placeholder title="Forecast" icon="📈" />;
+    case 'rev_channels':   return <Placeholder title="Canaux" icon="📡" />;
+    case 'rev_allotments': return <Placeholder title="Allotements" icon="🗂️" />;
+    case 'rev_rules':      return <Placeholder title="Règles automatiques" icon="⚡" />;
+    case 'rev_graphs':     return <Placeholder title="Graphiques & analyses" icon="📉" />;
+
+    // ── FINANCE ───────────────────────────────────────────────────────────────
+    case 'facturation':        return <FacturationView />;
+    case 'proforma':           return <Placeholder title="Proforma / Devis" icon="📋" />;
+    case 'caisse':             return <Placeholder title="Petite caisse" icon="💰" />;
+    case 'impayes':            return <Placeholder title="Impayés / Débiteurs" icon="⚠️" />;
+    case 'cloture':            return <Placeholder title="Clôture & Audit" icon="🔐" />;
+    case 'fin_reconciliation': return <ReconciliationView />;
+    case 'tva2026':            return <Placeholder title="TVA 2026 & e-facture" icon="🧾" />;
+    case 'paiements_securises':return <Placeholder title="Paiements sécurisés" icon="🛡️" />;
+    case 'comptabilite':       return <Placeholder title="Comptabilité" icon="📒" />;
+    case 'cash_management':    return <Placeholder title="Cash Management" icon="💵" />;
+    case 'finance':            return <FinanceView activeTab="facturation" />;
+
+    // ── ANALYSE ───────────────────────────────────────────────────────────────
+    case 'analysis':
+    case 'kpi':                      return <AnalysisView />;
+    case 'performance':              return <Placeholder title="Performance" icon="🏆" />;
+    case 'forecast':                 return <Placeholder title="Prévisionnel" icon="🔭" />;
+    case 'rapports':                 return <Placeholder title="Rapports (93)" icon="📊" />;
+    case 'rapports_exploitation':    return <Placeholder title="Rapports Exploitation" icon="🏨" />;
+    case 'rapports_reservations':    return <Placeholder title="Rapports Réservations" icon="📅" />;
+    case 'rapports_backoffice':      return <Placeholder title="Rapports Back office" icon="🏦" />;
+    case 'rapports_comptabilite':    return <Placeholder title="Rapports Comptabilité" icon="📒" />;
+    case 'rapports_tva':             return <Placeholder title="Rapports TVA 2026" icon="🧾" />;
+    case 'rapports_stats':           return <Placeholder title="Statistiques" icon="📈" />;
+    case 'rapports_revenue':         return <Placeholder title="Rapports Revenue" icon="💹" />;
+    case 'rapports_housekeeping':    return <Placeholder title="Rapports Housekeeping" icon="🛏️" />;
+
+    // ── PARAMÈTRES ────────────────────────────────────────────────────────────
+    case 'settings':
+    default:                         return <SettingsView />;
+  }
+}
+
+export default function App() {
+  const [activePage, setActivePage] = useState<PageId>('flowboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   useReservationsRealtime();
   useReconciliationRealtime();
   useRevenueAnomaliesRealtime();
   useSasIncomingRealtime();
 
-  const renderPage = () => {
-    switch (activePage) {
-      case 'today': return <TodayView />;
-      case 'flowboard': return <FlowboardView />;
-      case 'planning': return <PlanningView />;
-      case 'reservations': 
-      case 'calendrier':
-      case 'mouvements':
-      case 'qr':
-      case 'simulation':
-      case 'groupes':
-      case 'paiements':
-      case 'relances':
-      case 'anomalies':
-        return <ReservationsView />;
-      case 'clients': 
-      case 'fiches':
-      case 'fidelite':
-        return <ClientsView />;
-      case 'revenue': 
-      case 'yield':
-      case 'promotions':
-        return <RevenueView />;
-      case 'analysis': 
-      case 'performance':
-      case 'forecast':
-        return <AnalysisView />;
-      // Finance sub-modules
-      case 'journal_audit':
-        return <AuditLogView />;
-      case 'rapprochement':
-        return <ReconciliationView />;
-      case 'revenue_integrity':
-        return <RevenueIntegrityView />;
-      case 'facturation':
-        return <FacturationView />;
-      case 'finance':
-      case 'caisse':
-      case 'impayes':
-      case 'cloture':
-      case 'proprietaires':
-        return <FinanceView activeTab={activePage} />;
-
-      // SAS module — Phase 1 (placeholders → Phase 2 les remplacera)
-      case 'sas':
-      case 'sas_incoming':
-        return <SasPlaceholder title="Réservations entrantes OTA" />;
-      case 'sas_rie':
-        return <SasPlaceholder title="Revenue Integrity Engine" />;
-      case 'sas_anomalies':
-        return <SasPlaceholder title="Anomalies détectées" />;
-      case 'sas_quarantine':
-        return <SasPlaceholder title="File quarantaine" />;
-      case 'sas_odms':
-        return <OdmsView />;
-      case 'sas_reconciliation':
-        return <ReconciliationView />;
-      case 'sas_audit':
-        return <AuditLogView />;
-      case 'sas_partners':
-        return <SasPlaceholder title="Configuration partenaires OTA" />;
-      case 'sas_dispute_detail':
-        return <SasPlaceholder title="Détail litige" />;
-      case 'operations': return <PlaceholderPage name="Opérations" />;
-      case 'settings': 
-      case 'annulations':
-      case 'supplements':
-      case 'fermatures':
-      case 'hotel':
-      case 'taxe':
-      case 'pms':
-      case 'api':
-        return <SettingsView activeTab={activePage} />;
-      default: return <TodayView />;
-    }
-  };
-
   return (
-    <div className="flex h-screen bg-[#F9FAFB] text-gray-900 font-sans overflow-hidden">
-      {/* Global Contextual Sidebar */}
-      <Sidebar 
-        activePage={activePage} 
-        setActivePage={setActivePage} 
-        isCollapsed={isSidebarCollapsed}
-        setIsCollapsed={setIsSidebarCollapsed}
-      />
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        <Topbar activePage={activePage} setActivePage={setActivePage} />
-        
-        <main className="flex-1 overflow-hidden relative">
-           <AnimatePresence mode="wait">
-              <motion.div
-                key={activePage}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.25, ease: "easeOut" }}
-                className="h-full w-full overflow-hidden flex flex-col"
-              >
-                 {renderPage()}
-              </motion.div>
-           </AnimatePresence>
+    <div className="h-screen flex flex-col overflow-hidden bg-[#F9FAFB]">
+      <Topbar activePage={activePage} setActivePage={setActivePage} />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar
+          activePage={activePage}
+          setActivePage={setActivePage}
+          isCollapsed={sidebarCollapsed}
+          setIsCollapsed={setSidebarCollapsed}
+        />
+        <main className="flex-1 overflow-hidden flex flex-col">
+          {renderPage(activePage)}
         </main>
-
-        {/* Global Footer / Quick Access */}
-        <footer className="h-10 bg-white border-t border-[#E5E7EB] flex items-center justify-between px-6 shrink-0 z-50">
-           <div className="flex items-center gap-4">
-              <button 
-                 onClick={() => setActivePage('planning')}
-                 className="flex items-center gap-2 text-[10px] font-bold text-gray-500 hover:text-[#8B5CF6] transition-colors uppercase tracking-widest"
-              >
-                 <span className="p-1 bg-gray-100 rounded">📅</span> Planning
-              </button>
-           </div>
-           <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                 <span className="text-[9px] font-bold text-gray-400">SYSTÈME OK</span>
-              </div>
-              <div className="text-[9px] font-bold text-gray-400 tracking-tighter">
-                 F1 Aide • Ecc Quitter • Fermer
-              </div>
-           </div>
-        </footer>
       </div>
     </div>
   );
-};
-
-export default App;
+}

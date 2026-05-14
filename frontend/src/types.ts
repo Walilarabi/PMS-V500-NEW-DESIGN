@@ -1,56 +1,114 @@
-export type PageId = 
+// ============================================================================
+// FLOWTYM PMS — Navigation types (arborescence officielle)
+// ============================================================================
+
+export type PageId =
+  // ── 1. FLOWDAY ─────────────────────────────────────────────────────────────
   | 'flowboard'
-  | 'planning' 
-  | 'today' 
-  | 'reservations' 
-  | 'clients' 
-  | 'revenue' 
-  | 'operations' 
-  | 'finance' 
-  | 'analysis' 
-  | 'settings'
-  | 'calendrier'
-  | 'mouvements'
-  | 'qr'
-  | 'simulation'
+  | 'planning'
+  | 'today'
+  | 'housekeeping'
+  | 'maintenance'
+  // ── 2. SAS (sous-menu de Flowday dans la sidebar, module principal dans nav)
+  | 'sas'
+  | 'sas_incoming'
+  | 'sas_rie'
+  | 'sas_anomalies'
+  | 'sas_quarantine'
+  | 'sas_odms'
+  | 'sas_reconciliation'
+  | 'sas_audit'
+  | 'sas_partners'
+  // ── 3. RÉSERVATIONS ────────────────────────────────────────────────────────
+  | 'reservations'
+  | 'res_confirmed'
+  | 'res_hold'
+  | 'res_pending'
   | 'groupes'
-  | 'paiements'
-  | 'relances'
-  | 'anomalies'
-  // Finance sub-pages (Finance garde : Facturation, Caisse, Impayés, Clôture, Propriétaires)
+  | 'res_payments'
+  | 'res_anomalies'
+  | 'res_relances'
+  // ── 4. CLIENTS ─────────────────────────────────────────────────────────────
+  | 'clients'
+  | 'clients_cardex'
+  | 'clients_companies'
+  | 'clients_segments'
+  | 'clients_merge'
+  | 'clients_documents'
+  | 'clients_blacklist'
+  | 'clients_tiers'
+  // ── 5. REVENUE ─────────────────────────────────────────────────────────────
+  | 'revenue'
+  | 'rev_calendar'
+  | 'rev_grid'
+  | 'rev_forecast'
+  | 'rev_channels'
+  | 'rev_allotments'
+  | 'rev_rules'
+  | 'rev_graphs'
+  // ── 6. FINANCE ─────────────────────────────────────────────────────────────
+  | 'finance'
   | 'facturation'
+  | 'proforma'
   | 'caisse'
   | 'impayes'
-  | 'proprietaires'
   | 'cloture'
-  // SAS — module à part entière dans la nav principale
-  | 'sas'
-  | 'sas_incoming'       // Réservations entrantes (bulle verte)
-  | 'sas_rie'            // Revenue Integrity Engine dashboard
-  | 'sas_anomalies'      // Liste anomalies
-  | 'sas_quarantine'     // File quarantaine
-  | 'sas_odms'           // OTA Dispute Center
-  | 'sas_dispute_detail' // Détail litige
-  | 'sas_reconciliation' // Reconciliation Center
-  | 'sas_audit'          // Journal d'audit (déplacé depuis Finance)
-  | 'sas_partners'       // Configuration partenaires OTA
-  // Revenue sub-pages
-  | 'yield'
-  | 'promotions'
-  // Clients sub-pages
-  | 'fiches'
-  | 'fidelite'
-  // Settings sub-pages
-  | 'annulations'
-  | 'supplements'
-  | 'fermatures'
-  | 'hotel'
-  | 'taxe'
-  | 'pms'
-  | 'api'
-  // Analysis sub-pages
+  | 'fin_reconciliation'
+  | 'tva2026'
+  | 'paiements_securises'
+  | 'comptabilite'
+  | 'cash_management'
+  // ── 7. ANALYSE ─────────────────────────────────────────────────────────────
+  | 'analysis'
+  | 'kpi'
   | 'performance'
-  | 'forecast';
+  | 'forecast'
+  | 'rapports'
+  | 'rapports_exploitation'
+  | 'rapports_reservations'
+  | 'rapports_backoffice'
+  | 'rapports_comptabilite'
+  | 'rapports_tva'
+  | 'rapports_stats'
+  | 'rapports_revenue'
+  | 'rapports_housekeeping'
+  // ── 8. PARAMÈTRES ──────────────────────────────────────────────────────────
+  | 'settings'
+  | 'settings_hotel'
+  | 'settings_multihotel'
+  | 'settings_room_types'
+  | 'settings_rooms'
+  | 'settings_floors'
+  | 'settings_room_status'
+  | 'settings_preferences'
+  | 'settings_products'
+  | 'settings_rate_plans'
+  | 'settings_conditions'
+  | 'settings_seasons'
+  | 'settings_age_categories'
+  | 'settings_invoice'
+  | 'settings_numbering'
+  | 'settings_payment_modes'
+  | 'settings_accounting'
+  | 'settings_debtors'
+  | 'settings_fiscal'
+  | 'settings_hk_status'
+  | 'settings_hk_checklists'
+  | 'settings_hk_staff'
+  | 'settings_hk_distribution'
+  | 'settings_maintenance'
+  | 'settings_lost_found'
+  | 'settings_breakfast'
+  | 'settings_pms_sync'
+  | 'settings_api'
+  | 'settings_connectors'
+  | 'settings_users'
+  | 'settings_automations'
+  | 'settings_notifications'
+  | 'settings_rgpd'
+  | 'settings_import_export'
+  | 'settings_audit'
+  | 'settings_backups';
 
 export interface Reservation {
   id: string;

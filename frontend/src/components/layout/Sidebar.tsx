@@ -1,10 +1,16 @@
 import React from 'react';
-import { 
-  Calendar, RefreshCcw, Hash, Monitor, Users, CreditCard, Send,
-  AlertCircle, FileText, Banknote, Lock, History, TrendingUp, Percent,
-  XCircle, PlusCircle, Building2, Database, Cloud, ChevronRight,
-  Sparkles, PanelLeftClose, PanelLeftOpen, Shield, RefreshCw,
-  ShieldAlert, GitMerge, Search, Settings2,
+import {
+  LayoutDashboard, Calendar, Bed, Wrench, Shield, RefreshCw,
+  ShieldAlert, AlertCircle, GitMerge, History, Settings2,
+  CalendarDays, CheckCircle2, Clock, HelpCircle, Users,
+  Building2, Target, GitMerge as Merge, FileText, Ban,
+  UserCheck, TrendingUp, Grid, BarChart2, Share2,
+  Layers, Zap, LineChart, CreditCard, Receipt, Wallet,
+  AlertTriangle, Lock, Banknote, Percent, Plug, Package,
+  PieChart, Activity, BookOpen, Database,
+  ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
+  Cpu, Bell, ShieldCheck, Upload, ClipboardList, HardDrive,
+  Hotel, Globe, Tag, Coffee, KeyRound, Star,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -13,186 +19,315 @@ interface SidebarProps {
   activePage: PageId;
   setActivePage: (page: PageId) => void;
   isCollapsed: boolean;
-  setIsCollapsed: (collapsed: boolean) => void;
+  setIsCollapsed: (v: boolean) => void;
+}
+
+type NavItem = { id: PageId; label: string; icon: any; badge?: string };
+type NavGroup = { label: string; items: NavItem[] };
+
+// ── Arborescence officielle ────────────────────────────────────────────────────
+const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
+
+  flowday: [
+    {
+      label: 'Flowday',
+      items: [
+        { id: 'flowboard',   label: 'Flowboard',    icon: LayoutDashboard },
+        { id: 'planning',    label: 'Planning',     icon: CalendarDays },
+        { id: 'today',       label: 'Flowday',      icon: Bed },
+        { id: 'housekeeping',label: 'Housekeeping', icon: Sparkles },
+        { id: 'maintenance', label: 'Maintenance',  icon: Wrench },
+      ],
+    },
+    {
+      label: 'SAS — Revenue Integrity',
+      items: [
+        { id: 'sas_incoming',      label: 'Réservations entrantes', icon: RefreshCw },
+        { id: 'sas_rie',           label: 'Revenue Integrity (RIE)', icon: Shield },
+        { id: 'sas_anomalies',     label: 'Anomalies détectées',    icon: ShieldAlert },
+        { id: 'sas_quarantine',    label: 'File quarantaine',       icon: AlertCircle },
+        { id: 'sas_odms',          label: 'OTA Dispute Center',     icon: GitMerge },
+        { id: 'sas_reconciliation',label: 'Rapprochement',          icon: RefreshCw },
+        { id: 'sas_audit',         label: 'Journal Audit',          icon: History },
+        { id: 'sas_partners',      label: 'Config. partenaires OTA',icon: Settings2 },
+      ],
+    },
+  ],
+
+  reservations: [
+    {
+      label: 'Réservations',
+      items: [
+        { id: 'reservations', label: 'Dashboard',       icon: LayoutDashboard },
+        { id: 'res_confirmed',label: 'Confirmées',      icon: CheckCircle2 },
+        { id: 'res_hold',     label: 'En option (Hold)',icon: Clock },
+        { id: 'res_pending',  label: 'Pending',         icon: HelpCircle },
+        { id: 'groupes',      label: 'Groupes',         icon: Users },
+      ],
+    },
+    {
+      label: 'Suivi des paiements',
+      items: [
+        { id: 'res_payments',  label: 'Paiements',          icon: CreditCard },
+        { id: 'res_anomalies', label: 'Anomalies financières',icon: AlertTriangle },
+        { id: 'res_relances',  label: 'Relances',           icon: Bell },
+      ],
+    },
+  ],
+
+  clients: [
+    {
+      label: 'Clients',
+      items: [
+        { id: 'clients',           label: 'Dashboard',            icon: LayoutDashboard },
+        { id: 'clients_cardex',    label: 'Particuliers (Cardex)',icon: UserCheck },
+        { id: 'clients_companies', label: 'Sociétés / Agences',  icon: Building2 },
+        { id: 'clients_segments',  label: 'Segments marketing',  icon: Target },
+        { id: 'clients_merge',     label: 'Fusion / Dédoublonnage',icon: Merge },
+        { id: 'clients_documents', label: 'Documents & signatures',icon: FileText },
+        { id: 'clients_blacklist', label: 'Blacklist / Watchlist',icon: Ban },
+        { id: 'clients_tiers',     label: 'Tiers / Prescripteurs',icon: Globe },
+      ],
+    },
+  ],
+
+  revenue: [
+    {
+      label: 'Revenue Management',
+      items: [
+        { id: 'revenue',        label: 'Dashboard',         icon: LayoutDashboard },
+        { id: 'rev_calendar',   label: 'Calendrier tarifaire',icon: Calendar },
+        { id: 'rev_grid',       label: 'Grille (matrice)',  icon: Grid },
+        { id: 'rev_forecast',   label: 'Forecast',          icon: TrendingUp },
+        { id: 'rev_channels',   label: 'Canaux',            icon: Share2 },
+        { id: 'rev_allotments', label: 'Allotements',       icon: Layers },
+        { id: 'rev_rules',      label: 'Règles automatiques',icon: Zap },
+        { id: 'rev_graphs',     label: 'Graphiques & analyses',icon: LineChart },
+      ],
+    },
+  ],
+
+  finance: [
+    {
+      label: 'Finance',
+      items: [
+        { id: 'facturation',       label: 'Facturation',       icon: FileText },
+        { id: 'proforma',          label: 'Proforma / Devis',  icon: Receipt },
+        { id: 'caisse',            label: 'Petite caisse',     icon: Wallet },
+        { id: 'impayes',           label: 'Impayés / Débiteurs',icon: AlertTriangle },
+        { id: 'cloture',           label: 'Clôture & Audit',   icon: Lock },
+        { id: 'fin_reconciliation',label: 'Rapprochement bancaire',icon: RefreshCw },
+        { id: 'tva2026',           label: 'TVA 2026 & e-facture',icon: Percent },
+        { id: 'paiements_securises',label: 'Paiements sécurisés',icon: ShieldCheck },
+        { id: 'comptabilite',      label: 'Comptabilité',      icon: BookOpen },
+        { id: 'cash_management',   label: 'Cash Management',   icon: Banknote },
+      ],
+    },
+  ],
+
+  analysis: [
+    {
+      label: 'Analyse',
+      items: [
+        { id: 'kpi',         label: 'KPI',          icon: Activity },
+        { id: 'performance', label: 'Performance',  icon: BarChart2 },
+        { id: 'forecast',    label: 'Prévisionnel', icon: TrendingUp },
+      ],
+    },
+    {
+      label: 'Rapports (93)',
+      items: [
+        { id: 'rapports_exploitation', label: 'Exploitation',      icon: Bed },
+        { id: 'rapports_reservations', label: 'Réservations',      icon: Calendar },
+        { id: 'rapports_backoffice',   label: 'Back office',       icon: Building2 },
+        { id: 'rapports_comptabilite', label: 'Comptabilité',      icon: BookOpen },
+        { id: 'rapports_tva',          label: 'TVA 2026 & e-fact.', icon: Percent },
+        { id: 'rapports_stats',        label: 'Statistiques',      icon: PieChart },
+        { id: 'rapports_revenue',      label: 'Revenue Management',icon: TrendingUp },
+        { id: 'rapports_housekeeping', label: 'Housekeeping',      icon: Sparkles },
+      ],
+    },
+  ],
+
+  settings: [
+    {
+      label: 'Vue générale',
+      items: [
+        { id: 'settings',        label: 'Vue d\'ensemble', icon: LayoutDashboard },
+        { id: 'settings_hotel',  label: 'Établissement',   icon: Hotel },
+        { id: 'settings_multihotel', label: 'Multi-hôtels',icon: Globe },
+      ],
+    },
+    {
+      label: 'Chambres & Inventaire',
+      items: [
+        { id: 'settings_room_types', label: 'Types de chambres', icon: Tag },
+        { id: 'settings_rooms',      label: 'Chambres',          icon: Bed },
+        { id: 'settings_floors',     label: 'Étages',            icon: Layers },
+        { id: 'settings_room_status',label: 'Statuts',           icon: CheckCircle2 },
+        { id: 'settings_preferences',label: 'Préférences',       icon: Star },
+      ],
+    },
+    {
+      label: 'Tarifs & Prestations',
+      items: [
+        { id: 'settings_products',       label: 'Prestations',       icon: Package },
+        { id: 'settings_rate_plans',     label: 'Plans tarifaires',  icon: Grid },
+        { id: 'settings_conditions',     label: 'Conditions',        icon: FileText },
+        { id: 'settings_seasons',        label: 'Saisons',           icon: Calendar },
+        { id: 'settings_age_categories', label: 'Catégories d\'âge', icon: Users },
+      ],
+    },
+    {
+      label: 'Finance & Facturation',
+      items: [
+        { id: 'settings_invoice',       label: 'Paramètres facture', icon: Receipt },
+        { id: 'settings_numbering',     label: 'Numérotation',       icon: Hash },
+        { id: 'settings_payment_modes', label: 'Modes de règlement', icon: CreditCard },
+        { id: 'settings_accounting',    label: 'Comptabilité',       icon: BookOpen },
+        { id: 'settings_debtors',       label: 'Débiteurs',          icon: AlertTriangle },
+        { id: 'settings_fiscal',        label: 'Fiscalité France 2026', icon: Percent },
+      ],
+    },
+    {
+      label: 'Housekeeping',
+      items: [
+        { id: 'settings_hk_status',      label: 'Statuts chambres', icon: CheckCircle2 },
+        { id: 'settings_hk_checklists',  label: 'Checklists',       icon: ClipboardList },
+        { id: 'settings_hk_staff',       label: 'Personnel',        icon: Users },
+        { id: 'settings_hk_distribution',label: 'Répartition',      icon: Share2 },
+        { id: 'settings_maintenance',    label: 'Maintenance',      icon: Wrench },
+        { id: 'settings_lost_found',     label: 'Objets trouvés',   icon: Package },
+        { id: 'settings_breakfast',      label: 'Petit-déjeuner',   icon: Coffee },
+      ],
+    },
+    {
+      label: 'Technique & Sécurité',
+      items: [
+        { id: 'settings_pms_sync',       label: 'PMS / Synchronisation', icon: Plug },
+        { id: 'settings_api',            label: 'API & Webhooks',     icon: Cpu },
+        { id: 'settings_connectors',     label: 'Connecteurs',        icon: Share2 },
+        { id: 'settings_users',          label: 'Utilisateurs & Droits', icon: KeyRound },
+        { id: 'settings_automations',    label: 'Automatisations',    icon: Zap },
+        { id: 'settings_notifications',  label: 'Notifications & Modèles', icon: Bell },
+        { id: 'settings_rgpd',           label: 'RGPD & Sécurité',   icon: ShieldCheck },
+        { id: 'settings_import_export',  label: 'Import / Export',    icon: Upload },
+        { id: 'settings_audit',          label: 'Audit / Logs',       icon: History },
+        { id: 'settings_backups',        label: 'Sauvegardes',        icon: HardDrive },
+      ],
+    },
+  ],
+};
+
+// Map page → catégorie sidebar
+const PAGE_TO_CATEGORY: Record<string, string> = {
+  flowboard: 'flowday', planning: 'flowday', today: 'flowday',
+  housekeeping: 'flowday', maintenance: 'flowday',
+  sas: 'flowday', sas_incoming: 'flowday', sas_rie: 'flowday',
+  sas_anomalies: 'flowday', sas_quarantine: 'flowday', sas_odms: 'flowday',
+  sas_reconciliation: 'flowday', sas_audit: 'flowday', sas_partners: 'flowday',
+  reservations: 'reservations', res_confirmed: 'reservations', res_hold: 'reservations',
+  res_pending: 'reservations', groupes: 'reservations', res_payments: 'reservations',
+  res_anomalies: 'reservations', res_relances: 'reservations',
+  clients: 'clients', clients_cardex: 'clients', clients_companies: 'clients',
+  clients_segments: 'clients', clients_merge: 'clients', clients_documents: 'clients',
+  clients_blacklist: 'clients', clients_tiers: 'clients',
+  revenue: 'revenue', rev_calendar: 'revenue', rev_grid: 'revenue',
+  rev_forecast: 'revenue', rev_channels: 'revenue', rev_allotments: 'revenue',
+  rev_rules: 'revenue', rev_graphs: 'revenue',
+  finance: 'finance', facturation: 'finance', proforma: 'finance',
+  caisse: 'finance', impayes: 'finance', cloture: 'finance',
+  fin_reconciliation: 'finance', tva2026: 'finance',
+  paiements_securises: 'finance', comptabilite: 'finance', cash_management: 'finance',
+  analysis: 'analysis', kpi: 'analysis', performance: 'analysis',
+  forecast: 'analysis', rapports: 'analysis', rapports_exploitation: 'analysis',
+  rapports_reservations: 'analysis', rapports_backoffice: 'analysis',
+  rapports_comptabilite: 'analysis', rapports_tva: 'analysis',
+  rapports_stats: 'analysis', rapports_revenue: 'analysis', rapports_housekeeping: 'analysis',
+  settings: 'settings', settings_hotel: 'settings', settings_multihotel: 'settings',
+  settings_room_types: 'settings', settings_rooms: 'settings', settings_floors: 'settings',
+  settings_room_status: 'settings', settings_preferences: 'settings',
+  settings_products: 'settings', settings_rate_plans: 'settings',
+  settings_conditions: 'settings', settings_seasons: 'settings', settings_age_categories: 'settings',
+  settings_invoice: 'settings', settings_numbering: 'settings', settings_payment_modes: 'settings',
+  settings_accounting: 'settings', settings_debtors: 'settings', settings_fiscal: 'settings',
+  settings_hk_status: 'settings', settings_hk_checklists: 'settings', settings_hk_staff: 'settings',
+  settings_hk_distribution: 'settings', settings_maintenance: 'settings',
+  settings_lost_found: 'settings', settings_breakfast: 'settings',
+  settings_pms_sync: 'settings', settings_api: 'settings', settings_connectors: 'settings',
+  settings_users: 'settings', settings_automations: 'settings', settings_notifications: 'settings',
+  settings_rgpd: 'settings', settings_import_export: 'settings',
+  settings_audit: 'settings', settings_backups: 'settings',
+};
+
+// Hash icon manquant
+function Hash({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/>
+      <line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>
+    </svg>
+  );
 }
 
 export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed }: SidebarProps) => {
-  const getCategory = (page: PageId) => {
-    if (['reservations', 'calendrier', 'mouvements', 'qr', 'simulation', 'groupes', 'paiements', 'relances', 'anomalies'].includes(page)) return 'reservations';
-    if (['revenue', 'yield', 'promotions'].includes(page)) return 'revenue';
-    if (['finance', 'facturation', 'caisse', 'impayes', 'cloture', 'proprietaires'].includes(page)) return 'finance';
-    if (['settings', 'annulations', 'supplements', 'fermatures', 'hotel', 'taxe', 'pms', 'api'].includes(page)) return 'settings';
-    if (['clients', 'fiches', 'fidelite'].includes(page)) return 'clients';
-    if (['analysis', 'performance', 'forecast'].includes(page)) return 'analysis';
-    if (page.startsWith('sas')) return 'sas';
-    return 'general';
-  };
-
-  const category = getCategory(activePage);
-
-  const subMenus: Record<string, { label: string; items: { id: string; label: string; icon: any }[] }> = {
-    reservations: {
-      label: 'Réservations',
-      items: [
-        { id: 'reservations', label: 'Dashboard', icon: Calendar },
-        { id: 'groupes', label: 'Groupes', icon: Users },
-        { id: 'mouvements', label: 'Arrivées / Départs', icon: RefreshCcw },
-        { id: 'qr', label: 'QR Check-in', icon: Hash },
-        { id: 'simulation', label: 'Simulation', icon: Monitor },
-        { id: 'paiements', label: 'Paiements', icon: CreditCard },
-        { id: 'relances', label: 'Relances', icon: Send },
-        { id: 'anomalies', label: 'Anomalies', icon: AlertCircle },
-      ]
-    },
-    sas: {
-      label: 'SAS — Système d\'Acquisition',
-      items: [
-        { id: 'sas_incoming',       label: 'Réservations entrantes', icon: RefreshCw },
-        { id: 'sas_rie',            label: 'Revenue Integrity (RIE)', icon: Shield },
-        { id: 'sas_anomalies',      label: 'Anomalies détectées', icon: ShieldAlert },
-        { id: 'sas_quarantine',     label: 'File quarantaine', icon: AlertCircle },
-        { id: 'sas_odms',           label: 'OTA Dispute Center', icon: GitMerge },
-        { id: 'sas_reconciliation', label: 'Rapprochement', icon: RefreshCw },
-        { id: 'sas_audit',          label: 'Journal d\'audit', icon: History },
-        { id: 'sas_partners',       label: 'Config. partenaires OTA', icon: Settings2 },
-      ]
-    },
-    finance: {
-      label: 'Finance',
-      items: [
-        { id: 'facturation',  label: 'Facturation', icon: FileText },
-        { id: 'caisse',       label: 'Caisse', icon: Banknote },
-        { id: 'impayes',      label: 'Impayés / Débiteurs', icon: AlertCircle },
-        { id: 'proprietaires',label: 'Propriétaires', icon: Users },
-        { id: 'cloture',      label: 'Clôture & Audit', icon: Lock },
-      ]
-    },
-    revenue: {
-      label: 'Revenue Management',
-      items: [
-        { id: 'revenue',     label: 'Dashboard', icon: TrendingUp },
-        { id: 'yield',       label: 'Yield Management', icon: Percent },
-        { id: 'promotions',  label: 'Offres & Promos', icon: PlusCircle },
-      ]
-    },
-    clients: {
-      label: 'Clients',
-      items: [
-        { id: 'clients',  label: 'Base Clients', icon: Users },
-        { id: 'fiches',   label: 'Fiches de Police', icon: FileText },
-        { id: 'fidelite', label: 'Fidélité', icon: Sparkles },
-      ]
-    },
-    analysis: {
-      label: 'Analyse & Rapports',
-      items: [
-        { id: 'analysis',    label: 'Dashboard KPI', icon: TrendingUp },
-        { id: 'performance', label: 'Performance', icon: Percent },
-        { id: 'forecast',    label: 'Prévisionnel', icon: Cloud },
-      ]
-    },
-    settings: {
-      label: 'Configuration',
-      items: [
-        { id: 'settings',   label: 'Paramètres Généraux', icon: Building2 },
-        { id: 'annulations',label: 'Politiques Annulation', icon: XCircle },
-        { id: 'supplements',label: 'Suppléments & Packs', icon: PlusCircle },
-        { id: 'hotel',      label: 'Fiche Établissement', icon: Building2 },
-        { id: 'taxe',       label: 'Taxe de Séjour', icon: Database },
-        { id: 'pms',        label: 'Connectivité PMS', icon: Cloud },
-        { id: 'api',        label: 'Intégrations API', icon: Database },
-      ]
-    },
-    general: {
-      label: 'Navigation',
-      items: [
-        { id: 'flowboard', label: 'Flowboard', icon: TrendingUp },
-        { id: 'planning',  label: 'Planning', icon: Calendar },
-        { id: 'today',     label: 'Flowday', icon: RefreshCcw },
-      ]
-    }
-  };
-
-  const currentMenu = subMenus[category] || subMenus.general;
+  const category = PAGE_TO_CATEGORY[activePage] ?? 'flowday';
+  const groups = SIDEBAR_CONFIG[category] ?? [];
 
   return (
     <aside className={cn(
-      "bg-white border-r border-[#E5E7EB] flex flex-col shrink-0 transition-all duration-300 ease-in-out z-[100]",
-      isCollapsed ? "w-20" : "w-64"
+      'h-full bg-white border-r border-gray-100 flex flex-col transition-all duration-300 shrink-0',
+      isCollapsed ? 'w-14' : 'w-52',
     )}>
-      <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
-        <div className={cn("mb-8 px-2 flex items-center justify-between", isCollapsed && "justify-center")}>
-          {!isCollapsed && <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{currentMenu.label}</h2>}
-          <button 
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 hover:bg-gray-50 rounded-lg text-gray-400 hover:text-[#8B5CF6] transition-colors"
-          >
-            {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          </button>
-        </div>
-
-        <nav className="space-y-1">
-          {currentMenu.items.map((item) => {
-            const isActive = activePage === item.id || (item.id === 'finance' && activePage === 'finance');
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActivePage(item.id as PageId)}
-                title={isCollapsed ? item.label : undefined}
-                className={cn(
-                  "w-full flex items-center transition-all duration-300 rounded-2xl group relative overflow-hidden",
-                  isCollapsed ? "justify-center p-2" : "px-4 py-3 justify-between",
-                  isActive
-                    ? "bg-[#8B5CF6]/[0.08] text-[#8B5CF6]"
-                    : "text-gray-500 hover:text-[#8B5CF6] hover:bg-gray-50/80"
-                )}
-              >
-                <div className="flex items-center gap-3.5 z-10">
-                  <div className={cn(
-                    "p-2 rounded-xl transition-all duration-300",
-                    isActive ? "bg-[#8B5CF6] text-white shadow-lg shadow-[#8B5CF6]/20 rotate-3" : "bg-gray-100 group-hover:bg-white text-gray-400 group-hover:text-[#8B5CF6]"
-                  )}>
-                    <item.icon size={16} />
-                  </div>
-                  {!isCollapsed && <span className="text-[12px] font-bold tracking-tight text-left">{item.label}</span>}
-                </div>
-                {!isCollapsed && (
-                  <ChevronRight size={14} className={cn(
-                    "opacity-30 transition-all duration-300 transform",
-                    isActive ? "opacity-100 translate-x-0" : "-translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100"
-                  )} />
-                )}
-              </button>
-            );
-          })}
-        </nav>
+      {/* Toggle */}
+      <div className="h-10 flex items-center justify-end px-2 border-b border-gray-50 shrink-0">
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="p-1.5 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-50 transition-all"
+        >
+          {isCollapsed
+            ? <PanelLeftOpen size={14} />
+            : <PanelLeftClose size={14} />}
+        </button>
       </div>
 
-      <div className="mt-auto p-4 shrink-0">
-        <div className={cn(
-          "bg-gradient-to-br from-[#8B5CF6]/5 to-transparent rounded-3xl border border-[#8B5CF6]/10 relative overflow-hidden transition-all duration-300",
-          isCollapsed ? "p-2 opacity-100" : "p-5"
-        )}>
-           <div className="relative z-10">
-              <div className={cn("flex items-center gap-2 mb-3", isCollapsed && "justify-center mb-0")}>
-                 <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center shadow-sm shrink-0">
-                    <Sparkles size={12} className="text-[#F59E0B]" />
-                 </div>
-                 {!isCollapsed && <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">Flowtym Pro</span>}
-              </div>
-              {!isCollapsed && (
-                <>
-                  <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
-                     Optimisez votre revenue management avec nos algorithmes IA.
-                  </p>
-                  <button className="w-full mt-4 py-2 bg-[#8B5CF6] rounded-xl text-[10px] font-black text-white uppercase tracking-widest hover:bg-[#7C3AED] transition-colors shadow-lg shadow-[#8B5CF6]/20">
-                     En savoir plus
+      {/* Nav */}
+      <div className="flex-1 overflow-y-auto py-3 space-y-4 px-2">
+        {groups.map((group) => (
+          <div key={group.label}>
+            {!isCollapsed && (
+              <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest px-2 mb-1.5">
+                {group.label}
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const isActive = activePage === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActivePage(item.id)}
+                    title={isCollapsed ? item.label : undefined}
+                    className={cn(
+                      'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-[11px] font-bold transition-all text-left',
+                      isActive
+                        ? 'bg-[#8B5CF6]/8 text-[#8B5CF6]'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50',
+                    )}
+                  >
+                    <item.icon size={14} className={cn('shrink-0', isActive && 'text-[#8B5CF6]')} />
+                    {!isCollapsed && (
+                      <span className="truncate">{item.label}</span>
+                    )}
+                    {!isCollapsed && isActive && (
+                      <ChevronRight size={10} className="ml-auto shrink-0 text-[#8B5CF6]" />
+                    )}
                   </button>
-                </>
-              )}
-           </div>
-           {!isCollapsed && <div className="absolute top-0 right-0 w-24 h-24 bg-[#8B5CF6]/5 rounded-full -mr-12 -mt-12" />}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </aside>
   );
