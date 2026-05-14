@@ -320,7 +320,195 @@ function DisputeDetailDrawer({
   );
 }
 
-// ─── Main View ────────────────────────────────────────────────────────────────
+// ─── Create Dispute Modal ─────────────────────────────────────────────────────
+
+function CreateDisputeModal({
+  partners,
+  onClose,
+  onCreate,
+  isLoading,
+}: {
+  partners: any[];
+  onClose: () => void;
+  onCreate: (input: any) => Promise<void>;
+  isLoading: boolean;
+}) {
+  const [form, setForm] = useState({
+    partnerId: '',
+    expectedAmount: '',
+    receivedAmount: '',
+    claimedAmount: '',
+    subject: '',
+    explanation: '',
+  });
+
+  const deviation = form.expectedAmount && form.receivedAmount
+    ? (parseFloat(form.receivedAmount) - parseFloat(form.expectedAmount)).toFixed(2)
+    : null;
+
+  const handleSubmit = async () => {
+    await onCreate({
+      partnerId:      form.partnerId || undefined,
+      expectedAmount: form.expectedAmount ? parseFloat(form.expectedAmount) : undefined,
+      receivedAmount: form.receivedAmount ? parseFloat(form.receivedAmount) : undefined,
+      claimedAmount:  form.claimedAmount  ? parseFloat(form.claimedAmount)  :
+                      form.expectedAmount && form.receivedAmount
+                        ? Math.abs(parseFloat(form.receivedAmount) - parseFloat(form.expectedAmount))
+                        : undefined,
+      subject:     form.subject || undefined,
+      explanation: form.explanation || undefined,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.96 }}
+        className="bg-white w-full max-w-lg rounded-[28px] shadow-2xl overflow-hidden"
+      >
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] text-[#8B5CF6] font-bold uppercase tracking-widest mb-1">
+              <GitMerge size={11} /> Nouveau litige OTA
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">Créer une réclamation</h3>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full text-gray-400">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+
+          {/* Partenaire OTA */}
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5">
+              Partenaire OTA
+            </label>
+            {partners.length === 0 ? (
+              <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-700 font-medium">
+                Aucun partenaire configuré — allez dans SAS → Config. partenaires pour en ajouter.
+              </div>
+            ) : (
+              <select
+                value={form.partnerId}
+                onChange={e => setForm(f => ({ ...f, partnerId: e.target.value }))}
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30"
+              >
+                <option value="">— Sélectionner un partenaire —</option>
+                {partners.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Sujet */}
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5">
+              Sujet du litige
+            </label>
+            <input
+              value={form.subject}
+              onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
+              placeholder="Ex: Commission incorrecte sur réservation BK-12345678"
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30"
+            />
+          </div>
+
+          {/* Montants */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5">
+                Montant attendu (€)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.expectedAmount}
+                onChange={e => setForm(f => ({ ...f, expectedAmount: e.target.value }))}
+                placeholder="0.00"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5">
+                Montant reçu (€)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={form.receivedAmount}
+                onChange={e => setForm(f => ({ ...f, receivedAmount: e.target.value }))}
+                placeholder="0.00"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30"
+              />
+            </div>
+          </div>
+
+          {/* Écart calculé */}
+          {deviation !== null && (
+            <div className={cn(
+              'p-3 rounded-xl text-sm font-bold flex items-center gap-2',
+              parseFloat(deviation) < 0 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'
+            )}>
+              <AlertTriangle size={14} />
+              Écart calculé : {parseFloat(deviation) < 0 ? '' : '+'}{deviation} €
+            </div>
+          )}
+
+          {/* Montant réclamé */}
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5">
+              Montant réclamé (€) <span className="text-gray-300 normal-case font-normal">— auto-calculé si vide</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={form.claimedAmount}
+              onChange={e => setForm(f => ({ ...f, claimedAmount: e.target.value }))}
+              placeholder={deviation ? `${Math.abs(parseFloat(deviation)).toFixed(2)}` : '0.00'}
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30"
+            />
+          </div>
+
+          {/* Explication */}
+          <div>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1.5">
+              Explication / détail de la réclamation
+            </label>
+            <textarea
+              value={form.explanation}
+              onChange={e => setForm(f => ({ ...f, explanation: e.target.value }))}
+              placeholder="Décrivez l'anomalie détectée et les éléments justificatifs..."
+              rows={3}
+              className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30 resize-none"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-gray-100 flex gap-3">
+          <Button variant="ghost" onClick={onClose} className="flex-1 font-bold">
+            Annuler
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={isLoading || !form.subject}
+            className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20"
+          >
+            {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+            Créer le litige
+          </Button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 export const OdmsView = () => {
   const [statusFilter, setStatusFilter] = useState('');
@@ -587,6 +775,21 @@ export const OdmsView = () => {
             <Eye size={32} className="mb-3 opacity-20" />
             <p className="text-sm font-medium">Sélectionne un litige pour afficher le détail.</p>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal création litige */}
+      <AnimatePresence>
+        {showCreate && (
+          <CreateDisputeModal
+            partners={partners}
+            onClose={() => setShowCreate(false)}
+            isLoading={createDispute.isPending}
+            onCreate={async (input) => {
+              await createDispute.mutateAsync(input);
+              setShowCreate(false);
+            }}
+          />
         )}
       </AnimatePresence>
     </div>
