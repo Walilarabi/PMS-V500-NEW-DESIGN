@@ -50,8 +50,12 @@ export async function listReservations(
     .range(offset, offset + limit - 1);
 
   if (params.status?.length) q = q.in('status', params.status);
-  if (params.dateFrom) q = q.gte('check_in', params.dateFrom);
-  if (params.dateTo) q = q.lte('check_out', params.dateTo);
+  // Filtre de date : chevauchement correct
+  // Une réservation est dans la plage si elle CHEVAUCHE [dateFrom, dateTo]
+  // c'est-à-dire : check_in < dateTo ET check_out > dateFrom
+  // (évite d'exclure les in-house qui commencent avant dateFrom)
+  if (params.dateFrom) q = q.gt('check_out', params.dateFrom);  // check_out > dateFrom
+  if (params.dateTo) q = q.lt('check_in', params.dateTo);        // check_in < dateTo
 
   const { data, error, count } = await q;
   if (error) throw mapSupabaseError(error);

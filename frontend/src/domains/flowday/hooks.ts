@@ -212,7 +212,12 @@ export function useFlowdayDataset(): FlowdayDataset {
   const { status } = useAuth();
   const enabled = status === 'authenticated';
 
-  const reservationsQ = useReservations({ limit: 200 });
+  // Exclure les statuts inactifs dès la requête — évite d'afficher
+  // des réservations annulées dans la vue opérationnelle du jour
+  const reservationsQ = useReservations({
+    limit: 200,
+    status: ['confirmed', 'checked_in', 'pending', 'hold'],
+  });
   const roomsQ = useRooms();
 
   const reservationRows: ReservationRow[] = enabled ? reservationsQ.data?.rows ?? [] : [];
@@ -237,7 +242,24 @@ export function useFlowdayDataset(): FlowdayDataset {
   }, [dbRooms]);
 
   const rows = useMemo<FlowdayRoomRow[]>(() => {
-    return reservationRows.map((res, idx) => {
+    // Ne garder que les réservations actives pour le jour courant :
+    // arrivée, départ, ou présentes (in-house).
+    // Les réservations futures ou passées (movement==='other') sont exclues
+    // du tableau opérationnel — elles ne nécessitent aucune action ce jour.
+    const today = todayKey();
+    const activeRows = reservationRows.filter((res) => {
+      if (!res.check_in || !res.check_out) return false;
+      // Inclure : arrive aujourd'hui OU part aujourd'hui OU en cours
+      const arrivalDay = res.check_in.slice(0, 10);
+      const departureDay = res.check_out.slice(0, 10);
+      return (
+        arrivalDay === today ||                            // arrivée aujourd'hui
+        departureDay === today ||                          // départ aujourd'hui
+        (arrivalDay < today && departureDay > today)       // in-house
+      );
+    });
+
+    return activeRows.map((res, idx) => {
       const dbRoom = (res.room_id && roomsById[res.room_id]) ||
         (res.room_number && roomsByNumber[res.room_number]) ||
         null;

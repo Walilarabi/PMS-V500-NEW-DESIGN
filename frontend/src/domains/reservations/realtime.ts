@@ -30,6 +30,9 @@ export function useReservationsRealtime(): void {
           filter: `hotel_id=eq.${hotelId}`,
         },
         () => {
+          // Invalide TOUT le préfixe ['reservations'] :
+          // couvre useReservations (list), useReservationsByRange (range), useReservation (one)
+          // et par extension useFlowdayDataset qui consomme useReservations
           void qc.invalidateQueries({ queryKey: ['reservations'] });
         },
       )
@@ -38,6 +41,8 @@ export function useReservationsRealtime(): void {
         { event: '*', schema: 'public', table: 'rooms', filter: `hotel_id=eq.${hotelId}` },
         () => {
           void qc.invalidateQueries({ queryKey: ['rooms'] });
+          // Les rooms impactent aussi le planning Gantt
+          void qc.invalidateQueries({ queryKey: ['reservations', 'range'] });
         },
       )
       .subscribe();
