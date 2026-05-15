@@ -15,6 +15,22 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      outDir: 'dist',
+      emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-query': ['@tanstack/react-query'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-charts': ['recharts', 'chart.js', 'react-chartjs-2'],
+            'vendor-motion': ['motion'],
+            'vendor-ui': ['lucide-react', 'clsx', 'tailwind-merge'],
+            'vendor-forms': ['react-hook-form', 'zod'],
+          },
+        },
+      },
+    },
     server: {
       host: '0.0.0.0',
       port: 3000,
