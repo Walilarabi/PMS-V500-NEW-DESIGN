@@ -41,12 +41,11 @@ export function useCreateReservationFromForm() {
         guestName: data.guestName || null,
         guestEmail: data.email || null,
         guestPhone: data.phone || null,
-        // roomNumber fourni par le formulaire — room_id résolu par le repository via snapshot
         roomNumber: data.roomNumber || null,
         roomType: data.roomType || null,
         checkIn: data.checkIn,
         checkOut: data.checkOut,
-        nights: data.nights,
+        // nights est calculé par le repository depuis checkIn/checkOut
         adults: data.adults,
         children: data.children,
         source: data.channel || 'Direct',

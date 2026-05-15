@@ -2,7 +2,7 @@
   "version": 2,
   "framework": "vite",
   "rootDirectory": "frontend",
-  "buildCommand": "npm run build",
+  "buildCommand": "vite build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "build": {
@@ -39,5 +39,6 @@
         }
       ]
     }
-  ]
+  ],
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- ."
 }
