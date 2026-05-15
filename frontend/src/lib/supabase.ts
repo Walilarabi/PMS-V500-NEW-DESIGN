@@ -9,33 +9,36 @@
  * computes or sends tenant_id explicitly.
  *
  * SECURITY: No credentials are hardcoded here. All values must be supplied
- * via environment variables. Create frontend/.env.local for local dev
- * (see frontend/.env.example). For production, configure secrets in Vercel.
+ * via environment variables:
+ *   - Local dev  : frontend/.env.local (non commité — voir .env.example)
+ *   - Production : Vercel Dashboard > Settings > Environment Variables
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from './supabase.types';
 
-// SECURITY: env vars obligatoires — aucun fallback hardcodé (SECURITY_RULES §6)
-// Conflit résolu en faveur de Phase 1 : Cursor réintroduisait les credentials
-// hardcodés que Phase 1 a explicitement supprimés. Notre version est supérieure.
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
-if (!SUPABASE_URL?.trim()) {
-  throw new Error(
+// En développement : crash immédiat pour forcer la configuration.
+// En production (Vercel) : crash avec message lisible dans la console,
+// la page blanche est préférable à une app partiellement initialisée.
+if (!SUPABASE_URL) {
+  const msg =
     '[FLOWTYM] VITE_SUPABASE_URL manquant.\n' +
-    'Créer frontend/.env.local avec VITE_SUPABASE_URL=https://<ref>.supabase.co\n' +
-    'Voir frontend/.env.example pour le template complet.',
-  );
+    '• Local  : créer frontend/.env.local  →  VITE_SUPABASE_URL=https://<ref>.supabase.co\n' +
+    '• Vercel : Dashboard → Settings → Environment Variables';
+  console.error(msg);
+  throw new Error(msg);
 }
 
-if (!SUPABASE_ANON_KEY?.trim()) {
-  throw new Error(
+if (!SUPABASE_ANON_KEY) {
+  const msg =
     '[FLOWTYM] VITE_SUPABASE_ANON_KEY manquant.\n' +
-    'Créer frontend/.env.local avec VITE_SUPABASE_ANON_KEY=<anon-key>\n' +
-    'Voir frontend/.env.example pour le template complet.',
-  );
+    '• Local  : créer frontend/.env.local  →  VITE_SUPABASE_ANON_KEY=<clé-anon>\n' +
+    '• Vercel : Dashboard → Settings → Environment Variables';
+  console.error(msg);
+  throw new Error(msg);
 }
 
 export const supabase: SupabaseClient<Database> = createClient<Database>(
