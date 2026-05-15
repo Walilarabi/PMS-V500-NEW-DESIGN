@@ -29,9 +29,9 @@ export const LoginPage: React.FC = () => {
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('Wali Larabi');
-  const [hotelName, setHotelName] = useState('Flowtym Demo Hotel');
-  const [tenantSlug, setTenantSlug] = useState('flowtym');
+  const [fullName, setFullName] = useState('');
+  const [hotelName, setHotelName] = useState('');
+  const [tenantSlug, setTenantSlug] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
