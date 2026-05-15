@@ -1,44 +1,36 @@
 /**
  * FLOWTYM — Supabase Client (Browser).
  *
- * Single source of truth for all Supabase interactions on the client side.
- * NEVER use the service_role_key here. Only the anon key + RLS policies.
+ * Les valeurs VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY sont injectées
+ * au moment du build par vite.config.ts via define{}.
+ * Elles proviennent de :
+ *   - vercel.json -> env{} (production Vercel)
+ *   - frontend/.env.local (développement local)
  *
- * Multi-tenancy: tenant_id is enforced server-side via RLS policies that
- * read it from the JWT custom claim `tenant_id`. The frontend never
- * computes or sends tenant_id explicitly.
- *
- * SECURITY: No credentials are hardcoded here. All values must be supplied
- * via environment variables:
- *   - Local dev  : frontend/.env.local (non commité — voir .env.example)
- *   - Production : Vercel Dashboard > Settings > Environment Variables
+ * La clé anon est publique par conception Supabase — la sécurité
+ * réelle est assurée par les RLS PostgreSQL côté serveur.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
 import type { Database } from './supabase.types';
 
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
-const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
+// Ces valeurs sont remplacées par des strings littéraux au build (Vite define{})
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ?? '';
+const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() ?? '';
 
-// En développement : crash immédiat pour forcer la configuration.
-// En production (Vercel) : crash avec message lisible dans la console,
-// la page blanche est préférable à une app partiellement initialisée.
-if (!SUPABASE_URL) {
-  const msg =
-    '[FLOWTYM] VITE_SUPABASE_URL manquant.\n' +
-    '• Local  : créer frontend/.env.local  →  VITE_SUPABASE_URL=https://<ref>.supabase.co\n' +
-    '• Vercel : Dashboard → Settings → Environment Variables';
-  console.error(msg);
-  throw new Error(msg);
-}
-
-if (!SUPABASE_ANON_KEY) {
-  const msg =
-    '[FLOWTYM] VITE_SUPABASE_ANON_KEY manquant.\n' +
-    '• Local  : créer frontend/.env.local  →  VITE_SUPABASE_ANON_KEY=<clé-anon>\n' +
-    '• Vercel : Dashboard → Settings → Environment Variables';
-  console.error(msg);
-  throw new Error(msg);
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  // En développement : indiquer comment configurer
+  if (import.meta.env.DEV) {
+    console.error(
+      '[FLOWTYM] Variables Supabase manquantes.\n' +
+      'Créer frontend/.env.local :\n' +
+      '  VITE_SUPABASE_URL=https://hzrzkvdebaadditvbqis.supabase.co\n' +
+      '  VITE_SUPABASE_ANON_KEY=<clé anon>',
+    );
+  }
+  throw new Error(
+    '[FLOWTYM] VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY manquant. ' +
+    'Vérifier vercel.json env{} ou frontend/.env.local.',
+  );
 }
 
 export const supabase: SupabaseClient<Database> = createClient<Database>(
@@ -52,13 +44,9 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(
       storageKey: 'flowtym.auth',
     },
     global: {
-      headers: {
-        'x-flowtym-client': 'web',
-      },
+      headers: { 'x-flowtym-client': 'web' },
     },
-    db: {
-      schema: 'public',
-    },
+    db: { schema: 'public' },
   },
 );
 
