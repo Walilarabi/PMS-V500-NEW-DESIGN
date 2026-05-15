@@ -7,7 +7,7 @@ import {
   X, User, Mail, Phone, Users, Building2, Calendar, 
   Globe, Bed, Hash, Coffee, ShieldCheck, Tag, CreditCard, 
   Zap, Upload, FileText, Check, 
-  ChevronDown, ArrowRight, Wallet, Info, FilePlus
+  ChevronDown, ArrowRight, Wallet, Info, FilePlus, Loader2
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 
@@ -54,7 +54,7 @@ export interface AvailableRoom {
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: ReservationFormData) => void;
+  onSave: (data: ReservationFormData) => void | Promise<void>;
   initialData?: Partial<ReservationFormData>;
   availableRooms?: AvailableRoom[];
   editId?: string | null;
@@ -107,6 +107,8 @@ const RATE_PLANS = [
   { id: 'BKG-NR', label: 'Booking Non-Ref', channel: 'Booking.com', board: 'Room Only', policy: 'nanr', mult: 0.95 },
   { id: 'AIR-NR', label: 'Airbnb Stricte', channel: 'Airbnb', board: 'Room Only', policy: 'nanr', mult: 1.05 },
 ];
+
+const SAVE_TIMEOUT_MS = 15_000;
 
 const COUNTRIES = [
   { name: "France", code: "FR" },
@@ -191,8 +193,20 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
     stayTax: 40.00,
     ...initialData
   });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveTimedOut, setSaveTimedOut] = useState(false);
+  const saveAttemptRef = useRef(0);
 
   const set = (k: keyof ReservationFormData, v: any) => setForm(f => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    saveAttemptRef.current += 1;
+    if (!isOpen) return;
+    setSaving(false);
+    setSaveError(null);
+    setSaveTimedOut(false);
+  }, [isOpen]);
 
   // Filtered Lists
   const filteredRooms = useMemo(() => 
@@ -242,6 +256,37 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
 
     return { nights, pricePerNight, rows, subtotal, vat, totalTTC };
   }, [form.checkIn, form.checkOut, form.roomNumber, form.ratePlanId, form.vatRate, form.stayTax, form.roomType]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError(null);
+    setSaveTimedOut(false);
+    let timedOut = false;
+    const attemptId = ++saveAttemptRef.current;
+    const timeoutId = setTimeout(() => {
+      if (saveAttemptRef.current !== attemptId) return;
+      timedOut = true;
+      setSaving(false);
+      setSaveTimedOut(true);
+      setSaveError(
+        'Enregistrement toujours en cours côté serveur. Patientez : le bouton est bloqué pour éviter un doublon.',
+      );
+    }, SAVE_TIMEOUT_MS);
+
+    try {
+      await Promise.resolve(onSave({ ...form, totalTTC: pricingBreakdown.totalTTC, nights: pricingBreakdown.nights }));
+      clearTimeout(timeoutId);
+      if (saveAttemptRef.current !== attemptId) return;
+      onClose();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (saveAttemptRef.current !== attemptId) return;
+      setSaveTimedOut(false);
+      setSaveError(err instanceof Error ? err.message : 'Impossible d’enregistrer la réservation.');
+    } finally {
+      if (!timedOut && saveAttemptRef.current === attemptId) setSaving(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -547,6 +592,12 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
           </div>
 
           {/* Footer Actions */}
+          {saveError && (
+            <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] font-semibold text-red-600">
+              {saveError}
+            </div>
+          )}
+
           <div className="flex items-center justify-between pt-4 border-t border-gray-100">
              <div className="flex items-center gap-4">
                 <button className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors shadow-sm">
@@ -577,14 +628,12 @@ const ReservationFormModal: React.FC<Props> = ({ isOpen, onClose, onSave, initia
                    Annuler
                 </button>
                 <button 
-                  onClick={() => {
-                    onSave({ ...form, totalTTC: pricingBreakdown.totalTTC, nights: pricingBreakdown.nights });
-                    onClose();
-                  }}
+                  onClick={handleSave}
+                  disabled={saving || saveTimedOut}
                   className="px-10 py-3 bg-[#8B5CF6] text-white rounded-2xl text-[12px] font-black uppercase tracking-widest shadow-xl shadow-[#8B5CF6]/30 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2"
                 >
-                   <Check size={18} strokeWidth={3} />
-                   Enregistrer
+                   {saving ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} strokeWidth={3} />}
+                   {saveTimedOut ? 'En cours...' : saving ? 'Enregistrement...' : 'Enregistrer'}
                 </button>
              </div>
           </div>

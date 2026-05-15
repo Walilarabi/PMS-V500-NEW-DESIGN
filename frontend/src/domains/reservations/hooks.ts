@@ -6,10 +6,12 @@ import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 
 import * as repo from './repository';
+import { mapSupabaseError } from '@/src/domains/_shared/errors';
 import {
   type CreateReservationInput,
   createReservationInputSchema,
   type ReservationRow,
+  reservationRowSchema,
 } from './schemas';
 
 const RESERVATIONS_KEY = ['reservations'] as const;
@@ -58,8 +60,16 @@ export function useCreateReservation() {
 
       return repo.createReservation(hotelId, parsed);
     },
-    onSuccess: () => {
+    onSuccess: (newReservation) => {
+      // Invalider TOUTES les queries avec le préfixe ['reservations']
+      // Couvre : list, range (planning), one — par préfixe TanStack Query
       void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+      // Invalider aussi les rooms (dispo peut avoir changé)
+      void qc.invalidateQueries({ queryKey: ['rooms'] });
+      // Invalider les guests si un guest_id est lié
+      if (newReservation.guest_id) {
+        void qc.invalidateQueries({ queryKey: ['guests-by-ids'] });
+      }
     },
     onError: (err) => {
       console.error('[useCreateReservation]', err);
@@ -123,6 +133,103 @@ export function useCancelReservation() {
       void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
       void qc.invalidateQueries({ queryKey: ['audit-logs'] });
       void qc.invalidateQueries({ queryKey: [...RESERVATIONS_KEY, 'one', vars.id] });
+    },
+  });
+}
+
+// ============================================================================
+// PLANNING HOOKS — ajoutés pour PlanningViewLive
+// ============================================================================
+
+export interface ReservationsByRangeParams {
+  /** YYYY-MM-DD — premier jour de la période affichée */
+  rangeStart: string;
+  /** YYYY-MM-DD — dernier jour de la période affichée */
+  rangeEnd: string;
+}
+
+/**
+ * Récupère les réservations dont la période chevauche [rangeStart, rangeEnd].
+ *
+ * RÈGLE MÉTIER : chevauchement correct = check_in < rangeEnd ET check_out > rangeStart
+ * (inclusif côté arrivée, exclusif côté départ — conforme au trigger anti-overbooking)
+ *
+ * BUG ÉVITÉ : ne pas utiliser check_in >= rangeStart AND check_in <= rangeEnd
+ * car cela exclut les réservations qui commencent AVANT la fenêtre mais
+ * sont encore présentes pendant (in-house).
+ *
+ * QueryKey inclut [rangeStart, rangeEnd] pour que chaque fenêtre soit
+ * cachée indépendamment ET invalidée par useReservationsRealtime qui
+ * invalide ['reservations'] (préfixe commun).
+ */
+export function useReservationsByRange(params: ReservationsByRangeParams) {
+  const { status } = useAuth();
+  return useQuery<ReservationRow[]>({
+    queryKey: [...RESERVATIONS_KEY, 'range', params.rangeStart, params.rangeEnd],
+    queryFn: async () => {
+      // Chevauchement : check_in < rangeEnd ET check_out > rangeStart
+      const { data, error } = await supabase
+        .from('reservations')
+        .select('*')
+        .lt('check_in', params.rangeEnd)   // check_in < rangeEnd
+        .gt('check_out', params.rangeStart) // check_out > rangeStart
+        .not('status', 'in', '("cancelled","no_show")')
+        .order('check_in', { ascending: true })
+        .limit(500);
+      if (error) throw mapSupabaseError(error);
+      return (data ?? []).map((d: unknown) => reservationRowSchema.parse(d));
+    },
+    enabled: status === 'authenticated' && !!params.rangeStart && !!params.rangeEnd,
+    staleTime: 10_000,
+  });
+}
+
+export interface MoveReservationInput {
+  id: string;
+  fromVersion: number;
+  roomId: string;
+  checkIn: string;
+  checkOut: string;
+}
+
+/**
+ * Déplace une réservation (chambre et/ou dates) depuis le planning Gantt.
+ * Utilise l'optimistic locking (fromVersion) pour détecter les conflits.
+ * Invalide toutes les queries 'reservations' après succès.
+ */
+export function useMoveReservation() {
+  const qc = useQueryClient();
+  return useMutation<ReservationRow, Error, MoveReservationInput>({
+    mutationFn: async ({ id, fromVersion, roomId, checkIn, checkOut }) => {
+      const { data, error } = await supabase
+        .from('reservations')
+        .update({
+          room_id: roomId,
+          check_in: checkIn,
+          check_out: checkOut,
+        })
+        .eq('id', id)
+        .eq('version', fromVersion) // optimistic lock
+        .select('*')
+        .maybeSingle();
+
+      if (error) throw mapSupabaseError(error);
+
+      if (!data) {
+        throw new Error(
+          `Conflit de version sur la réservation ${id} — ` +
+          `modification concurrente détectée. Rechargez et réessayez.`,
+        );
+      }
+
+      return reservationRowSchema.parse(data);
+    },
+    onSuccess: () => {
+      // Invalider tout le préfixe ['reservations'] — couvre list, range, one
+      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+    },
+    onError: (err) => {
+      console.error('[useMoveReservation]', err);
     },
   });
 }

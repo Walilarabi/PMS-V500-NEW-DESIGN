@@ -123,7 +123,42 @@ function renderPage(page: PageId): React.ReactNode {
 
     // ── PARAMÈTRES ────────────────────────────────────────────────────────────
     case 'settings':
-    default:                         return <SettingsView />;
+    case 'settings_hotel':
+    case 'settings_multihotel':
+    case 'settings_room_types':
+    case 'settings_rooms':
+    case 'settings_floors':
+    case 'settings_room_status':
+    case 'settings_preferences':
+    case 'settings_products':
+    case 'settings_rate_plans':
+    case 'settings_conditions':
+    case 'settings_seasons':
+    case 'settings_age_categories':
+    case 'settings_invoice':
+    case 'settings_numbering':
+    case 'settings_payment_modes':
+    case 'settings_accounting':
+    case 'settings_debtors':
+    case 'settings_fiscal':
+    case 'settings_hk_status':
+    case 'settings_hk_checklists':
+    case 'settings_hk_staff':
+    case 'settings_hk_distribution':
+    case 'settings_maintenance':
+    case 'settings_lost_found':
+    case 'settings_breakfast':
+    case 'settings_pms_sync':
+    case 'settings_api':
+    case 'settings_connectors':
+    case 'settings_users':
+    case 'settings_automations':
+    case 'settings_notifications':
+    case 'settings_rgpd':
+    case 'settings_import_export':
+    case 'settings_audit':
+    case 'settings_backups':
+    default:                         return <SettingsView activePage={page} />;
   }
 }
 

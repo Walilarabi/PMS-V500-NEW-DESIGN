@@ -1,8 +1,88 @@
+# ============================================================================
+# FLOWTYM PMS — .gitignore
+# ============================================================================
+
+# --- Dépendances ---
 node_modules/
+.pnp
+.pnp.js
+
+# --- Build outputs ---
 build/
 dist/
-coverage/
-.DS_Store
-*.log
-.env*
+.next/
+out/
+
+# --- Environnement & Secrets (JAMAIS dans git — SECURITY_RULES §6) ---
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+# Exception : le template vide est versionné
 !.env.example
+
+# --- Coverage & tests ---
+coverage/
+.nyc_output/
+test_reports/
+*.lcov
+
+# --- OS ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V8
+.Trashes
+Thumbs.db
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# --- Debug & scripts temporaires (ne doivent jamais être commités) ---
+debug_*.cjs
+trace_*.cjs
+convert.cjs
+count_all.cjs
+tsc_output.txt
+tsc_fixed.txt
+*.tmp
+*.temp
+
+# --- Fichiers de diagnostic temporaires ---
+injectTabRes.js
+planning_reservation_spec.md
+reservation_lifecycle_planning.html
+metadata.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+.eggs/
+
+# --- TypeScript ---
+*.tsbuildinfo
+
+# --- Vercel ---
+.vercel/
