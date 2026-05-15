@@ -7,22 +7,31 @@
  * Multi-tenancy: tenant_id is enforced server-side via RLS policies that
  * read it from the JWT custom claim `tenant_id`. The frontend never
  * computes or sends tenant_id explicitly.
+ *
+ * SECURITY: No credentials are hardcoded here. All values must be supplied
+ * via environment variables. Create frontend/.env.local for local dev
+ * (see frontend/.env.example). For production, configure secrets in Vercel.
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database } from './supabase.types';
 
-const SUPABASE_URL =
-  import.meta.env.VITE_SUPABASE_URL ??
-  'https://hzrzkvdebaadditvbqis.supabase.co';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-const SUPABASE_ANON_KEY =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ??
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6cnprdmRlYmFhZGRpdHZicWlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMjEwMTQsImV4cCI6MjA5MjY5NzAxNH0.IDFFWHNNIeBReWRTeVj8RlRpyz5J4XaStFhGVEYEBU8';
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+if (!SUPABASE_URL?.trim()) {
   throw new Error(
-    'Missing Supabase env: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are required.',
+    '[FLOWTYM] VITE_SUPABASE_URL manquant.\n' +
+    'Créer frontend/.env.local avec VITE_SUPABASE_URL=https://<ref>.supabase.co\n' +
+    'Voir frontend/.env.example pour le template complet.',
+  );
+}
+
+if (!SUPABASE_ANON_KEY?.trim()) {
+  throw new Error(
+    '[FLOWTYM] VITE_SUPABASE_ANON_KEY manquant.\n' +
+    'Créer frontend/.env.local avec VITE_SUPABASE_ANON_KEY=<anon-key>\n' +
+    'Voir frontend/.env.example pour le template complet.',
   );
 }
 
