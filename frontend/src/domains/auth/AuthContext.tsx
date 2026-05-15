@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
+import { supabase } from '@/src/lib/supabase';
 import * as authRepo from './repository';
 import type { AuthSession, LoginInput, SignUpInput } from './schemas';
 
@@ -13,6 +14,20 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/**
+ * Appeler après chaque login pour s'assurer que public.users contient
+ * un profil pour cet utilisateur (nécessaire pour la FK audit_logs.actor_user_id).
+ * Non-bloquant : les erreurs sont silencieuses.
+ */
+async function ensureUserProfile(): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.rpc as any)('ensure_user_profile');
+  } catch {
+    // Silencieux — ne jamais bloquer le login pour ça
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [status, setStatus] = useState<AuthContextValue['status']>('loading');
@@ -25,6 +40,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!mounted) return;
         setSession(s);
         setStatus(s ? 'authenticated' : 'unauthenticated');
+        // Sync profil si session existante au chargement
+        if (s) ensureUserProfile();
       })
       .catch(() => {
         if (!mounted) return;
@@ -34,6 +51,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return;
       setSession(s);
       setStatus(s ? 'authenticated' : 'unauthenticated');
+      if (s) ensureUserProfile();
     });
     return () => {
       mounted = false;
@@ -49,11 +67,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const s = await authRepo.loginWithPassword(input);
         setSession(s);
         setStatus('authenticated');
+        // Créer le profil public.users si absent (évite FK violation audit_logs)
+        ensureUserProfile();
       },
       signUp: async (_input) => {
         const s = await authRepo.signUpAndProvisionTenant();
         setSession(s);
         setStatus('authenticated');
+        ensureUserProfile();
       },
       logout: async () => {
         await authRepo.signOut();

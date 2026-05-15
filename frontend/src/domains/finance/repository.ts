@@ -414,17 +414,34 @@ export async function writeAuditLog(entry: {
   payload?: Record<string, unknown>;
   correlation_id?: string;
 }): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase.from('audit_logs') as any).insert({
-    entity: entry.entity,
-    entity_id: entry.entity_id,
-    action: entry.action,
-    payload: entry.payload ?? {},
-    correlation_id: null,   // uuid généré DB-side par le trigger
-    hotel_id: (await supabase.rpc('get_user_hotel_id')).data ?? '',
-    actor_user_id: (await supabase.auth.getUser()).data.user?.id ?? null,
-  });
+  // Audit failures MUST NEVER block business operations.
+  // All errors are swallowed here — the DB trigger is the authoritative audit trail.
+  try {
+    // Résoudre actor_user_id via public.users (pas auth.uid() direct qui
+    // ne correspond pas à public.users.id — seul public.users.auth_id = auth.uid())
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: actorId } = await (supabase.rpc as any)('resolve_actor_user_id');
+    const { data: hotelId } = await supabase.rpc('get_user_hotel_id');
 
-  // Audit failures are non-fatal — log but don't throw
-  if (error) console.error('[audit] write failed:', error.message);
+    if (!hotelId) {
+      // Pas de contexte hôtel → pas d'audit possible, skip silencieux
+      return;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase.from('audit_logs') as any).insert({
+      entity: entry.entity,
+      entity_id: entry.entity_id,
+      action: entry.action,
+      payload: entry.payload ?? {},
+      correlation_id: null,
+      hotel_id: hotelId,
+      actor_user_id: actorId ?? null, // NULL accepté grâce à la migration 0150
+    });
+
+    if (error) console.warn('[audit] write failed (non-fatal):', error.message);
+  } catch (err) {
+    // Swallow entièrement — l'audit ne doit jamais faire crasher une réservation
+    console.warn('[audit] exception (non-fatal):', err);
+  }
 }
