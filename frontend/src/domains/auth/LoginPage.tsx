@@ -1,28 +1,134 @@
+/**
+ * FLOWTYM — LoginPage (nouveau design Mai 2026)
+ * Intégré au système auth Flowtym : useAuth, loginSchema, DomainError.
+ */
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import {
-  Activity,
-  BedDouble,
-  Building2,
-  Circle,
-  Database,
-  Eye,
-  EyeOff,
-  KeyRound,
-  Lock,
-  LogIn,
-  Mail,
-  ReceiptText,
-  ShieldCheck,
-  Sparkles,
-  TriangleAlert,
-  Wrench,
+  ArrowRight, Eye, EyeOff, Lock, Mail,
+  BedDouble, CheckCircle2, ShieldCheck,
+  ArrowUpRight, Sparkles, AlertTriangle,
+  Building2, Receipt, Layers,
 } from 'lucide-react';
 
 import { useAuth } from '@/src/domains/auth/AuthContext';
 import { loginSchema, signupSchema } from '@/src/domains/auth/schemas';
 import { DomainError } from '@/src/domains/_shared/errors';
 
+const C = {
+  bg: '#fafafa', surface: '#ffffff',
+  text: '#0f0a1e', textMuted: '#6b6574', textSubtle: '#9a94a3',
+  border: '#e8e5eb',
+  purple: '#7c3aed', purpleSoft: '#ede9fe',
+  mint: '#10b981', mintLight: '#a7f3d0', mintSoft: '#d1fae5',
+  orange: '#f59e0b', orangeSoft: '#fef3c7',
+};
+
 type Mode = 'login' | 'signup';
+
+function FlowtymLogo({ size = 36 }: { size?: number }) {
+  return (
+    <img
+      src="/flowtym-logo.png" alt="Flowtym" width={size} height={size}
+      className="block rounded-[22%] object-cover"
+      style={{ width: size, height: size, boxShadow: '0 10px 28px rgba(0,0,0,0.25)' }}
+      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+    />
+  );
+}
+
+function FeatureModules() {
+  const features = [
+    { icon: Layers,        title: 'RMS intégré',         desc: 'Pricing dynamique et stratégie tarifaire pilotée par les données.',       color: C.mint },
+    { icon: AlertTriangle, title: 'Détection OTA',       desc: 'Anomalies tarifaires détectées automatiquement sur les canaux.',           color: C.orange },
+    { icon: BedDouble,     title: 'Housekeeping',        desc: 'Application terrain dernière génération. Planning et contrôle qualité.',   color: '#a78bfa' },
+    { icon: Building2,     title: 'Multi-hôtel',         desc: 'Vision consolidée et pilotage centralisé de votre portefeuille.',          color: '#818cf8' },
+    { icon: Sparkles,      title: 'Maintenance',         desc: 'Suivi des interventions, prévention et alertes équipements en temps réel.',color: '#f472b6' },
+    { icon: Receipt,       title: 'TVA & e-facturation', desc: 'Conformité FR 2026, génération automatique et archivage conforme.',        color: '#93c5fd' },
+  ];
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 0.2 }} className="grid grid-cols-2 gap-3">
+      {features.map((f, i) => (
+        <motion.div key={f.title} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.08, ease: [0.22, 1, 0.36, 1] }}
+          className="rounded-xl px-4 py-3.5 flex items-start gap-3"
+          style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.1)' }}>
+            <f.icon size={16} style={{ color: f.color }} />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-white">{f.title}</div>
+            <div className="text-[11.5px] leading-[1.5] mt-0.5" style={{ color: 'rgba(255,255,255,0.78)' }}>{f.desc}</div>
+          </div>
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
+function MiniDashboard() {
+  const bars = [35, 52, 48, 67, 55, 72, 60, 82, 70, 78, 65, 88, 75, 92];
+  return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      className="rounded-xl overflow-hidden"
+      style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(12px)' }}>
+      {/* Browser bar */}
+      <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="flex items-center gap-2.5">
+          <div className="flex gap-1.5">
+            {['rgba(251,113,133,0.7)', 'rgba(250,204,21,0.7)', 'rgba(74,222,128,0.7)'].map((bg, i) => (
+              <div key={i} className="w-2.5 h-2.5 rounded-full" style={{ background: bg }} />
+            ))}
+          </div>
+          <span className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.55)' }}>app.flowtym.com/dashboard</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-pulse" /><span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" /></span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: C.mint }}>Live</span>
+        </div>
+      </div>
+      <div className="p-5">
+        {/* KPIs */}
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          {[{ label: 'Occupation', value: '87%', delta: '+4.2 pts' }, { label: 'ADR', value: '€147', delta: '+€12' }, { label: 'RevPAR', value: '€128', delta: '+18%' }].map((kpi, i) => (
+            <motion.div key={kpi.label} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 + i * 0.1 }}
+              className="rounded-lg px-4 py-3" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.65)' }}>{kpi.label}</div>
+              <div className="text-[20px] font-bold tracking-tight mt-1 text-white">{kpi.value}</div>
+              <div className="text-[11px] font-semibold mt-0.5" style={{ color: C.mintLight }}>{kpi.delta}</div>
+            </motion.div>
+          ))}
+        </div>
+        {/* Barchart */}
+        <div className="rounded-lg px-4 py-3.5 mb-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.65)' }}>Revenus · 14 jours</span>
+            <div className="flex items-center gap-1 text-[11px] font-bold" style={{ color: C.mintLight }}><ArrowUpRight size={12} />+12.4%</div>
+          </div>
+          <div className="flex items-end gap-[3px] h-14">
+            {bars.map((h, i) => (
+              <motion.div key={i} className="flex-1 rounded-[2px]" initial={{ scaleY: 0 }} animate={{ scaleY: 1 }}
+                transition={{ delay: 0.85 + i * 0.03, duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+                style={{ height: `${h}%`, transformOrigin: 'bottom', background: i === 13 ? 'rgba(167,139,250,0.8)' : i >= 11 ? 'rgba(167,139,250,0.35)' : 'rgba(255,255,255,0.14)' }} />
+            ))}
+          </div>
+        </div>
+        {/* OTA */}
+        <div className="rounded-lg px-4 py-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2"><AlertTriangle size={12} style={{ color: C.orange }} /><span className="text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>Monitoring OTA</span></div>
+            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full" style={{ background: C.orangeSoft, color: '#92400e' }}>2 alertes</span>
+          </div>
+          {[{ text: 'Booking — Chambre Standard sous-évaluée de 12%', warn: true }, { text: 'Expedia — Disparité tarifaire détectée sur la Suite', warn: false }].map((a, i) => (
+            <motion.div key={i} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.2 + i * 0.1 }} className="flex items-center gap-2.5 py-1">
+              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: a.warn ? C.orange : '#ef4444' }} />
+              <span className="text-[11px] flex-1 truncate" style={{ color: 'rgba(255,255,255,0.78)' }}>{a.text}</span>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 export const LoginPage: React.FC = () => {
   const { login, signUp } = useAuth();
@@ -32,404 +138,207 @@ export const LoginPage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [hotelName, setHotelName] = useState('');
   const [tenantSlug, setTenantSlug] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [pwFocused, setPwFocused] = useState(false);
 
   const handleSubmit: React.FormEventHandler = async (e) => {
     e.preventDefault();
     setError(null);
-    setSubmitting(true);
+    setIsLoading(true);
     try {
       if (mode === 'login') {
-        const parsed = loginSchema.parse({ email, password });
-        await login(parsed);
+        await login(loginSchema.parse({ email, password }));
       } else {
-        const parsed = signupSchema.parse({
-          email,
-          password,
-          fullName,
-          tenantSlug,
-          hotelName,
-        });
-        await signUp(parsed);
+        await signUp(signupSchema.parse({ email, password, fullName, tenantSlug, hotelName }));
       }
     } catch (err) {
-      if (err instanceof DomainError) setError(err.message);
-      else if (err instanceof Error) setError(err.message);
-      else setError('Erreur inconnue');
+      setError(err instanceof DomainError ? err.message : err instanceof Error ? err.message : 'Erreur inconnue');
     } finally {
-      setSubmitting(false);
+      setIsLoading(false);
     }
   };
 
-  return (
-    <div
-      data-testid="login-page"
-      className="min-h-screen w-full bg-white font-sans text-slate-900 lg:grid lg:grid-cols-[53%_47%]"
-    >
-      <BrandPanel />
+  const fieldStyle = (focused: boolean) => ({
+    background: C.bg,
+    border: `1px solid ${focused ? C.purple : C.border}`,
+    boxShadow: focused ? `0 0 0 4px ${C.purpleSoft}` : '0 1px 2px rgba(15,10,30,0.02)',
+  });
 
-      <div className="flex min-h-screen items-center justify-center px-6 py-12 lg:px-16">
-        <form
-          onSubmit={handleSubmit}
-          className="w-full max-w-[360px] space-y-5"
-          data-testid={mode === 'login' ? 'login-form' : 'signup-form'}
-        >
-          <div className="space-y-3">
-            <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-emerald-600 ring-1 ring-emerald-100">
-              <ShieldCheck size={12} />
-              Accès sécurisé
-            </span>
-            <div className="space-y-1">
-              <h2 className="text-[22px] font-extrabold tracking-[-0.04em] text-[#191923]">
-                {mode === 'login' ? 'Bon retour' : 'Créer votre accès'}
-              </h2>
-              <p className="text-[12px] font-medium leading-5 text-slate-500">
-                {mode === 'login'
-                  ? 'Connectez-vous à votre espace de pilotage.'
-                  : 'Demandez un accès à votre espace Flowtym.'}
-              </p>
+  return (
+    <div className="min-h-screen flex overflow-hidden" style={{ background: C.bg, fontFamily: "'Inter', system-ui, sans-serif" }}>
+
+      {/* ── PANNEAU GAUCHE ────────────────────────────────────────────────── */}
+      <div className="hidden lg:flex flex-col justify-between w-1/2 relative overflow-hidden p-10 xl:p-14" style={{ background: '#8b5cf6' }}>
+        <div className="absolute inset-0 opacity-[0.12]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px)', backgroundSize: '48px 48px' }} />
+        <div className="absolute -top-20 -left-20 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 70%)' }} />
+        <div className="absolute bottom-0 right-0 w-[450px] h-[450px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.12) 0%, transparent 70%)' }} />
+
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="flex items-center gap-3 z-10">
+          <FlowtymLogo size={46} />
+          <div>
+            <div className="text-[26px] font-bold tracking-tight"><span className="text-white">Flow</span><span style={{ color: '#a7f3d0' }}>tym</span></div>
+            <div className="text-[10px] font-semibold tracking-[0.2em] uppercase mt-0.5" style={{ color: 'rgba(255,255,255,0.72)' }}>Property Management</div>
+          </div>
+        </motion.div>
+
+        <div className="z-10 space-y-6 max-w-[620px] mx-auto w-full">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full"
+            style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)' }}>
+            <Sparkles size={12} className="text-white" />
+            <span className="text-[11px] font-semibold tracking-widest uppercase text-white">PMS Nouvelle Génération</span>
+          </motion.div>
+          <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="font-bold leading-[1.08] tracking-[-0.03em] text-white" style={{ fontSize: 'clamp(35px, 3.2vw, 50px)' }}>
+            Pilotez. Détectez.<br /><span style={{ color: 'rgba(255,255,255,0.88)' }}>Optimisez.</span>
+          </motion.h1>
+          <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.26 }}
+            className="text-[16px] leading-[1.7] max-w-[540px]" style={{ color: 'rgba(255,255,255,0.88)', fontWeight: 400 }}>
+            Flowtym centralise vos opérations hôtelières, détecte les anomalies de vos OTA et vous donne la maîtrise complète de votre performance — en temps réel.
+          </motion.p>
+          <FeatureModules />
+          <MiniDashboard />
+        </div>
+
+        <div className="z-10 w-full max-w-[620px] mx-auto">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.8 }} className="flex items-center gap-5 flex-wrap">
+            {[{ icon: ShieldCheck, text: 'AES-256' }, { icon: Receipt, text: 'TVA 2026 & e-facturation' }, { icon: ShieldCheck, text: 'ISO 27001' }].map((item, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <item.icon size={12} style={{ color: 'rgba(255,255,255,0.6)' }} />
+                <span className="text-[11.5px] font-medium" style={{ color: 'rgba(255,255,255,0.7)' }}>{item.text}</span>
+              </div>
+            ))}
+          </motion.div>
+          <div className="mt-3 text-[11.5px]" style={{ color: 'rgba(255,255,255,0.55)' }}>© 2026 Flowtym Labs</div>
+        </div>
+      </div>
+
+      {/* ── PANNEAU DROIT — Formulaire ────────────────────────────────────── */}
+      <div className="w-full lg:w-1/2 flex flex-col items-center justify-center px-8 py-12 relative" style={{ background: C.surface }}>
+        {/* Mobile logo */}
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="flex lg:hidden items-center gap-3 mb-10">
+          <FlowtymLogo size={38} />
+          <span className="text-[22px] font-bold tracking-tight"><span style={{ color: C.text }}>Flow</span><span style={{ color: C.mint }}>tym</span></span>
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }} className="w-full max-w-[360px] relative z-10">
+
+          {/* En-tête */}
+          <div className="mb-8">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full mb-5" style={{ background: C.mintSoft, border: '1px solid rgba(16,185,129,0.15)' }}>
+              <CheckCircle2 size={10} style={{ color: C.mint }} />
+              <span className="text-[10px] font-semibold tracking-widest uppercase" style={{ color: C.mint }}>Accès sécurisé</span>
             </div>
+            <h2 className="font-bold tracking-tight leading-none text-[24px]" style={{ color: C.text }}>
+              {mode === 'login' ? 'Bon retour' : 'Créer un compte'}
+            </h2>
+            <p className="mt-3 text-[14px] leading-relaxed" style={{ color: C.textMuted }}>
+              {mode === 'login' ? 'Connectez-vous à votre espace de pilotage.' : 'Lancez votre tenant Flowtym.'}
+            </p>
           </div>
 
-          {mode === 'signup' && (
-            <div className="space-y-3">
-              <Field
-                label="Nom complet"
-                value={fullName}
-                onChange={setFullName}
-                testid="signup-fullname-input"
-              />
-              <Field
-                label="Nom de l'hôtel"
-                value={hotelName}
-                onChange={setHotelName}
-                testid="signup-hotel-input"
-              />
-              <Field
-                label="Identifiant tenant"
-                value={tenantSlug}
-                onChange={(v) => setTenantSlug(v.toLowerCase())}
-                testid="signup-tenant-input"
-                placeholder="ex. flowtym"
-              />
-            </div>
-          )}
-
-          <Field
-            label="Adresse email"
-            type="email"
-            value={email}
-            onChange={setEmail}
-            testid={`${mode}-email-input`}
-            placeholder="prenom.nom@hotel.com"
-            icon={<Mail size={14} />}
-          />
-          <Field
-            label="Mot de passe"
-            type={showPassword ? 'text' : 'password'}
-            value={password}
-            onChange={setPassword}
-            testid={`${mode}-password-input`}
-            placeholder="••••••••••••"
-            icon={<Lock size={14} />}
-            trailing={
-              <button
-                type="button"
-                aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-                onClick={() => setShowPassword((value) => !value)}
-                className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-white hover:text-[#8B5CF6]"
-              >
-                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            }
-          />
-
+          {/* Erreur */}
           {error && (
-            <div
-              data-testid="auth-error"
-              className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] font-medium text-red-600"
-            >
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+              className="mb-5 px-4 py-3 rounded-xl text-[13px] font-medium"
+              style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c' }}>
               {error}
-            </div>
+            </motion.div>
           )}
 
-          <button
-            type="submit"
-            disabled={submitting}
-            data-testid={`${mode}-submit-button`}
-            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#8B5CF6] px-6 text-[12px] font-extrabold text-white shadow-[0_12px_24px_rgba(139,92,246,0.28)] transition-all hover:-translate-y-0.5 hover:bg-[#7C3AED] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {mode === 'login' ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Email */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-semibold tracking-wide uppercase" style={{ color: C.textMuted }}>Adresse email</label>
+              <div className="relative transition-all duration-200 rounded-xl overflow-hidden" style={fieldStyle(emailFocused)}>
+                <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-200" style={{ color: emailFocused ? C.purple : C.textSubtle }} />
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} onFocus={() => setEmailFocused(true)} onBlur={() => setEmailFocused(false)}
+                  placeholder="prenom.nom@hotel.com" autoComplete="email" required
+                  className="w-full pl-11 pr-4 py-3.5 bg-transparent text-[14px] transition-all" style={{ color: C.text, outline: 'none' }} />
+              </div>
+            </div>
+
+            {/* Mot de passe */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-semibold tracking-wide uppercase" style={{ color: C.textMuted }}>Mot de passe</label>
+                {mode === 'login' && <button type="button" className="text-[11px] font-medium" style={{ color: C.purple }}>Oublié ?</button>}
+              </div>
+              <div className="relative transition-all duration-200 rounded-xl overflow-hidden" style={fieldStyle(pwFocused)}>
+                <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-200" style={{ color: pwFocused ? C.purple : C.textSubtle }} />
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} onFocus={() => setPwFocused(true)} onBlur={() => setPwFocused(false)}
+                  placeholder="••••••••••••" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required
+                  className="w-full pl-11 pr-12 py-3.5 bg-transparent text-[14px] transition-all" style={{ color: C.text, outline: 'none' }} />
+                <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all duration-200" style={{ color: C.textSubtle }}>
+                  {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+
+            {/* Champs signup */}
+            {mode === 'signup' && (
               <>
-                {submitting ? 'Connexion...' : 'Se connecter'}
-                <LogIn size={14} />
-              </>
-            ) : (
-              <>
-                {submitting ? 'Demande en cours...' : 'Demander un accès'}
-                <Building2 size={14} />
+                {[
+                  { label: 'Nom complet', value: fullName, onChange: setFullName, placeholder: 'Prénom Nom', type: 'text' },
+                  { label: "Nom de l'hôtel", value: hotelName, onChange: setHotelName, placeholder: 'Hôtel de la Paix', type: 'text' },
+                  { label: 'Identifiant tenant', value: tenantSlug, onChange: (v: string) => setTenantSlug(v.toLowerCase().replace(/[^a-z0-9-]/g, '-')), placeholder: 'mon-hotel', type: 'text' },
+                ].map((field) => (
+                  <div key={field.label} className="space-y-1.5">
+                    <label className="block text-[11px] font-semibold tracking-wide uppercase" style={{ color: C.textMuted }}>{field.label}</label>
+                    <input type={field.type} value={field.value} onChange={e => field.onChange(e.target.value)} placeholder={field.placeholder} required
+                      className="w-full px-4 py-3.5 rounded-xl text-[14px] transition-all"
+                      style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text, outline: 'none' }} />
+                  </div>
+                ))}
               </>
             )}
-          </button>
 
-          <div className="flex items-center gap-4 py-1">
-            <div className="h-px flex-1 bg-slate-100" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300">
-              ou
-            </span>
-            <div className="h-px flex-1 bg-slate-100" />
+            {/* Submit */}
+            <div className="pt-2">
+              <button type="submit" disabled={isLoading}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-[14px] text-white transition-all duration-200"
+                style={{ background: isLoading ? 'rgba(124,58,237,0.7)' : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', boxShadow: isLoading ? 'none' : '0 4px 14px rgba(124,58,237,0.35)', letterSpacing: '-0.01em' }}>
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                    </svg>
+                    Connexion...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">{mode === 'login' ? 'Se connecter' : 'Créer le compte'} <ArrowRight size={15} /></div>
+                )}
+              </button>
+            </div>
+          </form>
+
+          <div className="flex items-center gap-4 my-7">
+            <div className="flex-1 h-px" style={{ background: C.border }} />
+            <span className="text-[11px] font-medium" style={{ color: C.textSubtle }}>ou</span>
+            <div className="flex-1 h-px" style={{ background: C.border }} />
           </div>
 
-          <button
-            type="button"
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[12px] font-bold text-slate-500 transition-colors hover:border-[#8B5CF6]/40 hover:text-[#8B5CF6]"
-          >
-            <KeyRound size={13} />
+          <button type="button" className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl text-[13px] font-medium transition-all duration-200"
+            style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.textMuted, boxShadow: '0 1px 2px rgba(15,10,30,0.02)' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" /></svg>
             Connexion SSO entreprise
           </button>
 
-          <button
-            type="button"
-            data-testid="toggle-auth-mode"
-            onClick={() => {
-              setMode(mode === 'login' ? 'signup' : 'login');
-              setError(null);
-            }}
-            className="w-full text-center text-[11px] font-medium text-slate-400 transition-colors hover:text-[#8B5CF6]"
-          >
-            {mode === 'login'
-              ? "Pas encore de compte ? Demander une démo"
-              : 'Déjà un compte ? Se connecter'}
-          </button>
-        </form>
+          <p className="mt-8 text-center text-[12px] font-medium" style={{ color: C.textSubtle }}>
+            {mode === 'login' ? 'Pas encore de compte ? ' : 'Déjà un compte ? '}
+            <button type="button" onClick={() => { setMode(m => m === 'login' ? 'signup' : 'login'); setError(null); }}
+              className="font-semibold transition-colors duration-200" style={{ color: C.purple }}>
+              {mode === 'login' ? 'Demander une démo' : 'Se connecter'}
+            </button>
+          </p>
+        </motion.div>
+
+        <div className="absolute bottom-0 left-0 right-0 h-40 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(250,250,250,0.8), transparent)' }} />
       </div>
     </div>
   );
 };
-
-interface FieldProps {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-  testid?: string;
-  icon?: React.ReactNode;
-  trailing?: React.ReactNode;
-}
-
-const Field: React.FC<FieldProps> = ({
-  label,
-  value,
-  onChange,
-  type = 'text',
-  placeholder,
-  testid,
-  icon,
-  trailing,
-}) => (
-  <label className="block">
-    <span className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">
-      {label}
-    </span>
-    <span className="mt-1 flex h-11 items-center gap-2 rounded-xl border border-transparent bg-[#F6F4FA] px-3 transition-all focus-within:border-[#8B5CF6]/50 focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(139,92,246,0.08)]">
-      {icon && <span className="text-slate-400">{icon}</span>}
-      <input
-        data-testid={testid}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent text-[12px] font-semibold text-slate-700 outline-none placeholder:text-slate-400"
-        required
-      />
-      {trailing}
-    </span>
-  </label>
-);
-
-const BrandPanel: React.FC = () => (
-  <section className="relative hidden min-h-screen overflow-hidden bg-[radial-gradient(circle_at_16%_8%,rgba(255,255,255,0.18),transparent_30%),linear-gradient(150deg,#9B5CFF_0%,#8B5CF6_48%,#7C4DFF_100%)] px-16 py-12 text-white lg:flex lg:flex-col">
-    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:72px_72px] opacity-10" />
-    <div className="relative z-10 flex items-start justify-between">
-      <div className="flex items-center gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#5B21B6] shadow-[0_10px_30px_rgba(49,18,97,0.35)]">
-          <Sparkles size={18} />
-        </span>
-        <div>
-          <div className="text-[18px] font-black tracking-[-0.05em]">Flowtym</div>
-          <div className="mt-0.5 text-[8px] font-black uppercase tracking-[0.32em] text-white/60">
-            Property Management
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div className="relative z-10 mx-auto mt-10 w-full max-w-[590px]">
-      <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/12 px-4 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/80 backdrop-blur">
-        <Sparkles size={12} />
-        PMS nouvelle génération
-      </div>
-      <h1 className="max-w-[430px] text-[48px] font-black leading-[0.95] tracking-[-0.065em]">
-        Pilotez. Détectez. Optimisez.
-      </h1>
-      <p className="mt-5 max-w-[520px] text-[13px] font-semibold leading-6 text-white/68">
-        Flowtym centralise vos opérations hôtelières, détecte les anomalies de vos OTA et vous
-        donne la maîtrise complète de votre performance — en temps réel.
-      </p>
-
-      <div className="mt-7 grid grid-cols-2 gap-3">
-        <FeatureCard
-          icon={<Database size={15} />}
-          title="RMS intégré"
-          text="Pricing dynamique et stratégie tarifaire pilotée par les données."
-        />
-        <FeatureCard
-          icon={<TriangleAlert size={15} />}
-          title="Détection OTA"
-          text="Anomalies tarifaires détectées automatiquement sur vos canaux."
-        />
-        <FeatureCard
-          icon={<BedDouble size={15} />}
-          title="Housekeeping"
-          text="Assignation terrain, statuts, planning et suivi centralisé."
-        />
-        <FeatureCard
-          icon={<Building2 size={15} />}
-          title="Multi-hôtel"
-          text="Vision consolidée et pilotage centralisé de votre portefeuille."
-        />
-        <FeatureCard
-          icon={<Wrench size={15} />}
-          title="Maintenance"
-          text="Suivi des interventions, prévention et alertes d’exploitation."
-        />
-        <FeatureCard
-          icon={<ReceiptText size={15} />}
-          title="TVA & e-facturation"
-          text="Conformité FR 2026, génération automatique et archivage."
-        />
-      </div>
-
-      <div className="mt-8 rounded-2xl border border-white/12 bg-white/10 p-4 shadow-[0_28px_80px_rgba(53,22,134,0.28)] backdrop-blur-md">
-        <div className="flex items-center justify-between text-[9px] font-bold text-white/50">
-          <div className="flex items-center gap-2">
-            <Circle size={6} className="fill-[#34D399] text-[#34D399]" />
-            app.flowtym.com
-          </div>
-          <span className="text-emerald-300">Live</span>
-        </div>
-
-        <div className="mt-5 grid grid-cols-3 gap-3">
-          <Metric label="Occupation" value="87%" delta="+4.2 pts" />
-          <Metric label="ADR" value="€147" delta="+€12" />
-          <Metric label="RevPAR" value="€128" delta="+15%" />
-        </div>
-
-        <div className="mt-5 rounded-xl bg-white/8 p-3">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/55">
-              Revenus · 14 jours
-            </span>
-            <span className="text-[10px] font-black text-emerald-300">+12.4%</span>
-          </div>
-          <div className="flex h-12 items-end gap-2">
-            {[34, 48, 42, 60, 53, 68, 58, 72, 50, 74, 70, 62, 78, 88].map((height, index) => (
-              <div
-                key={index}
-                className="flex-1 rounded-t bg-white/22"
-                style={{ height: `${height}%` }}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 space-y-2.5">
-          <AlertRow icon={<TriangleAlert size={12} />} label="Booking — Chambres Standard sous-évaluées de 12%" badge="2 alertes" />
-          <AlertRow icon={<Activity size={12} />} label="Expedia — Écart tarifaire détecté sur 5 dates" />
-        </div>
-
-        <div className="mt-4 rounded-xl bg-white/8 p-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-[28px] font-black leading-none">4.6</div>
-              <div className="mt-1 text-[10px] font-bold text-amber-200">★ ★ ★ ★ ☆</div>
-            </div>
-            <div className="w-2/3 space-y-2">
-              <Score label="Propreté" value={96} color="bg-emerald-300" />
-              <Score label="Accueil" value={91} color="bg-cyan-300" />
-              <Score label="Chambres" value={82} color="bg-violet-200" />
-              <Score label="Services" value={76} color="bg-amber-300" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-5 flex items-center gap-5 text-[10px] font-semibold text-white/42">
-        <span> AES-256</span>
-        <span>TVA 2026 & e-facturation</span>
-        <span>ISO 27001</span>
-      </div>
-    </div>
-  </section>
-);
-
-interface FeatureCardProps {
-  icon: React.ReactNode;
-  title: string;
-  text: string;
-}
-
-const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, text }) => (
-  <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm ring-1 ring-white/10">
-    <div className="flex gap-3">
-      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-white/10 text-emerald-200">
-        {icon}
-      </span>
-      <div>
-        <div className="text-[11px] font-black tracking-[-0.02em]">{title}</div>
-        <p className="mt-1 text-[9px] font-semibold leading-4 text-white/52">{text}</p>
-      </div>
-    </div>
-  </div>
-);
-
-const Metric: React.FC<{ label: string; value: string; delta: string }> = ({ label, value, delta }) => (
-  <div className="rounded-xl bg-white/10 p-3">
-    <div className="text-[9px] font-black uppercase tracking-[0.14em] text-white/45">{label}</div>
-    <div className="mt-2 text-[22px] font-black leading-none tracking-[-0.05em]">{value}</div>
-    <div className="mt-1 text-[9px] font-bold text-white/45">{delta}</div>
-  </div>
-);
-
-const AlertRow: React.FC<{ icon: React.ReactNode; label: string; badge?: string }> = ({
-  icon,
-  label,
-  badge,
-}) => (
-  <div className="flex items-center justify-between gap-3 text-[10px] font-bold text-white/62">
-    <div className="flex items-center gap-2">
-      <span className="text-amber-300">{icon}</span>
-      <span>{label}</span>
-    </div>
-    {badge && (
-      <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[8px] font-black text-amber-900">
-        {badge}
-      </span>
-    )}
-  </div>
-);
-
-const Score: React.FC<{ label: string; value: number; color: string }> = ({ label, value, color }) => (
-  <div className="grid grid-cols-[64px_1fr_28px] items-center gap-2">
-    <span className="text-[9px] font-bold text-white/55">{label}</span>
-    <span className="h-1.5 overflow-hidden rounded-full bg-white/12">
-      <span className={`block h-full rounded-full ${color}`} style={{ width: `${value}%` }} />
-    </span>
-    <span className="text-right text-[8px] font-black text-white/45">{value}%</span>
-  </div>
-);
-
-export default LoginPage;
