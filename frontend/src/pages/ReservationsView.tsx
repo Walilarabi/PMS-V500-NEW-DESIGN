@@ -37,7 +37,7 @@ import { motion } from 'motion/react';
 
 import { useReservations as useContextReservations } from '@/src/contexts/ReservationContext';
 import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
-import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
+import ReservationFormModal from '@/src/components/modals/ReservationFormModal';
 import { LiveReservationsBanner } from '@/src/domains/reservations/LiveReservationsBanner';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
 
@@ -598,7 +598,7 @@ export const ReservationsView = () => {
            </div>
         </div>
       </div>
-      <NewReservationModal
+      <ReservationFormModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={async (data) => {
@@ -608,19 +608,44 @@ export const ReservationsView = () => {
               guestName: data.guestName || null,
               guestEmail: data.email || null,
               guestPhone: data.phone || null,
+              guestPhone2: (data as any).partnerRef || null,
               checkIn: data.checkIn,
               checkOut: data.checkOut,
               adults: data.adults ?? 1,
               children: data.children ?? 0,
-              source: data.source ?? 'DIRECT',
+              source: data.channel ?? 'Direct',
               totalAmount: data.totalTTC ?? 0,
               notes: data.notes || null,
-              roomId: data.roomIds?.[0] ?? null,
-              roomNumber: data.roomNumbers?.[0] ?? null,
-              roomType: data.roomSelections?.[0]?.type ?? null,
-              roomCategory: null,
+              roomId: null,
+              roomNumber: data.roomNumber || null,
+              roomType: data.category || null,
+              roomCategory: data.category || null,
               guestId: null,
             });
+            // Chambres supplémentaires : créer une réservation liée par chambre
+            const extras = (data as any).roomSelections ?? [];
+            for (const sel of extras) {
+              if (!sel.roomNumber) continue;
+              await createReservation.mutateAsync({
+                reference: data.reference + '-' + sel.roomNumber,
+                guestName: data.guestName || null,
+                guestEmail: data.email || null,
+                guestPhone: data.phone || null,
+                guestPhone2: null,
+                checkIn: data.checkIn,
+                checkOut: data.checkOut,
+                adults: sel.adults ?? 1,
+                children: sel.children ?? 0,
+                source: data.channel ?? 'Direct',
+                totalAmount: 0,
+                notes: data.notes || null,
+                roomId: null,
+                roomNumber: sel.roomNumber,
+                roomType: sel.roomType || null,
+                roomCategory: sel.roomType || null,
+                guestId: null,
+              });
+            }
           } catch (err) {
             console.error('[ReservationsView] createReservation failed:', err);
             throw err;
