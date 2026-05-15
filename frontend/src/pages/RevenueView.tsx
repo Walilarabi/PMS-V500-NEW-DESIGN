@@ -1,4 +1,5 @@
 import React from 'react';
+import { ModuleSidebar } from '@/src/components/ModuleSidebar';
 import { 
   Zap, 
   Plus, 
@@ -32,8 +33,10 @@ import { Card, CardHeader, CardContent } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
 import { cn } from '@/src/lib/utils';
-// mock context removed — data via Supabase hooks
+import { useReservations } from '@/src/contexts/ReservationContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { Tarifs } from '@/src/components/Tarifs';
+import { AutoRules } from '@/src/components/AutoRules';
 
 // Mock data for price history simulation
 const priceHistoryData = [
@@ -48,13 +51,13 @@ const priceHistoryData = [
   { day: '10/06', baseline: 260, optimized: 330, delta: 70 },
 ];
 
-export const RevenueView = ({ activeTab: propTab = 'yield' }: { activeTab?: string }) => {
-  const [activeTab, setActiveTab] = React.useState<'yield' | 'promotions' | 'channels'>('yield');
+export const RevenueView = ({ activeTab: propTab = 'tarifs' }: { activeTab?: string }) => {
+  const [activeTab, setActiveTab] = React.useState<'tarifs' | 'auto_rules' | 'yield' | 'promotions' | 'channels'>('tarifs');
   const [selectedRule, setSelectedRule] = React.useState<any>(null);
-  const reservations = [];
+  const { reservations } = useReservations();
 
   React.useEffect(() => {
-    if (['yield', 'promotions', 'channels'].includes(propTab)) {
+    if (['tarifs', 'auto_rules', 'yield', 'promotions', 'channels'].includes(propTab)) {
       setActiveTab(propTab as any);
     }
   }, [propTab]);
@@ -387,8 +390,20 @@ export const RevenueView = ({ activeTab: propTab = 'yield' }: { activeTab?: stri
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-[#F9FAFB] scrollbar-hide">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full bg-[#F9FAFB]">
+      <ModuleSidebar
+        items={[
+          { id: 'tarifs', label: 'Tarifs & Dispos', icon: BarChart2 },
+          { id: 'auto_rules', label: 'Règles Auto', icon: Zap },
+          { id: 'yield', label: 'Règles Yielder', icon: Zap },
+          { id: 'channels', label: 'Performance Canaux', icon: Globe },
+          { id: 'promotions', label: 'Offres & Promos', icon: Zap },
+        ]}
+        activeTab={activeTab}
+        setActiveTab={(tab) => setActiveTab(tab as any)}
+      />
+      <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-[#F9FAFB] scrollbar-hide">
+        <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
            <button className="p-2.5 bg-white border border-gray-100 rounded-xl text-gray-400 hover:text-gray-600 transition-colors shadow-sm"><ChevronRight size={20} className="rotate-180" /></button>
            <div className="flex items-center gap-3 text-left">
@@ -409,26 +424,10 @@ export const RevenueView = ({ activeTab: propTab = 'yield' }: { activeTab?: stri
         </div>
       </div>
 
-      <div className="flex border-b border-gray-200 gap-8">
-        {[
-          { id: 'yield', label: 'Règles Yielder' },
-          { id: 'channels', label: 'Performance Canaux' },
-          { id: 'promotions', label: 'Offres & Promos' },
-        ].map((tab) => (
-          <button 
-            key={tab.id} 
-            onClick={() => setActiveTab(tab.id as any)}
-            className={cn(
-            "pb-4 text-xs font-bold transition-all relative px-2 text-nowrap",
-            activeTab === tab.id ? "text-[#8B5CF6]" : "text-gray-400 hover:text-gray-600"
-          )}>
-            {tab.label}
-            {activeTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#8B5CF6]" />}
-          </button>
-        ))}
-      </div>
 
       <div className="flex-1">
+        {activeTab === 'tarifs' && <Tarifs />}
+        {activeTab === 'auto_rules' && <AutoRules />}
         {activeTab === 'yield' && renderYield()}
         {activeTab === 'channels' && renderChannels()}
         {activeTab === 'promotions' && <div className="text-left p-20 bg-white rounded-3xl border border-dashed text-gray-300 font-bold uppercase tracking-widest text-center">Module Promotions en cours de modernisation</div>}
@@ -437,6 +436,7 @@ export const RevenueView = ({ activeTab: propTab = 'yield' }: { activeTab?: stri
       <AnimatePresence>
         {selectedRule && renderRuleSimulation()}
       </AnimatePresence>
+      </div>
     </div>
   );
 };

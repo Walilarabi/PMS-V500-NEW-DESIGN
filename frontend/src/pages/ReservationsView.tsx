@@ -1,4 +1,5 @@
 import React from 'react';
+import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 import { 
   Search, 
   Filter, 
@@ -113,6 +114,7 @@ export const ReservationsView = () => {
   const { data: supabaseData } = useReservations({ limit: 100 });
   const createReservation = useCreateReservation();
   const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [selectedResDetails, setSelectedResDetails] = React.useState<any>(null);
 
   const paymentFollowUps = [
     { ref: 'RES-095', client: 'Sophie Dubois', amount: '360 €', status: 'Lien expiré', statusColor: 'red', expire: 'Expiré', room: '102' },
@@ -429,7 +431,7 @@ export const ReservationsView = () => {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                        {filteredReservations.map((row, idx) => (
-                         <tr key={`res-row-${row.ref}-${idx}`} className="text-[13px] hover:bg-gray-50 transition-colors group">
+                         <tr key={`res-row-${row.ref}-${idx}`} className="text-[13px] hover:bg-gray-50 transition-colors group cursor-pointer" onClick={() => setSelectedResDetails(row)}>
                             <td className="px-4 py-5 font-bold text-[#8953F1] leading-none">{row.ref}</td>
                             <td className="px-4 py-5">
                                <div className={cn(
@@ -625,6 +627,32 @@ export const ReservationsView = () => {
           }
         }}
       />
+      {selectedResDetails && (
+        <ReservationDetailsModal
+          isOpen={true}
+          reservation={{
+            id: selectedResDetails.ref || selectedResDetails.id,
+            client: selectedResDetails.guest,
+            guestName: selectedResDetails.guest,
+            room: selectedResDetails.room,
+            arrival: selectedResDetails.checkIn || selectedResDetails.arrival,
+            departure: selectedResDetails.checkOut || selectedResDetails.departure,
+            checkIn: selectedResDetails.checkIn || selectedResDetails.arrival,
+            checkOut: selectedResDetails.checkOut || selectedResDetails.departure,
+            source: selectedResDetails.source || selectedResDetails.canal || 'Direct',
+            status: selectedResDetails.status === 'CHECK-OUT' ? 'checked_out'
+                  : selectedResDetails.status === 'CHECK-IN' ? 'checked_in'
+                  : selectedResDetails.status === 'CONFIRMÉE' ? 'confirmed'
+                  : selectedResDetails.status === 'ANNULÉE' ? 'cancelled'
+                  : 'pending',
+            totalAmount: selectedResDetails.amount || selectedResDetails.montant || 0,
+            montant: selectedResDetails.amount || selectedResDetails.montant || 0,
+            nights: selectedResDetails.nights || 1,
+            guests: { adults: selectedResDetails.adults || 1, children: 0 },
+          } as any}
+          onClose={() => setSelectedResDetails(null)}
+        />
+      )}
     </div>
   );
 };

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { ReservationModal } from '@/src/components/today/modals/ReservationModal';
+import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 import { HousekeepingAssignmentModal } from '@/src/components/today/modals/HousekeepingAssignmentModal';
 import { RoomChangeModal } from '@/src/components/today/modals/RoomChangeModal';
 import { CommunicationModal } from '@/src/components/today/modals/CommunicationModal';
@@ -134,6 +135,7 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
   const [cleaningFilter, setCleaningFilter] = useState('all');
   const [openMenuRowId, setOpenMenuRowId] = useState<number | null>(null);
   const [isExtendedView, setIsExtendedView] = useState(false);
+  const [detailsRow, setDetailsRow] = useState<RoomRow | null>(null);
 
   const openReservation = (row: RoomRow) => {
     setReservationModal({ row, mode: row.movement === 'departure' ? 'departure' : 'arrival' });
@@ -516,7 +518,7 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
                               <span className={cn('truncate font-medium text-xs', row.status.includes('Bloquée') ? 'text-slate-500' : row.status.includes('Non prête') ? 'text-red-600' : row.status.includes('Ménage en cours') ? 'text-orange-600' : row.status.includes('Arrivée') ? 'text-yellow-600' : row.status.includes('Occupée') ? 'text-blue-600' : 'text-green-600')}>{row.status}</span>
                             </div>
                           </td>
-                          <td className="px-2 py-3"><ClientIdentity row={row} index={index} onClick={() => openReservation(row)} /></td>
+                          <td className="px-2 py-3"><ClientIdentity row={row} index={index} onClick={() => setDetailsRow(row)} /></td>
                           <td className="px-2 py-3"><DateCell value={row.arrival} type="arrival" /></td>
                           <td className="px-2 py-3"><DateCell value={row.departure} type="departure" /></td>
                           <td className="px-2 py-3"><EtaEtdCell row={row} /></td>
@@ -755,6 +757,28 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
       )}
       {assignmentModalOpen && selectedRooms.length > 0 && <HousekeepingAssignmentModal rooms={selectedRooms} onClose={() => { setAssignmentModalOpen(false); setSelectedRoomIds([]); }} onAssign={handleAssignRooms} />}
       {reservationModal && <ReservationModal state={reservationModal} onClose={() => setReservationModal(null)} onValidate={handleReservationValidation} />}
+      {detailsRow && (
+        <ReservationDetailsModal
+          isOpen={true}
+          reservation={{
+            id: detailsRow.reservationId || String(detailsRow.id),
+            client: detailsRow.guest,
+            guestName: detailsRow.guest,
+            room: detailsRow.room,
+            arrival: detailsRow.arrival,
+            departure: detailsRow.departure,
+            checkIn: detailsRow.arrival,
+            checkOut: detailsRow.departure,
+            source: detailsRow.source,
+            status: detailsRow.status === 'check-out fait' ? 'checked_out' : detailsRow.movement === 'arrival' ? 'confirmed' : 'checked_in',
+            totalAmount: detailsRow.amount || 0,
+            montant: detailsRow.amount || 0,
+            nights: detailsRow.nights || 1,
+            guests: { adults: detailsRow.adults || detailsRow.guestCount || 1, children: 0 },
+          } as any}
+          onClose={() => setDetailsRow(null)}
+        />
+      )}
       {roomChangeModal && <RoomChangeModal row={roomChangeModal} onClose={() => setRoomChangeModal(null)} onSave={handleRoomChange} />}
       {communicationModal && <CommunicationModal row={communicationModal} onClose={() => setCommunicationModal(null)} onSend={handleMessageSent} />}
       {badgesModal && <BadgesModal row={badgesModal} onClose={() => setBadgesModal(null)} onSave={handleBadgesSave} />}
