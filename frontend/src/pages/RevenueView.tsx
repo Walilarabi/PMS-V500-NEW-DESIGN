@@ -37,6 +37,8 @@ import { useReservations } from '@/src/contexts/ReservationContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { Tarifs } from '@/src/components/Tarifs';
 import { AutoRules } from '@/src/components/AutoRules';
+import { CalendarGrid } from '@/src/components/rms/calendar/CalendarGrid';
+import { ToastProvider } from '@/src/components/rms/calendar/Toast';
 
 // Mock data for price history simulation
 const priceHistoryData = [
@@ -394,6 +396,7 @@ export const RevenueView = ({ activeTab: propTab = 'tarifs' }: { activeTab?: str
       <ModuleSidebar
         items={[
           { id: 'tarifs', label: 'Tarifs & Dispos', icon: BarChart2 },
+          { id: 'grid', label: 'Grille Tarifaire', icon: BarChart2 },
           { id: 'auto_rules', label: 'Règles Auto', icon: Zap },
           { id: 'yield', label: 'Règles Yielder', icon: Zap },
           { id: 'channels', label: 'Performance Canaux', icon: Globe },
@@ -427,6 +430,11 @@ export const RevenueView = ({ activeTab: propTab = 'tarifs' }: { activeTab?: str
 
       <div className="flex-1">
         {activeTab === 'tarifs' && <Tarifs />}
+        {activeTab === 'grid' && (
+          <ToastProvider>
+            <CalendarGrid />
+          </ToastProvider>
+        )}
         {activeTab === 'auto_rules' && <AutoRules />}
         {activeTab === 'yield' && renderYield()}
         {activeTab === 'channels' && renderChannels()}
