@@ -38,14 +38,16 @@ export type PageId =
   | 'clients_blacklist'
   | 'clients_tiers'
   // ── 5. REVENUE ─────────────────────────────────────────────────────────────
-  | 'revenue'
-  | 'rev_calendar'
-  | 'rev_grid'
-  | 'rev_forecast'
-  | 'rev_channels'
-  | 'rev_allotments'
-  | 'rev_rules'
-  | 'rev_graphs'
+  // Pilotage
+  | 'revenue'              // Dashboard Revenue
+  | 'rev_pricing'          // Calendrier tarifaire (grille de prix)
+  // Distribution
+  | 'rev_channels'         // Canaux & OTAs
+  | 'rev_market'           // Veille concurrentielle
+  // Automatisation
+  | 'rev_rules'            // Règles tarifaires (auto-pricing)
+  | 'rev_yield'            // Yield management
+  | 'rev_promotions'       // Promotions
   // ── 6. FINANCE ─────────────────────────────────────────────────────────────
   | 'finance'
   | 'facturation'

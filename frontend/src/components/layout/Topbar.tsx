@@ -32,9 +32,9 @@ const PAGE_TO_NAV: Record<string, string> = {
   clients_segments: 'clients', clients_merge: 'clients',
   clients_documents: 'clients', clients_blacklist: 'clients', clients_tiers: 'clients',
   // Revenue
-  revenue: 'revenue', rev_calendar: 'revenue', rev_grid: 'revenue',
-  rev_forecast: 'revenue', rev_channels: 'revenue', rev_allotments: 'revenue',
-  rev_rules: 'revenue', rev_graphs: 'revenue',
+  revenue: 'revenue', rev_pricing: 'revenue', rev_channels: 'revenue',
+  rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
+  rev_promotions: 'revenue',
   // Finance
   finance: 'finance', facturation: 'finance', proforma: 'finance',
   caisse: 'finance', impayes: 'finance', cloture: 'finance',

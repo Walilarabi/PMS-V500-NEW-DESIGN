@@ -5,7 +5,7 @@ import {
   CalendarDays, CheckCircle2, Clock, HelpCircle, Users,
   Building2, Target, GitMerge as Merge, FileText, Ban,
   UserCheck, TrendingUp, Grid, BarChart2, Share2,
-  Layers, Zap, LineChart, CreditCard, Receipt, Wallet,
+  Layers, Zap, CreditCard, Receipt, Wallet,
   AlertTriangle, Lock, Banknote, Percent, Plug, Package,
   PieChart, Activity, BookOpen, Database,
   ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
@@ -96,16 +96,25 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
 
   revenue: [
     {
-      label: 'Revenue Management',
+      label: 'Pilotage',
       items: [
-        { id: 'revenue',        label: 'Dashboard',         icon: LayoutDashboard },
-        { id: 'rev_calendar',   label: 'Calendrier tarifaire',icon: Calendar },
-        { id: 'rev_grid',       label: 'Grille (matrice)',  icon: Grid },
-        { id: 'rev_forecast',   label: 'Forecast',          icon: TrendingUp },
-        { id: 'rev_channels',   label: 'Canaux',            icon: Share2 },
-        { id: 'rev_allotments', label: 'Allotements',       icon: Layers },
-        { id: 'rev_rules',      label: 'Règles automatiques',icon: Zap },
-        { id: 'rev_graphs',     label: 'Graphiques & analyses',icon: LineChart },
+        { id: 'revenue',      label: 'Dashboard',           icon: LayoutDashboard },
+        { id: 'rev_pricing',  label: 'Calendrier tarifaire',icon: CalendarDays },
+      ],
+    },
+    {
+      label: 'Distribution',
+      items: [
+        { id: 'rev_channels', label: 'Canaux & OTAs',       icon: Share2 },
+        { id: 'rev_market',   label: 'Veille concurrentielle', icon: Target },
+      ],
+    },
+    {
+      label: 'Automatisation',
+      items: [
+        { id: 'rev_rules',       label: 'Règles tarifaires',icon: Zap },
+        { id: 'rev_yield',       label: 'Yield management', icon: TrendingUp },
+        { id: 'rev_promotions',  label: 'Promotions',       icon: Tag },
       ],
     },
   ],
@@ -235,9 +244,9 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   clients: 'clients', clients_cardex: 'clients', clients_companies: 'clients',
   clients_segments: 'clients', clients_merge: 'clients', clients_documents: 'clients',
   clients_blacklist: 'clients', clients_tiers: 'clients',
-  revenue: 'revenue', rev_calendar: 'revenue', rev_grid: 'revenue',
-  rev_forecast: 'revenue', rev_channels: 'revenue', rev_allotments: 'revenue',
-  rev_rules: 'revenue', rev_graphs: 'revenue',
+  revenue: 'revenue', rev_pricing: 'revenue', rev_channels: 'revenue',
+  rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
+  rev_promotions: 'revenue',
   finance: 'finance', facturation: 'finance', proforma: 'finance',
   caisse: 'finance', impayes: 'finance', cloture: 'finance',
   fin_reconciliation: 'finance', tva2026: 'finance',

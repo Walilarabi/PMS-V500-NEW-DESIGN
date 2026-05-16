@@ -8,7 +8,13 @@ import { TodayView }        from '@/src/pages/TodayView';
 import { PlanningView }     from '@/src/pages/PlanningViewLive';
 import { ReservationsView } from '@/src/pages/ReservationsView';
 import { ClientsView }      from '@/src/pages/ClientsView';
-import { RevenueView }      from '@/src/pages/RevenueView';
+import { RevenueDashboard }    from '@/src/pages/revenue/RevenueDashboard';
+import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
+import { ChannelsView }        from '@/src/pages/revenue/ChannelsView';
+import { MarketIntelligence }  from '@/src/pages/revenue/MarketIntelligence';
+import { PricingRules }        from '@/src/pages/revenue/PricingRules';
+import { YieldView }           from '@/src/pages/revenue/YieldView';
+import { PromotionsView }      from '@/src/pages/revenue/PromotionsView';
 import { FinanceView }      from '@/src/pages/FinanceView';
 import { AnalysisView }     from '@/src/pages/AnalysisView';
 import { FlowboardView }    from '@/src/pages/FlowboardView';
@@ -84,14 +90,13 @@ function renderPage(page: PageId): React.ReactNode {
     case 'clients_tiers':     return <Placeholder title="Tiers / Prescripteurs" icon="🤝" />;
 
     // ── REVENUE ───────────────────────────────────────────────────────────────
-    case 'revenue':        return <RevenueView />;
-    case 'rev_calendar':   return <Placeholder title="Calendrier tarifaire" icon="📅" />;
-    case 'rev_grid':       return <Placeholder title="Grille tarifaire" icon="📊" />;
-    case 'rev_forecast':   return <Placeholder title="Forecast" icon="📈" />;
-    case 'rev_channels':   return <Placeholder title="Canaux" icon="📡" />;
-    case 'rev_allotments': return <Placeholder title="Allotements" icon="🗂️" />;
-    case 'rev_rules':      return <Placeholder title="Règles automatiques" icon="⚡" />;
-    case 'rev_graphs':     return <Placeholder title="Graphiques & analyses" icon="📉" />;
+    case 'revenue':        return <RevenueDashboard />;
+    case 'rev_pricing':    return <PricingCalendar />;
+    case 'rev_channels':   return <ChannelsView />;
+    case 'rev_market':     return <MarketIntelligence />;
+    case 'rev_rules':      return <PricingRules />;
+    case 'rev_yield':      return <YieldView />;
+    case 'rev_promotions': return <PromotionsView />;
 
     // ── FINANCE ───────────────────────────────────────────────────────────────
     case 'facturation':        return <FacturationView />;
