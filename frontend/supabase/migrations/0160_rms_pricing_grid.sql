@@ -68,6 +68,29 @@ CREATE TABLE IF NOT EXISTS public.rate_plans (
   UNIQUE (hotel_id, plan_code)
 );
 
+-- Idempotency safety: if rate_plans already exists from a partial earlier run
+-- with missing columns, add them now so the rest of the migration works.
+ALTER TABLE public.rate_plans
+  ADD COLUMN IF NOT EXISTS plan_name text,
+  ADD COLUMN IF NOT EXISTS pension_type text,
+  ADD COLUMN IF NOT EXISTS channel_type text NOT NULL DEFAULT 'OTA',
+  ADD COLUMN IF NOT EXISTS calc_mode text NOT NULL DEFAULT 'derived',
+  ADD COLUMN IF NOT EXISTS calc_value numeric NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS reference_plan_id uuid,
+  ADD COLUMN IF NOT EXISTS is_reference boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS connectivity_type text NOT NULL DEFAULT 'Aucun',
+  ADD COLUMN IF NOT EXISTS is_connectivity_locked boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS distribution_channels jsonb NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS min_stay integer,
+  ADD COLUMN IF NOT EXISTS max_stay integer,
+  ADD COLUMN IF NOT EXISTS cancellation_policy text,
+  ADD COLUMN IF NOT EXISTS meal_plan text,
+  ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS deleted_at timestamptz,
+  ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+
 -- Only ONE reference plan per hotel (enforced at DB level)
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_rate_plans_one_reference_per_hotel
   ON public.rate_plans(hotel_id)
@@ -100,6 +123,14 @@ CREATE TABLE IF NOT EXISTS public.pricing_rules (
   version integer NOT NULL DEFAULT 1
 );
 
+ALTER TABLE public.pricing_rules
+  ADD COLUMN IF NOT EXISTS reference_plan_id uuid,
+  ADD COLUMN IF NOT EXISTS room_rules jsonb NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS plan_rules jsonb NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS updated_by uuid,
+  ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+
 DROP TRIGGER IF EXISTS trg_pricing_rules_updated_at ON public.pricing_rules;
 CREATE TRIGGER trg_pricing_rules_updated_at
   BEFORE UPDATE ON public.pricing_rules
@@ -125,6 +156,17 @@ CREATE TABLE IF NOT EXISTS public.rate_prices (
   version integer NOT NULL DEFAULT 1,
   UNIQUE (hotel_id, room_type_code, plan_id, stay_date)
 );
+
+ALTER TABLE public.rate_prices
+  ADD COLUMN IF NOT EXISTS price numeric,
+  ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'EUR',
+  ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open',
+  ADD COLUMN IF NOT EXISTS plan_closed boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS block_reason text,
+  ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual',
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS updated_by uuid,
+  ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
 
 CREATE INDEX IF NOT EXISTS idx_rate_prices_lookup
   ON public.rate_prices(hotel_id, stay_date, room_type_code);
@@ -158,6 +200,19 @@ CREATE TABLE IF NOT EXISTS public.rate_restrictions (
   version integer NOT NULL DEFAULT 1,
   UNIQUE (hotel_id, room_type_code, stay_date)
 );
+
+ALTER TABLE public.rate_restrictions
+  ADD COLUMN IF NOT EXISTS cta boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS ctd boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS min_stay integer,
+  ADD COLUMN IF NOT EXISTS max_stay integer,
+  ADD COLUMN IF NOT EXISTS inventory integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS capacity integer,
+  ADD COLUMN IF NOT EXISTS sold integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS inventory_override text,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS updated_by uuid,
+  ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
 
 CREATE INDEX IF NOT EXISTS idx_rate_restrictions_lookup
   ON public.rate_restrictions(hotel_id, stay_date, room_type_code);
