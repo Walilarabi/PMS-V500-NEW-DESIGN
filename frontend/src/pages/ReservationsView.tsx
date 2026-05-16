@@ -111,7 +111,7 @@ const mapSupabaseReservation = (row: ReservationRow): ReservationTableRow => {
 
 export const ReservationsView = () => {
   const { reservations } = useContextReservations();
-  const { data: supabaseData } = useReservations({ limit: 100 });
+  const { data: supabaseData } = useReservations({ limit: 500 });
   const createReservation = useCreateReservation();
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [selectedResDetails, setSelectedResDetails] = React.useState<any>(null);

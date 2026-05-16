@@ -40,7 +40,7 @@ export interface ListReservationsParams {
 export async function listReservations(
   params: ListReservationsParams = {},
 ): Promise<{ rows: ReservationRow[]; total: number }> {
-  const limit = Math.min(params.limit ?? 50, 200);
+  const limit = Math.min(params.limit ?? 50, 1000);
   const offset = params.offset ?? 0;
 
   let q = supabase

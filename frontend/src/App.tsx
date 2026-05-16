@@ -32,6 +32,7 @@ import {
   useRevenueAnomaliesRealtime,
   useSasIncomingRealtime,
 } from '@/src/hooks/useRealtimeChannels';
+import { useSupabaseSync } from '@/src/hooks/useSupabaseSync';
 
 // Placeholder universel
 const Placeholder = ({ title, icon }: { title: string; icon?: string }) => (
@@ -175,6 +176,7 @@ export default function App() {
   useReconciliationRealtime();
   useRevenueAnomaliesRealtime();
   useSasIncomingRealtime();
+  useSupabaseSync();  // Synchronise les rooms et réservations depuis Supabase vers les stores locaux
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#F9FAFB]">
