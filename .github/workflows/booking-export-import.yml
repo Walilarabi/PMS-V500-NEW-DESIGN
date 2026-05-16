@@ -1,0 +1,46 @@
+name: Booking Export Import
+
+on:
+  workflow_dispatch:
+    inputs:
+      hotel_id:
+        description: 'Hotel UUID'
+        required: true
+        type: string
+        default: '02b9eb0e-89ef-45de-ba8e-20d4b41c500c'
+      excel_url:
+        description: 'Raw URL of the BookingExport .xlsx'
+        required: true
+        type: string
+        default: 'https://raw.githubusercontent.com/Walilarabi/PMS-V500-NEW-DESIGN/main/data/booking_exports/folkestone_booking_export_2026-05-16.xlsx'
+      dry_run:
+        description: 'Dry run (analysis only)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install httpx==0.28.1 pandas==2.2.3 openpyxl==3.1.5
+      - run: |
+          mkdir -p /tmp/import
+          curl -fsSL "${{ inputs.excel_url }}" -o /tmp/import/booking.xlsx
+          ls -la /tmp/import/
+      - env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          PYTHONPATH=. python -m backend.workers.booking_export_importer \
+            --file /tmp/import/booking.xlsx \
+            --hotel-id ${{ inputs.hotel_id }} \
+            ${{ inputs.dry_run == true && '--dry-run' || '' }}
