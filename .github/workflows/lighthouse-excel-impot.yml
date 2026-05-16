@@ -1,0 +1,60 @@
+name: Lighthouse Excel Import
+
+on:
+  workflow_dispatch:
+    inputs:
+      hotel_id:
+        description: 'Hotel UUID'
+        required: true
+        type: string
+      excel_url:
+        description: 'Raw URL to the .xlsx in the repo'
+        required: true
+        type: string
+      ota:
+        description: 'OTA name'
+        required: false
+        type: choice
+        default: 'bookingdotcom'
+        options:
+          - bookingdotcom
+          - expedia
+          - airbnb
+          - branddotcom
+          - agoda
+      dry_run:
+        description: 'Dry run (parse only)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - run: |
+          python -m pip install --upgrade pip
+          pip install httpx==0.28.1 pandas==2.2.3 openpyxl==3.1.5
+
+      - run: |
+          mkdir -p /tmp/import
+          curl -fsSL "${{ inputs.excel_url }}" -o /tmp/import/lighthouse_export.xlsx
+          ls -la /tmp/import/
+
+      - env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          PYTHONPATH=. python -m backend.workers.lighthouse_excel_importer \
+            --file /tmp/import/lighthouse_export.xlsx \
+            --hotel-id ${{ inputs.hotel_id }} \
+            --ota ${{ inputs.ota }} \
+            ${{ inputs.dry_run == true && '--dry-run' || '' }}
