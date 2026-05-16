@@ -157,6 +157,9 @@ function mapSupabaseReservationToContext(r: SupabaseReservation): Reservation {
  *
  * Surveille tenantId. Quand il change ET qu'on est authentifié, fetch les
  * rooms et réservations depuis Supabase et les injecte dans les stores locaux.
+ *
+ * Expose `window.flowtymResetSync()` pour forcer une resynchronisation
+ * (efface les mocks localStorage et re-fetch depuis Supabase).
  */
 export function useSupabaseSync() {
   const { status, session } = useAuth();
@@ -168,6 +171,24 @@ export function useSupabaseSync() {
   const lastSyncedRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // Expose une fonction de debug accessible depuis la console
+    if (typeof window !== 'undefined') {
+      (window as unknown as { flowtymResetSync?: () => void }).flowtymResetSync = () => {
+        try {
+          localStorage.removeItem('pms-reservations-v1');
+          // Le configStore Zustand persist a sa propre clé
+          const keysToCheck = Object.keys(localStorage).filter((k) =>
+            k.includes('config') || k.includes('pms-')
+          );
+          keysToCheck.forEach((k) => localStorage.removeItem(k));
+          console.info('[flowtymResetSync] Cleared localStorage, reloading...');
+          window.location.reload();
+        } catch (e) {
+          console.error('[flowtymResetSync] Failed:', e);
+        }
+      };
+    }
+
     if (status !== 'authenticated' || !tenantId) return;
     if (lastSyncedRef.current === tenantId) return;
 
@@ -175,7 +196,7 @@ export function useSupabaseSync() {
 
     async function syncAll() {
       try {
-        // 1. ROOMS
+        // 1. ROOMS — toujours fetch depuis Supabase
         const { data: roomsData, error: roomsError } = await supabase
           .from('rooms')
           .select('id,number,type,category,room_type_code,active')
@@ -191,13 +212,15 @@ export function useSupabaseSync() {
           if (supabaseRooms.length > 0) {
             const mappedRooms = supabaseRooms.map(mapSupabaseRoomToStore);
             updateRooms(mappedRooms);
-            console.info(`[useSupabaseSync] Synced ${mappedRooms.length} rooms from Supabase`);
+            console.info(
+              `[useSupabaseSync] ✅ Synced ${mappedRooms.length} rooms from Supabase for hotel ${tenantId}`
+            );
           } else {
-            console.info('[useSupabaseSync] No rooms in DB, keeping mocks');
+            console.info('[useSupabaseSync] No rooms in DB, keeping current store rooms');
           }
         }
 
-        // 2. RESERVATIONS
+        // 2. RESERVATIONS — toujours fetch
         const { data: resData, error: resError } = await supabase
           .from('reservations')
           .select(
@@ -218,8 +241,19 @@ export function useSupabaseSync() {
             const mapped = supabaseReservations.map(mapSupabaseReservationToContext);
             replaceAllReservations(mapped);
             console.info(
-              `[useSupabaseSync] Synced ${mapped.length} reservations from Supabase`
+              `[useSupabaseSync] ✅ Synced ${mapped.length} reservations from Supabase for hotel ${tenantId}`
             );
+            // Debug : afficher un échantillon
+            if (mapped.length > 0) {
+              console.info('[useSupabaseSync] Sample reservation:', {
+                room: mapped[0].room,
+                client: mapped[0].client,
+                arrival: mapped[0].arrival,
+                departure: mapped[0].departure,
+                checkIn: mapped[0].checkIn,
+                checkOut: mapped[0].checkOut,
+              });
+            }
           } else {
             console.info('[useSupabaseSync] No reservations in DB, keeping mocks');
           }
