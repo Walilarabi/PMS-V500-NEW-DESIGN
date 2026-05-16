@@ -27,17 +27,6 @@ CREATE INDEX IF NOT EXISTS idx_rooms_type_code
   ON public.rooms(hotel_id, room_type_code)
   WHERE room_type_code IS NOT NULL;
 
--- Add revenue_manager role to the enum (used by RBAC below)
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_enum
-    WHERE enumtypid = 'admin_user_role'::regtype
-      AND enumlabel = 'revenue_manager'
-  ) THEN
-    ALTER TYPE admin_user_role ADD VALUE 'revenue_manager';
-  END IF;
-END $$;
 
 -- ----------------------------------------------------------------------------
 -- 1. rate_plans — distinct pricing plans per hotel
@@ -452,9 +441,9 @@ CREATE POLICY rate_plans_select ON public.rate_plans FOR SELECT
 DROP POLICY IF EXISTS rate_plans_write ON public.rate_plans;
 CREATE POLICY rate_plans_write ON public.rate_plans FOR ALL
   USING (hotel_id = public.get_user_hotel_id()
-         AND public.get_user_role() IN ('direction','revenue_manager'))
+         AND public.get_user_role() IN ('direction'))
   WITH CHECK (hotel_id = public.get_user_hotel_id()
-              AND public.get_user_role() IN ('direction','revenue_manager'));
+              AND public.get_user_role() IN ('direction'));
 
 DROP POLICY IF EXISTS pricing_rules_select ON public.pricing_rules;
 CREATE POLICY pricing_rules_select ON public.pricing_rules FOR SELECT
@@ -463,9 +452,9 @@ CREATE POLICY pricing_rules_select ON public.pricing_rules FOR SELECT
 DROP POLICY IF EXISTS pricing_rules_write ON public.pricing_rules;
 CREATE POLICY pricing_rules_write ON public.pricing_rules FOR ALL
   USING (hotel_id = public.get_user_hotel_id()
-         AND public.get_user_role() IN ('direction','revenue_manager'))
+         AND public.get_user_role() IN ('direction'))
   WITH CHECK (hotel_id = public.get_user_hotel_id()
-              AND public.get_user_role() IN ('direction','revenue_manager'));
+              AND public.get_user_role() IN ('direction'));
 
 DROP POLICY IF EXISTS rate_prices_select ON public.rate_prices;
 CREATE POLICY rate_prices_select ON public.rate_prices FOR SELECT
@@ -474,9 +463,9 @@ CREATE POLICY rate_prices_select ON public.rate_prices FOR SELECT
 DROP POLICY IF EXISTS rate_prices_write ON public.rate_prices;
 CREATE POLICY rate_prices_write ON public.rate_prices FOR ALL
   USING (hotel_id = public.get_user_hotel_id()
-         AND public.get_user_role() IN ('direction','revenue_manager','reception'))
+         AND public.get_user_role() IN ('direction','reception'))
   WITH CHECK (hotel_id = public.get_user_hotel_id()
-              AND public.get_user_role() IN ('direction','revenue_manager','reception'));
+              AND public.get_user_role() IN ('direction','reception'));
 
 DROP POLICY IF EXISTS rate_restrictions_select ON public.rate_restrictions;
 CREATE POLICY rate_restrictions_select ON public.rate_restrictions FOR SELECT
@@ -485,6 +474,6 @@ CREATE POLICY rate_restrictions_select ON public.rate_restrictions FOR SELECT
 DROP POLICY IF EXISTS rate_restrictions_write ON public.rate_restrictions;
 CREATE POLICY rate_restrictions_write ON public.rate_restrictions FOR ALL
   USING (hotel_id = public.get_user_hotel_id()
-         AND public.get_user_role() IN ('direction','revenue_manager','reception'))
+         AND public.get_user_role() IN ('direction','reception'))
   WITH CHECK (hotel_id = public.get_user_hotel_id()
-              AND public.get_user_role() IN ('direction','revenue_manager','reception'));
+              AND public.get_user_role() IN ('direction','reception'));

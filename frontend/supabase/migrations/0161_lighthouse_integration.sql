@@ -144,7 +144,7 @@ DROP POLICY IF EXISTS sync_failures_select ON public.competitor_sync_failures;
 CREATE POLICY sync_failures_select ON public.competitor_sync_failures FOR SELECT
   USING (
     hotel_id = public.get_user_hotel_id()
-    AND public.get_user_role() IN ('direction','revenue_manager')
+    AND public.get_user_role() IN ('direction')
   );
 
 DROP POLICY IF EXISTS sync_failures_no_write ON public.competitor_sync_failures;

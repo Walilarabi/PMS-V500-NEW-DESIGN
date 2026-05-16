@@ -72,7 +72,7 @@ ALTER TABLE public.worker_runs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS worker_runs_select ON public.worker_runs;
 CREATE POLICY worker_runs_select ON public.worker_runs FOR SELECT
   USING (
-    public.get_user_role() IN ('direction','revenue_manager')
+    public.get_user_role() IN ('direction')
   );
 
 -- No INSERT/UPDATE/DELETE from authenticated users — service_role only.
