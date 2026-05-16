@@ -89,6 +89,8 @@ interface ReservationContextType {
   reservations: EnrichedReservation[];
   addReservation: (reservation: Reservation) => void;
   updateReservation: (id: string, updates: Partial<Reservation>) => void;
+  /** Remplace tout le tableau (utilisé pour la sync Supabase) */
+  replaceAll: (reservations: Reservation[]) => void;
   /** Change le statut et trace le changement dans les logs */
   changeStatus: (id: string, newStatus: ReservationStatus, userId?: string) => void;
   /** Expire manuellement toutes les options dépassées */
@@ -503,11 +505,20 @@ export const ReservationProvider: React.FC<{ children: ReactNode }> = ({ childre
       .sort((a, b) => (b.overbookingPriority ?? 0) - (a.overbookingPriority ?? 0));
   }, [reservations]);
 
+  /**
+   * Remplace tout le tableau de réservations (utilisé par useSupabaseSync
+   * pour injecter les données Supabase au login).
+   */
+  const replaceAll = useCallback((newReservations: Reservation[]) => {
+    setReservations(newReservations);
+  }, []);
+
   return (
     <ReservationContext.Provider value={{
       reservations,
       addReservation,
       updateReservation,
+      replaceAll,
       changeStatus,
       expireOptions,
       getPriorityOrder,
