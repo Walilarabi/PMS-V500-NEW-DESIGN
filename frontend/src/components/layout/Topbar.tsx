@@ -1,13 +1,13 @@
 import React from 'react';
 import {
   Zap, Calendar, Users, TrendingUp, CreditCard,
-  BarChart2, Settings, Shield, LogOut, ChevronDown,
+  BarChart2, Settings, Shield, LogOut,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
 import { useAuth } from '@/src/domains/auth/AuthContext';
-import { useConfigStore } from '@/src/store/configStore';
 import { useSasNavBadges } from '@/src/domains/sas/hooks';
+import { HotelSelector } from './HotelSelector';
 
 interface TopbarProps {
   activePage: PageId;
@@ -59,7 +59,6 @@ const NAV_ITEMS = [
 ];
 
 export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
-  const hotel = useConfigStore(s => s.hotel);
   const { logout } = useAuth();
   const { data: sasBadges } = useSasNavBadges();
 
@@ -69,16 +68,16 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
 
   return (
     <header className="h-14 bg-white border-b border-gray-100 flex items-center px-4 gap-4 shrink-0 z-40">
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 w-52 shrink-0">
-        <div className="w-8 h-8 bg-[#8B5CF6] rounded-xl flex items-center justify-center shadow-lg shadow-[#8B5CF6]/30">
+      {/* Logo + Hotel Selector */}
+      <div className="flex items-center gap-2.5 w-60 shrink-0">
+        <div className="w-8 h-8 bg-[#8B5CF6] rounded-xl flex items-center justify-center shadow-lg shadow-[#8B5CF6]/30 shrink-0">
           <span className="text-white font-black text-sm">F</span>
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[11px] font-black text-gray-900 leading-none tracking-tight">FLOWTYM</p>
-          <p className="text-[9px] text-gray-400 font-medium truncate leading-none mt-0.5">
-            {hotel?.name ?? 'PMS'}
-          </p>
+          <div className="mt-0.5">
+            <HotelSelector />
+          </div>
         </div>
       </div>
 

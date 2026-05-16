@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '@/src/lib/supabase';
 import * as authRepo from './repository';
@@ -10,6 +11,14 @@ interface AuthContextValue {
   login: (input: LoginInput) => Promise<void>;
   signUp: (input: SignUpInput) => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * Switch the active hotel. Calls RPC set_active_hotel server-side,
+   * then refreshes the session and invalidates ALL TanStack queries so
+   * the UI re-fetches under the new tenant scope.
+   */
+  switchHotel: (hotelId: string) => Promise<void>;
+  /** True while a hotel switch is in flight (for UI loading state). */
+  isSwitchingHotel: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -31,6 +40,8 @@ async function ensureUserProfile(): Promise<void> {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [status, setStatus] = useState<AuthContextValue['status']>('loading');
+  const [isSwitchingHotel, setIsSwitchingHotel] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     let mounted = true;
@@ -63,6 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       session,
       status,
+      isSwitchingHotel,
       login: async (input) => {
         const s = await authRepo.loginWithPassword(input);
         setSession(s);
@@ -81,8 +93,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setStatus('unauthenticated');
       },
+      switchHotel: async (hotelId) => {
+        if (session?.tenantId === hotelId) return; // no-op
+        setIsSwitchingHotel(true);
+        try {
+          await authRepo.switchActiveHotel(hotelId);
+          // Refetch session to get the new accessibleHotels with is_active updated
+          const refreshed = await authRepo.refreshSession();
+          if (refreshed) setSession(refreshed);
+          // Invalidate ALL queries — every component fetching tenant-scoped
+          // data will re-run under the new hotel context.
+          await queryClient.invalidateQueries();
+        } finally {
+          setIsSwitchingHotel(false);
+        }
+      },
     }),
-    [session, status],
+    [session, status, isSwitchingHotel, queryClient],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

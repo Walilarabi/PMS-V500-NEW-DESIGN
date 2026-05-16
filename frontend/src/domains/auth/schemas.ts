@@ -21,10 +21,34 @@ export const signupSchema = z.object({
 });
 export type SignUpInput = z.infer<typeof signupSchema>;
 
+/**
+ * One hotel an authenticated user has access to.
+ * Source of truth: public.user_hotels (joined with public.hotels).
+ */
+export interface AccessibleHotel {
+  hotelId: string;
+  name: string;
+  city: string | null;
+  country: string | null;
+  role: string;
+  isDefault: boolean;
+  isActive: boolean;
+}
+
 export interface AuthSession {
   userId: string;
   email: string;
+  /**
+   * Hôtel actif (sélectionné). Égal à `accessibleHotels.find(h => h.isActive).hotelId`.
+   * NULL si l'utilisateur n'a pas encore de profil ou aucun hôtel.
+   */
   tenantId: string | null;
   role: string | null;
   fullName: string | null;
+  /**
+   * Liste des hôtels accessibles à cet utilisateur, alimentée au login via
+   * la RPC public.list_user_hotels().
+   * Vide si l'utilisateur n'a pas encore de profil dans public.users.
+   */
+  accessibleHotels: AccessibleHotel[];
 }

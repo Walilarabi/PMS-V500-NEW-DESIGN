@@ -5,7 +5,7 @@ import { supabase } from '@/src/lib/supabase';
 import { mapSupabaseError, NotFoundError } from '@/src/domains/_shared/errors';
 import type { AdminUserRole } from '@/src/lib/supabase.types';
 
-import type { AuthSession, LoginInput } from './schemas';
+import type { AccessibleHotel, AuthSession, LoginInput } from './schemas';
 
 interface AppUserProfile {
   id: string;
@@ -13,6 +13,16 @@ interface AppUserProfile {
   email: string;
   full_name: string;
   role: AdminUserRole;
+}
+
+interface ListUserHotelsRow {
+  hotel_id: string;
+  name: string;
+  city: string | null;
+  country: string | null;
+  role: string;
+  is_default: boolean;
+  is_active: boolean;
 }
 
 async function fetchProfile(authUserId: string): Promise<AppUserProfile | null> {
@@ -29,13 +39,47 @@ async function fetchProfile(authUserId: string): Promise<AppUserProfile | null> 
   return data;
 }
 
-function buildSession(authUserId: string, email: string, profile: AppUserProfile | null): AuthSession {
+/**
+ * Fetch the list of hotels accessible to the current user via RPC.
+ * Never throws — returns empty list on any error (graceful degradation:
+ * the legacy single-hotel codepath still works via users.hotel_id).
+ */
+async function fetchAccessibleHotels(): Promise<AccessibleHotel[]> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase.rpc as any)('list_user_hotels');
+    if (error) return [];
+    if (!Array.isArray(data)) return [];
+    return (data as ListUserHotelsRow[]).map((row) => ({
+      hotelId: row.hotel_id,
+      name: row.name,
+      city: row.city,
+      country: row.country,
+      role: row.role,
+      isDefault: row.is_default,
+      isActive: row.is_active,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+function buildSession(
+  authUserId: string,
+  email: string,
+  profile: AppUserProfile | null,
+  accessibleHotels: AccessibleHotel[],
+): AuthSession {
+  // tenantId = l'hôtel actif (is_active=true), sinon fallback sur profile.hotel_id (legacy)
+  const activeHotel = accessibleHotels.find((h) => h.isActive);
+  const resolvedTenantId = activeHotel?.hotelId ?? profile?.hotel_id ?? null;
   return {
     userId: authUserId,
     email,
-    tenantId: profile?.hotel_id ?? null,
+    tenantId: resolvedTenantId,
     role: profile?.role ?? null,
     fullName: profile?.full_name ?? null,
+    accessibleHotels,
   };
 }
 
@@ -49,7 +93,8 @@ export async function loginWithPassword(input: LoginInput): Promise<AuthSession>
   } catch {
     profile = null;
   }
-  return buildSession(data.user.id, data.user.email ?? input.email, profile);
+  const accessibleHotels = await fetchAccessibleHotels();
+  return buildSession(data.user.id, data.user.email ?? input.email, profile, accessibleHotels);
 }
 
 export async function signOut(): Promise<void> {
@@ -67,7 +112,13 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
   } catch {
     profile = null;
   }
-  return buildSession(data.session.user.id, data.session.user.email ?? '', profile);
+  const accessibleHotels = await fetchAccessibleHotels();
+  return buildSession(
+    data.session.user.id,
+    data.session.user.email ?? '',
+    profile,
+    accessibleHotels,
+  );
 }
 
 export function onAuthStateChange(cb: (session: AuthSession | null) => void): () => void {
@@ -82,9 +133,28 @@ export function onAuthStateChange(cb: (session: AuthSession | null) => void): ()
     } catch {
       profile = null;
     }
-    cb(buildSession(session.user.id, session.user.email ?? '', profile));
+    const accessibleHotels = await fetchAccessibleHotels();
+    cb(buildSession(session.user.id, session.user.email ?? '', profile, accessibleHotels));
   });
   return () => data.subscription.unsubscribe();
+}
+
+/**
+ * Change the user's active hotel via RPC set_active_hotel.
+ * Throws if the user does not have access to the requested hotel.
+ */
+export async function switchActiveHotel(hotelId: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.rpc as any)('set_active_hotel', { p_hotel_id: hotelId });
+  if (error) throw mapSupabaseError(error);
+}
+
+/**
+ * Reload the session after switching hotels (useful to refresh accessibleHotels
+ * and tenantId without a full page reload).
+ */
+export async function refreshSession(): Promise<AuthSession | null> {
+  return getCurrentSession();
 }
 
 /** Self-service signup is disabled in this iteration: hotel provisioning is
