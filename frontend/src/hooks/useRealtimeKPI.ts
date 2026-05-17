@@ -15,6 +15,13 @@ interface KPIData {
  * Hook qui calcule automatiquement les KPI hôteliers en temps réel
  * à partir des réservations et de la capacité totale.
  * 
+ * FORMULES APPLIQUÉES :
+ * - Chambres vendues = Nombre de chambres uniques occupées
+ * - Chambres disponibles = Total chambres - Chambres vendues
+ * - TO (%) = (Chambres vendues / Total chambres) × 100
+ * - ADR (€) = Revenu total / Nuitées totales
+ * - RevPAR (€) = Revenu total / (Chambres × Jours)
+ * 
  * Se recalcule automatiquement dès qu'une réservation change.
  */
 export function useRealtimeKPI(
@@ -40,10 +47,10 @@ export function useRealtimeKPI(
       return true;
     });
 
-    // Calculer nombre de nuitées vendues ET chambres uniques
-    let totalNights = 0;
-    let totalRevenue = 0;
+    // Calculer chambres UNIQUES occupées (chambres vendues)
     const uniqueRooms = new Set<string>();
+    let totalRevenue = 0;
+    let totalNights = 0;
     
     activeReservations.forEach(res => {
       const checkIn = new Date(res.checkIn || res.arrival);
@@ -59,28 +66,29 @@ export function useRealtimeKPI(
       }
     });
 
-    // Calculer période en jours
-    const periodDays = dateRange 
-      ? Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24))
-      : 30; // Par défaut 30 jours
-
-    // Disponibilité totale = chambres × jours
-    const totalAvailability = totalRoomCount * periodDays;
+    // CHAMBRES VENDUES = nombre de chambres UNIQUES occupées
+    const roomsSold = uniqueRooms.size;
     
-    // TO = (nuitées vendues / disponibilité totale) × 100
-    // Plafonné à 100% max (ne peut pas dépasser capacité)
-    const toRaw = totalAvailability > 0 ? (totalNights / totalAvailability) * 100 : 0;
+    // CHAMBRES DISPONIBLES = Total chambres - Chambres vendues
+    const availableRooms = Math.max(0, totalRoomCount - roomsSold);
+    
+    // TO = (Chambres vendues / Total chambres) × 100
+    // Plafonné à 100% (ne peut jamais dépasser)
+    const toRaw = totalRoomCount > 0 ? (roomsSold / totalRoomCount) * 100 : 0;
     const to = Math.min(100, toRaw);
     
     // ADR = revenu total / nuitées vendues
     const adr = totalNights > 0 ? totalRevenue / totalNights : 0;
     
-    // RevPAR = (revenu total / disponibilité totale) OU (TO × ADR / 100)
-    const revpar = totalAvailability > 0 ? totalRevenue / totalAvailability : 0;
+    // Calculer période en jours pour RevPAR
+    const periodDays = dateRange 
+      ? Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24))
+      : 30;
     
-    // Chambres vendues = nombre de chambres UNIQUES occupées (plafonné au total)
-    const roomsSold = Math.min(uniqueRooms.size, totalRoomCount);
-    const availableRooms = Math.max(0, totalRoomCount - roomsSold);
+    const totalAvailability = totalRoomCount * periodDays;
+    
+    // RevPAR = revenu total / disponibilité totale
+    const revpar = totalAvailability > 0 ? totalRevenue / totalAvailability : 0;
 
     return {
       to: Math.round(to * 10) / 10,           // Arrondi 1 décimale
