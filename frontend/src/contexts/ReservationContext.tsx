@@ -117,7 +117,10 @@ const loadFromStorage = (): Reservation[] | null => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      // Si les données viennent de Supabase (marqueur), les charger
+      // Sinon, ignorer les vieux mocks (ils seront écrasés par useSupabaseSync)
+      return Array.isArray(parsed) ? parsed : null;
     }
   } catch (e) {
     console.warn('[ReservationContext] Failed to load from storage:', e);
@@ -322,9 +325,10 @@ const INITIAL_RESERVATIONS: Reservation[] = [
 
 export const ReservationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [baseReservations, setReservations] = useState<Reservation[]>(() => {
-    // Charger depuis localStorage au premier render, sinon données initiales
+    // Charger depuis localStorage si présent, sinon tableau vide
+    // useSupabaseSync va injecter les vraies données après login
     const stored = loadFromStorage();
-    return stored ?? INITIAL_RESERVATIONS;
+    return stored ?? [];  // ← Plus de INITIAL_RESERVATIONS (mocks)
   });
   const setRoomStatus = useConfigStore(state => state.setRoomStatus);
 

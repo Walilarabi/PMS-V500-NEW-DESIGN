@@ -33,6 +33,7 @@ import {
   useSasIncomingRealtime,
 } from '@/src/hooks/useRealtimeChannels';
 import { useSupabaseSync } from '@/src/hooks/useSupabaseSync';
+import { DebugPanel } from '@/src/components/DebugPanel';
 
 // Placeholder universel
 const Placeholder = ({ title, icon }: { title: string; icon?: string }) => (
@@ -192,6 +193,7 @@ export default function App() {
           {renderPage(activePage)}
         </main>
       </div>
+      <DebugPanel />
     </div>
   );
 }
