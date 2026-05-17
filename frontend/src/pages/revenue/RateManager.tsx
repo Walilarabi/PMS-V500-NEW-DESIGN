@@ -43,6 +43,8 @@ import {
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
+import { getEventsForDate } from '../../utils/events-parser';
+import { getMarketDataForDate, getMarketPressure, getMarketPressureColor } from '../../utils/lighthouse-parser';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -273,14 +275,15 @@ function generateMockData(startDate: Date, days: number): DayData[] {
       strategy,
     });
 
-    // Événements : afficher EUROPCAR si pression marché > 70
-    const events: string[] = [];
-    if (marketPressure > 70) {
-      events.push('EUROPCAR');
-    }
-    if (marketPressure > 85 && isWeekend) {
-      events.push('ROLAND GARROS');
-    }
+    // ✅ ÉVÉNEMENTS RÉELS (depuis fichier salons)
+    const realEvents = getEventsForDate(date);
+    const events = realEvents.map(e => e.name);
+
+    // ✅ MARKET PRESSURE RÉELLE (depuis Lighthouse)
+    const marketData = getMarketDataForDate(date);
+    const realMarketPressure = marketData 
+      ? getMarketPressure(marketData.marketDemand)
+      : marketPressure; // fallback sur mock si pas de data
 
     data.push({
       date: dateStr,
@@ -289,11 +292,11 @@ function generateMockData(startDate: Date, days: number): DayData[] {
       month: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'][date.getMonth()],
       isWeekend,
       isToday: date.getTime() === today.getTime(),
-      events, // Maintenant rempli correctement
-      marketPressure,
+      events, // ✅ Vraies données événements
+      marketPressure: realMarketPressure, // ✅ Vraie pression marché
       occupancyRate,
       availability,
-      medianPrice,
+      medianPrice: marketData?.compsetMedian || medianPrice, // ✅ Vraie médiane compset
       minPrice,
       maxPrice,
       leadTimeMajority,
@@ -301,7 +304,7 @@ function generateMockData(startDate: Date, days: number): DayData[] {
       strategy,
       recommendation,
       confidenceScore: confidence,
-      currentPrice,
+      currentPrice: marketData?.ourPrice || currentPrice, // ✅ Vrai prix actuel
       suggestedPrice,
       finalPrice: null,
       validationStatus: 'En attente',

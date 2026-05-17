@@ -130,7 +130,12 @@ interface RateCalendarStore {
   addAuditLog: (entry: Omit<AuditLogEntry, "id" | "at">) => void;
 }
 
-const initialStartDate = new Date("2026-05-14");
+// ✅ Date initiale = AUJOURD'HUI (pas hardcodée)
+const initialStartDate = (() => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+})();
 
 export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
   const rulesEngine = new PricingRulesEngine(pricingRules);
