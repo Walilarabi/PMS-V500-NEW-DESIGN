@@ -43,6 +43,11 @@ export function CalendarGrid() {
   const [showFilters, setShowFilters] = useState(false);
   const [draggedRoomIndex, setDraggedRoomIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  
+  // ✅ SÉLECTION MULTI-CELLULES
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const [rangeStart, setRangeStart] = useState<string | null>(null);
+  
   const { success, info } = useToast();
 
   // Initialize
@@ -67,12 +72,75 @@ export function CalendarGrid() {
       
       // ✅ COPIER/COLLER EXCEL-STYLE
       if ((e.ctrlKey || e.metaKey) && e.key === "c" && !e.shiftKey) {
-        // Copier : pour l'instant on log juste, implémentation complète plus tard
-        console.log('[RMS] Copy triggered');
+        e.preventDefault();
+        handleCopy();
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "v" && !e.shiftKey) {
-        // Coller : pour l'instant on log juste, implémentation complète plus tard
-        console.log('[RMS] Paste triggered');
+        e.preventDefault();
+        handlePaste();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [info]);
+
+  // ✅ COPIER SÉLECTION
+  const handleCopy = useCallback(() => {
+    const { activeCell } = useRateCalendarStore.getState();
+    if (!activeCell) {
+      info("Copier", "Sélectionnez une cellule à copier");
+      return;
+    }
+
+    // Pour l'instant : copier cellule active uniquement
+    const room = roomTypes.find(r => r.roomTypeId === activeCell.roomTypeId);
+    const plan = room?.ratePlans.find(p => p.planId === activeCell.planId);
+    const price = plan?.prices.find(p => p.date === activeCell.date);
+    
+    if (price) {
+      // Format TSV (compatible Excel)
+      const tsv = String(price.price);
+      navigator.clipboard.writeText(tsv);
+      info("Copié", `Prix ${price.price}€ copié`);
+    }
+  }, [roomTypes, info]);
+
+  // ✅ COLLER SÉLECTION
+  const handlePaste = useCallback(async () => {
+    const { activeCell, updatePrice } = useRateCalendarStore.getState();
+    if (!activeCell) {
+      info("Coller", "Sélectionnez une cellule de destination");
+      return;
+    }
+
+    try {
+      const text = await navigator.clipboard.readText();
+      const value = parseFloat(text.trim());
+      
+      if (isNaN(value) || value < 0) {
+        info("Erreur", "Valeur invalide dans le presse-papier");
+        return;
+      }
+
+      // Coller dans cellule active
+      updatePrice(activeCell.roomTypeId, activeCell.planId, activeCell.date, value);
+      success("Collé", `Prix ${value}€ appliqué`);
+      
+    } catch (error) {
+      info("Erreur", "Impossible de lire le presse-papier");
+    }
+  }, [info, success]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setShowKeyboardHelp(p => !p);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        info("Sauvegarde", "Les modifications sont enregistrées automatiquement");
       }
     };
     document.addEventListener("keydown", handler);
