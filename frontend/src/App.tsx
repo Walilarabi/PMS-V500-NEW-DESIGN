@@ -15,6 +15,7 @@ import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
 import { RateManager }         from '@/src/pages/revenue/RateManager';
 import { DecisionHistory }     from '@/src/pages/revenue/DecisionHistory';
 import { CompetitiveIntel }    from '@/src/pages/revenue/CompetitiveIntel';
+import { LighthouseMonthlyView } from '@/src/pages/revenue/LighthouseMonthlyView';
 import { Channels }            from '@/src/pages/revenue/Channels';
 import { Promotions }          from '@/src/pages/revenue/Promotions';
 // PricingRules already imported below
@@ -110,7 +111,7 @@ function renderPage(page: PageId): React.ReactNode {
     // RMS ENTERPRISE ULTIMATE
     case 'rms':            return <RateManager />;
     case 'rms_history':    return <DecisionHistory />;
-    case 'rev_compset':    return <CompetitiveIntel />;
+    case 'rev_compset':    return <LighthouseMonthlyView />;
     case 'rev_channels':   return <Channels />;
     case 'rev_promotions': return <Promotions />;
     case 'rev_rules':      return <PricingRules />;
