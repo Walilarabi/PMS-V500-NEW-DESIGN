@@ -14,7 +14,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/domains/auth/AuthContext';
-import { normalizeStatus, getStatusDisplay, type NormalizedStatus } from '@/lib/status-mapper';
+import { normalizeStatus, getStatusDisplay, type NormalizedStatus } from '@/src/lib/status-mapper';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────

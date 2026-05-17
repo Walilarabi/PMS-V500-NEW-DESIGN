@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { typography, spacing, shadows, transitions } from '@/design-system/tokens';
+import { typography, spacing, shadows, transitions } from '@/src/design-system/tokens';
 import { cn } from '@/src/lib/utils';
 import type { PlanningReservation } from '../hooks/usePlanningData';
 

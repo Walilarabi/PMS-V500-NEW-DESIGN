@@ -5,7 +5,7 @@ import { PageId } from '@/src/types';
 
 // Pages existantes
 import { TodayView }        from '@/src/pages/TodayView';
-import { PlanningView }     from '@/src/pages/PlanningViewLive';
+import { PlanningView }     from '@/src/features/planning/PlanningViewV2';  // V2 premium
 import { ReservationsView } from '@/src/pages/ReservationsView';
 import { ClientsView }      from '@/src/pages/ClientsView';
 import { RevenueDashboard }    from '@/src/pages/revenue/RevenueDashboard';

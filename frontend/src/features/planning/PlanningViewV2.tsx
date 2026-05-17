@@ -21,14 +21,14 @@ import { format, addDays, startOfDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { usePlanningData } from './hooks/usePlanningData';
 import { ReservationCard } from './components/ReservationCard';
-import { typography, spacing } from '@/design-system/tokens';
+import { typography, spacing } from '@/src/design-system/tokens';
 import { cn } from '@/src/lib/utils';
 
 const CELL_WIDTH = 50;  // Largeur cellule en px
 const ROW_HEIGHT = 40;  // Hauteur ligne chambre
 const VIEW_LENGTH = 14; // Nombre de jours affichés
 
-export const PlanningViewV2 = () => {
+export const PlanningView = () => {
   const { rooms, reservations, loading } = usePlanningData();
   const [currentDate, setCurrentDate] = useState(new Date());
 

@@ -11,7 +11,7 @@
  * quelle que soit sa source ou son état initial.
  */
 
-import { colorClasses } from '@/design-system/tokens';
+import { colorClasses } from '@/src/design-system/tokens';
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
