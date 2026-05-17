@@ -1,336 +1,679 @@
 /**
- * FLOWTYM RMS — Tableau Révolutionnaire
+ * FLOWTYM RMS — Tableau Revenue Management
  * 
- * Features innovantes :
- * ✅ Compset dynamique 10 concurrents réels Booking.com
- * ✅ Events timeline intelligente (63 événements Paris 2026)
- * ✅ Pricing explainable (11 facteurs avec explications)
- * ✅ One-Click Apply recommandations
- * ✅ Heatmap visuelle événements
- * ✅ Variations prix temps réel
+ * Design system: EXACTEMENT aligné sur Calendrier Tarifaire
+ * - Même grille (LABEL_W = 200px)
+ * - Même typographie (text-sm, font-semibold)
+ * - Même couleurs (violet-500, emerald, amber)
+ * - Scroll moderne et fluide
+ * - Collapse/Expand concurrents
+ * - Filtres avancés
  */
 
-import React, { useState, useMemo } from 'react';
-import { Card } from './ui/Card';
-import { Button } from './ui/Button';
-import { Badge } from './ui/Badge';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  TrendingUp, 
-  TrendingDown,
-  AlertCircle,
-  Sparkles,
+import React, { useState, useMemo, useRef } from 'react';
+import {
   Calendar,
-  Users,
-  Info
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Sparkles,
+  ChevronRight,
+  ChevronDown,
+  Check,
+  Filter,
+  Download,
+  Info,
+  Star,
+  Building2,
+  X,
 } from 'lucide-react';
-
+import { PARIS_EVENTS_2026, getEventsForDate, getEventImpactScore } from '../data/rms/events';
 import { FOLKESTONE_COMPSET, generateCompetitorPricing, getCompsetStats } from '../data/rms/compset';
-import { getEventsForDate, getEventImpactScore } from '../data/rms/events';
 import { generatePricingRecommendation } from '../data/rms/pricing-engine';
 
-interface DayData {
+// ═══════════════════════════════════════════════════════════════════════════
+// CONSTANTES (alignées sur CalendarGrid)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const LABEL_W = 200; // Largeur exacte colonne labels (comme CalendarGrid)
+
+// Utilitaire classNames
+const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface DayColumn {
   date: string;
   dayName: string;
+  dayNumber: number;
+  month: string;
   isWeekend: boolean;
+  isToday: boolean;
   eventImpact: number;
   events: any[];
-  ourPrice: number;
-  recommendedPrice: number;
-  compsetMedian: number;
-  recommendation: any;
 }
 
+interface CompetitorPricingRow {
+  competitor: any;
+  pricing: Map<string, { price: number; availability: string; variation: number }>;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMPOSANT PRINCIPAL
+// ═══════════════════════════════════════════════════════════════════════════
+
 export function RMSTableau() {
-  const [startDate, setStartDate] = useState(new Date());
-  const [viewDays, setViewDays] = useState<7 | 15 | 30>(15);
+  const [viewMode, setViewMode] = useState<'7days' | '15days' | '30days'>('15days');
+  const [startDate, setStartDate] = useState(new Date('2026-06-01'));
+  const [isCompsetCollapsed, setIsCompsetCollapsed] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const daysData = useMemo<DayData[]>(() => {
-    const data: DayData[] = [];
-    const basePrice = 280;
+  // Filtres
+  const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
+  const [selectedSegments, setSelectedSegments] = useState<string[]>([]);
+  const [minPriceFilter, setMinPriceFilter] = useState<number | null>(null);
+  const [maxPriceFilter, setMaxPriceFilter] = useState<number | null>(null);
 
-    for (let i = 0; i < viewDays; i++) {
+  // ───────────────────────────────────────────────────────────────────────────
+  // GÉNÉRATION COLONNES (comme CalendarGrid)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const dateColumns = useMemo<DayColumn[]>(() => {
+    const days = viewMode === '7days' ? 7 : viewMode === '15days' ? 15 : 30;
+    const cols: DayColumn[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < days; i++) {
       const date = new Date(startDate);
       date.setDate(date.getDate() + i);
       const dateStr = date.toISOString().split('T')[0];
-      const isWeekend = date.getDay() === 0 || date.getDay() === 6;
       
-      const eventImpact = getEventImpactScore(dateStr);
-      const events = getEventsForDate(dateStr);
-      const recommendation = generatePricingRecommendation(dateStr, basePrice);
-      
-      const leadTime = Math.floor((date.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-      const compset = getCompsetStats(dateStr, eventImpact, leadTime, isWeekend);
-
-      data.push({
+      cols.push({
         date: dateStr,
-        dayName: date.toLocaleDateString('fr-FR', { weekday: 'short' }),
-        isWeekend,
-        eventImpact,
-        events,
-        ourPrice: basePrice,
-        recommendedPrice: recommendation.recommendedPrice,
-        compsetMedian: compset.median,
-        recommendation,
+        dayName: ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][date.getDay()],
+        dayNumber: date.getDate(),
+        month: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'][date.getMonth()],
+        isWeekend: date.getDay() === 0 || date.getDay() === 6,
+        isToday: date.getTime() === today.getTime(),
+        eventImpact: getEventImpactScore(dateStr),
+        events: getEventsForDate(dateStr),
       });
     }
 
-    return data;
-  }, [startDate, viewDays]);
+    return cols;
+  }, [startDate, viewMode]);
 
-  const goToPrevious = () => {
+  // ───────────────────────────────────────────────────────────────────────────
+  // DONNÉES COMPSET AVEC PRICING
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const compsetRows = useMemo<CompetitorPricingRow[]>(() => {
+    return FOLKESTONE_COMPSET.map((competitor) => {
+      const pricing = new Map();
+      
+      dateColumns.forEach((col) => {
+        const priceData = generateCompetitorPricing(
+          competitor,
+          col.date,
+          col.eventImpact,
+          startDate
+        );
+        pricing.set(col.date, priceData);
+      });
+
+      return { competitor, pricing };
+    });
+  }, [dateColumns, startDate]);
+
+  // Filtrage des concurrents
+  const filteredCompsetRows = useMemo(() => {
+    return compsetRows.filter((row) => {
+      // Filtre par concurrent sélectionné
+      if (selectedCompetitors.length > 0 && !selectedCompetitors.includes(row.competitor.name)) {
+        return false;
+      }
+      
+      // Filtre par segment
+      if (selectedSegments.length > 0 && !selectedSegments.includes(row.competitor.segment)) {
+        return false;
+      }
+
+      // Filtre par prix (moyenne sur la période)
+      if (minPriceFilter || maxPriceFilter) {
+        const avgPrice = Array.from(row.pricing.values()).reduce((sum, p) => sum + p.price, 0) / row.pricing.size;
+        if (minPriceFilter && avgPrice < minPriceFilter) return false;
+        if (maxPriceFilter && avgPrice > maxPriceFilter) return false;
+      }
+
+      return true;
+    });
+  }, [compsetRows, selectedCompetitors, selectedSegments, minPriceFilter, maxPriceFilter]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // GRID TEMPLATE (comme CalendarGrid)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const minColPx = viewMode === '7days' ? 90 : viewMode === '15days' ? 52 : 32;
+  const colCount = dateColumns.length;
+  const gridTemplate = `${LABEL_W}px repeat(${colCount}, minmax(${minColPx}px, 1fr))`;
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // NAVIGATION DATES
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const navigateDays = (direction: 'prev' | 'next') => {
+    const days = viewMode === '7days' ? 7 : viewMode === '15days' ? 15 : 30;
     const newDate = new Date(startDate);
-    newDate.setDate(newDate.getDate() - viewDays);
+    newDate.setDate(newDate.getDate() + (direction === 'next' ? days : -days));
     setStartDate(newDate);
   };
 
-  const goToNext = () => {
-    const newDate = new Date(startDate);
-    newDate.setDate(newDate.getDate() + viewDays);
-    setStartDate(newDate);
-  };
+  // ───────────────────────────────────────────────────────────────────────────
+  // RECOMMENDATIONS (données statiques pour l'instant)
+  // ───────────────────────────────────────────────────────────────────────────
 
-  const applySmartPricing = () => {
-    alert('✅ Smart Pricing appliqué sur ' + viewDays + ' jours !');
-  };
+  const recommendations = useMemo(() => {
+    return dateColumns.slice(0, 5).map((col) => {
+      const ourPrice = 280;
+      return {
+        date: col.date,
+        ...generatePricingRecommendation(col.date, ourPrice),
+      };
+    });
+  }, [dateColumns]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">RMS — Revenue Management</h2>
-          <p className="text-sm text-muted-foreground">
-            Compset intelligent • Pricing explainable • One-Click Apply
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1 bg-muted rounded-lg p-1">
-            {[7, 15, 30].map((days) => (
-              <Button
-                key={days}
-                variant={viewDays === days ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewDays(days as 7 | 15 | 30)}
+    <div className="flex flex-col h-screen w-full bg-white overflow-hidden">
+      {/* ─────────────────────────────────────────────────────────────────────
+          TOOLBAR (aligné sur CalendarGrid)
+      ───────────────────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center justify-between px-4 py-2.5 border-b border-gray-200 bg-white shrink-0 gap-2">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-bold text-gray-800">Tableau RMS</h1>
+          
+          {/* View Mode Selector */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
+            {(['7days', '15days', '30days'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={cn(
+                  'px-3 py-1 text-xs font-semibold rounded transition-colors',
+                  viewMode === mode
+                    ? 'bg-white text-violet-700 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                )}
               >
-                {days}j
-              </Button>
+                {mode === '7days' ? '7j' : mode === '15days' ? '15j' : '30j'}
+              </button>
             ))}
           </div>
 
-          <div className="flex gap-1">
-            <Button variant="outline" size="icon" onClick={goToPrevious}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="icon" onClick={goToNext}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors border',
+              showFilters
+                ? 'bg-violet-500 text-white border-violet-500'
+                : 'bg-white text-violet-700 border-violet-300 hover:bg-violet-50'
+            )}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            Filtres
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Date Navigation */}
+          <div className="flex items-center gap-2 border border-gray-300 rounded-md overflow-hidden">
+            <button
+              onClick={() => navigateDays('prev')}
+              className="px-3 py-1.5 hover:bg-gray-100 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4 rotate-180" />
+            </button>
+            <span className="px-3 py-1.5 text-sm font-semibold text-gray-700 border-x border-gray-300 whitespace-nowrap">
+              {startDate.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+            </span>
+            <button
+              onClick={() => navigateDays('next')}
+              className="px-3 py-1.5 hover:bg-gray-100 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
 
-          <Button onClick={applySmartPricing} className="gap-2">
-            <Sparkles className="h-4 w-4" />
-            Apply Smart Pricing
-          </Button>
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 transition-colors"
+            title="Exporter en CSV"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Exporter
+          </button>
         </div>
       </div>
 
-      <Card className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Événements Paris 2026</span>
-        </div>
-        
-        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${viewDays}, 1fr)` }}>
-          {daysData.map((day) => (
-            <div key={day.date} className="space-y-1">
-              <div className="text-xs text-center font-medium">
-                {new Date(day.date).getDate()}
-              </div>
-              {day.events.length > 0 ? (
-                <div
-                  className="h-12 rounded flex flex-col justify-center px-1 cursor-pointer hover:opacity-80 transition-opacity"
-                  style={{
-                    backgroundColor: `hsl(${220 - day.eventImpact}, 70%, ${65 - day.eventImpact * 0.3}%)`,
+      {/* ─────────────────────────────────────────────────────────────────────
+          FILTRES (collapsible)
+      ───────────────────────────────────────────────────────────────────── */}
+      {showFilters && (
+        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 shrink-0">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-600">Segment:</span>
+              {['budget', 'midscale', 'upscale', 'luxury'].map((segment) => (
+                <button
+                  key={segment}
+                  onClick={() => {
+                    setSelectedSegments((prev) =>
+                      prev.includes(segment) ? prev.filter((s) => s !== segment) : [...prev, segment]
+                    );
                   }}
-                  title={day.events.map(e => e.name).join(', ')}
-                >
-                  <div className="text-[10px] text-white font-medium truncate">
-                    {day.events[0].name}
-                  </div>
-                  {day.events.length > 1 && (
-                    <div className="text-[9px] text-white/80">
-                      +{day.events.length - 1}
-                    </div>
+                  className={cn(
+                    'px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors',
+                    selectedSegments.includes(segment)
+                      ? 'bg-violet-500 text-white border-violet-500'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-violet-300'
                   )}
-                </div>
-              ) : (
-                <div className="h-12 rounded bg-muted/30" />
-              )}
+                >
+                  {segment.charAt(0).toUpperCase() + segment.slice(1)}
+                </button>
+              ))}
             </div>
-          ))}
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-gray-600">Prix:</span>
+              <input
+                type="number"
+                placeholder="Min"
+                value={minPriceFilter || ''}
+                onChange={(e) => setMinPriceFilter(e.target.value ? Number(e.target.value) : null)}
+                className="w-20 px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:border-violet-500"
+              />
+              <span className="text-gray-400">-</span>
+              <input
+                type="number"
+                placeholder="Max"
+                value={maxPriceFilter || ''}
+                onChange={(e) => setMaxPriceFilter(e.target.value ? Number(e.target.value) : null)}
+                className="w-20 px-2 py-1 text-xs border border-gray-300 rounded-md focus:outline-none focus:border-violet-500"
+              />
+            </div>
+
+            {(selectedSegments.length > 0 || minPriceFilter || maxPriceFilter) && (
+              <button
+                onClick={() => {
+                  setSelectedSegments([]);
+                  setMinPriceFilter(null);
+                  setMaxPriceFilter(null);
+                }}
+                className="text-xs text-violet-600 hover:text-violet-700 font-semibold"
+              >
+                Réinitialiser
+              </button>
+            )}
+          </div>
         </div>
-      </Card>
+      )}
 
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-medium sticky left-0 bg-muted/50 z-10">
-                  Hôtel
-                </th>
-                {daysData.map((day) => (
-                  <th key={day.date} className="px-3 py-3 text-center">
-                    <div className="text-xs text-muted-foreground">{day.dayName}</div>
-                    <div className="text-sm font-medium">
-                      {new Date(day.date).getDate()}/{new Date(day.date).getMonth() + 1}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="bg-primary/5 border-t-2 border-primary">
-                <td className="px-4 py-3 font-semibold sticky left-0 bg-primary/5 z-10">
-                  Folkestone Opéra
-                </td>
-                {daysData.map((day) => (
-                  <td key={day.date} className="px-3 py-3 text-center">
-                    <div className="space-y-1">
-                      <div className="font-bold text-lg">{day.ourPrice}€</div>
-                      {day.recommendedPrice !== day.ourPrice && (
-                        <div className="flex items-center justify-center gap-1">
-                          {day.recommendedPrice > day.ourPrice ? (
-                            <TrendingUp className="h-3 w-3 text-green-600" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3 text-orange-600" />
-                          )}
-                          <span className="text-xs font-medium text-primary">
-                            {day.recommendedPrice}€
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                ))}
-              </tr>
+      {/* ─────────────────────────────────────────────────────────────────────
+          LÉGENDE (alignée sur CalendarGrid)
+      ───────────────────────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-4 px-4 py-2 border-b border-gray-200 bg-gray-50 shrink-0 overflow-x-auto">
+        <Info className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+        <div className="flex items-center gap-3 text-[11px] text-gray-500 whitespace-nowrap">
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Haute dispo
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-orange-500" /> Basse dispo
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-red-500" /> Sold out
+          </span>
+          <span className="flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 text-emerald-600" /> Prix hausse
+          </span>
+          <span className="flex items-center gap-1">
+            <TrendingDown className="w-3 h-3 text-red-600" /> Prix baisse
+          </span>
+        </div>
+      </div>
 
-              <tr className="bg-muted/30">
-                <td colSpan={viewDays + 1} className="px-4 py-2 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-3 w-3" />
-                    <span>Concurrents Booking.com (Primary Compset)</span>
+      {/* ─────────────────────────────────────────────────────────────────────
+          MAIN SCROLLABLE AREA
+      ───────────────────────────────────────────────────────────────────── */}
+      <div ref={scrollContainerRef} className="flex-1 overflow-auto w-full custom-scrollbar">
+        <div className="w-full">
+          {/* ═══════════════════════════════════════════════════════════════
+              EVENTS TIMELINE
+          ═══════════════════════════════════════════════════════════════ */}
+          <div className="border-b-2 border-gray-300">
+            {/* Header Events */}
+            <div
+              className="sticky top-0 z-30 bg-white border-b border-gray-200"
+              style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+            >
+              <div
+                className="sticky left-0 z-40 bg-white border-r border-gray-300 flex items-center px-3 py-2"
+                style={{ width: LABEL_W }}
+              >
+                <Calendar className="w-4 h-4 text-violet-500 mr-2" />
+                <span className="text-sm font-bold text-gray-800">Événements</span>
+              </div>
+
+              {dateColumns.map((col) => (
+                <div
+                  key={col.date}
+                  className={cn(
+                    'flex flex-col items-center justify-center border-r border-gray-200 py-1.5 overflow-hidden',
+                    col.isWeekend && 'bg-gray-50',
+                    col.isToday && 'bg-violet-50'
+                  )}
+                >
+                  <div className="text-[10px] font-medium text-gray-500 uppercase">{col.dayName}</div>
+                  <div className="text-sm font-bold text-gray-800">{col.dayNumber}</div>
+                  <div className="text-[10px] text-gray-400">{col.month}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Events Row */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+              className="bg-white"
+            >
+              <div
+                className="sticky left-0 z-20 bg-white border-r border-gray-300 flex items-center px-3 py-2"
+                style={{ width: LABEL_W }}
+              >
+                <span className="text-xs text-gray-600">Impact événements</span>
+              </div>
+
+              {dateColumns.map((col) => {
+                const impactColor =
+                  col.eventImpact >= 80
+                    ? 'bg-red-500'
+                    : col.eventImpact >= 50
+                    ? 'bg-orange-500'
+                    : col.eventImpact >= 20
+                    ? 'bg-yellow-500'
+                    : 'bg-emerald-500';
+
+                return (
+                  <div
+                    key={col.date}
+                    className={cn(
+                      'flex flex-col items-center justify-center border-r border-gray-200 py-3 gap-1',
+                      col.isWeekend && 'bg-gray-50'
+                    )}
+                    title={col.events.map((e) => e.name).join(', ')}
+                  >
+                    {col.eventImpact > 0 ? (
+                      <>
+                        <div
+                          className={cn('w-12 h-1.5 rounded-full', impactColor)}
+                          style={{ width: `${Math.min(col.eventImpact, 100)}%` }}
+                        />
+                        <span className="text-[10px] font-bold text-gray-700">{col.eventImpact}</span>
+                      </>
+                    ) : (
+                      <span className="text-[10px] text-gray-300">—</span>
+                    )}
                   </div>
-                </td>
-              </tr>
+                );
+              })}
+            </div>
+          </div>
 
-              {FOLKESTONE_COMPSET.map((competitor) => (
-                <tr key={competitor.id} className="border-t hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 sticky left-0 bg-background z-10">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{competitor.name}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {competitor.stars}★
-                      </Badge>
-                    </div>
-                  </td>
-                  {daysData.map((day) => {
-                    const leadTime = Math.floor(
-                      (new Date(day.date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-                    );
-                    const pricing = generateCompetitorPricing(
-                      competitor,
-                      day.date,
-                      day.eventImpact,
-                      leadTime,
-                      day.isWeekend
-                    );
+          {/* ═══════════════════════════════════════════════════════════════
+              COMPSET PRICING (COLLAPSIBLE)
+          ═══════════════════════════════════════════════════════════════ */}
+          <div className="border-b-2 border-gray-300">
+            {/* Header Compset */}
+            <div
+              className="sticky top-0 z-30 bg-white border-b border-gray-200"
+              style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+            >
+              <button
+                onClick={() => setIsCompsetCollapsed(!isCompsetCollapsed)}
+                className="sticky left-0 z-40 bg-white border-r border-gray-300 flex items-center px-3 py-2 hover:bg-gray-50 transition-colors text-left"
+                style={{ width: LABEL_W }}
+              >
+                {isCompsetCollapsed ? (
+                  <ChevronRight className="w-4 h-4 text-gray-400 mr-2" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-400 mr-2" />
+                )}
+                <Building2 className="w-4 h-4 text-violet-500 mr-2" />
+                <span className="text-sm font-bold text-gray-800">
+                  Compset ({filteredCompsetRows.length})
+                </span>
+              </button>
 
-                    return (
-                      <td key={day.date} className="px-3 py-3 text-center">
-                        {pricing.availability === 'sold-out' ? (
-                          <span className="text-xs text-red-600 font-medium">Épuisé</span>
-                        ) : (
-                          <div className="space-y-1">
-                            <div className="font-medium">{pricing.price}€</div>
-                            <div className="text-xs text-muted-foreground">
-                              {pricing.availability === 'low' && '🔴'}
-                              {pricing.availability === 'medium' && '🟡'}
-                              {pricing.availability === 'high' && '🟢'}
-                            </div>
+              {!isCompsetCollapsed &&
+                dateColumns.map((col) => (
+                  <div
+                    key={col.date}
+                    className={cn(
+                      'flex items-center justify-center border-r border-gray-200 py-2',
+                      col.isWeekend && 'bg-gray-50'
+                    )}
+                  >
+                    <span className="text-[10px] font-semibold text-gray-500">Prix</span>
+                  </div>
+                ))}
+            </div>
+
+            {/* Compset Rows */}
+            {!isCompsetCollapsed &&
+              filteredCompsetRows.map((row) => (
+                <div
+                  key={row.competitor.name}
+                  style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                >
+                  {/* Competitor Label */}
+                  <div
+                    className="sticky left-0 z-20 bg-white border-r border-gray-200 flex items-center px-3 py-2.5"
+                    style={{ width: LABEL_W }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-800 truncate">
+                          {row.competitor.name}
+                        </span>
+                        {row.competitor.stars && (
+                          <div className="flex items-center gap-0.5">
+                            {Array.from({ length: row.competitor.stars }).map((_, i) => (
+                              <Star
+                                key={i}
+                                className="w-2.5 h-2.5 fill-yellow-400 text-yellow-400"
+                              />
+                            ))}
                           </div>
                         )}
-                      </td>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span
+                          className={cn(
+                            'text-[10px] font-semibold px-1.5 py-0.5 rounded',
+                            row.competitor.segment === 'luxury'
+                              ? 'bg-purple-100 text-purple-700'
+                              : row.competitor.segment === 'upscale'
+                              ? 'bg-blue-100 text-blue-700'
+                              : row.competitor.segment === 'midscale'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-gray-100 text-gray-700'
+                          )}
+                        >
+                          {row.competitor.segment}
+                        </span>
+                        <span className="text-[10px] text-gray-500">
+                          {row.competitor.qualityScore}/10
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Price Cells */}
+                  {dateColumns.map((col) => {
+                    const priceData = row.pricing.get(col.date);
+                    if (!priceData) return <div key={col.date} className="border-r border-gray-200" />;
+
+                    const availColor =
+                      priceData.availability === 'sold-out'
+                        ? 'bg-red-50'
+                        : priceData.availability === 'low'
+                        ? 'bg-orange-50'
+                        : 'bg-white';
+
+                    return (
+                      <div
+                        key={col.date}
+                        className={cn(
+                          'flex flex-col items-center justify-center border-r border-gray-200 py-2 gap-0.5',
+                          availColor,
+                          col.isWeekend && !availColor.includes('bg-') && 'bg-gray-50'
+                        )}
+                      >
+                        <span className="text-sm font-bold text-gray-800">
+                          {priceData.price.toFixed(0)}€
+                        </span>
+                        {priceData.variation !== 0 && (
+                          <div className="flex items-center gap-0.5">
+                            {priceData.variation > 0 ? (
+                              <TrendingUp className="w-3 h-3 text-emerald-600" />
+                            ) : (
+                              <TrendingDown className="w-3 h-3 text-red-600" />
+                            )}
+                            <span
+                              className={cn(
+                                'text-[10px] font-semibold',
+                                priceData.variation > 0 ? 'text-emerald-600' : 'text-red-600'
+                              )}
+                            >
+                              {Math.abs(priceData.variation).toFixed(0)}%
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                </tr>
+                </div>
               ))}
+          </div>
 
-              <tr className="bg-muted/50 border-t-2">
-                <td className="px-4 py-3 font-medium sticky left-0 bg-muted/50 z-10">
-                  Médiane Compset
-                </td>
-                {daysData.map((day) => (
-                  <td key={day.date} className="px-3 py-3 text-center">
-                    <div className="font-semibold text-blue-600">{day.compsetMedian}€</div>
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
+          {/* ═══════════════════════════════════════════════════════════════
+              RECOMMENDATIONS
+          ═══════════════════════════════════════════════════════════════ */}
+          <div className="p-6 space-y-4 bg-gray-50">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-violet-500" />
+              <h2 className="text-lg font-bold text-gray-800">Recommandations Pricing</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {recommendations.map((reco) => (
+                <div
+                  key={reco.date}
+                  className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-700">
+                      {new Date(reco.date).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'short',
+                      })}
+                    </span>
+                    <span
+                      className={cn(
+                        'px-2 py-1 text-xs font-bold rounded',
+                        reco.confidence >= 80
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : reco.confidence >= 60
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-red-100 text-red-700'
+                      )}
+                    >
+                      {reco.confidence}% confiance
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <span className="text-2xl font-bold text-violet-600">
+                      {reco.recommendedPrice.toFixed(0)}€
+                    </span>
+                    <span
+                      className={cn(
+                        'text-sm font-semibold',
+                        reco.delta > 0 ? 'text-emerald-600' : 'text-red-600'
+                      )}
+                    >
+                      {reco.delta > 0 ? '+' : ''}
+                      {reco.delta.toFixed(0)}€ ({reco.deltaPercent > 0 ? '+' : ''}
+                      {reco.deltaPercent.toFixed(1)}%)
+                    </span>
+                  </div>
+
+                  {reco.opportunities.length > 0 && (
+                    <div className="mb-3">
+                      <div className="text-[11px] font-semibold text-emerald-700 mb-1">
+                        Opportunités:
+                      </div>
+                      {reco.opportunities.slice(0, 2).map((opp, i) => (
+                        <div key={i} className="text-[10px] text-gray-600 flex items-start gap-1">
+                          <span className="text-emerald-500">•</span>
+                          <span>{opp}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 transition-colors">
+                    <Check className="w-3.5 h-3.5" />
+                    Appliquer
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </Card>
-
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <TrendingUp className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-medium">Opportunités</span>
-          </div>
-          <div className="space-y-1">
-            {daysData
-              .filter(d => d.recommendation.opportunities.length > 0)
-              .slice(0, 3)
-              .map((day) => (
-                <div key={day.date} className="text-xs text-muted-foreground">
-                  {new Date(day.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}:{' '}
-                  {day.recommendation.opportunities[0]}
-                </div>
-              ))}
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertCircle className="h-4 w-4 text-orange-600" />
-            <span className="text-sm font-medium">Alertes</span>
-          </div>
-          <div className="space-y-1">
-            {daysData
-              .filter(d => d.recommendation.warnings.length > 0)
-              .slice(0, 3)
-              .map((day) => (
-                <div key={day.date} className="text-xs text-muted-foreground">
-                  {new Date(day.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}:{' '}
-                  {day.recommendation.warnings[0]}
-                </div>
-              ))}
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <Info className="h-4 w-4 text-blue-600" />
-            <span className="text-sm font-medium">Trust Score Moyen</span>
-          </div>
-          <div className="text-3xl font-bold text-blue-600">
-            {Math.round(
-              daysData.reduce((sum, d) => sum + d.recommendation.confidence, 0) / daysData.length
-            )}%
-          </div>
-        </Card>
       </div>
+
+      {/* ─────────────────────────────────────────────────────────────────────
+          CUSTOM SCROLLBAR CSS
+      ───────────────────────────────────────────────────────────────────── */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 12px;
+          height: 12px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 6px;
+          border: 2px solid #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+        .custom-scrollbar {
+          scrollbar-width: thin;
+          scrollbar-color: #cbd5e1 #f1f5f9;
+        }
+      `}</style>
     </div>
   );
 }
