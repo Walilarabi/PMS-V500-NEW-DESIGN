@@ -43,12 +43,13 @@ export type PageId =
   | 'rev_pricing'          // Calendrier tarifaire (grille de prix)
   // Distribution
   | 'rev_channels'         // Canaux & OTAs
-  | 'rev_market'           // Veille concurrentielle
+  | 'rev_market'           // Veille concurrentielle (deprecated)
+  | 'rev_compset'          // Veille Concurrentielle (nouvelle page dédiée)
   // Automatisation
   | 'rev_rules'            // Règles tarifaires (auto-pricing)
   | 'rev_yield'            // Yield management
   | 'rev_promotions'       // Promotions
-  | 'rms'                  // RMS Tableau (DPS & Pricing Engine)
+  | 'rms'                  // RMS Tableau Pro (Enterprise)
   // ── 6. FINANCE ─────────────────────────────────────────────────────────────
   | 'finance'
   | 'facturation'
