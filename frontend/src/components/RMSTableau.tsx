@@ -254,7 +254,7 @@ export function RMSTableau() {
   // ───────────────────────────────────────────────────────────────────────────
 
   const recommendations = useMemo(() => {
-    return dateColumns.slice(0, 5).map((col) => {
+    return dateColumns.slice(0, 15).map((col) => {
       const ourPrice = 280;
       return {
         date: col.date,
@@ -262,6 +262,49 @@ export function RMSTableau() {
       };
     });
   }, [dateColumns]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // HANDLERS VALIDATION
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const handleValidationChoice = (date: string, choice: ValidationChoice) => {
+    setValidations((prev) => {
+      const newMap = new Map(prev);
+      const recommendation = recommendations.find((r) => r.date === date);
+      
+      newMap.set(date, {
+        date,
+        choice,
+        manualPrice: choice === 'NON' ? (prev.get(date)?.manualPrice || null) : null,
+        recommendation,
+      });
+      
+      return newMap;
+    });
+  };
+
+  const handleManualPriceChange = (date: string, price: number) => {
+    setValidations((prev) => {
+      const newMap = new Map(prev);
+      const current = newMap.get(date);
+      
+      if (current) {
+        newMap.set(date, { ...current, manualPrice: price });
+      }
+      
+      return newMap;
+    });
+  };
+
+  const handleApplyValidations = async () => {
+    const approvedChanges = Array.from(validations.values()).filter(
+      (v) => v.choice === 'OK' || (v.choice === 'NON' && v.manualPrice)
+    );
+    
+    console.log('Applying validations:', approvedChanges);
+    // TODO: Implémenter workflow propagation Phase 4
+    alert(`${approvedChanges.length} tarifs prêts à être propagés`);
+  };
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
@@ -652,6 +695,304 @@ export function RMSTableau() {
                   })}
                 </div>
               ))}
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════════════
+              TABLEAU VALIDATION RMS (même design que compset)
+          ═══════════════════════════════════════════════════════════════ */}
+          <div className="border-b-2 border-gray-300">
+            {/* Header Validation */}
+            <div
+              className="sticky top-0 z-30 bg-white border-b border-gray-200"
+              style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+            >
+              <div
+                className="sticky left-0 z-40 bg-white border-r border-gray-300 flex items-center px-3 py-2"
+                style={{ width: LABEL_W }}
+              >
+                <Sparkles className="w-4 h-4 text-violet-500 mr-2" />
+                <span className="text-sm font-bold text-gray-800">Validation RMS</span>
+              </div>
+
+              {dateColumns.map((col) => (
+                <div
+                  key={col.date}
+                  className={cn(
+                    'flex items-center justify-center border-r border-gray-200 py-2',
+                    col.isWeekend && 'bg-gray-50'
+                  )}
+                >
+                  <span className="text-[10px] font-semibold text-gray-500">
+                    {col.dayNumber}/{col.month.slice(0, 3)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Row 1: Prix actuel */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+              className="border-b border-gray-100"
+            >
+              <div
+                className="sticky left-0 z-20 bg-white border-r border-gray-200 flex items-center px-3 py-2.5"
+                style={{ width: LABEL_W }}
+              >
+                <span className="text-xs text-gray-600">Prix actuel</span>
+              </div>
+
+              {dateColumns.map((col) => {
+                const reco = recommendations.find((r) => r.date === col.date);
+                return (
+                  <div
+                    key={col.date}
+                    className={cn(
+                      'flex items-center justify-center border-r border-gray-200 py-2',
+                      col.isWeekend && 'bg-gray-50'
+                    )}
+                  >
+                    <span className="text-sm font-semibold text-gray-700">
+                      {reco ? `${reco.currentPrice.toFixed(0)}€` : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Row 2: Prix suggéré */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+              className="border-b border-gray-100"
+            >
+              <div
+                className="sticky left-0 z-20 bg-white border-r border-gray-200 flex items-center px-3 py-2.5"
+                style={{ width: LABEL_W }}
+              >
+                <span className="text-xs text-gray-600">Prix suggéré RMS</span>
+              </div>
+
+              {dateColumns.map((col) => {
+                const reco = recommendations.find((r) => r.date === col.date);
+                const validation = validations.get(col.date);
+                
+                return (
+                  <div
+                    key={col.date}
+                    className={cn(
+                      'flex items-center justify-center border-r border-gray-200 py-2',
+                      col.isWeekend && 'bg-gray-50'
+                    )}
+                  >
+                    {reco ? (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-sm font-bold text-violet-600">
+                          {validation?.choice === 'NON' && validation.manualPrice
+                            ? `${validation.manualPrice}€`
+                            : `${reco.recommendedPrice.toFixed(0)}€`}
+                        </span>
+                        {reco.delta !== 0 && (
+                          <span
+                            className={cn(
+                              'text-[10px] font-semibold',
+                              reco.delta > 0 ? 'text-emerald-600' : 'text-red-600'
+                            )}
+                          >
+                            {reco.delta > 0 ? '+' : ''}
+                            {reco.delta.toFixed(0)}€
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-400">—</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Row 3: Médiane compset */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+              className="border-b border-gray-100"
+            >
+              <div
+                className="sticky left-0 z-20 bg-white border-r border-gray-200 flex items-center px-3 py-2.5"
+                style={{ width: LABEL_W }}
+              >
+                <span className="text-xs text-gray-600">Médiane compset</span>
+              </div>
+
+              {dateColumns.map((col) => {
+                const stats = dailyStats.get(col.date);
+                return (
+                  <div
+                    key={col.date}
+                    className={cn(
+                      'flex items-center justify-center border-r border-gray-200 py-2',
+                      col.isWeekend && 'bg-gray-50'
+                    )}
+                  >
+                    <span className="text-sm font-semibold text-orange-700">
+                      {stats ? `${stats.median.toFixed(0)}€` : '—'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Row 4: Confiance */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+              className="border-b border-gray-100"
+            >
+              <div
+                className="sticky left-0 z-20 bg-white border-r border-gray-200 flex items-center px-3 py-2.5"
+                style={{ width: LABEL_W }}
+              >
+                <span className="text-xs text-gray-600">Confiance RMS</span>
+              </div>
+
+              {dateColumns.map((col) => {
+                const reco = recommendations.find((r) => r.date === col.date);
+                return (
+                  <div
+                    key={col.date}
+                    className={cn(
+                      'flex items-center justify-center border-r border-gray-200 py-2',
+                      col.isWeekend && 'bg-gray-50'
+                    )}
+                  >
+                    {reco ? (
+                      <span
+                        className={cn(
+                          'text-[10px] font-bold px-1.5 py-0.5 rounded',
+                          reco.confidence >= 80
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : reco.confidence >= 60
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-red-100 text-red-700'
+                        )}
+                      >
+                        {reco.confidence}%
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Row 5: VALIDATION (avec boutons OK/NON/MAINTENIR) */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
+              className="bg-gray-50"
+            >
+              <div
+                className="sticky left-0 z-20 bg-gray-50 border-r border-gray-200 flex items-center px-3 py-3"
+                style={{ width: LABEL_W }}
+              >
+                <span className="text-xs font-bold text-gray-700">Décision</span>
+              </div>
+
+              {dateColumns.map((col) => {
+                const reco = recommendations.find((r) => r.date === col.date);
+                const validation = validations.get(col.date);
+
+                if (!reco) {
+                  return (
+                    <div
+                      key={col.date}
+                      className={cn(
+                        'flex items-center justify-center border-r border-gray-200',
+                        col.isWeekend && 'bg-gray-100'
+                      )}
+                    />
+                  );
+                }
+
+                return (
+                  <div
+                    key={col.date}
+                    className={cn(
+                      'flex flex-col items-center justify-center border-r border-gray-200 py-2 gap-1.5',
+                      col.isWeekend && 'bg-gray-100'
+                    )}
+                  >
+                    {/* Boutons de choix */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleValidationChoice(col.date, 'OK')}
+                        className={cn(
+                          'px-2 py-1 text-[10px] font-bold rounded border transition-all duration-150',
+                          validation?.choice === 'OK'
+                            ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-500 hover:shadow-sm'
+                        )}
+                        title="Accepter la recommandation"
+                      >
+                        ✓
+                      </button>
+
+                      <button
+                        onClick={() => handleValidationChoice(col.date, 'NON')}
+                        className={cn(
+                          'px-2 py-1 text-[10px] font-bold rounded border transition-all duration-150',
+                          validation?.choice === 'NON'
+                            ? 'bg-red-500 text-white border-red-500 shadow-sm'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-red-500 hover:shadow-sm'
+                        )}
+                        title="Refuser et saisir manuellement"
+                      >
+                        ✗
+                      </button>
+
+                      <button
+                        onClick={() => handleValidationChoice(col.date, 'MAINTENIR')}
+                        className={cn(
+                          'px-2 py-1 text-[10px] font-bold rounded border transition-all duration-150',
+                          validation?.choice === 'MAINTENIR'
+                            ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-blue-500 hover:shadow-sm'
+                        )}
+                        title="Maintenir le prix actuel"
+                      >
+                        −
+                      </button>
+                    </div>
+
+                    {/* Input éditable si NON */}
+                    {validation?.choice === 'NON' && (
+                      <input
+                        type="number"
+                        value={validation.manualPrice || ''}
+                        onChange={(e) => handleManualPriceChange(col.date, Number(e.target.value))}
+                        className="w-14 px-1.5 py-1 text-[11px] text-center font-semibold border border-violet-500 rounded focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                        placeholder="Prix"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer avec bouton Apply global */}
+            {validations.size > 0 && (
+              <div className="bg-violet-50 border-t border-violet-200 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-violet-700">
+                    <span className="font-bold">{validations.size}</span> date(s) validée(s)
+                  </div>
+                  <button
+                    onClick={handleApplyValidations}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-violet-500 text-white text-sm font-bold rounded-md hover:bg-violet-600 hover:shadow-md transition-all duration-150"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Appliquer & Propager ({validations.size})
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════
