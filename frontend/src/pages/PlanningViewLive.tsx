@@ -903,11 +903,18 @@ export const PlanningView = () => {
                 });
 
                 return (
-                  <div key={room.id} className="h-20 flex items-center px-4 border-b border-gray-100">
+                  <div key={room.id} className="h-14 flex items-center px-4 border-b border-gray-100 group">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                       <span className="text-[14px] font-semibold text-gray-900">{room.number}</span>
+                       <span 
+                         className="text-[14px] font-semibold text-gray-900 cursor-help" 
+                         title={`${room.number} - ${room.type} ${room.category}`}
+                       >
+                         {room.number}
+                       </span>
                        <span className="text-gray-400">·</span>
-                       <span className="text-[12px] font-medium text-gray-600 truncate">{room.type} {room.category}</span>
+                       <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+                         {room.type} {room.category}
+                       </span>
                        <div className={cn(
                          "w-4 h-4 rounded-full ml-auto shrink-0 border border-white", 
                          todayRes ? "bg-blue-500" :
@@ -919,14 +926,6 @@ export const PlanningView = () => {
                   </div>
                 );
               })}
-           </div>
-           
-           <div className="bg-gray-50/50 border-t border-gray-100 pb-20">
-              {['Simple', 'Double', 'Suite'].map(cat => (
-                <div key={cat} className="h-10 flex items-center px-4 border-b border-gray-50 last:border-0">
-                   <span className="text-[10px] font-black text-gray-400 italic uppercase">{cat}</span>
-                </div>
-              ))}
            </div>
         </div>
       )}
@@ -998,7 +997,7 @@ export const PlanningView = () => {
                      {rooms.map((room) => (
                       <div 
                          key={`row-${room.id}`} 
-                         className="h-20 border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
+                         className="h-14 border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
                          onDragOver={handleDragOver}
                          onDrop={(e) => handleDrop(e, room)}
                        >
@@ -1115,8 +1114,8 @@ export const PlanningView = () => {
                            } else {
                              const channelConfig = storeChannels.find(c => c.name.toUpperCase() === res.source.toUpperCase());
                              barStyle = channelConfig
-                               ? { backgroundColor: `${channelConfig.color}CC`, borderColor: channelConfig.color, color: getContrastColor(channelConfig.color) }
-                               : {};
+                               ? { backgroundColor: channelConfig.color, borderColor: channelConfig.color, color: getContrastColor(channelConfig.color), boxShadow: 'none' }
+                               : { boxShadow: 'none' };
                              statusIcon = '✅';
                            }
 
@@ -1137,7 +1136,7 @@ export const PlanningView = () => {
                                  setIsDetailsModalOpen(true);
                                }}
                                className={cn(
-                                 'absolute h-[48px] top-4 rounded-lg border flex items-center px-3 gap-2 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden',
+                                 'absolute h-[42px] top-2 rounded-lg border flex items-center px-3 gap-2 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden',
                                  opacityClass
                                )}
                                style={{ left: `calc(${startIndex * colWidth}% + 4px)`, width: `calc(${Math.min(viewLength - startIndex, dayCount) * colWidth}% - 8px)`, ...barStyle }}
