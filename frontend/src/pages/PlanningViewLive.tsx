@@ -924,7 +924,7 @@ export const PlanningView = () => {
                 });
 
                 return (
-                  <div key={room.id} className="h-[36px] flex items-center px-4 border-b border-gray-100 group">
+                  <div key={room.id} className="h-[38px] flex items-center px-4 border-b border-gray-100 group">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                        <span 
                          className="text-[14px] font-semibold text-gray-900 cursor-help" 
@@ -1018,7 +1018,7 @@ export const PlanningView = () => {
                      {rooms.map((room) => (
                       <div 
                          key={`row-${room.id}`} 
-                         className="h-[36px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
+                         className="h-[38px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
                          onDragOver={handleDragOver}
                          onDrop={(e) => handleDrop(e, room)}
                        >
@@ -1209,7 +1209,7 @@ export const PlanningView = () => {
                                  setIsDetailsModalOpen(true);
                                }}
                                className={cn(
-                                 'absolute h-[28px] top-1 rounded-lg border flex items-center px-2 gap-1.5 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden text-xs',
+                                 'absolute h-[30px] top-1 rounded-lg border flex items-center px-2 gap-1.5 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden text-xs',
                                  opacityClass
                                )}
                                style={{ 
@@ -1221,37 +1221,42 @@ export const PlanningView = () => {
                                  ...barStyle 
                                }}
                              >
-                                {/* Icône ARRIVÉE (flèche verte) à gauche */}
-                                <div className="shrink-0 flex items-center justify-center" style={{ width: 16, height: 16 }}>
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#10b981' }}>
-                                    <polyline points="9 18 15 12 9 6"></polyline>
-                                  </svg>
-                                </div>
-                                <span className={cn("text-[11px] font-semibold truncate min-w-0 flex-1", viewLength > 15 ? "hidden lg:block" : "")}>{res.client}</span>
-                                {isOB && (
-                                  <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 900, background: '#DC2626', color: '#fff', padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>OB</span>
-                                )}
-                                {/* Icône DÉPART (flèche rouge) à droite */}
-                                <div className="shrink-0 flex items-center justify-center ml-auto" style={{ width: 16, height: 16 }}>
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ef4444' }}>
-                                    <polyline points="15 18 9 12 15 6"></polyline>
-                                  </svg>
-                                </div>
+                                {/* Icône ARRIVÉE conditionnelle : uniquement si check-in = aujourd'hui */}
+                                {(() => {
+                                  const today = toLocalISODate(new Date());
+                                  const checkInDate = toLocalISODate(arrivalDate);
+                                  const checkOutDate = toLocalISODate(departureDate);
+                                  
+                                  return (
+                                    <>
+                                      {checkInDate === today && (
+                                        <div className="shrink-0 flex items-center justify-center" style={{ width: 16, height: 16 }}>
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#10b981' }}>
+                                            <polyline points="9 18 15 12 9 6"></polyline>
+                                          </svg>
+                                        </div>
+                                      )}
+                                      <span className={cn("text-[11px] font-semibold truncate min-w-0 flex-1", viewLength > 15 ? "hidden lg:block" : "")}>{res.client}</span>
+                                      {isOB && (
+                                        <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 900, background: '#DC2626', color: '#fff', padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>OB</span>
+                                      )}
+                                      {/* Icône DÉPART conditionnelle : uniquement si check-out = aujourd'hui */}
+                                      {checkOutDate === today && (
+                                        <div className="shrink-0 flex items-center justify-center ml-auto" style={{ width: 16, height: 16 }}>
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ef4444' }}>
+                                            <polyline points="15 18 9 12 15 6"></polyline>
+                                          </svg>
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                              </div>
                            );
                          })
                        })()}
                        </div>
                      ))}
-                     <div className="bg-gray-50/10">
-                        {['Simple', 'Double', 'Suite'].map((cat, idx) => (
-                           <div key={`sum-row-${cat}`} className="flex h-10 border-b border-gray-50 italic w-full flex-nowrap">
-                              {days.map(d => (
-                                 <div key={`sum-${cat}-${d.id}`} className={cn("shrink-0 border-r border-gray-50 flex items-center justify-center text-[11px] font-black text-gray-300", d.isWeekend ? "text-indigo-200" : "")} style={{ width: `${colWidth}%` }}>{idx === 2 ? 2 : 1}</div>
-                              ))}
-                           </div>
-                        ))}
-                     </div>
                   </div>
                </div>
              </div>
