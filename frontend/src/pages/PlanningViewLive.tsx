@@ -67,6 +67,27 @@ const toLocalISODate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+/**
+ * Convertit un type de chambre long vers son code court.
+ * Ex: "Twin Classique" → "TWN CL"
+ */
+const getRoomCode = (type: string, category: string): string => {
+  const fullType = `${type} ${category}`.trim();
+  
+  // Mapping exact selon le fichier chambres_folkestone.xlsx
+  const mapping: Record<string, string> = {
+    'Twin Classique': 'TWN CL',
+    'Double Deluxe': 'DBL DLX',
+    'Twin Deluxe': 'TWN DLX',
+    'Double Classique': 'DBL CL',
+    'Double Single Use Classique': 'DSU CL',
+    'Double Deluxe Terrasse': 'DBL DLX TER',
+    'Double Classique Terrasse': 'DBL CL TER',
+  };
+  
+  return mapping[fullType] || `${type.substring(0, 3).toUpperCase()} ${category.substring(0, 2).toUpperCase()}`;
+};
+
 export const PlanningView = () => {
   const { addReservation, updateReservation, reservations: contextReservations } = useReservations();
   const { rooms: storeRooms, events: storeEvents, channels: storeChannels } = useConfigStore();
@@ -913,7 +934,7 @@ export const PlanningView = () => {
                        </span>
                        <span className="text-gray-400">·</span>
                        <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-                         {room.type} {room.category}
+                         {getRoomCode(room.type, room.category)}
                        </span>
                        <div className={cn(
                          "w-4 h-4 rounded-full ml-auto shrink-0 border border-white", 
@@ -1139,7 +1160,13 @@ export const PlanningView = () => {
                                  'absolute h-[42px] top-2 rounded-lg border flex items-center px-3 gap-2 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden',
                                  opacityClass
                                )}
-                               style={{ left: `calc(${startIndex * colWidth}% + 4px)`, width: `calc(${Math.min(viewLength - startIndex, dayCount) * colWidth}% - 8px)`, ...barStyle }}
+                               style={{ 
+                                 left: `calc(${startIndex * colWidth}% + 4px)`, 
+                                 width: `calc(${Math.min(viewLength - startIndex, dayCount) * colWidth}% - 8px)`, 
+                                 contain: 'layout style paint',
+                                 isolation: 'isolate',
+                                 ...barStyle 
+                               }}
                              >
                                 <div className="w-7 h-7 rounded-full bg-white/60 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
                                   <span style={{ fontSize: 13 }}>{statusIcon}</span>
