@@ -35,8 +35,10 @@ import {
   Target,
   Activity,
   Building2,
+  Loader2,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
+import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -364,6 +366,11 @@ export function RMSTableauPro() {
   const [startDate, setStartDate] = useState(new Date('2026-06-01'));
   const [showFilters, setShowFilters] = useState(false);
   const [rmsData, setRmsData] = useState<DayRMSData[]>([]);
+  
+  // Propagation states
+  const [isPropagating, setIsPropagating] = useState(false);
+  const [propagationProgress, setPropagationProgress] = useState(0);
+  const [propagationMessage, setPropagationMessage] = useState('');
 
   // Navigation handler
   const handleNavigate = (page: string) => {
@@ -421,6 +428,64 @@ export function RMSTableauPro() {
       prev.map((d) => (d.date === date ? { ...d, selected: !d.selected } : d))
     );
   }, []);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PROPAGATION HANDLER
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const handlePropagate = useCallback(async () => {
+    const validated = rmsData.filter((d) => d.finalPrice !== null);
+    
+    if (validated.length === 0) {
+      alert('Aucune validation à propager');
+      return;
+    }
+
+    setIsPropagating(true);
+    setPropagationProgress(0);
+    setPropagationMessage('Préparation...');
+
+    try {
+      const validations: RMSValidation[] = validated.map((d) => ({
+        date: d.date,
+        finalPrice: d.finalPrice!,
+        strategy: d.strategy,
+        recommendation: d.recommendation,
+        confidence: d.confidenceScore,
+        currentPrice: d.currentPrice,
+        suggestedPrice: d.suggestedPrice,
+      }));
+
+      const result = await RMSPropagationService.propagateWithProgress(
+        validations,
+        'tenant_demo', // TODO: récupérer du context
+        'user_demo',   // TODO: récupérer du context
+        (progress, message) => {
+          setPropagationProgress(progress);
+          setPropagationMessage(message);
+        }
+      );
+
+      if (result.success) {
+        alert(
+          `✅ Propagation réussie!\n\n` +
+          `${result.validationsCount} tarifs propagés\n` +
+          `Calendrier: ${result.pricingCalendarUpdated ? '✓' : '✗'}\n` +
+          `Channel Manager: ${result.channelManagerSynced ? '✓' : '✗'}\n` +
+          `Cache: ${result.cacheUpdated ? '✓' : '✗'}\n` +
+          `Audit: ${result.auditLogCreated ? '✓' : '✗'}`
+        );
+      } else {
+        alert(`❌ Propagation échouée:\n${result.errors.join('\n')}`);
+      }
+    } catch (error: any) {
+      alert(`❌ Erreur: ${error.message}`);
+    } finally {
+      setIsPropagating(false);
+      setPropagationProgress(0);
+      setPropagationMessage('');
+    }
+  }, [rmsData]);
 
   // Count validations
   const validatedCount = rmsData.filter((d) => d.validationStatus !== 'En attente').length;
@@ -541,12 +606,36 @@ export function RMSTableauPro() {
       {/* STATUS BAR */}
       {validatedCount > 0 && (
         <div className="flex items-center justify-between px-4 py-2 bg-violet-50 border-b border-violet-200 shrink-0">
-          <div className="text-sm text-violet-700">
-            <span className="font-bold">{validatedCount}</span> recommandation(s) validée(s)
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-violet-700">
+              <span className="font-bold">{validatedCount}</span> recommandation(s) validée(s)
+            </div>
+            
+            {isPropagating && (
+              <div className="flex items-center gap-2 text-xs text-violet-600">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>{propagationMessage}</span>
+                <span className="font-bold">{propagationProgress}%</span>
+              </div>
+            )}
           </div>
-          <button className="flex items-center gap-1.5 px-4 py-1.5 bg-violet-500 text-white text-sm font-bold rounded-md hover:bg-violet-600 transition-colors">
-            <Zap className="w-4 h-4" />
-            Propager au Channel Manager ({validatedCount})
+          
+          <button
+            onClick={handlePropagate}
+            disabled={isPropagating}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-violet-500 text-white text-sm font-bold rounded-md hover:bg-violet-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            {isPropagating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Propagation en cours...
+              </>
+            ) : (
+              <>
+                <Zap className="w-4 h-4" />
+                Propager au Channel Manager ({validatedCount})
+              </>
+            )}
           </button>
         </div>
       )}
