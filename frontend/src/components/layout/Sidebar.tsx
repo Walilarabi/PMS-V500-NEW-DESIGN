@@ -106,7 +106,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
       label: 'Distribution',
       items: [
         { id: 'rev_channels', label: 'Canaux & OTAs',       icon: Share2 },
-        { id: 'rev_market',   label: 'Veille concurrentielle', icon: Target },
+        { id: 'rev_compset',  label: 'Veille concurrentielle', icon: Target },
       ],
     },
     {
@@ -246,8 +246,8 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   clients_segments: 'clients', clients_merge: 'clients', clients_documents: 'clients',
   clients_blacklist: 'clients', clients_tiers: 'clients',
   revenue: 'revenue', rev_pricing: 'revenue', rev_channels: 'revenue',
-  rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
-  rev_promotions: 'revenue', rms: 'revenue',
+  rev_compset: 'revenue', rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
+  rev_promotions: 'revenue', rms: 'revenue', rms_history: 'revenue',
   finance: 'finance', facturation: 'finance', proforma: 'finance',
   caisse: 'finance', impayes: 'finance', cloture: 'finance',
   fin_reconciliation: 'finance', tva2026: 'finance',
