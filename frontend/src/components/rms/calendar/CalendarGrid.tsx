@@ -60,6 +60,16 @@ export function CalendarGrid() {
         e.preventDefault();
         info("Sauvegarde", "Les modifications sont enregistrées automatiquement");
       }
+      
+      // ✅ COPIER/COLLER EXCEL-STYLE
+      if ((e.ctrlKey || e.metaKey) && e.key === "c" && !e.shiftKey) {
+        // Copier : pour l'instant on log juste, implémentation complète plus tard
+        console.log('[RMS] Copy triggered');
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "v" && !e.shiftKey) {
+        // Coller : pour l'instant on log juste, implémentation complète plus tard
+        console.log('[RMS] Paste triggered');
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
