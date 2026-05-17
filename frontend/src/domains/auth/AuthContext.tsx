@@ -32,8 +32,11 @@ async function ensureUserProfile(): Promise<void> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase.rpc as any)('ensure_user_profile');
-  } catch {
+  } catch (error) {
     // Silencieux — ne jamais bloquer le login pour ça
+    if ((error as any)?.code === 'PGRST116') {
+      console.warn('[Auth] RPC ensure_user_profile not found in DB (migration missing)');
+    }
   }
 }
 

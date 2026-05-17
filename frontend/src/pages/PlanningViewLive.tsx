@@ -903,20 +903,18 @@ export const PlanningView = () => {
                 });
 
                 return (
-                  <div key={room.id} className="h-20 flex flex-col justify-center px-4 border-b border-gray-50">
-                    <div className="flex items-center gap-[14px]">
-                       <span className="text-[14px] font-black text-gray-900 leading-none">{room.number}</span>
-                       <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 uppercase">{room.category}/{room.type}</span>
+                  <div key={room.id} className="h-20 flex items-center px-4 border-b border-gray-100">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                       <span className="text-[14px] font-semibold text-gray-900">{room.number}</span>
+                       <span className="text-gray-400">·</span>
+                       <span className="text-[12px] font-medium text-gray-600 truncate">{room.type} {room.category}</span>
                        <div className={cn(
-                         "w-5 h-5 rounded-full ml-auto shadow-[0_0_12px] transition-all border-2 border-white", 
-                         todayRes ? "bg-blue-400 shadow-blue-100" :
-                         room.status === 'clean' ? "bg-emerald-300 shadow-emerald-50" : 
-                         room.status === 'dirty' ? "bg-rose-300 shadow-rose-50" : 
-                         "bg-orange-300 shadow-orange-50"
+                         "w-4 h-4 rounded-full ml-auto shrink-0 border border-white", 
+                         todayRes ? "bg-blue-500" :
+                         room.status === 'clean' ? "bg-emerald-400" : 
+                         room.status === 'dirty' ? "bg-rose-400" : 
+                         "bg-orange-400"
                        )} />
-                    </div>
-                    <div className="flex items-center justify-between mt-2">
-                       <span className="text-[10px] font-black text-gray-300">€</span>
                     </div>
                   </div>
                 );
@@ -993,14 +991,14 @@ export const PlanningView = () => {
                <div className="relative w-full bg-white flex-1 min-h-[500px]">
                   <div className="absolute inset-0 flex pointer-events-none z-0">
                      {days.map((d) => (
-                        <div key={`col-${d.id}`} className={cn("shrink-0 border-r border-gray-50/50", d.isWeekend && "bg-gray-50/5")} style={{ width: `${colWidth}%` }} />
+                        <div key={`col-${d.id}`} className={cn("shrink-0 border-r", d.isWeekend ? "bg-gray-50/30 border-gray-200/60" : "border-gray-100")} style={{ width: `${colWidth}%` }} />
                      ))}
                   </div>
                   <div className="relative z-10 pb-20 w-full">
                      {rooms.map((room) => (
                       <div 
                          key={`row-${room.id}`} 
-                         className="h-20 border-b border-gray-50/60 relative hover:bg-gray-50/10 transition-colors w-full"
+                         className="h-20 border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
                          onDragOver={handleDragOver}
                          onDrop={(e) => handleDrop(e, room)}
                        >
@@ -1124,7 +1122,7 @@ export const PlanningView = () => {
 
                            if (isOB) {
                              barStyle.borderColor = '#DC2626';
-                             barStyle.boxShadow = '0 0 0 2px #DC262640';
+                             barStyle.border = '1px solid #DC2626';
                            }
 
                            return (
@@ -1139,7 +1137,7 @@ export const PlanningView = () => {
                                  setIsDetailsModalOpen(true);
                                }}
                                className={cn(
-                                 'absolute h-[48px] top-4 rounded-[14px] border flex items-center px-4 gap-3 cursor-pointer transition-all hover:scale-[1.01] hover:shadow-lg z-20 group overflow-hidden',
+                                 'absolute h-[48px] top-4 rounded-lg border flex items-center px-3 gap-2 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden',
                                  opacityClass
                                )}
                                style={{ left: `calc(${startIndex * colWidth}% + 4px)`, width: `calc(${Math.min(viewLength - startIndex, dayCount) * colWidth}% - 8px)`, ...barStyle }}

@@ -25,7 +25,22 @@ export const DebugPanel: React.FC = () => {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 z-[9999] bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-purple-700 font-mono text-xs"
+        style={{
+          position: 'fixed',
+          bottom: '16px',
+          right: '16px',
+          zIndex: 9999,
+          backgroundColor: '#7c3aed',
+          color: 'white',
+          padding: '8px 16px',
+          borderRadius: '8px',
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          border: 'none',
+          boxShadow: '0 4px 12px rgba(124,58,237,0.4)',
+        }}
       >
         🐛 DEBUG
       </button>

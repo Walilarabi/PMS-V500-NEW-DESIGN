@@ -97,7 +97,7 @@ export const RevenueKPIChart: React.FC<RevenueKPIChartProps> = ({ data }) => {
 
       {/* Chart Area */}
       <div className="flex-1 min-h-[400px] w-full relative">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={400}>
           <ComposedChart
             data={chartData}
             margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
