@@ -10,6 +10,16 @@ import { ReservationsView } from '@/src/pages/ReservationsView';
 import { ClientsView }      from '@/src/pages/ClientsView';
 import { RevenueDashboard }    from '@/src/pages/revenue/RevenueDashboard';
 import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
+
+// RMS ENTERPRISE ULTIMATE (6 pages complètes)
+import { RateManager }         from '@/src/pages/revenue/RateManager';
+import { DecisionHistory }     from '@/src/pages/revenue/DecisionHistory';
+import { CompetitiveIntel }    from '@/src/pages/revenue/CompetitiveIntel';
+import { Channels }            from '@/src/pages/revenue/Channels';
+import { Promotions }          from '@/src/pages/revenue/Promotions';
+// PricingRules already imported below
+
+// Anciennes versions (deprecated - à supprimer ultérieurement)
 import { ChannelsView }        from '@/src/pages/revenue/ChannelsView';
 import { MarketIntelligence }  from '@/src/pages/revenue/MarketIntelligence';
 import { PricingRules }        from '@/src/pages/revenue/PricingRules';
@@ -96,13 +106,18 @@ function renderPage(page: PageId): React.ReactNode {
     // ── REVENUE ───────────────────────────────────────────────────────────────
     case 'revenue':        return <RevenueDashboard />;
     case 'rev_pricing':    return <PricingCalendar />;
-    case 'rev_channels':   return <ChannelsView />;
-    case 'rev_market':     return <MarketIntelligence />;
+    
+    // RMS ENTERPRISE ULTIMATE
+    case 'rms':            return <RateManager />;
+    case 'rms_history':    return <DecisionHistory />;
+    case 'rev_compset':    return <CompetitiveIntel />;
+    case 'rev_channels':   return <Channels />;
+    case 'rev_promotions': return <Promotions />;
     case 'rev_rules':      return <PricingRules />;
+    
+    // Anciennes versions (deprecated)
+    case 'rev_market':     return <MarketIntelligence />;
     case 'rev_yield':      return <YieldView />;
-    case 'rev_promotions': return <PromotionsView />;
-    case 'rms':            return <RMSTableauPro />;
-    case 'rev_compset':    return <VeilleConcurrentielle />;
 
     // ── FINANCE ───────────────────────────────────────────────────────────────
     case 'facturation':        return <FacturationView />;
