@@ -15,6 +15,7 @@ import { MarketIntelligence }  from '@/src/pages/revenue/MarketIntelligence';
 import { PricingRules }        from '@/src/pages/revenue/PricingRules';
 import { YieldView }           from '@/src/pages/revenue/YieldView';
 import { PromotionsView }      from '@/src/pages/revenue/PromotionsView';
+import { RMSTableau }          from '@/src/components/RMSTableau';
 import { FinanceView }      from '@/src/pages/FinanceView';
 import { AnalysisView }     from '@/src/pages/AnalysisView';
 import { FlowboardView }    from '@/src/pages/FlowboardView';
@@ -99,6 +100,7 @@ function renderPage(page: PageId): React.ReactNode {
     case 'rev_rules':      return <PricingRules />;
     case 'rev_yield':      return <YieldView />;
     case 'rev_promotions': return <PromotionsView />;
+    case 'rms':            return <RMSTableau />;
 
     // ── FINANCE ───────────────────────────────────────────────────────────────
     case 'facturation':        return <FacturationView />;

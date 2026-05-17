@@ -48,6 +48,7 @@ export type PageId =
   | 'rev_rules'            // Règles tarifaires (auto-pricing)
   | 'rev_yield'            // Yield management
   | 'rev_promotions'       // Promotions
+  | 'rms'                  // RMS Tableau (DPS & Pricing Engine)
   // ── 6. FINANCE ─────────────────────────────────────────────────────────────
   | 'finance'
   | 'facturation'
