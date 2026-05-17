@@ -40,9 +40,10 @@ export function useRealtimeKPI(
       return true;
     });
 
-    // Calculer nombre de nuitées vendues
+    // Calculer nombre de nuitées vendues ET chambres uniques
     let totalNights = 0;
     let totalRevenue = 0;
+    const uniqueRooms = new Set<string>();
     
     activeReservations.forEach(res => {
       const checkIn = new Date(res.checkIn || res.arrival);
@@ -51,6 +52,11 @@ export function useRealtimeKPI(
       
       totalNights += nights;
       totalRevenue += (res.totalAmount || res.totalTTC || 0);
+      
+      // Compter chambres uniques
+      if (res.room) {
+        uniqueRooms.add(String(res.room));
+      }
     });
 
     // Calculer période en jours
@@ -62,7 +68,9 @@ export function useRealtimeKPI(
     const totalAvailability = totalRoomCount * periodDays;
     
     // TO = (nuitées vendues / disponibilité totale) × 100
-    const to = totalAvailability > 0 ? (totalNights / totalAvailability) * 100 : 0;
+    // Plafonné à 100% max (ne peut pas dépasser capacité)
+    const toRaw = totalAvailability > 0 ? (totalNights / totalAvailability) * 100 : 0;
+    const to = Math.min(100, toRaw);
     
     // ADR = revenu total / nuitées vendues
     const adr = totalNights > 0 ? totalRevenue / totalNights : 0;
@@ -70,9 +78,9 @@ export function useRealtimeKPI(
     // RevPAR = (revenu total / disponibilité totale) OU (TO × ADR / 100)
     const revpar = totalAvailability > 0 ? totalRevenue / totalAvailability : 0;
     
-    // Chambres disponibles restantes
-    const roomsSold = activeReservations.length;
-    const availableRooms = totalRoomCount - roomsSold;
+    // Chambres vendues = nombre de chambres UNIQUES occupées (plafonné au total)
+    const roomsSold = Math.min(uniqueRooms.size, totalRoomCount);
+    const availableRooms = Math.max(0, totalRoomCount - roomsSold);
 
     return {
       to: Math.round(to * 10) / 10,           // Arrondi 1 décimale

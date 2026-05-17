@@ -1004,7 +1004,7 @@ export const PlanningView = () => {
                   </div>
                   <div className="flex bg-white w-full flex-nowrap">
                      {days.map((d, i) => (
-                       <div key={`date-${d.id}`} className={cn("shrink-0 h-20 flex flex-col items-center justify-center border-r border-gray-100 transition-all", d.isWeekend ? "bg-[#FFF9F5]/50" : "bg-white", i === 0 && "bg-indigo-50/30 ring-2 ring-inset ring-indigo-100/50")} style={{ width: `${colWidth}%` }}>
+                       <div key={`date-${d.id}`} className={cn("shrink-0 h-16 flex flex-col items-center justify-center border-r border-gray-100 transition-all", d.isWeekend ? "bg-[#FFF9F5]/50" : "bg-white", i === 0 && "bg-indigo-50/30 ring-2 ring-inset ring-indigo-100/50")} style={{ width: `${colWidth}%` }}>
                          <span className={cn("text-[10px] font-black uppercase tracking-widest mb-1", d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.dayName}</span>
                          <div className="flex items-baseline gap-1.5 leading-none">
                             <span className={cn("text-[17px] font-black", i === 0 ? "text-indigo-400" : d.isWeekend ? "text-orange-400" : "text-gray-900")}>{d.dateNum}</span>
@@ -1752,7 +1752,7 @@ export const PlanningView = () => {
 
       {/* Panneau latéral fixe pour fiche réservation (2/3 écran) */}
       {isDetailsModalOpen && selectedDetailsRes && (
-        <div className="fixed inset-0 z-50 flex justify-end pointer-events-none">
+        <div className="fixed inset-0 z-[100] flex justify-end pointer-events-none">
           {/* Overlay semi-transparent */}
           <div 
             className="absolute inset-0 bg-black/20 pointer-events-auto" 
