@@ -1133,10 +1133,33 @@ export const PlanningView = () => {
                              barStyle = { backgroundColor: '#FEE2E2', borderColor: '#EF4444', color: '#991B1B' };
                              statusIcon = '⚡';
                            } else {
+                             // Matching strict par nom de canal
                              const channelConfig = storeChannels.find(c => c.name.toUpperCase() === res.source.toUpperCase());
-                             barStyle = channelConfig
-                               ? { backgroundColor: channelConfig.color, borderColor: channelConfig.color, color: getContrastColor(channelConfig.color), boxShadow: 'none' }
-                               : { boxShadow: 'none' };
+                             
+                             if (channelConfig) {
+                               barStyle = { 
+                                 backgroundColor: channelConfig.color, 
+                                 borderColor: channelConfig.color, 
+                                 color: getContrastColor(channelConfig.color), 
+                                 boxShadow: 'none' 
+                               };
+                             } else {
+                               // Fallback : couleur par source partielle
+                               const src = res.source.toUpperCase();
+                               let fallbackColor = '#6366f1'; // Indigo par défaut
+                               
+                               if (src.includes('BOOKING')) fallbackColor = '#003580';
+                               else if (src.includes('EXPEDIA')) fallbackColor = '#FDA44F';
+                               else if (src.includes('AIRBNB')) fallbackColor = '#FF5A5F';
+                               else if (src.includes('DIRECT')) fallbackColor = '#A5B4FC';
+                               
+                               barStyle = { 
+                                 backgroundColor: fallbackColor, 
+                                 borderColor: fallbackColor, 
+                                 color: getContrastColor(fallbackColor), 
+                                 boxShadow: 'none' 
+                               };
+                             }
                              statusIcon = '✅';
                            }
 
@@ -1165,6 +1188,7 @@ export const PlanningView = () => {
                                  width: `calc(${Math.min(viewLength - startIndex, dayCount) * colWidth}% - 8px)`, 
                                  contain: 'layout style paint',
                                  isolation: 'isolate',
+                                 clipPath: 'inset(0 0 0 0 round 8px)',
                                  ...barStyle 
                                }}
                              >
