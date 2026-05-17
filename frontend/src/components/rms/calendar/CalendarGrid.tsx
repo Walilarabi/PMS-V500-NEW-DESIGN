@@ -26,6 +26,8 @@ export function CalendarGrid() {
     startDate,
     toggleChannelClosed,
     reorderChannels,
+    reorderRoomTypes,
+    resetRoomTypesOrder,
     updateChannel,
     deleteChannel,
     addChannel,
@@ -39,6 +41,8 @@ export function CalendarGrid() {
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [draggedRoomIndex, setDraggedRoomIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const { success, info } = useToast();
 
   // Initialize
@@ -88,6 +92,49 @@ export function CalendarGrid() {
   }, [roomTypes, selectedRoomTypeIds]);
 
   const visiblePlanNames = selectedPlanNames.length === 0 ? null : selectedPlanNames;
+
+  // ✅ DRAG & DROP HANDLERS
+  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
+    setDraggedRoomIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverIndex(index);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    if (draggedRoomIndex === null || dragOverIndex === null) {
+      setDraggedRoomIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    if (draggedRoomIndex === dragOverIndex) {
+      setDraggedRoomIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    // Réordonnancer
+    const newRoomTypes = [...filteredRoomTypes];
+    const [removed] = newRoomTypes.splice(draggedRoomIndex, 1);
+    newRoomTypes.splice(dragOverIndex, 0, removed);
+    
+    // Reconstruire avec TOUS les roomTypes (pas juste filteredRoomTypes)
+    const fullReordered = [...roomTypes];
+    const filterSet = new Set(filteredRoomTypes.map(r => r.roomTypeId));
+    const nonFiltered = fullReordered.filter(r => !filterSet.has(r.roomTypeId));
+    const finalOrder = [...nonFiltered, ...newRoomTypes];
+    
+    reorderRoomTypes(finalOrder);
+    success("Ordre mis à jour", "L'affichage des chambres a été réorganisé");
+    
+    setDraggedRoomIndex(null);
+    setDragOverIndex(null);
+  }, [draggedRoomIndex, dragOverIndex, filteredRoomTypes, roomTypes, reorderRoomTypes, success]);
 
   // Export/Print handlers
   const handleExport = useCallback(() => {
@@ -168,6 +215,19 @@ export function CalendarGrid() {
             >
               <Filter className="w-3.5 h-3.5" />
               Filtres
+            </button>
+            <button
+              onClick={() => {
+                if (confirm("Réinitialiser l'ordre d'affichage des chambres ?")) {
+                  resetRoomTypesOrder();
+                  success("Ordre réinitialisé", "L'ordre par défaut a été restauré");
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-sm font-semibold rounded-md hover:bg-gray-50 transition-colors border border-gray-300"
+              title="Réinitialiser l'ordre des chambres"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+              Reset Ordre
             </button>
           </div>
 
@@ -271,14 +331,26 @@ export function CalendarGrid() {
           </div>
 
           {/* Room sections */}
-          {filteredRoomTypes.map((roomType) => (
-            <RoomSection
+          {filteredRoomTypes.map((roomType, index) => (
+            <div
               key={roomType.roomTypeId}
-              roomType={roomType}
-              gridTemplate={gridTemplate}
-              colCount={colCount}
-              visiblePlanNames={visiblePlanNames}
-            />
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDragEnd={handleDragEnd}
+              className={cn(
+                "transition-all duration-200",
+                draggedRoomIndex === index && "opacity-40",
+                dragOverIndex === index && draggedRoomIndex !== index && "border-t-4 border-violet-500"
+              )}
+            >
+              <RoomSection
+                roomType={roomType}
+                gridTemplate={gridTemplate}
+                colCount={colCount}
+                visiblePlanNames={visiblePlanNames}
+              />
+            </div>
           ))}
         </div>
       </div>

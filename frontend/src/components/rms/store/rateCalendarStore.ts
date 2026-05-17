@@ -113,6 +113,10 @@ interface RateCalendarStore {
   toggleChannelClosed: (channelId: string, date: string) => void;
   reorderChannels: (newChannels: ChannelData[]) => void;
 
+  // Room Ordering
+  reorderRoomTypes: (newRoomTypes: RoomTypeData[]) => void;
+  resetRoomTypesOrder: () => void;
+
   // CRUD
   addRoomType: (payload: NewRoomPayload) => void;
   updateRoomType: (payload: UpdateRoomPayload) => void;
@@ -179,7 +183,24 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       const { startDate, viewMode } = get();
       set({ isLoading: true });
       try {
-        const { roomTypes, dateColumns } = await fetchCalendarData(startDate, viewMode);
+        let { roomTypes, dateColumns } = await fetchCalendarData(startDate, viewMode);
+        
+        // ✅ Appliquer ordre sauvegardé utilisateur
+        const savedOrder = localStorage.getItem('flowtym_room_order');
+        if (savedOrder) {
+          try {
+            const orderArray: string[] = JSON.parse(savedOrder);
+            const orderMap = new Map(orderArray.map((id, idx) => [id, idx]));
+            roomTypes = roomTypes.sort((a, b) => {
+              const aIdx = orderMap.get(a.roomTypeId) ?? 999;
+              const bIdx = orderMap.get(b.roomTypeId) ?? 999;
+              return aIdx - bIdx;
+            });
+          } catch (e) {
+            console.warn('[RMS] Failed to apply saved room order:', e);
+          }
+        }
+        
         const expandedRooms: Record<string, boolean> = {};
         roomTypes.forEach((rt) => { expandedRooms[rt.roomTypeId] = true; });
         const roomIds = roomTypes.map(r => r.roomTypeId);
@@ -316,6 +337,20 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       }),
     })),
     reorderChannels: (newChannels) => set({ channels: newChannels }),
+
+    // ─── Room Ordering ────────────────────────────────────────────────
+    reorderRoomTypes: (newRoomTypes) => {
+      set({ roomTypes: newRoomTypes });
+      // Persister ordre dans localStorage
+      const order = newRoomTypes.map(r => r.roomTypeId);
+      localStorage.setItem('flowtym_room_order', JSON.stringify(order));
+    },
+
+    resetRoomTypesOrder: () => {
+      localStorage.removeItem('flowtym_room_order');
+      // Recharger pour ordre par défaut
+      get().loadData();
+    },
 
     addRoomType: (payload) => set((state) => {
       const roomTypeId = `rt_${payload.roomCode.toLowerCase()}`;
