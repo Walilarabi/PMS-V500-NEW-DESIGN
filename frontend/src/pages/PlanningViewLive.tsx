@@ -47,6 +47,7 @@ import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 import { ChannelColorModal } from '@/src/components/modals/ChannelColorModal';
 import { RevenueDetailsModal } from '@/src/components/modals/RevenueDetailsModal';
 import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
+import { AvailabilityModal } from '@/src/components/modals/AvailabilityModal';
 import { Palette } from 'lucide-react';
 import { usePlanningMetrics } from '@/src/hooks/usePlanningMetrics';
 import { buildReservation } from '@/src/lib/reservationFactory';
@@ -104,6 +105,7 @@ export const PlanningView = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedDetailsRes, setSelectedDetailsRes] = useState<Reservation | null>(null);
+  const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
   const [selectedEventDate, setSelectedEventDate] = useState<string | null>(null);
@@ -611,6 +613,53 @@ export const PlanningView = () => {
     return () => window.removeEventListener('mouseup', onMouseUp);
   }, [handleGridMouseUp, isMouseSelecting]);
 
+  // Préparer données pour modal disponibilité
+  const availabilityData = React.useMemo(() => {
+    // Grouper chambres par catégorie
+    const categoriesMap = new Map<string, { category: string; totalRooms: number; occupiedByDate: Record<string, Set<string>> }>();
+    
+    storeRooms.forEach(room => {
+      const category = `${room.type} ${room.category}`.trim();
+      if (!categoriesMap.has(category)) {
+        categoriesMap.set(category, { category, totalRooms: 0, occupiedByDate: {} });
+      }
+      categoriesMap.get(category)!.totalRooms++;
+    });
+    
+    // Calculer occupation par date pour chaque catégorie
+    contextReservations.forEach(res => {
+      if (res.reservationStatus === 'cancelled' || !res.room) return;
+      
+      const room = storeRooms.find(r => r.number === res.room);
+      if (!room) return;
+      
+      const category = `${room.type} ${room.category}`.trim();
+      const catData = categoriesMap.get(category);
+      if (!catData) return;
+      
+      const checkIn = new Date(res.checkIn || res.arrival);
+      const checkOut = new Date(res.checkOut || res.departure);
+      
+      // Marquer chambre occupée pour chaque nuit
+      for (let d = new Date(checkIn); d < checkOut; d.setDate(d.getDate() + 1)) {
+        const dateKey = toLocalISODate(d);
+        if (!catData.occupiedByDate[dateKey]) {
+          catData.occupiedByDate[dateKey] = new Set();
+        }
+        catData.occupiedByDate[dateKey].add(res.room);
+      }
+    });
+    
+    // Convertir Sets en counts
+    return Array.from(categoriesMap.values()).map(cat => ({
+      category: cat.category,
+      totalRooms: cat.totalRooms,
+      occupiedByDate: Object.fromEntries(
+        Object.entries(cat.occupiedByDate).map(([date, rooms]) => [date, rooms.size])
+      )
+    }));
+  }, [storeRooms, contextReservations]);
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[#F8FAFC] overflow-hidden font-sans select-none" onMouseMove={handleMouseMove}>
       {/* Top Header Bar */}
@@ -893,7 +942,7 @@ export const PlanningView = () => {
                   <TrendingUp size={14} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>TO %</span>
                </button>
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Détails Chambres libres' } }))} className='h-10 flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+               <button onClick={() => setIsAvailabilityModalOpen(true)} className='h-10 flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
                   <Lock size={14} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Ch. libres</span>
                </button>
@@ -1971,6 +2020,14 @@ export const PlanningView = () => {
           </div>
         )}
       </AnimatePresence>
+      
+      {/* Modal Disponibilité par catégorie */}
+      <AvailabilityModal 
+        isOpen={isAvailabilityModalOpen}
+        onClose={() => setIsAvailabilityModalOpen(false)}
+        dateRange={days.map(d => new Date(d.id))}
+        roomsByCategory={availabilityData}
+      />
     </div>
   </div>
 );
