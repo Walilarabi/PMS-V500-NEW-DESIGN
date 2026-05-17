@@ -22,10 +22,13 @@ import {
   ChevronRight,
   Filter,
   Download,
-  AlertTriangle,
   Target,
+  BarChart3,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 import { FOLKESTONE_COMPSET, generateCompetitorPricing } from '../../data/rms/compset';
+import { RevenueHeader } from '../../components/revenue/RevenueHeader';
+import { KPIStrip, KPICardData } from '../../components/revenue/KPIStrip';
 
 const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
 
@@ -55,6 +58,13 @@ export function VeilleConcurrentielle() {
   const [startDate, setStartDate] = useState(new Date('2026-06-01'));
   const [isCompsetCollapsed, setIsCompsetCollapsed] = useState(false);
   const [selectedSegments, setSelectedSegments] = useState<string[]>([]);
+
+  // Navigation handler
+  const handleNavigate = (page: string) => {
+    // TODO: implémenter avec context ou props de App.tsx
+    console.log('Navigate to:', page);
+    window.dispatchEvent(new CustomEvent('navigate', { detail: { page } }));
+  };
 
   // Génération colonnes dates
   const dateColumns = useMemo<DateColumn[]>(() => {
@@ -126,20 +136,82 @@ export function VeilleConcurrentielle() {
     return stats;
   }, [filteredRows, dateColumns]);
 
+  // KPI Cards données
+  const kpiCards: KPICardData[] = useMemo(() => {
+    const statsArray = Array.from(dailyStats.values());
+    if (statsArray.length === 0) return [];
+
+    const avgMin = statsArray.reduce((sum, s) => sum + s.min, 0) / statsArray.length;
+    const avgMedian = statsArray.reduce((sum, s) => sum + s.median, 0) / statsArray.length;
+    const avgMax = statsArray.reduce((sum, s) => sum + s.max, 0) / statsArray.length;
+    const avgSpread = statsArray.reduce((sum, s) => sum + (s.max - s.min), 0) / statsArray.length;
+
+    return [
+      {
+        label: 'Prix MIN Moyen',
+        value: Math.round(avgMin),
+        unit: '€',
+        color: 'green',
+        subtitle: 'Période',
+      },
+      {
+        label: 'Prix MÉDIANE Moyen',
+        value: Math.round(avgMedian),
+        unit: '€',
+        color: 'amber',
+        subtitle: 'Période',
+      },
+      {
+        label: 'Prix MAX Moyen',
+        value: Math.round(avgMax),
+        unit: '€',
+        color: 'red',
+        subtitle: 'Période',
+      },
+      {
+        label: 'Écart MIN-MAX',
+        value: Math.round(avgSpread),
+        unit: '€',
+        color: 'violet',
+        subtitle: 'Moyenne',
+      },
+      {
+        label: 'Concurrents Suivis',
+        value: filteredRows.length,
+        color: 'blue',
+        subtitle: `${viewPeriod === '7days' ? '7' : viewPeriod === '15days' ? '15' : viewPeriod === '30days' ? '30' : viewPeriod === '60days' ? '60' : '90'} jours`,
+      },
+      {
+        label: 'Jours Analysés',
+        value: dateColumns.length,
+        color: 'violet',
+        subtitle: 'Période active',
+      },
+    ];
+  }, [dailyStats, filteredRows.length, dateColumns.length, viewPeriod]);
+
   const gridTemplate = `200px repeat(${Math.min(dateColumns.length, 30)}, minmax(52px, 1fr))`;
 
   return (
     <div className="flex flex-col h-screen w-full bg-white overflow-hidden">
-      {/* HEADER */}
-      <div className="px-6 py-4 border-b border-gray-200 bg-white shrink-0">
-        <div className="flex items-center gap-3">
-          <Building2 className="w-6 h-6 text-violet-500" />
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">Veille Concurrentielle</h1>
-            <p className="text-sm text-gray-500">Analyse marché temps réel · {filteredRows.length} concurrents suivis</p>
-          </div>
-        </div>
-      </div>
+      {/* HEADER avec navigation rapide */}
+      <RevenueHeader
+        icon={Building2}
+        title="Veille Concurrentielle"
+        subtitle={`Analyse marché temps réel · ${filteredRows.length} concurrents suivis · ${dateColumns.length} jours`}
+        quickActions={[
+          {
+            label: 'RMS Tableau',
+            icon: BarChart3,
+            onClick: () => handleNavigate('rms'),
+          },
+          {
+            label: 'Calendrier Tarifaire',
+            icon: CalendarIcon,
+            onClick: () => handleNavigate('rev_pricing'),
+          },
+        ]}
+      />
 
       {/* TOOLBAR */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-gray-50 shrink-0">
@@ -192,61 +264,9 @@ export function VeilleConcurrentielle() {
         </button>
       </div>
 
-      {/* STATS RÉSUMÉ */}
-      <div className="px-6 py-4 border-b border-gray-200 bg-white shrink-0">
-        <div className="grid grid-cols-4 gap-4">
-          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-            <div className="text-xs font-semibold text-emerald-700 mb-1">Prix MIN moyen</div>
-            <div className="text-2xl font-bold text-emerald-700">
-              {Array.from(dailyStats.values()).length > 0
-                ? Math.round(
-                    Array.from(dailyStats.values()).reduce((sum, s) => sum + s.min, 0) /
-                      dailyStats.size
-                  )
-                : 0}
-              €
-            </div>
-          </div>
-
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-            <div className="text-xs font-semibold text-orange-700 mb-1">Prix MÉDIANE moyen</div>
-            <div className="text-2xl font-bold text-orange-700">
-              {Array.from(dailyStats.values()).length > 0
-                ? Math.round(
-                    Array.from(dailyStats.values()).reduce((sum, s) => sum + s.median, 0) /
-                      dailyStats.size
-                  )
-                : 0}
-              €
-            </div>
-          </div>
-
-          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-            <div className="text-xs font-semibold text-red-700 mb-1">Prix MAX moyen</div>
-            <div className="text-2xl font-bold text-red-700">
-              {Array.from(dailyStats.values()).length > 0
-                ? Math.round(
-                    Array.from(dailyStats.values()).reduce((sum, s) => sum + s.max, 0) /
-                      dailyStats.size
-                  )
-                : 0}
-              €
-            </div>
-          </div>
-
-          <div className="bg-violet-50 border border-violet-200 rounded-lg p-3">
-            <div className="text-xs font-semibold text-violet-700 mb-1">Écart moyen MIN-MAX</div>
-            <div className="text-2xl font-bold text-violet-700">
-              {Array.from(dailyStats.values()).length > 0
-                ? Math.round(
-                    Array.from(dailyStats.values()).reduce((sum, s) => sum + (s.max - s.min), 0) /
-                      dailyStats.size
-                  )
-                : 0}
-              €
-            </div>
-          </div>
-        </div>
+      {/* STATS RÉSUMÉ avec KPI Strip */}
+      <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 shrink-0">
+        <KPIStrip cards={kpiCards} />
       </div>
 
       {/* TABLEAU COMPSET */}

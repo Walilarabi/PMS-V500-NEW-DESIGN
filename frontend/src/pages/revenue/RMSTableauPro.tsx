@@ -34,7 +34,9 @@ import {
   Zap,
   Target,
   Activity,
+  Building2,
 } from 'lucide-react';
+import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -363,6 +365,12 @@ export function RMSTableauPro() {
   const [showFilters, setShowFilters] = useState(false);
   const [rmsData, setRmsData] = useState<DayRMSData[]>([]);
 
+  // Navigation handler
+  const handleNavigate = (page: string) => {
+    console.log('Navigate to:', page);
+    window.dispatchEvent(new CustomEvent('navigate', { detail: { page } }));
+  };
+
   // Génération données
   useMemo(() => {
     const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : viewPeriod === '30days' ? 30 : viewPeriod === '60days' ? 60 : 90;
@@ -419,10 +427,28 @@ export function RMSTableauPro() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-white overflow-hidden">
+      {/* HEADER avec navigation rapide */}
+      <RevenueHeader
+        icon={Target}
+        title="RMS Revenue Management"
+        subtitle={`Tableau de pilotage · ${rmsData.length} dates · ${validatedCount} validations`}
+        quickActions={[
+          {
+            label: 'Veille Compset',
+            icon: Building2,
+            onClick: () => handleNavigate('rev_compset'),
+          },
+          {
+            label: 'Calendrier Tarifaire',
+            icon: Calendar,
+            onClick: () => handleNavigate('rev_pricing'),
+          },
+        ]}
+      />
+
       {/* TOOLBAR */}
       <div className="flex flex-wrap items-center justify-between px-4 py-2.5 border-b border-gray-200 bg-white shrink-0 gap-2">
         <div className="flex items-center gap-4">
-          <h1 className="text-lg font-bold text-gray-800">RMS Revenue Management</h1>
           
           {/* Period Selector */}
           <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
