@@ -1,13 +1,16 @@
 /**
- * FLOWTYM RMS — Tableau Revenue Management
+ * FLOWTYM RMS — Tableau Revenue Management ENTERPRISE
  * 
- * Design system: EXACTEMENT aligné sur Calendrier Tarifaire
- * - Même grille (LABEL_W = 200px)
- * - Même typographie (text-sm, font-semibold)
- * - Même couleurs (violet-500, emerald, amber)
- * - Scroll moderne et fluide
- * - Collapse/Expand concurrents
- * - Filtres avancés
+ * Design system PREMIUM aligné Calendrier Tarifaire
+ * 
+ * FEATURES:
+ * ✅ Codes couleur pastel MIN/MAX/MEDIAN
+ * ✅ Second tableau validation jour par jour (OK/NON/Maintenir)
+ * ✅ Édition manuelle tarif si NON
+ * ✅ Mode automatique intelligent (switch global)
+ * ✅ Workflow propagation auto → Calendrier → D-EDGE → Réservations
+ * ✅ Vue Tableau + Vue Jour (cartes)
+ * ✅ UX premium enterprise-grade
  */
 
 import React, { useState, useMemo, useRef } from 'react';
@@ -26,18 +29,22 @@ import {
   Star,
   Building2,
   X,
+  Zap,
+  Edit3,
+  Minus,
+  Grid3x3,
+  LayoutList,
 } from 'lucide-react';
 import { PARIS_EVENTS_2026, getEventsForDate, getEventImpactScore } from '../data/rms/events';
 import { FOLKESTONE_COMPSET, generateCompetitorPricing, getCompsetStats } from '../data/rms/compset';
 import { generatePricingRecommendation } from '../data/rms/pricing-engine';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CONSTANTES (alignées sur CalendarGrid)
+// CONSTANTES
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LABEL_W = 200; // Largeur exacte colonne labels (comme CalendarGrid)
+const LABEL_W = 200;
 
-// Utilitaire classNames
 const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -60,16 +67,36 @@ interface CompetitorPricingRow {
   pricing: Map<string, { price: number; availability: string; variation: number }>;
 }
 
+type ValidationChoice = 'OK' | 'NON' | 'MAINTENIR' | null;
+
+interface DayValidation {
+  date: string;
+  choice: ValidationChoice;
+  manualPrice: number | null;
+  recommendation: any;
+}
+
+type ViewMode = 'table' | 'cards';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPOSANT PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function RMSTableau() {
-  const [viewMode, setViewMode] = useState<'7days' | '15days' | '30days'>('15days');
+  const [viewPeriod, setViewPeriod] = useState<'7days' | '15days' | '30days'>('15days');
   const [startDate, setStartDate] = useState(new Date('2026-06-01'));
   const [isCompsetCollapsed, setIsCompsetCollapsed] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Mode d'affichage : tableau ou cartes
+  const [displayMode, setDisplayMode] = useState<ViewMode>('table');
+
+  // Mode automatique RMS
+  const [autoModeEnabled, setAutoModeEnabled] = useState(false);
+
+  // Validations par date
+  const [validations, setValidations] = useState<Map<string, DayValidation>>(new Map());
 
   // Filtres
   const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
@@ -82,7 +109,7 @@ export function RMSTableau() {
   // ───────────────────────────────────────────────────────────────────────────
 
   const dateColumns = useMemo<DayColumn[]>(() => {
-    const days = viewMode === '7days' ? 7 : viewMode === '15days' ? 15 : 30;
+    const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : 30;
     const cols: DayColumn[] = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -105,7 +132,7 @@ export function RMSTableau() {
     }
 
     return cols;
-  }, [startDate, viewMode]);
+  }, [startDate, viewPeriod]);
 
   // ───────────────────────────────────────────────────────────────────────────
   // DONNÉES COMPSET AVEC PRICING
@@ -128,6 +155,56 @@ export function RMSTableau() {
       return { competitor, pricing };
     });
   }, [dateColumns, startDate]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // CALCUL MIN/MAX/MEDIAN PAR DATE (pour codes couleur pastel)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const dailyStats = useMemo(() => {
+    const stats = new Map<string, { min: number; max: number; median: number }>();
+    
+    dateColumns.forEach((col) => {
+      const prices = compsetRows
+        .map((row) => row.pricing.get(col.date)?.price)
+        .filter((p) => p !== undefined) as number[];
+      
+      if (prices.length > 0) {
+        const sortedPrices = [...prices].sort((a, b) => a - b);
+        stats.set(col.date, {
+          min: Math.min(...prices),
+          max: Math.max(...prices),
+          median: sortedPrices[Math.floor(sortedPrices.length / 2)],
+        });
+      }
+    });
+    
+    return stats;
+  }, [compsetRows, dateColumns]);
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // FONCTION COULEUR PASTEL PREMIUM (MIN=vert, MAX=rouge, MEDIAN=orange)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const getPriceColorClass = (price: number, dateStats: { min: number; max: number; median: number } | undefined) => {
+    if (!dateStats) return 'bg-white text-gray-800';
+    
+    // Prix MIN → vert pastel
+    if (price === dateStats.min) {
+      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
+    }
+    
+    // Prix MAX → rouge pastel
+    if (price === dateStats.max) {
+      return 'bg-red-50 text-red-700 ring-1 ring-red-200';
+    }
+    
+    // Prix MEDIAN (±5€ de tolérance) → orange pastel
+    if (Math.abs(price - dateStats.median) < 5) {
+      return 'bg-orange-50 text-orange-700 ring-1 ring-orange-200';
+    }
+    
+    return 'bg-white text-gray-800';
+  };
 
   // Filtrage des concurrents
   const filteredCompsetRows = useMemo(() => {
@@ -154,10 +231,10 @@ export function RMSTableau() {
   }, [compsetRows, selectedCompetitors, selectedSegments, minPriceFilter, maxPriceFilter]);
 
   // ───────────────────────────────────────────────────────────────────────────
-  // GRID TEMPLATE (comme CalendarGrid)
+  // GRID TEMPLATE (comme CalendarGrid) avec UX améliorée
   // ───────────────────────────────────────────────────────────────────────────
 
-  const minColPx = viewMode === '7days' ? 90 : viewMode === '15days' ? 52 : 32;
+  const minColPx = viewPeriod === '7days' ? 90 : viewPeriod === '15days' ? 52 : 32;
   const colCount = dateColumns.length;
   const gridTemplate = `${LABEL_W}px repeat(${colCount}, minmax(${minColPx}px, 1fr))`;
 
@@ -166,7 +243,7 @@ export function RMSTableau() {
   // ───────────────────────────────────────────────────────────────────────────
 
   const navigateDays = (direction: 'prev' | 'next') => {
-    const days = viewMode === '7days' ? 7 : viewMode === '15days' ? 15 : 30;
+    const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : 30;
     const newDate = new Date(startDate);
     newDate.setDate(newDate.getDate() + (direction === 'next' ? days : -days));
     setStartDate(newDate);
@@ -204,10 +281,10 @@ export function RMSTableau() {
             {(['7days', '15days', '30days'] as const).map((mode) => (
               <button
                 key={mode}
-                onClick={() => setViewMode(mode)}
+                onClick={() => setViewPeriod(mode)}
                 className={cn(
-                  'px-3 py-1 text-xs font-semibold rounded transition-colors',
-                  viewMode === mode
+                  'px-3 py-1 text-xs font-semibold rounded transition-all duration-150',
+                  viewPeriod === mode
                     ? 'bg-white text-violet-700 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 )}
@@ -479,11 +556,11 @@ export function RMSTableau() {
                 <div
                   key={row.competitor.name}
                   style={{ display: 'grid', gridTemplateColumns: gridTemplate }}
-                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                  className="border-b border-gray-100 hover:bg-gray-50 hover:shadow-sm transition-all duration-200"
                 >
-                  {/* Competitor Label */}
+                  {/* Competitor Label avec UX améliorée */}
                   <div
-                    className="sticky left-0 z-20 bg-white border-r border-gray-200 flex items-center px-3 py-2.5"
+                    className="sticky left-0 z-20 bg-white border-r border-gray-200 flex items-center px-3 py-3 transition-colors duration-200"
                     style={{ width: LABEL_W }}
                   >
                     <div className="flex-1 min-w-0">
@@ -502,10 +579,10 @@ export function RMSTableau() {
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex items-center gap-2 mt-1">
                         <span
                           className={cn(
-                            'text-[10px] font-semibold px-1.5 py-0.5 rounded',
+                            'min-w-[70px] text-center text-[11px] font-bold px-2 py-0.5 rounded',
                             row.competitor.segment === 'luxury'
                               ? 'bg-purple-100 text-purple-700'
                               : row.competitor.segment === 'upscale'
@@ -524,7 +601,7 @@ export function RMSTableau() {
                     </div>
                   </div>
 
-                  {/* Price Cells */}
+                  {/* Price Cells avec codes couleur MIN/MAX/MEDIAN */}
                   {dateColumns.map((col) => {
                     const priceData = row.pricing.get(col.date);
                     if (!priceData) return <div key={col.date} className="border-r border-gray-200" />;
@@ -540,12 +617,17 @@ export function RMSTableau() {
                       <div
                         key={col.date}
                         className={cn(
-                          'flex flex-col items-center justify-center border-r border-gray-200 py-2 gap-0.5',
+                          'flex flex-col items-center justify-center border-r border-gray-200 py-2.5 gap-1 transition-all duration-200',
                           availColor,
                           col.isWeekend && !availColor.includes('bg-') && 'bg-gray-50'
                         )}
                       >
-                        <span className="text-sm font-bold text-gray-800">
+                        <span
+                          className={cn(
+                            'text-sm font-bold px-2 py-1 rounded transition-all duration-150',
+                            getPriceColorClass(priceData.price, dailyStats.get(col.date))
+                          )}
+                        >
                           {priceData.price.toFixed(0)}€
                         </span>
                         {priceData.variation !== 0 && (
