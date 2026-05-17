@@ -214,67 +214,68 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
     collapseAllRooms: () => set((s) => { const e: Record<string, boolean> = {}; s.roomTypes.forEach(rt => e[rt.roomTypeId] = false); return { expandedRooms: e }; }),
 
     updatePrice: (roomTypeId, planId, date, newPrice) => {
-      const { roomTypes, rulesEngine, cascadeEngine } = get();
+      const { roomTypes, rulesEngine } = get();
       const key = `${roomTypeId}:${planId}:${date}`;
-      if (!rulesEngine.isReferenceRoom(roomTypeId)) {
-        get().addAuditLog({ action: "price_update_ignored", target: key, detail: "Seule la chambre de référence pilote la cascade.", result: "ignored" });
+      
+      // ✅ ÉDITION DIRECTE : Update prix sans cascade pour l'instant
+      // La cascade sera réactivée plus tard comme option
+      const room = roomTypes.find((r) => r.roomTypeId === roomTypeId);
+      const plan = room?.ratePlans.find((p) => p.planId === planId);
+      const cell = plan?.prices.find((c) => c.date === date);
+      
+      if (!room || !plan || !cell) {
+        get().addAuditLog({ action: "price_update_failed", target: key, detail: "Cellule introuvable", result: "failed" });
         return;
       }
-      const updated = rulesEngine.isReferencePlan(planId)
-        ? cascadeEngine.updateReferencePrice(roomTypes, date, newPrice)
-        : cascadeEngine.updateReferenceRoomPlanPrice(roomTypes, planId, date, newPrice);
-      set((s) => ({ roomTypes: updated, editedCells: new Set([...s.editedCells, key]), lastSaved: new Date() }));
-      get().addAuditLog({ action: "price_cascade", target: key, detail: `Prix ${newPrice} EUR propagé.`, result: "accepted" });
+      
+      // Update local state
+      const updatedRoomTypes = roomTypes.map(r => {
+        if (r.roomTypeId !== roomTypeId) return r;
+        return {
+          ...r,
+          ratePlans: r.ratePlans.map(p => {
+            if (p.planId !== planId) return p;
+            return {
+              ...p,
+              prices: p.prices.map(pr => 
+                pr.date === date ? { ...pr, price: newPrice } : pr
+              )
+            };
+          })
+        };
+      });
+      
+      set((s) => ({ 
+        roomTypes: updatedRoomTypes, 
+        editedCells: new Set([...s.editedCells, key]), 
+        lastSaved: new Date() 
+      }));
+      
+      get().addAuditLog({ action: "price_updated", target: key, detail: `Prix ${newPrice} EUR`, result: "accepted" });
 
-      // ─── Persist to Supabase (fire-and-forget) ────────────────────────
-      // The local cascade engine already updated the UI optimistically.
-      // We now ask the server to do the SAME cascade authoritatively, so
-      // that the values are persisted and audited. If the server cascade
-      // returns different prices (because pricing_rules in DB diverge from
-      // local cascade engine), we silently realign on the next loadData().
-      if (rulesEngine.isReferencePlan(planId)) {
-        // Only the reference plan triggers full cascade on the server
-        getCurrentHotelIdSafe().then((hotelId) => {
-          if (!hotelId) return;
-          persistReferencePriceCascade(hotelId, date, newPrice).then((result) => {
-            if (result === null) {
+      // ─── Persist to Supabase ────────────────────────
+      if (cell?.priceId && typeof cell.priceVersion === 'number') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from('rate_prices')
+          .update({
+            price: newPrice,
+            source: 'manual',
+            version: cell.priceVersion + 1,
+          })
+          .eq('id', cell.priceId)
+          .eq('version', cell.priceVersion)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .then(({ error }: any) => {
+            if (error) {
               get().addAuditLog({
                 action: 'price_persist_failed',
                 target: key,
-                detail: 'Supabase cascade RPC failed — local changes only.',
+                detail: error.message || 'Update failed',
                 result: 'failed',
               });
             }
           });
-        });
-      } else {
-        // Non-reference plan: just persist this single cell
-        const room = roomTypes.find((r) => r.roomTypeId === roomTypeId);
-        const plan = room?.ratePlans.find((p) => p.planId === planId);
-        const cell = plan?.prices.find((c) => c.date === date);
-        if (cell?.priceId && typeof cell.priceVersion === 'number') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase as any)
-            .from('rate_prices')
-            .update({
-              price: newPrice,
-              source: 'manual',
-              version: cell.priceVersion + 1,
-            })
-            .eq('id', cell.priceId)
-            .eq('version', cell.priceVersion)
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .then(({ error }: any) => {
-              if (error) {
-                get().addAuditLog({
-                  action: 'price_persist_failed',
-                  target: key,
-                  detail: error.message || 'Update failed',
-                  result: 'failed',
-                });
-              }
-            });
-        }
       }
     },
 

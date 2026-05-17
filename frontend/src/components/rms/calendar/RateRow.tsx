@@ -91,7 +91,7 @@ export const RateRow = memo(function RateRow({
             price={price}
             isActive={isActive}
             isEdited={isEdited}
-            canEditPrice={isReferenceRoom}
+            canEditPrice={true}  // ✅ TOUTES chambres éditables (cascade désactivée temporairement)
             onPriceChange={(newPrice) => handlePriceChange(price.date, newPrice)}
             onTogglePlanRestriction={() =>
               updatePlanRestriction(roomTypeId, plan.planId, price.date, !price.planClosed)
