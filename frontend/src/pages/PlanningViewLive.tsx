@@ -924,7 +924,7 @@ export const PlanningView = () => {
                 });
 
                 return (
-                  <div key={room.id} className="h-[42px] flex items-center px-4 border-b border-gray-100 group">
+                  <div key={room.id} className="h-[36px] flex items-center px-4 border-b border-gray-100 group">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                        <span 
                          className="text-[14px] font-semibold text-gray-900 cursor-help" 
@@ -1018,7 +1018,7 @@ export const PlanningView = () => {
                      {rooms.map((room) => (
                       <div 
                          key={`row-${room.id}`} 
-                         className="h-[42px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
+                         className="h-[36px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
                          onDragOver={handleDragOver}
                          onDrop={(e) => handleDrop(e, room)}
                        >
@@ -1075,35 +1075,36 @@ export const PlanningView = () => {
                             );
                           })}
                         </div>
-                         {/* Empilage vertical des réservations qui se chevauchent */}
+                         {/* Afficher UNIQUEMENT les réservations sans conflit temporel */}
                          {(() => {
                            const roomReservations = contextReservations.filter(res => res.room === room.number);
                            
-                           // Calculer les layers (niveaux d'empilage) pour éviter chevauchement
-                           const reservationsWithLayers = roomReservations.map((res, idx) => {
-                             const arrivalDate = res.checkIn ? new Date(res.checkIn) : new Date(res.arrival);
-                             const departureDate = res.checkOut ? new Date(res.checkOut) : new Date(res.departure);
-                             
-                             const startMs = arrivalDate.getTime();
-                             const endMs = departureDate.getTime();
-                             
-                             // Compter combien de réservations précédentes chevauchent celle-ci
-                             let layer = 0;
-                             for (let i = 0; i < idx; i++) {
-                               const prevRes = roomReservations[i];
-                               const prevStart = prevRes.checkIn ? new Date(prevRes.checkIn).getTime() : new Date(prevRes.arrival).getTime();
-                               const prevEnd = prevRes.checkOut ? new Date(prevRes.checkOut).getTime() : new Date(prevRes.departure).getTime();
-                               
-                               // Détection de chevauchement
-                               if (startMs < prevEnd && prevStart < endMs) {
-                                 layer++;
-                               }
-                             }
-                             
-                             return { res, layer };
+                           // Tri par date d'arrivée
+                           const sorted = roomReservations.sort((a, b) => {
+                             const dateA = a.checkIn ? new Date(a.checkIn) : new Date(a.arrival);
+                             const dateB = b.checkIn ? new Date(b.checkIn) : new Date(b.arrival);
+                             return dateA.getTime() - dateB.getTime();
                            });
                            
-                           return reservationsWithLayers.map(({ res, layer }, idx) => {
+                           // Filtrer uniquement les réservations valides (sans chevauchement avec celles avant)
+                           const validReservations: typeof sorted = [];
+                           let lastEndMs = 0;
+                           
+                           for (const res of sorted) {
+                             const startDate = res.checkIn ? new Date(res.checkIn) : new Date(res.arrival);
+                             const endDate = res.checkOut ? new Date(res.checkOut) : new Date(res.departure);
+                             const startMs = startDate.getTime();
+                             const endMs = endDate.getTime();
+                             
+                             // Accepter si pas de conflit avec la réservation précédente
+                             if (startMs >= lastEndMs) {
+                               validReservations.push(res);
+                               lastEndMs = endMs;
+                             }
+                             // Sinon = conflit → ignorer cette réservation (pas affichée)
+                           }
+                           
+                           return validReservations.map((res, idx) => {
                            const arrivalDate = res.checkIn ? new Date(res.checkIn) : new Date(res.arrival);
                            const departureDate = res.checkOut ? new Date(res.checkOut) : new Date(res.departure);
                            
@@ -1208,26 +1209,34 @@ export const PlanningView = () => {
                                  setIsDetailsModalOpen(true);
                                }}
                                className={cn(
-                                 'absolute h-[32px] top-1.5 rounded-lg border flex items-center px-2.5 gap-2 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden text-xs',
+                                 'absolute h-[28px] top-1 rounded-lg border flex items-center px-2 gap-1.5 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden text-xs',
                                  opacityClass
                                )}
                                style={{ 
                                  left: `calc(${startIndex * colWidth}% + 4px)`, 
                                  width: `calc(${Math.min(viewLength - startIndex, dayCount) * colWidth}% - 8px)`,
-                                 top: `${1.5 + (layer * 34)}px`,  // Empilement vertical : 1.5px base + 34px par layer
                                  contain: 'layout style paint',
                                  isolation: 'isolate',
                                  clipPath: 'inset(0 0 0 0 round 8px)',
                                  ...barStyle 
                                }}
                              >
-                                <div className="w-7 h-7 rounded-full bg-white/60 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                  <span style={{ fontSize: 13 }}>{statusIcon}</span>
+                                {/* Icône ARRIVÉE (flèche verte) à gauche */}
+                                <div className="shrink-0 flex items-center justify-center" style={{ width: 16, height: 16 }}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#10b981' }}>
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                  </svg>
                                 </div>
-                                <span className={cn("text-[13px] font-semibold truncate min-w-0 flex-1", viewLength > 15 ? "hidden lg:block" : "")}>{res.client}</span>
+                                <span className={cn("text-[11px] font-semibold truncate min-w-0 flex-1", viewLength > 15 ? "hidden lg:block" : "")}>{res.client}</span>
                                 {isOB && (
                                   <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 900, background: '#DC2626', color: '#fff', padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>OB</span>
                                 )}
+                                {/* Icône DÉPART (flèche rouge) à droite */}
+                                <div className="shrink-0 flex items-center justify-center ml-auto" style={{ width: 16, height: 16 }}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#ef4444' }}>
+                                    <polyline points="15 18 9 12 15 6"></polyline>
+                                  </svg>
+                                </div>
                              </div>
                            );
                          })
