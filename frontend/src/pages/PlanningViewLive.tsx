@@ -1139,7 +1139,7 @@ export const PlanningView = () => {
                                  setIsDetailsModalOpen(true);
                                }}
                                className={cn(
-                                 'absolute h-[48px] top-4 rounded-[14px] border flex items-center px-4 gap-3 cursor-pointer transition-all hover:scale-[1.01] hover:shadow-lg z-20 group',
+                                 'absolute h-[48px] top-4 rounded-[14px] border flex items-center px-4 gap-3 cursor-pointer transition-all hover:scale-[1.01] hover:shadow-lg z-20 group overflow-hidden',
                                  opacityClass
                                )}
                                style={{ left: `calc(${startIndex * colWidth}% + 4px)`, width: `calc(${Math.min(viewLength - startIndex, dayCount) * colWidth}% - 8px)`, ...barStyle }}
@@ -1147,7 +1147,7 @@ export const PlanningView = () => {
                                 <div className="w-7 h-7 rounded-full bg-white/60 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
                                   <span style={{ fontSize: 13 }}>{statusIcon}</span>
                                 </div>
-                                <span className={cn("text-[12px] font-black truncate", viewLength > 15 ? "hidden lg:block" : "")}>{res.client}</span>
+                                <span className={cn("text-[13px] font-semibold truncate min-w-0 flex-1", viewLength > 15 ? "hidden lg:block" : "")}>{res.client}</span>
                                 {isOB && (
                                   <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 900, background: '#DC2626', color: '#fff', padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>OB</span>
                                 )}

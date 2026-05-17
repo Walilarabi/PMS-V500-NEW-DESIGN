@@ -93,13 +93,13 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
                 key={item.id}
                 onClick={() => setActivePage(item.defaultPage)}
                 className={cn(
-                  'relative flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all duration-200',
+                  'relative flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[13px] font-semibold uppercase tracking-wide transition-all duration-200',
                   isActive
                     ? 'bg-white text-[#8B5CF6] shadow-sm ring-1 ring-gray-100'
                     : 'text-gray-400 hover:text-gray-600 hover:bg-white/60',
                 )}
               >
-                <item.icon size={13} />
+                <item.icon size={15} />
                 {item.label}
 
                 {/* Bulles SAS dans le bouton Flowday */}
