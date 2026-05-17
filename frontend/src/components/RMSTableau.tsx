@@ -306,6 +306,60 @@ export function RMSTableau() {
     alert(`${approvedChanges.length} tarifs prêts à être propagés`);
   };
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // RULES ENGINE MODE AUTO
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const applyAutoRules = React.useCallback(() => {
+    if (!autoModeEnabled) return;
+    
+    const newValidations = new Map<string, DayValidation>();
+    
+    recommendations.forEach((reco) => {
+      // Règle 1: Si confiance >= 85% → OK automatique
+      if (reco.confidence >= 85) {
+        newValidations.set(reco.date, {
+          date: reco.date,
+          choice: 'OK',
+          manualPrice: null,
+          recommendation: reco,
+        });
+      }
+      
+      // Règle 2: Si confiance < 60% → MAINTENIR
+      else if (reco.confidence < 60) {
+        newValidations.set(reco.date, {
+          date: reco.date,
+          choice: 'MAINTENIR',
+          manualPrice: null,
+          recommendation: reco,
+        });
+      }
+      
+      // Règle 3: Entre 60-85% → Nécessite validation manuelle (null)
+      else {
+        newValidations.set(reco.date, {
+          date: reco.date,
+          choice: null,
+          manualPrice: null,
+          recommendation: reco,
+        });
+      }
+    });
+    
+    setValidations(newValidations);
+  }, [autoModeEnabled, recommendations]);
+
+  // Appliquer les règles auto au changement du mode
+  React.useEffect(() => {
+    if (autoModeEnabled) {
+      applyAutoRules();
+    } else {
+      // Quand on désactive le mode auto, on garde les validations actuelles
+      // (ne pas les reset pour permettre validation manuelle)
+    }
+  }, [autoModeEnabled, applyAutoRules]);
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
   // ═══════════════════════════════════════════════════════════════════════════
@@ -368,6 +422,56 @@ export function RMSTableau() {
               className="px-3 py-1.5 hover:bg-gray-100 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Toggle Vue Tableau / Jour */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
+            <button
+              onClick={() => setDisplayMode('table')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold rounded flex items-center gap-1.5 transition-all duration-150',
+                displayMode === 'table'
+                  ? 'bg-white text-violet-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              )}
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+              Tableau
+            </button>
+            
+            <button
+              onClick={() => setDisplayMode('cards')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold rounded flex items-center gap-1.5 transition-all duration-150',
+                displayMode === 'cards'
+                  ? 'bg-white text-violet-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              )}
+            >
+              <Grid3x3 className="w-3.5 h-3.5" />
+              Jour
+            </button>
+          </div>
+
+          {/* Mode Auto */}
+          <div className="flex items-center gap-2 pl-2 border-l border-gray-200">
+            <Zap className={cn('w-4 h-4', autoModeEnabled ? 'text-violet-500' : 'text-gray-400')} />
+            <span className="text-sm font-semibold text-gray-700">Auto</span>
+            <button
+              onClick={() => setAutoModeEnabled(!autoModeEnabled)}
+              className={cn(
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200',
+                autoModeEnabled ? 'bg-violet-500' : 'bg-gray-300'
+              )}
+              title={autoModeEnabled ? 'Mode automatique activé' : 'Mode automatique désactivé'}
+            >
+              <span
+                className={cn(
+                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200',
+                  autoModeEnabled ? 'translate-x-6' : 'translate-x-1'
+                )}
+              />
             </button>
           </div>
 
@@ -472,7 +576,11 @@ export function RMSTableau() {
           MAIN SCROLLABLE AREA
       ───────────────────────────────────────────────────────────────────── */}
       <div ref={scrollContainerRef} className="flex-1 overflow-auto w-full custom-scrollbar">
-        <div className="w-full">
+        {displayMode === 'table' ? (
+          /* ═══════════════════════════════════════════════════════════════
+              VUE TABLEAU
+          ═══════════════════════════════════════════════════════════════ */
+          <div className="w-full">
           {/* ═══════════════════════════════════════════════════════════════
               EVENTS TIMELINE
           ═══════════════════════════════════════════════════════════════ */}
@@ -996,84 +1104,164 @@ export function RMSTableau() {
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════
-              RECOMMENDATIONS
+              RECOMMENDATIONS (section supprimée en mode cartes)
           ═══════════════════════════════════════════════════════════════ */}
-          <div className="p-6 space-y-4 bg-gray-50">
+          </div>
+        ) : (
+          /* ═══════════════════════════════════════════════════════════════
+              VUE JOUR (CARTES)
+          ═══════════════════════════════════════════════════════════════ */
+          <div className="p-6 bg-gray-50">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {dateColumns.map((col) => {
+                const recommendation = recommendations.find((r) => r.date === col.date);
+                const validation = validations.get(col.date);
+                const compsetStatsForDay = dailyStats.get(col.date);
+                
+                return (
+                  <div
+                    key={col.date}
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-xl hover:-translate-y-1 transition-all duration-200"
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="text-sm font-semibold text-gray-700">
+                          {col.dayName}. {col.dayNumber}/{col.month}
+                        </span>
+                        {col.events.length > 0 && (
+                          <div className="mt-1">
+                            <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-semibold">
+                              {col.events[0].name}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {validation?.choice && (
+                        <span className={cn(
+                          'px-2 py-1 text-[10px] font-bold rounded',
+                          validation.choice === 'OK' && 'bg-emerald-100 text-emerald-700',
+                          validation.choice === 'NON' && 'bg-red-100 text-red-700',
+                          validation.choice === 'MAINTENIR' && 'bg-blue-100 text-blue-700'
+                        )}>
+                          {validation.choice}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Metrics */}
+                    <div className="space-y-2 mb-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Dispo</span>
+                        <span className="font-semibold text-gray-800">0 ch</span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Prix actuel</span>
+                        <span className="font-bold text-gray-800">
+                          {recommendation ? `${recommendation.currentPrice.toFixed(0)}€` : '—'}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Prix suggéré</span>
+                        <span className="font-bold text-violet-600">
+                          {recommendation ? `${recommendation.recommendedPrice.toFixed(0)}€` : '—'}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-500">Médiane</span>
+                        <span className="font-semibold text-orange-700">
+                          {compsetStatsForDay ? `${compsetStatsForDay.median.toFixed(0)}€` : '—'}
+                        </span>
+                      </div>
+
+                      {recommendation && (
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
+                          <span className="text-gray-500">Confiance</span>
+                          <span className={cn(
+                            'px-2 py-0.5 text-[10px] font-bold rounded',
+                            recommendation.confidence >= 80 && 'bg-emerald-100 text-emerald-700',
+                            recommendation.confidence >= 60 && recommendation.confidence < 80 && 'bg-yellow-100 text-yellow-700',
+                            recommendation.confidence < 60 && 'bg-red-100 text-red-700'
+                          )}>
+                            {recommendation.confidence}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Validation Buttons */}
+                    {recommendation && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleValidationChoice(col.date, 'OK')}
+                          className={cn(
+                            'flex-1 px-2 py-1.5 text-xs font-semibold rounded border transition-all duration-150 hover:scale-105 active:scale-95',
+                            validation?.choice === 'OK'
+                              ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-500'
+                          )}
+                        >
+                          ✓ OK
+                        </button>
+                        
+                        <button
+                          onClick={() => handleValidationChoice(col.date, 'MAINTENIR')}
+                          className={cn(
+                            'flex-1 px-2 py-1.5 text-xs font-semibold rounded border transition-all duration-150 hover:scale-105 active:scale-95',
+                            validation?.choice === 'MAINTENIR'
+                              ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-blue-500'
+                          )}
+                        >
+                          − Maintenir
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Manual edit if NON */}
+                    {validation?.choice === 'NON' && (
+                      <div className="mt-2">
+                        <input
+                          type="number"
+                          value={validation.manualPrice || ''}
+                          onChange={(e) => handleManualPriceChange(col.date, Number(e.target.value))}
+                          className="w-full px-3 py-2 text-sm text-center border border-violet-500 rounded focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white font-semibold"
+                          placeholder="Saisir tarif manuel"
+                        />
+                      </div>
+                    )}
+
+                    {/* Bouton NON séparé si besoin */}
+                    {recommendation && !validation?.choice && (
+                      <button
+                        onClick={() => handleValidationChoice(col.date, 'NON')}
+                        className="w-full mt-2 px-2 py-1.5 text-xs font-semibold rounded border border-red-300 text-red-700 hover:bg-red-50 transition-all duration-150"
+                      >
+                        ✗ Refuser
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────────────
+          CUSTOM SCROLLBAR CSS (identique pour les 2 vues)
+      ───────────────────────────────────────────────────────────────────── */}
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-violet-500" />
               <h2 className="text-lg font-bold text-gray-800">Recommandations Pricing</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {recommendations.map((reco) => (
-                <div
-                  key={reco.date}
-                  className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-semibold text-gray-700">
-                      {new Date(reco.date).toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'short',
-                      })}
-                    </span>
-                    <span
-                      className={cn(
-                        'px-2 py-1 text-xs font-bold rounded',
-                        reco.confidence >= 80
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : reco.confidence >= 60
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-red-100 text-red-700'
-                      )}
-                    >
-                      {reco.confidence}% confiance
-                    </span>
-                  </div>
-
-                  <div className="flex items-baseline gap-2 mb-3">
-                    <span className="text-2xl font-bold text-violet-600">
-                      {reco.recommendedPrice.toFixed(0)}€
-                    </span>
-                    <span
-                      className={cn(
-                        'text-sm font-semibold',
-                        reco.delta > 0 ? 'text-emerald-600' : 'text-red-600'
-                      )}
-                    >
-                      {reco.delta > 0 ? '+' : ''}
-                      {reco.delta.toFixed(0)}€ ({reco.deltaPercent > 0 ? '+' : ''}
-                      {reco.deltaPercent.toFixed(1)}%)
-                    </span>
-                  </div>
-
-                  {reco.opportunities.length > 0 && (
-                    <div className="mb-3">
-                      <div className="text-[11px] font-semibold text-emerald-700 mb-1">
-                        Opportunités:
-                      </div>
-                      {reco.opportunities.slice(0, 2).map((opp, i) => (
-                        <div key={i} className="text-[10px] text-gray-600 flex items-start gap-1">
-                          <span className="text-emerald-500">•</span>
-                          <span>{opp}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <button className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 transition-colors">
-                    <Check className="w-3.5 h-3.5" />
-                    Appliquer
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* ─────────────────────────────────────────────────────────────────────
-          CUSTOM SCROLLBAR CSS
+          CUSTOM SCROLLBAR CSS (identique pour les 2 vues)
       ───────────────────────────────────────────────────────────────────── */}
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
