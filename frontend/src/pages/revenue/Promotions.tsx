@@ -21,6 +21,7 @@ import {
   Percent,
   DollarSign,
   Users,
+  Share2,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 
@@ -334,18 +335,33 @@ function PromoCard({
     return `${promo.value} nuit(s) gratuite(s)`;
   };
 
+  // Calculer performance (fictif: objectif 100 bookings)
+  const performancePercent = Math.min(100, (promo.bookingsGenerated / 100) * 100);
+
   return (
     <div
       className={cn(
-        'border-2 rounded-lg p-4 transition-all hover:shadow-lg',
-        promo.active ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50 opacity-70'
+        'border-2 rounded-xl p-5 transition-all duration-300',
+        promo.active 
+          ? 'border-emerald-300 bg-gradient-to-br from-emerald-50 to-white hover:shadow-2xl hover:scale-105' 
+          : 'border-gray-200 bg-gradient-to-br from-gray-50 to-white opacity-70 hover:shadow-lg'
       )}
     >
-      <div className="flex items-start justify-between mb-3">
+      {/* HEADER avec gradient badge */}
+      <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
-          <h4 className="font-bold text-gray-900 mb-1">{promo.name}</h4>
+          <div className="flex items-center gap-2 mb-2">
+            <h4 className="font-bold text-gray-900 text-lg">{promo.name}</h4>
+            {promo.active && (
+              <span className="px-2 py-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[10px] font-bold rounded-full uppercase">
+                Active
+              </span>
+            )}
+          </div>
+          
           {promo.code && (
-            <div className="inline-block px-2 py-0.5 bg-blue-600 text-white text-xs font-mono font-bold rounded">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs font-mono font-bold rounded-lg shadow-sm">
+              <Tag className="w-3 h-3" />
               {promo.code}
             </div>
           )}
@@ -354,56 +370,105 @@ function PromoCard({
         <button
           onClick={onToggle}
           className={cn(
-            'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-            promo.active ? 'bg-emerald-600' : 'bg-gray-300'
+            'relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200',
+            promo.active ? 'bg-emerald-600 shadow-md' : 'bg-gray-300'
           )}
+          title={promo.active ? 'Désactiver' : 'Activer'}
         >
           <span
             className={cn(
-              'inline-block h-3 w-3 transform rounded-full bg-white transition-transform',
-              promo.active ? 'translate-x-5' : 'translate-x-1'
+              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 shadow-sm',
+              promo.active ? 'translate-x-6' : 'translate-x-1'
             )}
           />
         </button>
       </div>
 
-      <div className="space-y-2 mb-3">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-600">Réduction</span>
-          <span className="font-bold text-emerald-600">{formatValue()}</span>
-        </div>
+      {/* RÉDUCTION en grand */}
+      <div className="mb-4 p-4 bg-gradient-to-r from-emerald-100 to-teal-100 rounded-lg border border-emerald-200">
+        <div className="text-xs text-emerald-700 font-semibold mb-1">RÉDUCTION</div>
+        <div className="text-2xl font-black text-emerald-700">{formatValue()}</div>
+      </div>
 
+      {/* PÉRIODE */}
+      <div className="mb-4 flex items-center gap-2 text-sm">
+        <Calendar className="w-4 h-4 text-gray-500" />
+        <span className="text-gray-600">Du</span>
+        <span className="font-bold text-gray-900">
+          {new Date(promo.startDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+        </span>
+        <span className="text-gray-600">au</span>
+        <span className="font-bold text-gray-900">
+          {new Date(promo.endDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+        </span>
+      </div>
+
+      {/* CANAUX (badges) */}
+      <div className="mb-4">
+        <div className="text-xs text-gray-500 font-semibold mb-2 flex items-center gap-1">
+          <Share2 className="w-3 h-3" />
+          Canaux diffusion
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {promo.channels.map((channel, idx) => (
+            <span 
+              key={idx}
+              className="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-md"
+            >
+              {channel}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* PERFORMANCE */}
+      <div className="mb-4 space-y-2">
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-600">Période</span>
-          <span className="font-semibold text-gray-900 text-xs">
-            {new Date(promo.startDate).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })} -{' '}
-            {new Date(promo.endDate).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}
+          <span className="text-gray-600 flex items-center gap-1">
+            <Users className="w-4 h-4" />
+            Réservations
           </span>
-        </div>
-
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-600">Réservations</span>
           <span className="font-bold text-blue-600">{promo.bookingsGenerated}</span>
         </div>
 
         <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-600">Revenu</span>
-          <span className="font-bold text-gray-900">{Math.round(promo.revenueGenerated).toLocaleString()}€</span>
+          <span className="text-gray-600 flex items-center gap-1">
+            <DollarSign className="w-4 h-4" />
+            Revenu généré
+          </span>
+          <span className="font-bold text-emerald-600">
+            {Math.round(promo.revenueGenerated).toLocaleString()}€
+          </span>
+        </div>
+
+        {/* Progress bar */}
+        <div className="pt-2">
+          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+            <span>Performance vs objectif</span>
+            <span className="font-bold">{performancePercent.toFixed(0)}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+              style={{ width: `${performancePercent}%` }}
+            />
+          </div>
         </div>
       </div>
 
+      {/* ACTIONS */}
       <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
         <button
-          className="flex-1 px-2 py-1.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded hover:bg-blue-200 flex items-center justify-center gap-1"
+          className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs font-bold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 hover:shadow-md flex items-center justify-center gap-1.5"
         >
-          <Edit className="w-3 h-3" />
+          <Edit className="w-3.5 h-3.5" />
           Éditer
         </button>
         <button
           onClick={onDelete}
-          className="flex-1 px-2 py-1.5 bg-red-100 text-red-700 text-xs font-semibold rounded hover:bg-red-200 flex items-center justify-center gap-1"
+          className="flex-1 px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs font-bold rounded-lg hover:from-red-600 hover:to-red-700 transition-all duration-200 hover:shadow-md flex items-center justify-center gap-1.5"
         >
-          <Trash2 className="w-3 h-3" />
+          <Trash2 className="w-3.5 h-3.5" />
           Supprimer
         </button>
       </div>
