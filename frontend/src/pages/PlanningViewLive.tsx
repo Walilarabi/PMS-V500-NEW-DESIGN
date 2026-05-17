@@ -42,6 +42,7 @@ import ReservationFormModal, { ReservationFormData } from '@/src/components/moda
 import { RevenueKPIChart } from '@/src/components/configuration/RevenueKPIChart';
 import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
 import { useConfigStore, HotelEvent } from '@/src/store/configStore';
+import { useRealtimeKPI } from '@/src/hooks/useRealtimeKPI';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 import { ChannelColorModal } from '@/src/components/modals/ChannelColorModal';
 import { RevenueDetailsModal } from '@/src/components/modals/RevenueDetailsModal';
@@ -91,6 +92,13 @@ const getRoomCode = (type: string, category: string): string => {
 export const PlanningView = () => {
   const { addReservation, updateReservation, reservations: contextReservations } = useReservations();
   const { rooms: storeRooms, events: storeEvents, channels: storeChannels } = useConfigStore();
+  
+  // Calcul KPI temps réel automatique
+  const kpiData = useRealtimeKPI(contextReservations, storeRooms.length, {
+    start: new Date(),
+    end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 jours
+  });
+  
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -773,10 +781,10 @@ export const PlanningView = () => {
         <div className="bg-white border-b border-gray-100 px-8 py-6 flex items-center justify-between gap-6 shrink-0">
            <div className="flex-1 grid grid-cols-5 gap-6">
               {[
-                  { label: 'TO moyen', val: '72,6%', trend: '+ 6,2 pts vs N-1', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50/40', border: 'border-emerald-100/50' },
-                  { label: 'CA total', val: '1 248 980 €', trend: '↗ 12,4% vs N-1', icon: Euro, color: 'text-indigo-600', bg: 'bg-indigo-50/40', border: 'border-indigo-100/50' },
-                  { label: 'RevPAR', val: '87,4 €', trend: '↗ 8,7% vs N-1', icon: Activity, color: 'text-violet-600', bg: 'bg-violet-50/40', border: 'border-violet-100/50' },
-                  { label: 'ADR', val: '120,3 €', trend: '↗ 3,6% vs N-1', icon: CreditCard, color: 'text-amber-600', bg: 'bg-amber-50/40', border: 'border-amber-100/50' },
+                  { label: 'TO', val: `${kpiData.to.toFixed(1)}%`, trend: `${kpiData.roomsSold}/${storeRooms.length} chambres`, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50/40', border: 'border-emerald-100/50' },
+                  { label: 'CA total', val: `${kpiData.totalRevenue.toLocaleString('fr-FR')} €`, trend: `${kpiData.reservationsCount} réservations`, icon: Euro, color: 'text-indigo-600', bg: 'bg-indigo-50/40', border: 'border-indigo-100/50' },
+                  { label: 'RevPAR', val: `${kpiData.revpar.toFixed(1)} €`, trend: `Chambres vendues: ${kpiData.roomsSold}`, icon: Activity, color: 'text-violet-600', bg: 'bg-violet-50/40', border: 'border-violet-100/50' },
+                  { label: 'ADR', val: `${kpiData.adr.toFixed(1)} €`, trend: `Dispo restante: ${kpiData.availableRooms}`, icon: CreditCard, color: 'text-amber-600', bg: 'bg-amber-50/40', border: 'border-amber-100/50' },
                ].map((kpi, i) => (
                   <div 
                     key={i} 
@@ -1742,12 +1750,32 @@ export const PlanningView = () => {
         )}
       </AnimatePresence>
 
-      <ReservationDetailsModal 
-        isOpen={isDetailsModalOpen} 
-        onClose={() => setIsDetailsModalOpen(false)} 
-        reservation={selectedDetailsRes!} 
-        onUpdate={(updated) => updateReservation(updated.id, updated)}
-      />
+      {/* Panneau latéral fixe pour fiche réservation (2/3 écran) */}
+      {isDetailsModalOpen && selectedDetailsRes && (
+        <div className="fixed inset-0 z-50 flex justify-end pointer-events-none">
+          {/* Overlay semi-transparent */}
+          <div 
+            className="absolute inset-0 bg-black/20 pointer-events-auto" 
+            onClick={() => setIsDetailsModalOpen(false)}
+          />
+          
+          {/* Panneau drawer fixe */}
+          <div 
+            className="relative w-2/3 h-full bg-white shadow-2xl pointer-events-auto overflow-y-auto"
+            style={{ 
+              transform: 'translateX(0)',
+              transition: 'transform 0.3s ease-out'
+            }}
+          >
+            <ReservationDetailsModal 
+              isOpen={true}
+              onClose={() => setIsDetailsModalOpen(false)} 
+              reservation={selectedDetailsRes} 
+              onUpdate={(updated) => updateReservation(updated.id, updated)}
+            />
+          </div>
+        </div>
+      )}
 
       <ReservationFormModal 
         isOpen={isModalOpen} 
