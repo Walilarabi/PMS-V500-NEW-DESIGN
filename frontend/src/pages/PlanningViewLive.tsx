@@ -924,7 +924,7 @@ export const PlanningView = () => {
                 });
 
                 return (
-                  <div key={room.id} className="h-14 flex items-center px-4 border-b border-gray-100 group">
+                  <div key={room.id} className="h-[42px] flex items-center px-4 border-b border-gray-100 group">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                        <span 
                          className="text-[14px] font-semibold text-gray-900 cursor-help" 
@@ -1018,7 +1018,7 @@ export const PlanningView = () => {
                      {rooms.map((room) => (
                       <div 
                          key={`row-${room.id}`} 
-                         className="h-14 border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
+                         className="h-[42px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
                          onDragOver={handleDragOver}
                          onDrop={(e) => handleDrop(e, room)}
                        >
@@ -1075,7 +1075,35 @@ export const PlanningView = () => {
                             );
                           })}
                         </div>
-                         {contextReservations.filter(res => res.room === room.number).map((res, idx) => {
+                         {/* Empilage vertical des réservations qui se chevauchent */}
+                         {(() => {
+                           const roomReservations = contextReservations.filter(res => res.room === room.number);
+                           
+                           // Calculer les layers (niveaux d'empilage) pour éviter chevauchement
+                           const reservationsWithLayers = roomReservations.map((res, idx) => {
+                             const arrivalDate = res.checkIn ? new Date(res.checkIn) : new Date(res.arrival);
+                             const departureDate = res.checkOut ? new Date(res.checkOut) : new Date(res.departure);
+                             
+                             const startMs = arrivalDate.getTime();
+                             const endMs = departureDate.getTime();
+                             
+                             // Compter combien de réservations précédentes chevauchent celle-ci
+                             let layer = 0;
+                             for (let i = 0; i < idx; i++) {
+                               const prevRes = roomReservations[i];
+                               const prevStart = prevRes.checkIn ? new Date(prevRes.checkIn).getTime() : new Date(prevRes.arrival).getTime();
+                               const prevEnd = prevRes.checkOut ? new Date(prevRes.checkOut).getTime() : new Date(prevRes.departure).getTime();
+                               
+                               // Détection de chevauchement
+                               if (startMs < prevEnd && prevStart < endMs) {
+                                 layer++;
+                               }
+                             }
+                             
+                             return { res, layer };
+                           });
+                           
+                           return reservationsWithLayers.map(({ res, layer }, idx) => {
                            const arrivalDate = res.checkIn ? new Date(res.checkIn) : new Date(res.arrival);
                            const departureDate = res.checkOut ? new Date(res.checkOut) : new Date(res.departure);
                            
@@ -1180,12 +1208,13 @@ export const PlanningView = () => {
                                  setIsDetailsModalOpen(true);
                                }}
                                className={cn(
-                                 'absolute h-[42px] top-2 rounded-lg border flex items-center px-3 gap-2 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden',
+                                 'absolute h-[32px] top-1.5 rounded-lg border flex items-center px-2.5 gap-2 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden text-xs',
                                  opacityClass
                                )}
                                style={{ 
                                  left: `calc(${startIndex * colWidth}% + 4px)`, 
-                                 width: `calc(${Math.min(viewLength - startIndex, dayCount) * colWidth}% - 8px)`, 
+                                 width: `calc(${Math.min(viewLength - startIndex, dayCount) * colWidth}% - 8px)`,
+                                 top: `${1.5 + (layer * 34)}px`,  // Empilement vertical : 1.5px base + 34px par layer
                                  contain: 'layout style paint',
                                  isolation: 'isolate',
                                  clipPath: 'inset(0 0 0 0 round 8px)',
@@ -1201,7 +1230,8 @@ export const PlanningView = () => {
                                 )}
                              </div>
                            );
-                         })}
+                         })
+                       })()}
                        </div>
                      ))}
                      <div className="bg-gray-50/10">
