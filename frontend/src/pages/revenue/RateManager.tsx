@@ -273,6 +273,15 @@ function generateMockData(startDate: Date, days: number): DayData[] {
       strategy,
     });
 
+    // Événements : afficher EUROPCAR si pression marché > 70
+    const events: string[] = [];
+    if (marketPressure > 70) {
+      events.push('EUROPCAR');
+    }
+    if (marketPressure > 85 && isWeekend) {
+      events.push('ROLAND GARROS');
+    }
+
     data.push({
       date: dateStr,
       dayName: ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][date.getDay()],
@@ -280,7 +289,7 @@ function generateMockData(startDate: Date, days: number): DayData[] {
       month: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'][date.getMonth()],
       isWeekend,
       isToday: date.getTime() === today.getTime(),
-      events: marketPressure > 70 ? ['EUROPCAR'] : [],
+      events, // Maintenant rempli correctement
       marketPressure,
       occupancyRate,
       availability,
@@ -310,10 +319,16 @@ function generateMockData(startDate: Date, days: number): DayData[] {
 export function RateManager() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [viewPeriod, setViewPeriod] = useState<ViewPeriod>('1month');
-  const [startDate, setStartDate] = useState(new Date('2026-06-01'));
+  const [startDate, setStartDate] = useState(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   const [autoPilot, setAutoPilot] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [rmsData, setRmsData] = useState<DayData[]>([]);
+  const [manualPrices, setManualPrices] = useState<Map<string, number>>(new Map());
+  const [selectedDateForDetails, setSelectedDateForDetails] = useState<string | null>(null);
   
   // Propagation states
   const [isPropagating, setIsPropagating] = useState(false);
@@ -364,8 +379,26 @@ export function RateManager() {
     setRmsData((prev) =>
       prev.map((d) =>
         d.date === date
-          ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Refusée' as ValidationStatus }
+          ? { 
+              ...d, 
+              finalPrice: manualPrices.get(date) || d.currentPrice, 
+              validationStatus: 'Refusée' as ValidationStatus 
+            }
           : d
+      )
+    );
+  }, [manualPrices]);
+
+  const handleManualPriceChange = useCallback((date: string, price: number) => {
+    setManualPrices((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(date, price);
+      return newMap;
+    });
+    // Update finalPrice immédiatement
+    setRmsData((prev) =>
+      prev.map((d) =>
+        d.date === date ? { ...d, finalPrice: price } : d
       )
     );
   }, []);
@@ -669,7 +702,17 @@ export function RateManager() {
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-auto">
         {viewMode === 'table' && (
-          <TableView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain, handleToggleSelect }} />
+          <TableView 
+            data={rmsData} 
+            handlers={{ 
+              handleAccept, 
+              handleReject, 
+              handleMaintain, 
+              handleToggleSelect,
+              handleManualPriceChange 
+            }}
+            onShowDetails={setSelectedDateForDetails}
+          />
         )}
         {viewMode === 'cards' && (
           <CardsView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
@@ -678,6 +721,111 @@ export function RateManager() {
           <div className="p-6 text-center text-gray-500">Vue Kanban en développement</div>
         )}
       </div>
+
+      {/* MODAL DÉTAILS CONCURRENTS */}
+      {selectedDateForDetails && (() => {
+        const selectedDay = rmsData.find(d => d.date === selectedDateForDetails);
+        if (!selectedDay) return null;
+
+        // Générer 5 concurrents fictifs pour cette date
+        const competitors = [
+          { name: 'Hôtel du Louvre', stars: 5, price: selectedDay.maxPrice * 1.05, platform: 'Booking.com' },
+          { name: 'Le Grand Haussmann', stars: 4, price: selectedDay.medianPrice * 1.02, platform: 'Expedia' },
+          { name: 'Majestic Opéra', stars: 5, price: selectedDay.maxPrice * 0.98, platform: 'Direct' },
+          { name: 'Paris Marriott', stars: 4, price: selectedDay.medianPrice * 0.95, platform: 'Booking.com' },
+          { name: 'Mercure Lafayette', stars: 3, price: selectedDay.minPrice * 1.03, platform: 'Airbnb' },
+        ];
+
+        return (
+          <div 
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={() => setSelectedDateForDetails(null)}
+          >
+            <div 
+              className="bg-white rounded-lg shadow-2xl w-full max-w-3xl p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900">
+                  Détails Concurrents — {selectedDay.dayName} {selectedDay.dayNumber}/{selectedDay.month}
+                </h2>
+                <button
+                  onClick={() => setSelectedDateForDetails(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Notre prix:</span>
+                    <span className="ml-2 font-bold text-blue-600">{selectedDay.currentPrice}€</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Prix suggéré:</span>
+                    <span className="ml-2 font-bold text-violet-600">{selectedDay.suggestedPrice}€</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Médiane marché:</span>
+                    <span className="ml-2 font-bold text-orange-600">{selectedDay.medianPrice.toFixed(0)}€</span>
+                  </div>
+                </div>
+              </div>
+
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold text-gray-700">Concurrent</th>
+                    <th className="px-4 py-2 text-center font-semibold text-gray-700">★</th>
+                    <th className="px-4 py-2 text-center font-semibold text-gray-700">Plateforme</th>
+                    <th className="px-4 py-2 text-right font-semibold text-gray-700">Prix</th>
+                    <th className="px-4 py-2 text-center font-semibold text-gray-700">Position</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {competitors.map((comp, idx) => (
+                    <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-3 font-semibold text-gray-900">{comp.name}</td>
+                      <td className="px-4 py-3 text-center text-amber-500">
+                        {'★'.repeat(comp.stars)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded font-semibold">
+                          {comp.platform}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold">
+                        {comp.price.toFixed(0)}€
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={cn(
+                          'px-2 py-0.5 text-xs font-bold rounded',
+                          comp.price > selectedDay.currentPrice
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-red-100 text-red-700'
+                        )}>
+                          {comp.price > selectedDay.currentPrice ? 'Nous < marché' : 'Nous > marché'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setSelectedDateForDetails(null)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold"
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -689,6 +837,7 @@ export function RateManager() {
 function TableView({
   data,
   handlers,
+  onShowDetails,
 }: {
   data: DayData[];
   handlers: {
@@ -696,7 +845,9 @@ function TableView({
     handleReject: (date: string) => void;
     handleMaintain: (date: string) => void;
     handleToggleSelect: (date: string) => void;
+    handleManualPriceChange: (date: string, price: number) => void;
   };
+  onShowDetails: (date: string) => void;
 }) {
   return (
     <div className="overflow-x-auto bg-white">
@@ -743,7 +894,13 @@ function TableView({
                 />
               </td>
               <td className="px-2 py-2 border-r border-gray-200">
-                <Eye className="w-4 h-4 text-gray-400 cursor-pointer hover:text-blue-600" />
+                <button
+                  onClick={() => onShowDetails(row.date)}
+                  className="hover:bg-blue-100 p-1 rounded transition-colors"
+                  title="Voir détails concurrents"
+                >
+                  <Eye className="w-4 h-4 text-gray-400 hover:text-blue-600" />
+                </button>
               </td>
               <td className="px-3 py-2 border-r border-gray-200 font-medium text-gray-700">{row.dayName}</td>
               <td className="px-3 py-2 border-r border-gray-200">
@@ -767,7 +924,7 @@ function TableView({
                       : 'bg-green-100 text-green-700'
                   )}
                 >
-                  {row.marketPressure.toFixed(0)}
+                  {row.marketPressure.toFixed(0)}%
                 </span>
               </td>
               <td className="px-3 py-2 border-r border-gray-200 text-center font-semibold">
@@ -827,7 +984,17 @@ function TableView({
                 {row.suggestedPrice}€
               </td>
               <td className="px-3 py-2 border-r border-gray-200 text-right font-bold text-blue-700">
-                {row.finalPrice ? `${row.finalPrice}€` : '—'}
+                {row.validationStatus === 'Refusée' ? (
+                  <input
+                    type="number"
+                    value={row.finalPrice || row.currentPrice}
+                    onChange={(e) => handlers.handleManualPriceChange(row.date, parseFloat(e.target.value) || 0)}
+                    className="w-20 px-2 py-1 text-right border border-blue-500 rounded focus:ring-2 focus:ring-blue-600 focus:outline-none font-bold"
+                    placeholder="Prix"
+                  />
+                ) : (
+                  row.finalPrice ? `${row.finalPrice}€` : '—'
+                )}
               </td>
               <td className="px-2 py-2 border-r border-gray-200">
                 <div className="flex items-center gap-1 justify-center">
