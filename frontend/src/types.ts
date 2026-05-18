@@ -50,6 +50,7 @@ export type PageId =
   | 'rev_yield'            // Yield management
   | 'rev_promotions'       // Promotions
   | 'rms'                  // RMS Tableau Pro (Enterprise)
+  | 'rms_history'          // Historique horodaté des décisions RMS
   // ── 6. FINANCE ─────────────────────────────────────────────────────────────
   | 'finance'
   | 'facturation'

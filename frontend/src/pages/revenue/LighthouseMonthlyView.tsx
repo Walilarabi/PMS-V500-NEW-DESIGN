@@ -14,11 +14,14 @@
 import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   BarChart3, Upload, AlertCircle, CheckCircle2, Loader2, X,
-  FileSpreadsheet, Target, TrendingUp, TrendingDown,
+  FileSpreadsheet, Target, TrendingUp, TrendingDown, CalendarDays,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { parseLighthouseExcel } from '../../services/lighthouse-parser.service';
+import { useSalonsStore } from '../../store/salonsStore';
+import { parseSalonsExcel } from '../../services/salons-parser.service';
+import { CompsetKpiBlock, CompsetBarChart } from './components/CompsetWidgets';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
@@ -139,11 +142,14 @@ function EmptyState({ onUploadClick }: { onUploadClick: () => void }) {
 
 export const LighthouseMonthlyView: React.FC = () => {
   const { importData, hasData, setImportData, setUploadStatus, clearImport } = useLighthouseStore();
+  const salonsStore = useSalonsStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const salonsInputRef = useRef<HTMLInputElement>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [compsetChartDate, setCompsetChartDate] = useState<string | null>(null);
 
-  // ─── Upload handler ───────────────────────────────────────────────────
+  // ─── Upload Lighthouse ────────────────────────────────────────────────
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -162,6 +168,22 @@ export const LighthouseMonthlyView: React.FC = () => {
       setUploadStatus('error', msg);
     }
   }, [setImportData, setUploadStatus]);
+
+  // ─── Upload Salons (Dates Salon) ──────────────────────────────────────
+  const handleSalonsFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    salonsStore.setUploadStatus('parsing');
+    try {
+      const result = await parseSalonsExcel(file);
+      salonsStore.setImportData(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+      salonsStore.setUploadStatus('error', msg);
+    }
+  }, [salonsStore]);
 
   // ─── Données dérivées ─────────────────────────────────────────────────
   const monthsAvailable = useMemo(() => {
@@ -248,6 +270,23 @@ export const LighthouseMonthlyView: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => salonsInputRef.current?.click()}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-1.5"
+                  title="Importer le fichier Excel Dates Salons (multi-feuilles)"
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  {salonsStore.hasData()
+                    ? `Salons ✓ (${salonsStore.importData?.events.length ?? 0})`
+                    : 'Importer Dates Salons'}
+                </button>
+                <input
+                  ref={salonsInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleSalonsFileChange}
+                  className="hidden"
+                />
+                <button
                   onClick={() => { clearImport(); }}
                   className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
                 >
@@ -258,23 +297,54 @@ export const LighthouseMonthlyView: React.FC = () => {
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
                 >
                   <Upload className="w-4 h-4" />
-                  Nouvel import
+                  Nouvel import Lighthouse
                 </button>
               </div>
             </div>
 
-            {/* KPIs calculés sur vraies données */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <KpiCard label="Médiane compset" value={`${stats.median}€`} />
-              <KpiCard label="Min compset" value={`${stats.min}€`} color="blue" />
-              <KpiCard label="Max compset" value={`${stats.max}€`} color="purple" />
-              <KpiCard
-                label="Demande moyenne"
-                value={`${stats.avgDemand}%`}
-                color={stats.avgDemand >= 70 ? 'red' : stats.avgDemand >= 40 ? 'amber' : 'green'}
+            {/* Banner upload salons */}
+            {salonsStore.uploadStatus === 'success' && salonsStore.importData && (
+              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-sm text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <div className="flex-1">
+                  <strong>{salonsStore.importData.events.length} événements importés</strong>
+                  {' '}depuis {salonsStore.importData.fileName}
+                  {' · '}feuilles : {salonsStore.importData.sheetsProcessed.join(', ')}
+                </div>
+                <button
+                  onClick={() => salonsStore.clearImport()}
+                  className="text-emerald-400 hover:text-emerald-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            {salonsStore.uploadStatus === 'error' && (
+              <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm text-red-800">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <strong>Erreur import salons :</strong> {salonsStore.uploadError}
+                </div>
+                <button
+                  onClick={() => salonsStore.setUploadStatus('idle')}
+                  className="text-red-400 hover:text-red-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Bloc 8 KPIs métier */}
+            <CompsetKpiBlock monthData={monthData} ourHotelName={importData?.ourHotelName ?? ''} />
+
+            {/* Graph compset horizontal par date */}
+            {importData && (
+              <CompsetBarChart
+                importData={importData}
+                selectedDate={compsetChartDate}
+                onDateChange={setCompsetChartDate}
               />
-              <KpiCard label="Rang moyen" value={stats.avgRank > 0 ? `#${stats.avgRank}` : '—'} />
-            </div>
+            )}
 
             {/* Graph prix */}
             <PriceChart days={monthData} />

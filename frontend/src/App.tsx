@@ -14,6 +14,7 @@ import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
 // RMS ENTERPRISE ULTIMATE (6 pages complètes)
 import { RateManager }         from '@/src/pages/revenue/RateManager';
 import { DecisionHistory }     from '@/src/pages/revenue/DecisionHistory';
+import { DecisionHistoryPage } from '@/src/pages/revenue/DecisionHistoryPage';
 import { CompetitiveIntel }    from '@/src/pages/revenue/CompetitiveIntel';
 import { LighthouseMonthlyView } from '@/src/pages/revenue/LighthouseMonthlyView';
 import { Channels }            from '@/src/pages/revenue/Channels';
@@ -114,7 +115,7 @@ function renderPage(page: PageId): React.ReactNode {
     
     // RMS ENTERPRISE ULTIMATE
     case 'rms':            return <RMSTableauPro />;
-    case 'rms_history':    return <DecisionHistory />;
+    case 'rms_history':    return <DecisionHistoryPage />;
     case 'rev_compset':    return <LighthouseMonthlyView />;
     case 'rev_channels':   return <DistributionAnalytics />;
     case 'rev_promotions': return <PromotionsCompact />;

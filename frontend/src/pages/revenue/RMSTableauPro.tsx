@@ -41,7 +41,9 @@ import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '../../store/lighthouseStore';
+import { useSalonsStore } from '../../store/salonsStore';
 import { useOperationalData } from '../../hooks/useOperationalData';
+import { recordRmsDecision } from '../../services/rms-decisions.service';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -289,7 +291,17 @@ function calculateRecommendation(data: Partial<DayRMSData>): {
 // GÉNÉRATION DONNÉES MOCK (à remplacer par API Supabase)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function generateMockRMSData(startDate: Date, days: number): DayRMSData[] {
+/**
+ * Génère un squelette déterministe (PAS de Math.random) pour la fenêtre demandée.
+ * Les valeurs réelles seront injectées ensuite depuis :
+ *   - Lighthouse store (médiane, MIN/MAX, pression, événements)
+ *   - useOperationalData hook (occupation, dispo, lead time, pickup)
+ *   - rateCalendarStore (prix actuel)
+ *
+ * Ce squelette ne contient QUE les champs invariants (date, jour, weekend).
+ * Toutes les valeurs numériques sont initialisées à 0 ou null.
+ */
+function generateSkeletonRMSData(startDate: Date, days: number): DayRMSData[] {
   const data: DayRMSData[] = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -298,41 +310,7 @@ function generateMockRMSData(startDate: Date, days: number): DayRMSData[] {
     const date = new Date(startDate);
     date.setDate(date.getDate() + i);
     const dateStr = date.toISOString().split('T')[0];
-
-    // Données mock réalistes
     const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-    const daysSinceToday = Math.floor((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
-    const occupancyRate = Math.min(95, Math.max(20, 60 + Math.random() * 30 + (isWeekend ? 10 : 0)));
-    const availability = Math.round(30 - (occupancyRate / 100) * 25);
-    const leadTimeMajority = Math.max(1, Math.round(daysSinceToday + Math.random() * 15));
-    const pickupRate = Math.random() * 25;
-    const marketPressure = Math.random() * 100;
-    
-    const medianPrice = 300 + Math.random() * 50 - 25;
-    const minPrice = medianPrice * (0.85 + Math.random() * 0.05);
-    const maxPrice = medianPrice * (1.10 + Math.random() * 0.10);
-    const currentPrice = 280;
-
-    // Calculs intelligents
-    const partialData: Partial<DayRMSData> = {
-      occupancyRate,
-      leadTimeMajority,
-      pickupRate,
-      marketPressure,
-      availability,
-      isWeekend,
-      currentPrice,
-      medianPrice,
-      minPrice,
-      maxPrice,
-    };
-
-    const strategy = calculateStrategy(partialData);
-    const { recommendation, suggestedPrice, confidence } = calculateRecommendation({
-      ...partialData,
-      strategy,
-    });
 
     data.push({
       date: dateStr,
@@ -341,23 +319,28 @@ function generateMockRMSData(startDate: Date, days: number): DayRMSData[] {
       month: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'][date.getMonth()],
       isWeekend,
       isToday: date.getTime() === today.getTime(),
-      events: marketPressure > 70 ? ['EUROPCAR'] : [],
-      marketPressure,
-      occupancyRate,
-      availability,
-      medianPrice,
-      minPrice,
-      maxPrice,
-      leadTimeMajority,
-      pickupRate,
-      strategy,
-      recommendation,
-      confidenceScore: confidence,
-      currentPrice,
-      suggestedPrice,
+      // Tous les autres champs commencent à 0 / placeholder neutre
+      // pour être remplis par les sources réelles
+      events: [],
+      marketPressure: 0,
+      occupancyRate: 0,
+      availability: 0,
+      medianPrice: 0,
+      minPrice: 0,
+      maxPrice: 0,
+      leadTimeMajority: 0,
+      pickupRate: 0,
+      strategy: 'Équilibrée',
+      recommendation: 'Maintenir',
+      confidenceScore: 0,
+      currentPrice: 0,
+      suggestedPrice: 0,
       finalPrice: null,
       validationStatus: 'En attente',
       selected: false,
+      varVsYesterday: null,
+      varVs3Days: null,
+      varVs7Days: null,
     });
   }
 
@@ -436,112 +419,100 @@ export function RMSTableauPro() {
     operationalRange.to,
   );
 
-  // Génération données RMS — alimentées par Lighthouse + Calendrier + Réservations
-  useMemo(() => {
-    const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : viewPeriod === '30days' ? 30 : viewPeriod === '60days' ? 60 : 90;
-    const generated = generateMockRMSData(startDate, days);
+  // Store salons (événements importés)
+  const salonsImport = useSalonsStore(s => s.importData);
+  const getSalonEvents = useCallback((date: string) => {
+    if (!salonsImport) return [];
+    return salonsImport.events.filter(e => date >= e.startDate && date <= e.endDate);
+  }, [salonsImport]);
 
-    // ✅ Injection vraies données :
-    //    - Lighthouse → marché (médiane, MIN/MAX, demande, ranking)
-    //    - Calendrier RMS → notre prix actuel
-    //    - useOperationalData → occupation/dispo/lead time/pickup (réservations Supabase)
-    const enriched = generated.map(row => {
+  // Override manuel d'inventaire (priorité sur opData)
+  const [inventoryOverrides, setInventoryOverrides] = useState<Map<string, number>>(new Map());
+
+  // ─── EFFET 1 : Génération du squelette (déterministe) ─────────────────────
+  // Ne se déclenche QUE quand la fenêtre temporelle change.
+  // Pas de Math.random — donc pas de fluctuation aléatoire.
+  useEffect(() => {
+    const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : viewPeriod === '30days' ? 30 : viewPeriod === '60days' ? 60 : 90;
+    const skeleton = generateSkeletonRMSData(startDate, days);
+    setRmsData(skeleton);
+  }, [startDate, viewPeriod]);
+
+  // ─── EFFET 2 : Enrichissement avec sources réelles ────────────────────────
+  // PRÉSERVE finalPrice et validationStatus pour ne pas écraser les décisions
+  // utilisateur quand Lighthouse / Ops / Calendrier se mettent à jour.
+  useEffect(() => {
+    setRmsData(prev => prev.map(row => {
       const realPrice = getPriceFromCalendar(row.date);
       const lhData = getLighthouseData(row.date);
       const opData = operationalByDate.get(row.date);
+      const salonEvents = getSalonEvents(row.date);
+      const inventoryOverride = inventoryOverrides.get(row.date);
 
-      // ─── Métriques opérationnelles (réservations) ───
-      // Si on a un dataset opérationnel chargé → on remplace le mock
-      // Sinon → on garde le mock pour ne pas casser l'affichage
-      const occupancyRate = opData ? opData.occupancyRate : row.occupancyRate;
-      const availability = opData ? opData.availability : row.availability;
-      const leadTimeMajority = opData && opData.leadTimeMajority > 0 ? opData.leadTimeMajority : row.leadTimeMajority;
-      const pickupRate = opData ? opData.pickupRate : row.pickupRate;
+      // ── Métriques opérationnelles ──
+      // Priorité : override manuel > opData > 0
+      const occupancyRate = opData ? opData.occupancyRate : 0;
+      const baseAvailability = opData ? opData.availability : 0;
+      const availability = inventoryOverride !== undefined ? inventoryOverride : baseAvailability;
+      const leadTimeMajority = opData && opData.leadTimeMajority > 0 ? opData.leadTimeMajority : 0;
+      const pickupRate = opData ? opData.pickupRate : 0;
 
-      // Si pas de Lighthouse, on retourne juste les données opérationnelles + prix calendrier
-      if (!lhData) {
-        // Recalcul stratégie/reco si on a des vraies données opérationnelles
-        const partial: Partial<DayRMSData> = {
-          occupancyRate, availability, leadTimeMajority, pickupRate,
-          marketPressure: row.marketPressure,
-          isWeekend: row.isWeekend,
-          currentPrice: realPrice > 0 ? realPrice : row.currentPrice,
-          medianPrice: row.medianPrice,
-          minPrice: row.minPrice,
-          maxPrice: row.maxPrice,
-        };
-        const recalcStrategy = opData ? calculateStrategy(partial) : row.strategy;
-        const recalcReco = opData ? calculateRecommendation({ ...partial, strategy: recalcStrategy }) : null;
+      // ── Marché (Lighthouse) ──
+      const ourPrice = realPrice > 0 ? realPrice : (lhData?.ourPrice ?? 0);
+      const medianPrice = lhData?.compsetMedian ?? 0;
+      const minPrice = lhData?.compsetMin ?? 0;
+      const maxPrice = lhData?.compsetMax ?? 0;
+      const marketPressure = lhData?.marketDemandPercent ?? 0;
 
-        return {
-          ...row,
-          currentPrice: realPrice > 0 ? realPrice : row.currentPrice,
-          occupancyRate,
-          availability,
-          leadTimeMajority,
-          pickupRate,
-          ...(recalcReco ? {
-            strategy: recalcStrategy,
-            recommendation: recalcReco.recommendation,
-            suggestedPrice: recalcReco.suggestedPrice,
-            confidenceScore: recalcReco.confidence,
-          } : {}),
-        };
-      }
+      // ── Événements : priorité 1) Salons importés 2) Lighthouse 3) []
+      const events: string[] = salonEvents.length > 0
+        ? salonEvents.map(e => e.name)
+        : (lhData?.events ? [lhData.events] : []);
 
-      // ─── Tarif actuel : priorité au calendrier RMS, sinon prix Lighthouse ───
-      const ourPrice = realPrice > 0 ? realPrice : lhData.ourPrice;
-
-      // ─── Médiane compset (depuis Aperçu) ───
-      const medianPrice = lhData.compsetMedian > 0 ? lhData.compsetMedian : row.medianPrice;
-
-      // ─── MIN/MAX (calculés depuis feuille Tarifs sur 10 concurrents) ───
-      const minPrice = lhData.compsetMin !== null ? lhData.compsetMin : row.minPrice;
-      const maxPrice = lhData.compsetMax !== null ? lhData.compsetMax : row.maxPrice;
-
-      // ─── Pression marché (= demande marché Lighthouse, 0-100) ───
-      const marketPressure = lhData.marketDemandPercent;
-
-      // Recalcul stratégie + recommandation avec toutes les vraies données
+      // ── Recalcul stratégie + recommandation ──
       const partial: Partial<DayRMSData> = {
-        occupancyRate,
-        leadTimeMajority,
-        pickupRate,
-        marketPressure,
-        availability,
-        isWeekend: row.isWeekend,
-        currentPrice: ourPrice,
-        medianPrice,
-        minPrice,
-        maxPrice,
+        occupancyRate, availability, leadTimeMajority, pickupRate,
+        marketPressure, isWeekend: row.isWeekend,
+        currentPrice: ourPrice, medianPrice, minPrice, maxPrice,
       };
       const strategy = calculateStrategy(partial);
       const reco = calculateRecommendation({ ...partial, strategy });
 
+      // ── Construction de la nouvelle ligne ──
+      // CRITIQUE : on PRÉSERVE finalPrice et validationStatus si déjà décidés
       return {
         ...row,
-        currentPrice: ourPrice,
-        medianPrice,
-        minPrice,
-        maxPrice,
+        events,
         marketPressure,
         occupancyRate,
         availability,
+        medianPrice,
+        minPrice,
+        maxPrice,
         leadTimeMajority,
         pickupRate,
         strategy,
         recommendation: reco.recommendation,
-        suggestedPrice: reco.suggestedPrice,
         confidenceScore: reco.confidence,
-        events: lhData.events ? [lhData.events] : row.events,
-        // Variations Lighthouse vs Hier / J-3 / J-7
-        varVsYesterday: lhData.varVsYesterday ?? null,
-        varVs3Days: lhData.varVs3Days ?? null,
-        varVs7Days: lhData.varVs7Days ?? null,
+        currentPrice: ourPrice,
+        suggestedPrice: reco.suggestedPrice,
+        // Variations Lighthouse
+        varVsYesterday: lhData?.varVsYesterday ?? null,
+        varVs3Days: lhData?.varVs3Days ?? null,
+        varVs7Days: lhData?.varVs7Days ?? null,
+        // ⚠️ NE PAS ÉCRASER finalPrice et validationStatus (préservés depuis prev)
+        // (déjà inclus dans ...row)
       };
-    });
-    setRmsData(enriched);
-  }, [startDate, viewPeriod, getPriceFromCalendar, getLighthouseData, operationalByDate]);
+    }));
+  }, [
+    getPriceFromCalendar,
+    getLighthouseData,
+    operationalByDate,
+    getSalonEvents,
+    inventoryOverrides,
+    startDate,
+    viewPeriod,
+  ]);
 
   // Navigation dates
   const navigateDays = (direction: 'prev' | 'next') => {
@@ -551,52 +522,124 @@ export function RMSTableauPro() {
     setStartDate(newDate);
   };
 
-  // Handlers validation
-  const handleAccept = useCallback((date: string) => {
-    setRmsData((prev) =>
-      prev.map((d) =>
-        d.date === date
-          ? { ...d, finalPrice: d.suggestedPrice, validationStatus: 'Acceptée' as ValidationStatus }
-          : d
-      )
-    );
-    // ✅ PUSH vers le calendrier tarifaire immédiatement
+  // ─── Handlers validation ─────────────────────────────────────────────────
+  // Règle stricte : chaque handler ne modifie QUE finalPrice + validationStatus
+  // sur la ligne ciblée. Aucune autre colonne n'est touchée.
+  // Toutes les actions sont historisées dans rms_decisions (Supabase append-only).
+
+  const handleAccept = useCallback(async (date: string) => {
     const row = rmsData.find(d => d.date === date);
-    if (row && referenceRoom && referencePlan) {
-      updatePrice(
-        referenceRoom.roomTypeId,
-        referencePlan.planId,
-        date,
-        row.suggestedPrice,
-      );
+    if (!row) return;
+
+    // 1. Update local : seulement finalPrice + validationStatus
+    setRmsData(prev => prev.map(d =>
+      d.date === date
+        ? { ...d, finalPrice: d.suggestedPrice, validationStatus: 'Acceptée' as ValidationStatus }
+        : d
+    ));
+
+    // 2. Push vers calendrier tarifaire (chambre référente)
+    if (referenceRoom && referencePlan) {
+      updatePrice(referenceRoom.roomTypeId, referencePlan.planId, date, row.suggestedPrice);
     }
+
+    // 3. Historiser dans rms_decisions (Supabase append-only)
+    recordRmsDecision({
+      stayDate: date,
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      action: 'accepted',
+      currentPrice: row.currentPrice,
+      suggestedPrice: row.suggestedPrice,
+      finalPrice: row.suggestedPrice,
+      strategy: row.strategy,
+      recommendation: row.recommendation,
+      confidenceScore: row.confidenceScore,
+      marketPressurePercent: Math.round(row.marketPressure),
+      occupancyRate: row.occupancyRate,
+      medianPrice: row.medianPrice,
+    });
   }, [rmsData, referenceRoom, referencePlan, updatePrice]);
 
-  const handleReject = useCallback((date: string) => {
-    setRmsData((prev) =>
-      prev.map((d) =>
-        d.date === date
-          ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Refusée' as ValidationStatus }
-          : d
-      )
-    );
-  }, []);
+  const handleReject = useCallback(async (date: string) => {
+    const row = rmsData.find(d => d.date === date);
+    if (!row) return;
 
-  const handleMaintain = useCallback((date: string) => {
-    setRmsData((prev) =>
-      prev.map((d) =>
-        d.date === date
-          ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Maintenue' as ValidationStatus }
-          : d
-      )
-    );
-  }, []);
+    setRmsData(prev => prev.map(d =>
+      d.date === date
+        ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Refusée' as ValidationStatus }
+        : d
+    ));
+
+    recordRmsDecision({
+      stayDate: date,
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      action: 'rejected',
+      currentPrice: row.currentPrice,
+      suggestedPrice: row.suggestedPrice,
+      finalPrice: row.currentPrice,
+      strategy: row.strategy,
+      recommendation: row.recommendation,
+      confidenceScore: row.confidenceScore,
+      marketPressurePercent: Math.round(row.marketPressure),
+      occupancyRate: row.occupancyRate,
+      medianPrice: row.medianPrice,
+    });
+  }, [rmsData, referenceRoom]);
+
+  const handleMaintain = useCallback(async (date: string) => {
+    const row = rmsData.find(d => d.date === date);
+    if (!row) return;
+
+    setRmsData(prev => prev.map(d =>
+      d.date === date
+        ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Maintenue' as ValidationStatus }
+        : d
+    ));
+
+    recordRmsDecision({
+      stayDate: date,
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      action: 'maintained',
+      currentPrice: row.currentPrice,
+      suggestedPrice: row.suggestedPrice,
+      finalPrice: row.currentPrice,
+      strategy: row.strategy,
+      recommendation: row.recommendation,
+      confidenceScore: row.confidenceScore,
+      marketPressurePercent: Math.round(row.marketPressure),
+      occupancyRate: row.occupancyRate,
+      medianPrice: row.medianPrice,
+    });
+  }, [rmsData, referenceRoom]);
 
   const handleToggleSelect = useCallback((date: string) => {
     setRmsData((prev) =>
       prev.map((d) => (d.date === date ? { ...d, selected: !d.selected } : d))
     );
   }, []);
+
+  // ─── Override manuel de la disponibilité ───────────────────────────────
+  const isAvailabilityOverridden = useCallback((date: string) => {
+    return inventoryOverrides.has(date);
+  }, [inventoryOverrides]);
+
+  const handleAvailabilityChange = useCallback((date: string, newValue: number) => {
+    if (newValue < 0 || !Number.isFinite(newValue)) return;
+
+    // 1. Update local state (override)
+    setInventoryOverrides(prev => {
+      const next = new Map(prev);
+      next.set(date, newValue);
+      return next;
+    });
+
+    // 2. Persister via le store rateCalendarStore (qui sauvegarde rate_restrictions)
+    if (referenceRoom) {
+      const { updateInventory } = useRateCalendarStore.getState();
+      // updateInventory met à jour le state local du store ET persiste dans rate_restrictions
+      updateInventory(referenceRoom.roomTypeId, date, newValue);
+    }
+  }, [referenceRoom]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PROPAGATION HANDLER
@@ -816,7 +859,15 @@ export function RMSTableauPro() {
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-auto">
         {viewMode === 'table' ? (
-          <TableView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain, handleToggleSelect, handleViewDetail: setDetailDate }} />
+          <TableView data={rmsData} handlers={{
+            handleAccept,
+            handleReject,
+            handleMaintain,
+            handleToggleSelect,
+            handleViewDetail: setDetailDate,
+            handleAvailabilityChange,
+            isAvailabilityOverridden,
+          }} />
         ) : (
           <KanbanView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
         )}
@@ -848,6 +899,8 @@ function TableView({
     handleMaintain: (date: string) => void;
     handleToggleSelect: (date: string) => void;
     handleViewDetail: (date: string) => void;
+    handleAvailabilityChange: (date: string, value: number) => void;
+    isAvailabilityOverridden: (date: string) => boolean;
   };
 }) {
   return (
@@ -923,10 +976,16 @@ function TableView({
                   row.marketPressure > 40 ? 'bg-yellow-100 text-yellow-700' :
                   'bg-green-100 text-green-700'
                 )}>
-                  {row.marketPressure.toFixed(0)}
+                  {row.marketPressure.toFixed(0)}%
                 </span>
               </td>
-              <td className="px-3 py-2 border-r border-gray-200 text-center font-semibold">{row.availability}</td>
+              <td className="px-3 py-2 border-r border-gray-200 text-center font-semibold">
+                <EditableAvailability
+                  value={row.availability}
+                  isOverride={handlers.isAvailabilityOverridden(row.date)}
+                  onChange={(v) => handlers.handleAvailabilityChange(row.date, v)}
+                />
+              </td>
               <td className="px-3 py-2 border-r border-gray-200 text-center font-bold">{row.occupancyRate.toFixed(0)}%</td>
               <td className="px-3 py-2 border-r border-gray-200 text-right font-semibold text-orange-700">{row.medianPrice.toFixed(0)}€</td>
               <td className="px-3 py-2 border-r border-gray-200 text-right font-semibold text-emerald-700">{row.minPrice.toFixed(0)}€</td>
@@ -1346,5 +1405,79 @@ function CompsetDetailModal({ date, onClose }: { date: string; onClose: () => vo
         </div>
       </div>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CELLULE DISPONIBILITÉ ÉDITABLE INLINE
+// — Affiche la valeur (calculée depuis Planning ou override manuel)
+// — Click → input numérique
+// — Enter / blur → commit (persisté via rateCalendarStore.updateInventory)
+// — Indicateur visuel si override manuel actif
+// ═══════════════════════════════════════════════════════════════════════════
+
+function EditableAvailability({
+  value,
+  isOverride,
+  onChange,
+}: {
+  value: number;
+  isOverride: boolean;
+  onChange: (v: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+
+  const startEdit = () => {
+    setDraft(String(value));
+    setEditing(true);
+  };
+
+  const commit = () => {
+    const parsed = parseInt(draft, 10);
+    if (!isNaN(parsed) && parsed >= 0 && parsed !== value) {
+      onChange(parsed);
+    }
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setDraft(String(value));
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="text"
+        inputMode="numeric"
+        className="w-12 text-center text-sm font-semibold border-2 border-blue-500 rounded outline-none px-1"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value.replace(/\D/g, ''))}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') cancel();
+        }}
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={startEdit}
+      className={cn(
+        'inline-block px-2 py-0.5 rounded text-sm font-semibold transition-colors hover:bg-blue-50',
+        isOverride && 'bg-amber-50 text-amber-800 ring-1 ring-amber-300'
+      )}
+      title={isOverride
+        ? `Override manuel : ${value}. Cliquez pour modifier. La valeur Planning sera ignorée.`
+        : `Calculé depuis le Planning : ${value}. Cliquez pour saisir une valeur manuelle.`
+      }
+    >
+      {value}
+      {isOverride && <span className="ml-0.5 text-[8px] align-top">●</span>}
+    </button>
   );
 }
