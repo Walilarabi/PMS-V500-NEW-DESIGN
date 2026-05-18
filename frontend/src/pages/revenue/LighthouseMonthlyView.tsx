@@ -8,6 +8,13 @@
  *   - Heatmap pression marché
  *   - Aucune donnée mock — uniquement le fichier importé
  *
+ * Persistance :
+ *   - Import Lighthouse → snapshot versionné (archive ancien, active nouveau)
+ *   - Import Salons (Dates Salons) → append-only (préserve historique)
+ *   - Hydratation depuis DB au mount pour survivre aux refresh / autres devices
+ *
+ * Graphique premium : PremiumCompsetChart (area + line + bars + tooltip riche)
+ *
  * État vide si aucun fichier importé → CTA Upload.
  */
 
@@ -21,7 +28,10 @@ import { useLighthouseStore } from '../../store/lighthouseStore';
 import { parseLighthouseExcel } from '../../services/lighthouse-parser.service';
 import { useSalonsStore } from '../../store/salonsStore';
 import { parseSalonsExcel } from '../../services/salons-parser.service';
+import { persistLighthouseImport, fetchActiveLighthouseImport } from '../../services/lighthouse-persistence.service';
+import { persistSalonEvents, fetchSalonEvents } from '../../services/salon-events.service';
 import { CompsetKpiBlock, CompsetBarChart } from './components/CompsetWidgets';
+import { PremiumCompsetChart } from './components/PremiumCompsetChart';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
@@ -163,6 +173,10 @@ export const LighthouseMonthlyView: React.FC = () => {
       if (result.days.length > 0) {
         setSelectedMonth(result.days[0].date.slice(0, 7));
       }
+      // ✅ Persister en DB (archive ancien snapshot, crée le nouveau actif)
+      persistLighthouseImport(result).then(r => {
+        if (r.errors.length > 0) console.warn('[lighthouse] persist warnings:', r.errors);
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erreur inconnue';
       setUploadStatus('error', msg);
@@ -179,6 +193,10 @@ export const LighthouseMonthlyView: React.FC = () => {
     try {
       const result = await parseSalonsExcel(file);
       salonsStore.setImportData(result);
+      // ✅ Persister append-only (préserve historique : pas de DELETE des anciens événements)
+      persistSalonEvents(result.events, file.name).then(r => {
+        if (r.errors.length > 0) console.warn('[salons] persist warnings:', r.errors);
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erreur inconnue';
       salonsStore.setUploadStatus('error', msg);
@@ -191,6 +209,39 @@ export const LighthouseMonthlyView: React.FC = () => {
     const set = new Set(importData.days.map(d => d.date.slice(0, 7)));
     return Array.from(set).sort();
   }, [importData]);
+
+  // ─── Hydratation depuis DB au mount ───────────────────────────────────
+  // Si le store local est vide (ex: première visite, autre device, cache vidé),
+  // on tente de charger l'import actif Lighthouse + les événements salons depuis Supabase.
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (!importData) {
+      fetchActiveLighthouseImport().then(persisted => {
+        if (!cancelled && persisted && persisted.days.length > 0) {
+          setImportData(persisted);
+          setSelectedMonth(persisted.days[0].date.slice(0, 7));
+        }
+      });
+    }
+
+    if (!salonsStore.hasData()) {
+      fetchSalonEvents().then(events => {
+        if (!cancelled && events.length > 0) {
+          salonsStore.setImportData({
+            fileName: 'persisted_events',
+            importedAt: new Date().toISOString(),
+            events,
+            sheetsProcessed: [],
+            warnings: [],
+          });
+        }
+      });
+    }
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-sélectionner premier mois quand on a des données
   React.useEffect(() => {
@@ -337,7 +388,16 @@ export const LighthouseMonthlyView: React.FC = () => {
             {/* Bloc 8 KPIs métier */}
             <CompsetKpiBlock monthData={monthData} ourHotelName={importData?.ourHotelName ?? ''} />
 
-            {/* Graph compset horizontal par date */}
+            {/* GRAPHIQUE PREMIUM — type Lighthouse redesigné (area + line + bars + tooltip riche) */}
+            {importData && (
+              <PremiumCompsetChart
+                importData={importData}
+                selectedMonth={selectedMonth}
+                onDateClick={setSelectedDate}
+              />
+            )}
+
+            {/* Vue par-date : barchart horizontal concurrents (complément du graph principal) */}
             {importData && (
               <CompsetBarChart
                 importData={importData}
@@ -345,9 +405,6 @@ export const LighthouseMonthlyView: React.FC = () => {
                 onDateChange={setCompsetChartDate}
               />
             )}
-
-            {/* Graph prix */}
-            <PriceChart days={monthData} />
 
             {/* Heatmap concurrents */}
             <CompetitorHeatmap
@@ -396,6 +453,8 @@ function KpiCard({ label, value, color = 'gray' }: { label: string; value: strin
   );
 }
 
+// PriceChart conservé (non utilisé dans la vue principale, remplacé par PremiumCompsetChart).
+// Laissé en place au cas où d'autres modules l'importeraient.
 function PriceChart({ days }: { days: import('../../services/lighthouse-parser.service').LighthouseDayData[] }) {
   if (days.length === 0) return null;
   const allPrices = days.flatMap(d => [d.ourPrice, d.compsetMedian].filter(p => p > 0));
