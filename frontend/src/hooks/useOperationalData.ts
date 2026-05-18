@@ -12,6 +12,10 @@
  *                     entre les résa créées les 7 derniers jours
  *                     et celles créées les 7 jours d'avant
  *
+ * Le paramètre optionnel `refreshToken` permet à un consumer (ex: bouton
+ * "Rafraîchir" dans le RMS) de forcer un re-fetch sans changer la fenêtre
+ * de dates. Bumper la valeur → le useEffect se ré-exécute.
+ *
  * Si l'utilisateur n'est pas authentifié (pas de hotel_id) ou si la table
  * est vide → on retourne un Map vide, le composant appelant gère le fallback.
  */
@@ -85,6 +89,7 @@ function* iterateNights(checkIn: string, checkOut: string): Generator<string> {
 export function useOperationalData(
   fromDate: string,
   toDate: string,
+  refreshToken: number = 0,
 ): UseOperationalDataResult {
   const [reservations, setReservations] = useState<ReservationRow[]>([]);
   const [totalCapacity, setTotalCapacity] = useState(0);
@@ -163,7 +168,9 @@ export function useOperationalData(
 
     fetchData();
     return () => { cancelled = true; };
-  }, [fromDate, toDate]);
+    // Le refreshToken déclenche un re-fetch à la demande (bouton Rafraîchir).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDate, toDate, refreshToken]);
 
   // ── 4. Calcul des métriques par date ─────────────────────────────────
   const byDate = useMemo(() => {
