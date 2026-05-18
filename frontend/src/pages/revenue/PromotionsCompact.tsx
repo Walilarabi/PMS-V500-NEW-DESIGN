@@ -1,8 +1,8 @@
 /**
- * FLOWTYM PROMOTIONS - COMPACT TABLE VIEW
+ * FLOWTYM PROMOTIONS - AVEC SYSTÈME ALERTES
  * 
- * Affichage dense type tableau professionnel
- * 10 types promotions standards hôtellerie
+ * Tableau compact + Alertes activation intelligentes
+ * WHY / WHEN / WHO explicatifs
  */
 
 import React, { useState, useMemo } from 'react';
@@ -14,35 +14,35 @@ import {
   Power,
   PowerOff,
   Search,
-  Filter,
-  Calendar,
-  TrendingUp,
   Users,
   DollarSign,
+  TrendingUp,
+  AlertCircle,
+  Lightbulb,
+  Clock,
+  Target,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 
 const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
 
-// 10 types promotions standards hôtellerie
 type PromoType = 
-  | 'mobile_rate'       // Tarif Mobile (booking via app)
-  | 'early_booker'      // Réservation anticipée
-  | 'last_minute'       // Last Minute (< 7j)
-  | 'long_stay'         // Long séjour (3+ nuits)
-  | 'non_refundable'    // Non remboursable
-  | 'genius'            // Genius / Fidélité
-  | 'couple_escape'     // Escapade Romantique
-  | 'family_deal'       // Offre Famille
-  | 'free_breakfast'    // Petit déjeuner offert
-  | 'secret_deal';      // Deal Secret
+  | 'mobile_rate' | 'early_booker' | 'last_minute' | 'long_stay' | 'non_refundable'
+  | 'genius' | 'couple_escape' | 'family_deal' | 'free_breakfast' | 'secret_deal';
+
+interface PromoAlert {
+  why: string;      // Pourquoi activer
+  when: string;     // Quand activer
+  who: string;      // Pour qui/quel canal
+  priority: 'low' | 'medium' | 'high';
+}
 
 interface Promotion {
   id: string;
   name: string;
   type: PromoType;
   typeLabel: string;
-  discount: string;       // "15%", "20€", "1 nuit"
+  discount: string;
   code: string | null;
   startDate: string;
   endDate: string;
@@ -51,11 +51,12 @@ interface Promotion {
   bookings: number;
   revenue: number;
   active: boolean;
+  alert?: PromoAlert;
 }
 
-// Mock data 10 promotions
-function generatePromotions(): Promotion[] {
-  return [
+// Générer alertes intelligentes
+function generatePromoAlerts(): Promotion[] {
+  const promos: Promotion[] = [
     {
       id: '1',
       name: 'Tarif Mobile Exclusif',
@@ -70,6 +71,12 @@ function generatePromotions(): Promotion[] {
       bookings: 142,
       revenue: 38420,
       active: true,
+      alert: {
+        why: 'Capter clientèle mobile-first (60% du trafic OTA)',
+        when: 'Permanent - Booking mobile > 50% des réservations',
+        who: 'Booking.com + Site direct (app mobile)',
+        priority: 'high'
+      }
     },
     {
       id: '2',
@@ -85,6 +92,12 @@ function generatePromotions(): Promotion[] {
       bookings: 87,
       revenue: 24350,
       active: true,
+      alert: {
+        why: 'Sécuriser occupation haute saison 3 mois avant',
+        when: 'Activer 90j avant période cible (avril pour été)',
+        who: 'Site direct (meilleure marge) + Expedia',
+        priority: 'high'
+      }
     },
     {
       id: '3',
@@ -99,7 +112,13 @@ function generatePromotions(): Promotion[] {
       minNights: 1,
       bookings: 56,
       revenue: 15680,
-      active: true,
+      active: false,
+      alert: {
+        why: 'Occupation < 60% à J-3 → Yield de dernière minute',
+        when: 'ACTIVER SI occupation vendredi/samedi < 60% le mercredi',
+        who: 'Direct uniquement (pas de commission OTA)',
+        priority: 'medium'
+      }
     },
     {
       id: '4',
@@ -115,6 +134,12 @@ function generatePromotions(): Promotion[] {
       bookings: 124,
       revenue: 42870,
       active: true,
+      alert: {
+        why: 'Augmenter durée séjour moyenne (actuellement 1.8 nuits)',
+        when: 'Permanent - Cibler clientèle affaires/congrès',
+        who: 'Tous canaux (large diffusion)',
+        priority: 'medium'
+      }
     },
     {
       id: '5',
@@ -130,6 +155,12 @@ function generatePromotions(): Promotion[] {
       bookings: 298,
       revenue: 81240,
       active: true,
+      alert: {
+        why: 'Meilleure visibilité algorithmes OTA + Réduire no-shows',
+        when: 'Permanent sur OTA (boost ranking)',
+        who: 'Booking.com + Expedia (demandé par algorithmes)',
+        priority: 'high'
+      }
     },
     {
       id: '6',
@@ -145,6 +176,12 @@ function generatePromotions(): Promotion[] {
       bookings: 412,
       revenue: 112560,
       active: true,
+      alert: {
+        why: 'Programme fidélité Booking = +35% visibilité résultats',
+        when: 'OBLIGATOIRE pour rester compétitif sur Booking',
+        who: 'Booking.com uniquement (programme propriétaire)',
+        priority: 'high'
+      }
     },
     {
       id: '7',
@@ -160,6 +197,12 @@ function generatePromotions(): Promotion[] {
       bookings: 34,
       revenue: 9520,
       active: false,
+      alert: {
+        why: 'Saint-Valentin - Forte demande couples',
+        when: 'Activer 1 mois avant (mi-janvier) jusqu\'à Saint-Valentin',
+        who: 'Site direct (packaging exclusif)',
+        priority: 'low'
+      }
     },
     {
       id: '8',
@@ -175,6 +218,12 @@ function generatePromotions(): Promotion[] {
       bookings: 0,
       revenue: 0,
       active: false,
+      alert: {
+        why: 'Vacances scolaires - Segment famille = séjours longs',
+        when: 'ACTIVER début juin pour résa juillet-août',
+        who: 'Direct + Booking (large audience famille)',
+        priority: 'medium'
+      }
     },
     {
       id: '9',
@@ -190,6 +239,12 @@ function generatePromotions(): Promotion[] {
       bookings: 67,
       revenue: 18340,
       active: true,
+      alert: {
+        why: 'Valoriser service existant → Conversion +12%',
+        when: 'Périodes faible demande (mai, septembre)',
+        who: 'Site direct (contrôle coût)',
+        priority: 'medium'
+      }
     },
     {
       id: '10',
@@ -205,12 +260,20 @@ function generatePromotions(): Promotion[] {
       bookings: 23,
       revenue: 6210,
       active: true,
+      alert: {
+        why: 'Programme Booking "Deals Secrets" = Visibilité premium',
+        when: 'Sur invitation Booking - Période faible occupation',
+        who: 'Booking.com uniquement (programme propriétaire)',
+        priority: 'medium'
+      }
     },
   ];
+
+  return promos;
 }
 
 export function PromotionsCompact() {
-  const [promotions, setPromotions] = useState<Promotion[]>(generatePromotions());
+  const [promotions, setPromotions] = useState<Promotion[]>(generatePromoAlerts());
   const [searchTerm, setSearchTerm] = useState('');
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
   const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(null);
@@ -232,6 +295,9 @@ export function PromotionsCompact() {
     
     return result;
   }, [promotions, searchTerm, filterActive]);
+
+  // Alertes prioritaires
+  const highPriorityAlerts = promotions.filter(p => !p.active && p.alert?.priority === 'high');
 
   // KPIs
   const activeCount = promotions.filter(p => p.active).length;
@@ -257,12 +323,52 @@ export function PromotionsCompact() {
         <RevenueHeader
           icon={Tag}
           title="Promotions"
-          subtitle="Gestion des campagnes promotionnelles - 10 types standards"
+          subtitle="Gestion campagnes + Alertes activation intelligentes"
         />
       </div>
 
       <div className="flex-1 overflow-auto px-6 pb-6">
         <div className="space-y-4">
+          {/* Alertes Activation Prioritaires */}
+          {highPriorityAlerts.length > 0 && (
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-orange-900 mb-3 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                🔔 Promotions à Activer (Haute Priorité)
+              </h3>
+              <div className="space-y-2">
+                {highPriorityAlerts.map((promo) => (
+                  <div key={promo.id} className="bg-white rounded-md p-3 flex items-start gap-3">
+                    <Lightbulb className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 text-sm">
+                      <div className="font-semibold text-gray-900 mb-1">{promo.name}</div>
+                      <div className="space-y-1 text-xs text-gray-600">
+                        <div className="flex items-start gap-2">
+                          <Target className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                          <span><strong>Pourquoi :</strong> {promo.alert?.why}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Clock className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                          <span><strong>Quand :</strong> {promo.alert?.when}</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <Users className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                          <span><strong>Pour qui :</strong> {promo.alert?.who}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => toggleActive(promo.id)}
+                      className="px-3 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs font-medium flex-shrink-0"
+                    >
+                      Activer
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* KPI Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -305,7 +411,7 @@ export function PromotionsCompact() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Rechercher par nom, type, code..."
+                  placeholder="Rechercher..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
@@ -349,7 +455,7 @@ export function PromotionsCompact() {
             </button>
           </div>
 
-          {/* Table */}
+          {/* Table Promotions */}
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -359,8 +465,6 @@ export function PromotionsCompact() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nom</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Type</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Réduction</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Code</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Période</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Canaux</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Résa.</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Revenu</th>
@@ -377,7 +481,6 @@ export function PromotionsCompact() {
                             'p-1 rounded transition-colors',
                             promo.active ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-100'
                           )}
-                          title={promo.active ? 'Désactiver' : 'Activer'}
                         >
                           {promo.active ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
                         </button>
@@ -396,14 +499,6 @@ export function PromotionsCompact() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-emerald-600">{promo.discount}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600 font-mono">
-                        {promo.code || <span className="text-gray-400">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">
-                        {new Date(promo.startDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })} 
-                        {' → '}
-                        {new Date(promo.endDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' })}
-                      </td>
                       <td className="px-4 py-3">
                         <div className="text-xs text-gray-600">
                           {promo.channels.slice(0, 2).join(', ')}
@@ -419,14 +514,12 @@ export function PromotionsCompact() {
                           <button
                             onClick={() => setSelectedPromo(promo)}
                             className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Modifier"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => deletePromo(promo.id)}
                             className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Supprimer"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -437,29 +530,36 @@ export function PromotionsCompact() {
                 </tbody>
               </table>
             </div>
-
-            {filteredPromos.length === 0 && (
-              <div className="px-4 py-12 text-center text-gray-500">
-                Aucune promotion trouvée
-              </div>
-            )}
           </div>
         </div>
       </div>
 
-      {/* Modal Détails (simple placeholder) */}
+      {/* Modal Détails avec Alertes */}
       {selectedPromo && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedPromo(null)}
         >
           <div
-            className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6"
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-bold text-gray-900 mb-4">
-              {selectedPromo.name}
-            </h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-4">{selectedPromo.name}</h2>
+            
+            {selectedPromo.alert && (
+              <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4" />
+                  Recommandations Activation
+                </h3>
+                <div className="space-y-2 text-sm text-blue-800">
+                  <div><strong>Pourquoi :</strong> {selectedPromo.alert.why}</div>
+                  <div><strong>Quand :</strong> {selectedPromo.alert.when}</div>
+                  <div><strong>Pour qui :</strong> {selectedPromo.alert.who}</div>
+                </div>
+              </div>
+            )}
+            
             <div className="space-y-3 text-sm">
               <div><span className="font-semibold">Type:</span> {selectedPromo.typeLabel}</div>
               <div><span className="font-semibold">Réduction:</span> {selectedPromo.discount}</div>
@@ -470,6 +570,7 @@ export function PromotionsCompact() {
               <div><span className="font-semibold">Réservations:</span> {selectedPromo.bookings}</div>
               <div><span className="font-semibold">Revenu:</span> {selectedPromo.revenue.toLocaleString()}€</div>
             </div>
+            
             <div className="mt-6 flex justify-end">
               <button
                 onClick={() => setSelectedPromo(null)}
