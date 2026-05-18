@@ -1,27 +1,22 @@
 /**
- * FLOWTYM — Veille Concurrentielle (Vue mensuelle)
+ * FLOWTYM — Veille Concurrentielle (Vue mensuelle organisée en onglets)
  *
- * Affiche les données Lighthouse importées :
- *   - 10 concurrents réels (depuis feuille Tarifs)
- *   - Tarifs jour par jour
- *   - Positionnement (ranking, écart médiane, MIN/MAX)
- *   - Heatmap pression marché
- *   - Aucune donnée mock — uniquement le fichier importé
+ * Onglets :
+ *   1. Marché             → KPIs + Graphique premium (area + line + bars + tooltip)
+ *   2. Positionnement     → Vue par-date barchart horizontal (CompsetBarChart)
+ *   3. Heatmap Tarifs     → Tableau croisé concurrents × dates
+ *   4. Détail jour        → Tableau dense jour par jour
  *
  * Persistance :
  *   - Import Lighthouse → snapshot versionné (archive ancien, active nouveau)
  *   - Import Salons (Dates Salons) → append-only (préserve historique)
  *   - Hydratation depuis DB au mount pour survivre aux refresh / autres devices
- *
- * Graphique premium : PremiumCompsetChart (area + line + bars + tooltip riche)
- *
- * État vide si aucun fichier importé → CTA Upload.
  */
 
 import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   BarChart3, Upload, AlertCircle, CheckCircle2, Loader2, X,
-  FileSpreadsheet, Target, TrendingUp, TrendingDown, CalendarDays,
+  FileSpreadsheet, Target, CalendarDays, LineChart, Layers, Table, ListFilter,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { useLighthouseStore } from '../../store/lighthouseStore';
@@ -35,6 +30,17 @@ import { PremiumCompsetChart } from './components/PremiumCompsetChart';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
+
+// ─── Onglets ──────────────────────────────────────────────────────────────
+
+type TabKey = 'marche' | 'positionnement' | 'heatmap' | 'detail';
+
+const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { key: 'marche',         label: 'Marché',                icon: LineChart },
+  { key: 'positionnement', label: 'Positionnement Compset', icon: Target },
+  { key: 'heatmap',        label: 'Heatmap Tarifs Compset', icon: Layers },
+  { key: 'detail',         label: 'Détail jour par jour',   icon: Table },
+];
 
 // ─── Upload Banner ────────────────────────────────────────────────────────
 
@@ -158,22 +164,21 @@ export const LighthouseMonthlyView: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [compsetChartDate, setCompsetChartDate] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>('marche');
 
   // ─── Upload Lighthouse ────────────────────────────────────────────────
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    e.target.value = ''; // Permet re-upload du même fichier
+    e.target.value = '';
 
     setUploadStatus('parsing');
     try {
       const result = await parseLighthouseExcel(file);
       setImportData(result);
-      // Auto-sélectionner premier mois
       if (result.days.length > 0) {
         setSelectedMonth(result.days[0].date.slice(0, 7));
       }
-      // ✅ Persister en DB (archive ancien snapshot, crée le nouveau actif)
       persistLighthouseImport(result).then(r => {
         if (r.errors.length > 0) console.warn('[lighthouse] persist warnings:', r.errors);
       });
@@ -183,7 +188,7 @@ export const LighthouseMonthlyView: React.FC = () => {
     }
   }, [setImportData, setUploadStatus]);
 
-  // ─── Upload Salons (Dates Salon) ──────────────────────────────────────
+  // ─── Upload Salons ────────────────────────────────────────────────────
   const handleSalonsFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -193,7 +198,6 @@ export const LighthouseMonthlyView: React.FC = () => {
     try {
       const result = await parseSalonsExcel(file);
       salonsStore.setImportData(result);
-      // ✅ Persister append-only (préserve historique : pas de DELETE des anciens événements)
       persistSalonEvents(result.events, file.name).then(r => {
         if (r.errors.length > 0) console.warn('[salons] persist warnings:', r.errors);
       });
@@ -211,8 +215,6 @@ export const LighthouseMonthlyView: React.FC = () => {
   }, [importData]);
 
   // ─── Hydratation depuis DB au mount ───────────────────────────────────
-  // Si le store local est vide (ex: première visite, autre device, cache vidé),
-  // on tente de charger l'import actif Lighthouse + les événements salons depuis Supabase.
   React.useEffect(() => {
     let cancelled = false;
 
@@ -243,7 +245,6 @@ export const LighthouseMonthlyView: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-sélectionner premier mois quand on a des données
   React.useEffect(() => {
     if (monthsAvailable.length > 0 && !monthsAvailable.includes(selectedMonth)) {
       setSelectedMonth(monthsAvailable[0]);
@@ -254,25 +255,6 @@ export const LighthouseMonthlyView: React.FC = () => {
     if (!importData) return [];
     return importData.days.filter(d => d.date.startsWith(selectedMonth));
   }, [importData, selectedMonth]);
-
-  const stats = useMemo(() => {
-    if (monthData.length === 0) {
-      return { median: 0, min: 0, max: 0, avgDemand: 0, avgRank: 0, totalRanked: 0 };
-    }
-    const medians = monthData.map(d => d.compsetMedian).filter(p => p > 0).sort((a, b) => a - b);
-    const mins = monthData.map(d => d.compsetMin).filter((v): v is number => v !== null);
-    const maxs = monthData.map(d => d.compsetMax).filter((v): v is number => v !== null);
-    const ranks = monthData.map(d => d.rankPosition).filter((r): r is number => r !== null);
-
-    return {
-      median: medians.length > 0 ? Math.round(medians[Math.floor(medians.length / 2)]) : 0,
-      min: mins.length > 0 ? Math.round(Math.min(...mins)) : 0,
-      max: maxs.length > 0 ? Math.round(Math.max(...maxs)) : 0,
-      avgDemand: Math.round((monthData.reduce((s, d) => s + d.marketDemand, 0) / monthData.length) * 100),
-      avgRank: ranks.length > 0 ? Math.round(ranks.reduce((s, r) => s + r, 0) / ranks.length) : 0,
-      totalRanked: ranks.length,
-    };
-  }, [monthData]);
 
   // ─── Render ───────────────────────────────────────────────────────────
   return (
@@ -292,15 +274,22 @@ export const LighthouseMonthlyView: React.FC = () => {
         onChange={handleFileChange}
         className="hidden"
       />
+      <input
+        ref={salonsInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={handleSalonsFileChange}
+        className="hidden"
+      />
 
-      <div className="flex-1 overflow-auto px-6 pb-6 space-y-5">
+      <div className="flex-1 overflow-auto px-6 pb-6 space-y-4">
         <UploadBanner />
 
         {!hasData() ? (
           <EmptyState onUploadClick={() => fileInputRef.current?.click()} />
         ) : (
           <>
-            {/* Toolbar */}
+            {/* Toolbar : mois + boutons imports — toujours visible au-dessus des onglets */}
             <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-gray-700">Période :</span>
@@ -330,13 +319,6 @@ export const LighthouseMonthlyView: React.FC = () => {
                     ? `Salons ✓ (${salonsStore.importData?.events.length ?? 0})`
                     : 'Importer Dates Salons'}
                 </button>
-                <input
-                  ref={salonsInputRef}
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleSalonsFileChange}
-                  className="hidden"
-                />
                 <button
                   onClick={() => { clearImport(); }}
                   className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
@@ -385,20 +367,46 @@ export const LighthouseMonthlyView: React.FC = () => {
               </div>
             )}
 
-            {/* Bloc 8 KPIs métier */}
-            <CompsetKpiBlock monthData={monthData} ourHotelName={importData?.ourHotelName ?? ''} />
+            {/* ─── BARRE D'ONGLETS ────────────────────────────────────────── */}
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="flex border-b border-gray-200">
+                {TABS.map(tab => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={cn(
+                        'flex items-center gap-2 px-5 py-3 text-sm font-medium transition-all border-b-2',
+                        isActive
+                          ? 'border-blue-600 text-blue-700 bg-blue-50/40'
+                          : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                      )}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-            {/* GRAPHIQUE PREMIUM — type Lighthouse redesigné (area + line + bars + tooltip riche) */}
-            {importData && (
-              <PremiumCompsetChart
-                importData={importData}
-                selectedMonth={selectedMonth}
-                onDateClick={setSelectedDate}
-              />
+            {/* ─── CONTENU DES ONGLETS ────────────────────────────────────── */}
+            {activeTab === 'marche' && (
+              <div className="space-y-4">
+                <CompsetKpiBlock monthData={monthData} ourHotelName={importData?.ourHotelName ?? ''} />
+                {importData && (
+                  <PremiumCompsetChart
+                    importData={importData}
+                    selectedMonth={selectedMonth}
+                    onDateClick={setSelectedDate}
+                  />
+                )}
+              </div>
             )}
 
-            {/* Vue par-date : barchart horizontal concurrents (complément du graph principal) */}
-            {importData && (
+            {activeTab === 'positionnement' && importData && (
               <CompsetBarChart
                 importData={importData}
                 selectedDate={compsetChartDate}
@@ -406,21 +414,22 @@ export const LighthouseMonthlyView: React.FC = () => {
               />
             )}
 
-            {/* Heatmap concurrents */}
-            <CompetitorHeatmap
-              days={monthData}
-              competitorNames={importData?.competitorNames ?? []}
-              ourHotelName={importData?.ourHotelName ?? ''}
-              onDateClick={setSelectedDate}
-            />
+            {activeTab === 'heatmap' && (
+              <CompetitorHeatmap
+                days={monthData}
+                competitorNames={importData?.competitorNames ?? []}
+                ourHotelName={importData?.ourHotelName ?? ''}
+                onDateClick={setSelectedDate}
+              />
+            )}
 
-            {/* Tableau détail jour par jour */}
-            <DailyTable days={monthData} onRowClick={setSelectedDate} />
+            {activeTab === 'detail' && (
+              <DailyTable days={monthData} onRowClick={setSelectedDate} />
+            )}
           </>
         )}
       </div>
 
-      {/* Modal détail par date */}
       {selectedDate && importData && (
         <DayDetailModal
           date={selectedDate}
@@ -435,58 +444,6 @@ export const LighthouseMonthlyView: React.FC = () => {
 
 // ─── Sous-composants ──────────────────────────────────────────────────────
 
-function KpiCard({ label, value, color = 'gray' }: { label: string; value: string; color?: string }) {
-  const colorClass = {
-    gray: 'text-gray-900',
-    blue: 'text-blue-600',
-    purple: 'text-purple-600',
-    green: 'text-emerald-600',
-    amber: 'text-amber-600',
-    red: 'text-red-600',
-  }[color] ?? 'text-gray-900';
-
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className={cn('text-2xl font-bold', colorClass)}>{value}</p>
-    </div>
-  );
-}
-
-// PriceChart conservé (non utilisé dans la vue principale, remplacé par PremiumCompsetChart).
-// Laissé en place au cas où d'autres modules l'importeraient.
-function PriceChart({ days }: { days: import('../../services/lighthouse-parser.service').LighthouseDayData[] }) {
-  if (days.length === 0) return null;
-  const allPrices = days.flatMap(d => [d.ourPrice, d.compsetMedian].filter(p => p > 0));
-  const maxPrice = Math.max(...allPrices, 1);
-
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <h3 className="text-base font-semibold text-gray-900 mb-4">Notre prix vs Médiane compset</h3>
-      <div className="h-48 flex items-end gap-0.5">
-        {days.map((day, idx) => {
-          const ourH = (day.ourPrice / maxPrice) * 100;
-          const medH = (day.compsetMedian / maxPrice) * 100;
-          const ourAbove = day.ourPrice >= day.compsetMedian;
-          return (
-            <div key={idx} className="flex-1 flex flex-col items-center gap-0.5" title={
-              `${day.dayName} ${day.date.slice(5)}\nNous: ${day.ourPrice}€\nMédiane: ${day.compsetMedian}€\nDemande: ${day.marketDemandPercent}%`
-            }>
-              <div className={cn('w-full rounded-t-sm', ourAbove ? 'bg-blue-500' : 'bg-orange-400')} style={{ height: `${Math.max(ourH, 2)}%` }} />
-              <div className="w-full bg-gray-300 rounded-b-sm" style={{ height: `${Math.max(medH, 2)}%` }} />
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-blue-500" /> Notre prix ≥ médiane</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-orange-400" /> Notre prix &lt; médiane</span>
-        <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-300" /> Médiane compset</span>
-      </div>
-    </div>
-  );
-}
-
 function CompetitorHeatmap({
   days,
   competitorNames,
@@ -500,18 +457,17 @@ function CompetitorHeatmap({
 }) {
   if (days.length === 0 || competitorNames.length === 0) return null;
 
-  // Couleurs : vert si nous moins cher / rouge si plus cher / gris si épuisé
   const cellColor = (price: number | null, ourPrice: number, status: string) => {
     if (status === 'sold_out') return 'bg-gray-200 text-gray-500';
     if (status === 'restricted') return 'bg-amber-100 text-amber-700';
     if (price === null) return 'bg-gray-50 text-gray-400';
     if (ourPrice === 0) return 'bg-white text-gray-700';
     const diff = (price - ourPrice) / ourPrice;
-    if (diff > 0.10) return 'bg-emerald-100 text-emerald-800';     // Eux plus chers de 10%+
+    if (diff > 0.10) return 'bg-emerald-100 text-emerald-800';
     if (diff > 0.02) return 'bg-emerald-50 text-emerald-700';
-    if (diff < -0.10) return 'bg-red-100 text-red-800';            // Eux moins chers de 10%+
+    if (diff < -0.10) return 'bg-red-100 text-red-800';
     if (diff < -0.02) return 'bg-red-50 text-red-700';
-    return 'bg-gray-50 text-gray-700';                              // ±2% équivalent
+    return 'bg-gray-50 text-gray-700';
   };
 
   return (
@@ -543,7 +499,6 @@ function CompetitorHeatmap({
             </tr>
           </thead>
           <tbody>
-            {/* Ligne notre hôtel */}
             <tr className="bg-blue-50/50 border-b-2 border-blue-200">
               <td className="px-2 py-2 font-bold text-blue-900 sticky left-0 bg-blue-50/50 flex items-center gap-1">
                 <Target className="w-3 h-3" />
@@ -555,8 +510,6 @@ function CompetitorHeatmap({
                 </td>
               ))}
             </tr>
-
-            {/* Lignes concurrents */}
             {competitorNames.map((name) => (
               <tr key={name} className="hover:bg-gray-50">
                 <td className="px-2 py-2 text-gray-700 sticky left-0 bg-white hover:bg-gray-50">{name}</td>
@@ -672,7 +625,6 @@ function DayDetailModal({
 }) {
   if (!dayData) return null;
 
-  // Construire le ranking : nous + concurrents disponibles triés par prix
   const allHotels: { name: string; price: number; isUs: boolean; status: string }[] = [
     { name: ourHotelName, price: dayData.ourPrice, isUs: true, status: 'available' },
     ...dayData.competitors.map(c => ({
@@ -699,7 +651,6 @@ function DayDetailModal({
         className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
@@ -714,7 +665,6 @@ function DayDetailModal({
           </button>
         </div>
 
-        {/* Stats résumé */}
         <div className="px-6 py-4 border-b border-gray-200 grid grid-cols-4 gap-4">
           <div>
             <p className="text-xs text-gray-500 uppercase">Notre prix</p>
@@ -736,7 +686,6 @@ function DayDetailModal({
           </div>
         </div>
 
-        {/* Liste classée */}
         <div className="px-6 py-4 overflow-y-auto">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Classement tarifaire</h3>
           <div className="space-y-1.5">
