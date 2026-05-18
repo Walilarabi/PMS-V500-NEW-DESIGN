@@ -84,28 +84,112 @@ export function CalendarGrid() {
     return () => document.removeEventListener("keydown", handler);
   }, [info]);
 
-  // ✅ COPIER SÉLECTION
+  // ✅ SÉLECTION RANGE (Shift+Click)
+  const handleCellClick = useCallback((roomTypeId: string, planId: string, date: string, shiftKey: boolean) => {
+    const cellKey = `${roomTypeId}:${planId}:${date}`;
+    
+    if (!shiftKey || !rangeStart) {
+      // Click simple : définir start range
+      setRangeStart(cellKey);
+      setSelectedCells(new Set([cellKey]));
+      return;
+    }
+    
+    // Shift+Click : sélectionner range
+    const [startRoomId, startPlanId, startDate] = rangeStart.split(':');
+    
+    // Trouver indices
+    const startDateIdx = dateColumns.indexOf(startDate);
+    const endDateIdx = dateColumns.indexOf(date);
+    
+    if (startDateIdx === -1 || endDateIdx === -1) return;
+    
+    const minDateIdx = Math.min(startDateIdx, endDateIdx);
+    const maxDateIdx = Math.max(startDateIdx, endDateIdx);
+    
+    // Trouver chambres/plans
+    const startRoom = roomTypes.find(r => r.roomTypeId === startRoomId);
+    const endRoom = roomTypes.find(r => r.roomTypeId === roomTypeId);
+    
+    if (!startRoom || !endRoom) return;
+    
+    // Si même chambre, sélectionner les plans entre start et end
+    if (startRoomId === roomTypeId) {
+      const startPlanIdx = startRoom.ratePlans.findIndex(p => p.planId === startPlanId);
+      const endPlanIdx = endRoom.ratePlans.findIndex(p => p.planId === planId);
+      
+      if (startPlanIdx === -1 || endPlanIdx === -1) return;
+      
+      const minPlanIdx = Math.min(startPlanIdx, endPlanIdx);
+      const maxPlanIdx = Math.max(startPlanIdx, endPlanIdx);
+      
+      const cells = new Set<string>();
+      for (let dateIdx = minDateIdx; dateIdx <= maxDateIdx; dateIdx++) {
+        for (let planIdx = minPlanIdx; planIdx <= maxPlanIdx; planIdx++) {
+          const plan = startRoom.ratePlans[planIdx];
+          if (plan) {
+            cells.add(`${roomTypeId}:${plan.planId}:${dateColumns[dateIdx]}`);
+          }
+        }
+      }
+      
+      setSelectedCells(cells);
+      info("Sélection", `${cells.size} cellules sélectionnées`);
+    }
+  }, [rangeStart, dateColumns, roomTypes, info]);
+
+  // ✅ COPIER SÉLECTION (Range ou cellule unique)
   const handleCopy = useCallback(() => {
     const { activeCell } = useRateCalendarStore.getState();
+    
+    // Si range sélectionné, copier tout le range
+    if (selectedCells.size > 0) {
+      const cells = Array.from(selectedCells).map(key => {
+        const [roomId, planId, date] = key.split(':');
+        const room = roomTypes.find(r => r.roomTypeId === roomId);
+        const plan = room?.ratePlans.find(p => p.planId === planId);
+        const price = plan?.prices.find(p => p.date === date);
+        return { key, price: price?.price || 0, roomId, planId, date };
+      }).sort((a, b) => {
+        // Trier par date puis par chambre
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return a.roomId.localeCompare(b.roomId);
+      });
+      
+      // Format TSV : une ligne par date, colonnes = chambres
+      const dates = [...new Set(cells.map(c => c.date))].sort();
+      const roomIds = [...new Set(cells.map(c => c.roomId))];
+      
+      const tsv = dates.map(date => {
+        return roomIds.map(roomId => {
+          const cell = cells.find(c => c.date === date && c.roomId === roomId);
+          return cell ? cell.price : '';
+        }).join('\t');
+      }).join('\n');
+      
+      navigator.clipboard.writeText(tsv);
+      success("Copié", `${selectedCells.size} cellules copiées`);
+      return;
+    }
+    
+    // Sinon, copier cellule active uniquement
     if (!activeCell) {
       info("Copier", "Sélectionnez une cellule à copier");
       return;
     }
 
-    // Pour l'instant : copier cellule active uniquement
     const room = roomTypes.find(r => r.roomTypeId === activeCell.roomTypeId);
     const plan = room?.ratePlans.find(p => p.planId === activeCell.planId);
     const price = plan?.prices.find(p => p.date === activeCell.date);
     
     if (price) {
-      // Format TSV (compatible Excel)
       const tsv = String(price.price);
       navigator.clipboard.writeText(tsv);
       info("Copié", `Prix ${price.price}€ copié`);
     }
-  }, [roomTypes, info]);
+  }, [roomTypes, selectedCells, info, success]);
 
-  // ✅ COLLER SÉLECTION
+  // ✅ COLLER SÉLECTION (Range ou cellule unique)
   const handlePaste = useCallback(async () => {
     const { activeCell, updatePrice } = useRateCalendarStore.getState();
     if (!activeCell) {
@@ -115,21 +199,72 @@ export function CalendarGrid() {
 
     try {
       const text = await navigator.clipboard.readText();
-      const value = parseFloat(text.trim());
       
-      if (isNaN(value) || value < 0) {
-        info("Erreur", "Valeur invalide dans le presse-papier");
+      // Parse TSV
+      const lines = text.trim().split('\n');
+      const rows = lines.map(line => line.split('\t'));
+      
+      // Single cell
+      if (rows.length === 1 && rows[0].length === 1) {
+        const value = parseFloat(rows[0][0]);
+        if (isNaN(value) || value < 0) {
+          info("Erreur", "Valeur invalide dans le presse-papier");
+          return;
+        }
+        updatePrice(activeCell.roomTypeId, activeCell.planId, activeCell.date, value);
+        success("Collé", `Prix ${value}€ appliqué`);
         return;
       }
-
-      // Coller dans cellule active
-      updatePrice(activeCell.roomTypeId, activeCell.planId, activeCell.date, value);
-      success("Collé", `Prix ${value}€ appliqué`);
+      
+      // Multi-cell range
+      // Trouver dates à partir de activeCell
+      const startDateIndex = dateColumns.findIndex(d => d === activeCell.date);
+      if (startDateIndex === -1) {
+        info("Erreur", "Date de départ introuvable");
+        return;
+      }
+      
+      // Valider dimensions
+      if (startDateIndex + rows[0].length > dateColumns.length) {
+        info("Erreur", `Pas assez de colonnes (besoin ${rows[0].length}, disponible ${dateColumns.length - startDateIndex})`);
+        return;
+      }
+      
+      // Trouver chambres/plans à partir de activeCell
+      const currentRoom = roomTypes.find(r => r.roomTypeId === activeCell.roomTypeId);
+      const currentPlanIndex = currentRoom?.ratePlans.findIndex(p => p.planId === activeCell.planId) || 0;
+      
+      if (!currentRoom) {
+        info("Erreur", "Chambre introuvable");
+        return;
+      }
+      
+      // Appliquer les valeurs
+      let appliedCount = 0;
+      for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+        const plan = currentRoom.ratePlans[currentPlanIndex + rowIdx];
+        if (!plan) continue;
+        
+        for (let colIdx = 0; colIdx < rows[rowIdx].length; colIdx++) {
+          const dateStr = dateColumns[startDateIndex + colIdx];
+          const valueStr = rows[rowIdx][colIdx];
+          
+          if (!valueStr || valueStr === '') continue;
+          
+          const value = parseFloat(valueStr);
+          if (isNaN(value) || value < 0) continue;
+          
+          updatePrice(currentRoom.roomTypeId, plan.planId, dateStr, value);
+          appliedCount++;
+        }
+      }
+      
+      success("Collé", `${appliedCount} cellules mises à jour`);
       
     } catch (error) {
       info("Erreur", "Impossible de lire le presse-papier");
     }
-  }, [info, success]);
+  }, [dateColumns, roomTypes, info, success]);
 
   // Keyboard shortcuts
   useEffect(() => {
