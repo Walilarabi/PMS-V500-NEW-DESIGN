@@ -113,7 +113,7 @@ function renderPage(page: PageId): React.ReactNode {
     case 'rev_pricing':    return <PricingCalendar />;
     
     // RMS ENTERPRISE ULTIMATE
-    case 'rms':            return <RateManager />;
+    case 'rms':            return <RMSTableauPro />;
     case 'rms_history':    return <DecisionHistory />;
     case 'rev_compset':    return <LighthouseMonthlyView />;
     case 'rev_channels':   return <DistributionAnalytics />;

@@ -40,7 +40,7 @@ import {
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
-import { LIGHTHOUSE_REAL_DATA } from '../../data/lighthouse-real-data';
+import { useLighthouseStore } from '../../store/lighthouseStore';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -368,6 +368,7 @@ export function RMSTableauPro() {
   const [startDate, setStartDate] = useState(new Date('2026-06-01'));
   const [showFilters, setShowFilters] = useState(false);
   const [rmsData, setRmsData] = useState<DayRMSData[]>([]);
+  const [detailDate, setDetailDate] = useState<string | null>(null);
   
   // Propagation states
   const [isPropagating, setIsPropagating] = useState(false);
@@ -408,26 +409,72 @@ export function RMSTableauPro() {
     return cell?.price ?? 280;
   }, [referenceRoom, referencePlan]);
 
-  // Récupérer données marché depuis Lighthouse
+  // Récupérer données marché depuis Lighthouse Store (vraies données)
+  const lighthouseImport = useLighthouseStore(s => s.importData);
   const getLighthouseData = useCallback((date: string) => {
-    return LIGHTHOUSE_REAL_DATA.find(d => d.date === date) ?? null;
-  }, []);
+    if (!lighthouseImport) return null;
+    return lighthouseImport.days.find(d => d.date === date) ?? null;
+  }, [lighthouseImport]);
 
-  // Génération données RMS — connectées aux vraies données calendrier + Lighthouse
+  // Génération données RMS — alimentées par Lighthouse + Calendrier
   useMemo(() => {
     const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : viewPeriod === '30days' ? 30 : viewPeriod === '60days' ? 60 : 90;
     const generated = generateMockRMSData(startDate, days);
-    // ✅ Injecter les vraies données depuis le calendrier et Lighthouse
+
+    // ✅ Injection vraies données : Lighthouse pour marché, Calendrier pour notre prix
     const enriched = generated.map(row => {
       const realPrice = getPriceFromCalendar(row.date);
       const lhData = getLighthouseData(row.date);
-      const medianPrice = lhData?.compsetMedian ?? row.medianPrice;
-      const demand = lhData ? Math.round(lhData.marketDemand * 100) : row.demand;
+
+      // Si pas de données Lighthouse pour cette date → garder le mock
+      if (!lhData) {
+        return {
+          ...row,
+          currentPrice: realPrice > 0 ? realPrice : row.currentPrice,
+        };
+      }
+
+      // ─── Tarif actuel : priorité au calendrier RMS, sinon prix Lighthouse ───
+      const ourPrice = realPrice > 0 ? realPrice : lhData.ourPrice;
+
+      // ─── Médiane compset (depuis Aperçu) ───
+      const medianPrice = lhData.compsetMedian > 0 ? lhData.compsetMedian : row.medianPrice;
+
+      // ─── MIN/MAX (calculés depuis feuille Tarifs sur 10 concurrents) ───
+      const minPrice = lhData.compsetMin !== null ? lhData.compsetMin : row.minPrice;
+      const maxPrice = lhData.compsetMax !== null ? lhData.compsetMax : row.maxPrice;
+
+      // ─── Pression marché (= demande marché Lighthouse, 0-100) ───
+      const marketPressure = lhData.marketDemandPercent;
+
+      // Recalcul stratégie + recommandation avec vraies données
+      const partial: Partial<DayRMSData> = {
+        occupancyRate: row.occupancyRate,
+        leadTimeMajority: row.leadTimeMajority,
+        pickupRate: row.pickupRate,
+        marketPressure,
+        availability: row.availability,
+        isWeekend: row.isWeekend,
+        currentPrice: ourPrice,
+        medianPrice,
+        minPrice,
+        maxPrice,
+      };
+      const strategy = calculateStrategy(partial);
+      const reco = calculateRecommendation({ ...partial, strategy });
+
       return {
         ...row,
-        currentPrice: realPrice > 0 ? realPrice : row.currentPrice,
+        currentPrice: ourPrice,
         medianPrice,
-        demand,
+        minPrice,
+        maxPrice,
+        marketPressure,
+        strategy,
+        recommendation: reco.recommendation,
+        suggestedPrice: reco.suggestedPrice,
+        confidenceScore: reco.confidence,
+        events: lhData.events ? [lhData.events] : row.events,
       };
     });
     setRmsData(enriched);
@@ -702,11 +749,19 @@ export function RMSTableauPro() {
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-auto">
         {viewMode === 'table' ? (
-          <TableView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain, handleToggleSelect }} />
+          <TableView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain, handleToggleSelect, handleViewDetail: setDetailDate }} />
         ) : (
           <KanbanView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
         )}
       </div>
+
+      {/* MODAL DÉTAIL COMPSET PAR DATE */}
+      {detailDate && (
+        <CompsetDetailModal
+          date={detailDate}
+          onClose={() => setDetailDate(null)}
+        />
+      )}
     </div>
   );
 }
@@ -725,6 +780,7 @@ function TableView({
     handleReject: (date: string) => void;
     handleMaintain: (date: string) => void;
     handleToggleSelect: (date: string) => void;
+    handleViewDetail: (date: string) => void;
   };
 }) {
   return (
@@ -772,7 +828,14 @@ function TableView({
                 />
               </td>
               <td className="px-2 py-2 border-r border-gray-200">
-                <Eye className="w-4 h-4 text-gray-400 cursor-pointer hover:text-violet-600" />
+                <button
+                  onClick={() => handlers.handleViewDetail(row.date)}
+                  className="text-gray-400 hover:text-violet-600 transition-colors"
+                  title="Voir le détail compset pour cette date"
+                  aria-label="Détail compset"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
               </td>
               <td className="px-3 py-2 border-r border-gray-200 font-medium text-gray-700">{row.dayName}</td>
               <td className="px-3 py-2 border-r border-gray-200">{row.dayNumber}/{row.month}</td>
@@ -1019,6 +1082,162 @@ function KanbanCard({
         >
           ✗ NON
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL DÉTAIL COMPSET POUR UNE DATE
+// — Affiche notre hôtel + les 10 concurrents Lighthouse pour la date sélectionnée
+// — Classement par prix, écart vs nous, status (épuisé, etc.)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function CompsetDetailModal({ date, onClose }: { date: string; onClose: () => void }) {
+  const importData = useLighthouseStore(s => s.importData);
+  const dayData = useMemo(() => {
+    if (!importData) return null;
+    return importData.days.find(d => d.date === date) ?? null;
+  }, [importData, date]);
+
+  if (!dayData) {
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Détail compset</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Aucune donnée Lighthouse importée pour la date <strong>{date}</strong>.
+          </p>
+          <p className="text-xs text-gray-500 mb-4">
+            Importez un fichier Excel Lighthouse depuis la page « Veille concurrentielle » pour alimenter cette vue.
+          </p>
+          <button onClick={onClose} className="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded text-sm font-medium text-gray-700">
+            Fermer
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const ourHotelName = importData!.ourHotelName;
+  const allHotels: { name: string; price: number; isUs: boolean; status: string }[] = [
+    { name: ourHotelName, price: dayData.ourPrice, isUs: true, status: 'available' },
+    ...dayData.competitors.map(c => ({
+      name: c.hotelName,
+      price: c.price ?? Infinity,
+      isUs: false,
+      status: c.status,
+    })),
+  ];
+  const ranked = allHotels
+    .filter(h => h.status === 'available' && h.price > 0 && isFinite(h.price))
+    .sort((a, b) => a.price - b.price);
+  const unavailable = allHotels.filter(h => h.status !== 'available' || h.price === 0 || !isFinite(h.price));
+  const ourPosition = ranked.findIndex(h => h.isUs) + 1;
+  const totalRanked = ranked.length;
+  const maxPrice = ranked.length > 0 ? ranked[ranked.length - 1].price : 1;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Compset {dayData.dayName} {date}
+            </h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Positionnement · Demande {dayData.marketDemandPercent}% · Rang {dayData.ranking}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-4 border-b border-gray-200 grid grid-cols-4 gap-4">
+          <div>
+            <p className="text-xs text-gray-500 uppercase">Notre prix</p>
+            <p className="text-xl font-bold text-blue-600">{dayData.ourPrice}€</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 uppercase">Médiane</p>
+            <p className="text-xl font-bold text-gray-900">{dayData.compsetMedian}€</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 uppercase">Min – Max</p>
+            <p className="text-xl font-bold text-gray-900">
+              {dayData.compsetMin ?? '—'}€ – {dayData.compsetMax ?? '—'}€
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 uppercase">Notre rang</p>
+            <p className="text-xl font-bold text-emerald-600">
+              {ourPosition > 0 ? `#${ourPosition} / ${totalRanked}` : '—'}
+            </p>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 overflow-y-auto">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Classement tarifaire</h3>
+          <div className="space-y-1.5">
+            {ranked.map((h, idx) => {
+              const widthPct = (h.price / maxPrice) * 100;
+              return (
+                <div
+                  key={h.name}
+                  className={
+                    'flex items-center gap-3 px-3 py-2 rounded ' +
+                    (h.isUs ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50')
+                  }
+                >
+                  <span className={
+                    'w-6 text-xs font-bold ' +
+                    (idx === 0 ? 'text-emerald-600' : idx < 3 ? 'text-blue-600' : 'text-gray-500')
+                  }>
+                    #{idx + 1}
+                  </span>
+                  <span className={'flex-1 text-sm ' + (h.isUs ? 'font-bold text-blue-900' : 'text-gray-700')}>
+                    {h.isUs && <Target className="inline w-3 h-3 mr-1" />}
+                    {h.name}
+                  </span>
+                  <div className="flex-1 max-w-[200px] bg-white rounded overflow-hidden h-2">
+                    <div
+                      className={'h-full rounded ' + (h.isUs ? 'bg-blue-500' : 'bg-gray-400')}
+                      style={{ width: `${widthPct}%` }}
+                    />
+                  </div>
+                  <span className={'text-sm font-semibold w-16 text-right ' + (h.isUs ? 'text-blue-900' : 'text-gray-900')}>
+                    {Math.round(h.price)}€
+                  </span>
+                </div>
+              );
+            })}
+
+            {unavailable.length > 0 && (
+              <>
+                <p className="text-xs text-gray-400 mt-3 mb-1">Non disponibles ({unavailable.length})</p>
+                {unavailable.map(h => (
+                  <div key={h.name} className="flex items-center gap-3 px-3 py-1.5 text-xs text-gray-400">
+                    <span className="flex-1">{h.name}</span>
+                    <span>
+                      {h.status === 'sold_out' ? 'Épuisé' : h.status === 'restricted' ? 'Restreint' : 'N/A'}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          {(dayData.events || dayData.holidays) && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+              {dayData.holidays && <div>📅 {dayData.holidays}</div>}
+              {dayData.events && <div>🎉 {dayData.events}</div>}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
