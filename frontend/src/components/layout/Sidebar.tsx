@@ -112,10 +112,9 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
     {
       label: 'Automatisation',
       items: [
-        { id: 'rev_rules',       label: 'Règles tarifaires',icon: Zap },
-        { id: 'rev_yield',       label: 'Yield management', icon: TrendingUp },
-        { id: 'rev_promotions',  label: 'Promotions',       icon: Tag },
-        { id: 'rms',             label: 'Tableau RMS',      icon: Activity },
+        { id: 'rms',             label: 'Tableau RMS',            icon: Activity },
+        { id: 'rev_rules',       label: 'Yield & Règles auto',    icon: Zap },
+        { id: 'rev_promotions',  label: 'Promotions',             icon: Tag },
       ],
     },
   ],

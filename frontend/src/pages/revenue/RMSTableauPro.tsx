@@ -15,7 +15,7 @@
  * - Workflow propagation Channel Manager
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Calendar,
   TrendingUp,
@@ -39,6 +39,8 @@ import {
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
+import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
+import { LIGHTHOUSE_REAL_DATA } from '../../data/lighthouse-real-data';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -378,11 +380,58 @@ export function RMSTableauPro() {
     window.dispatchEvent(new CustomEvent('navigate', { detail: { page } }));
   };
 
-  // Génération données
+  // ─── Store RMS Calendrier ───────────────────────────────────────────────────
+  const { roomTypes, updatePrice, loadData } = useRateCalendarStore();
+
+  // Charger les données du calendrier si pas encore fait
+  useEffect(() => {
+    if (roomTypes.length === 0) {
+      loadData();
+    }
+  }, []);
+
+  // Récupérer chambre référente
+  const referenceRoom = useMemo(() => {
+    return roomTypes.find(r => r.isReference) ?? roomTypes[0] ?? null;
+  }, [roomTypes]);
+
+  // Récupérer plan de référence
+  const referencePlan = useMemo(() => {
+    if (!referenceRoom) return null;
+    return referenceRoom.ratePlans.find(p => p.isReference) ?? referenceRoom.ratePlans[0] ?? null;
+  }, [referenceRoom]);
+
+  // Récupérer prix courant depuis le calendrier tarifaire (vraie donnée)
+  const getPriceFromCalendar = useCallback((date: string): number => {
+    if (!referenceRoom || !referencePlan) return 280; // fallback
+    const cell = referencePlan.prices.find(p => p.date === date);
+    return cell?.price ?? 280;
+  }, [referenceRoom, referencePlan]);
+
+  // Récupérer données marché depuis Lighthouse
+  const getLighthouseData = useCallback((date: string) => {
+    return LIGHTHOUSE_REAL_DATA.find(d => d.date === date) ?? null;
+  }, []);
+
+  // Génération données RMS — connectées aux vraies données calendrier + Lighthouse
   useMemo(() => {
     const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : viewPeriod === '30days' ? 30 : viewPeriod === '60days' ? 60 : 90;
-    setRmsData(generateMockRMSData(startDate, days));
-  }, [startDate, viewPeriod]);
+    const generated = generateMockRMSData(startDate, days);
+    // ✅ Injecter les vraies données depuis le calendrier et Lighthouse
+    const enriched = generated.map(row => {
+      const realPrice = getPriceFromCalendar(row.date);
+      const lhData = getLighthouseData(row.date);
+      const medianPrice = lhData?.compsetMedian ?? row.medianPrice;
+      const demand = lhData ? Math.round(lhData.marketDemand * 100) : row.demand;
+      return {
+        ...row,
+        currentPrice: realPrice > 0 ? realPrice : row.currentPrice,
+        medianPrice,
+        demand,
+      };
+    });
+    setRmsData(enriched);
+  }, [startDate, viewPeriod, getPriceFromCalendar, getLighthouseData]);
 
   // Navigation dates
   const navigateDays = (direction: 'prev' | 'next') => {
@@ -401,7 +450,17 @@ export function RMSTableauPro() {
           : d
       )
     );
-  }, []);
+    // ✅ PUSH vers le calendrier tarifaire immédiatement
+    const row = rmsData.find(d => d.date === date);
+    if (row && referenceRoom && referencePlan) {
+      updatePrice(
+        referenceRoom.roomTypeId,
+        referencePlan.planId,
+        date,
+        row.suggestedPrice,
+      );
+    }
+  }, [rmsData, referenceRoom, referencePlan, updatePrice]);
 
   const handleReject = useCallback((date: string) => {
     setRmsData((prev) =>

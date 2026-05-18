@@ -2,7 +2,7 @@
  * FLOWTYM — NewReservationModal v3
  * 100% fidèle à la maquette + toutes les fonctionnalités demandées
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X, User, Mail, Phone, Users, ChevronDown, Hash, Search,
   Check, Loader2, Upload, FileText, Link2, Lock, Send,
@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { supabase } from '@/src/lib/supabase';
 import { WORLD_COUNTRIES, OTA_SOURCES } from '@/src/data/reservationData';
+import { useRateCalendarStore } from '../rms/store/rateCalendarStore';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ROOM_TYPES   = ['Single', 'Double', 'Twin', 'Suite', 'Familiale', 'Junior Suite', 'Duplex'];
@@ -206,12 +207,70 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
     }));
   };
 
+  // ─── Tarifs depuis le calendrier RMS ─────────────────────────────────────
+  const { roomTypes, loadData: loadCalendar } = useRateCalendarStore();
+
+  // Charger le calendrier si besoin
+  useEffect(() => {
+    if (roomTypes.length === 0) loadCalendar();
+  }, []);
+
+  // Récupérer le prix depuis le calendrier tarifaire pour une chambre et une date
+  const getPriceFromCalendar = useCallback((roomTypeCode: string, date: string, planCode?: string): number => {
+    const roomType = roomTypes.find(r =>
+      r.roomTypeCode === roomTypeCode ||
+      r.roomTypeName?.toLowerCase().includes(roomTypeCode.toLowerCase())
+    );
+    if (!roomType) return 0;
+
+    const plan = planCode
+      ? roomType.ratePlans.find(p => p.planCode === planCode || p.planName === planCode)
+      : roomType.ratePlans.find(p => p.isReference) ?? roomType.ratePlans[0];
+
+    if (!plan) return 0;
+    const cell = plan.prices.find(p => p.date === date);
+    return cell?.price ?? 0;
+  }, [roomTypes]);
+
+  // Calcul prix total depuis le calendrier tarifaire, nuit par nuit
+  const computeTotalFromCalendar = useCallback((): number => {
+    if (!checkIn || !checkOut || roomSels.length === 0) return 0;
+
+    let total = 0;
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    const currentDate = new Date(start);
+
+    while (currentDate < end) {
+      const dateStr = currentDate.toISOString().slice(0, 10);
+      for (const sel of roomSels) {
+        const price = getPriceFromCalendar(sel.type, dateStr, ratePlan !== '' ? ratePlan : undefined);
+        // Si pas de prix dans calendrier, fallback sur base_price de la room
+        if (price > 0) {
+          total += price * sel.qty;
+        } else {
+          // Fallback: chercher dans rooms
+          const roomForType = rooms.find(r => r.type === sel.type);
+          total += (roomForType?.base_price ?? 0) * sel.qty;
+        }
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    return total;
+  }, [checkIn, checkOut, roomSels, ratePlan, getPriceFromCalendar, rooms]);
+
   // Pricing
   const nights = checkIn && checkOut
     ? Math.max(0, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86_400_000)) : 1;
   const firstNum = roomSels[0]?.numbers[0];
   const firstRoom = rooms.find(r => r.number === firstNum);
-  const prixNuit = (firstRoom?.base_price ?? 0) * Math.max(totalRooms, 1);
+
+  // ✅ Priorité 1: Prix depuis calendrier tarifaire RMS
+  // ✅ Priorité 2: base_price de la chambre (fallback)
+  const calendarTotal = computeTotalFromCalendar();
+  const prixNuit = calendarTotal > 0
+    ? calendarTotal / Math.max(nights, 1)
+    : (firstRoom?.base_price ?? 0) * Math.max(totalRooms, 1);
   const ht   = parseFloat((prixNuit * nights).toFixed(2));
   const tva  = parseFloat((ht * TVA).toFixed(2));
   const taxe = parseFloat((TAXE_SEJOUR * adults * nights).toFixed(2));

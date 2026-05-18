@@ -290,7 +290,49 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         get().addAuditLog({ action: "inventory_force_open_ignored", target: `${roomTypeId}:${date}`, detail: `Surbooking refusé.`, result: "ignored" });
         return;
       }
+      // ✅ Update local state immédiatement (optimistic)
       set({ roomTypes: cascadeEngine.updateInventory(roomTypes, roomTypeId, date, newInventory) });
+
+      // ✅ Persister override manuel en Supabase
+      const status = target?.statuses.find(s => s.date === date);
+      const overrideType = newInventory === 0 ? 'manual_closed' : newInventory > cap ? 'force_open' : 'manual';
+      getCurrentHotelIdSafe().then(async (hotelId) => {
+        if (!hotelId) return;
+        try {
+          if (status?.restrictionId) {
+            // Upsert sur restriction existante
+            await (supabase as any)
+              .from('rate_restrictions')
+              .update({
+                inventory: newInventory,
+                inventory_override: overrideType,
+                version: (status.restrictionVersion ?? 0) + 1,
+              })
+              .eq('id', status.restrictionId);
+          } else {
+            // Créer nouvelle restriction
+            await (supabase as any)
+              .from('rate_restrictions')
+              .insert({
+                hotel_id: hotelId,
+                room_type_code: roomTypeId,
+                stay_date: date,
+                inventory: newInventory,
+                capacity: cap,
+                inventory_override: overrideType,
+                version: 1,
+              });
+          }
+          get().addAuditLog({
+            action: 'inventory_manual_override',
+            target: `${roomTypeId}:${date}`,
+            detail: `Inventaire manuel: ${newInventory} (${overrideType})`,
+            result: 'accepted',
+          });
+        } catch (err) {
+          console.warn('[rms-store] inventory persist failed:', err);
+        }
+      });
     },
 
     updateStayRestriction: (roomTypeId, date, field, value) => {

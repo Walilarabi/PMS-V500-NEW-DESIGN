@@ -1,252 +1,418 @@
 /**
- * FLOWTYM LIGHTHOUSE - VEILLE CONCURRENTIELLE
- * 
- * Vue mensuelle professionnelle type Lighthouse
- * - Heatmap tarifaire
- * - Upload Excel pour mise à jour
- * - Données réelles 87 jours
+ * FLOWTYM LIGHTHOUSE — VEILLE CONCURRENTIELLE
+ *
+ * Vue mensuelle professionnelle :
+ * - Parsing Excel Lighthouse réel (librairie xlsx)
+ * - Feedback visuel complet (nom fichier, date import, statut, nb lignes)
+ * - Métriques calculées : médiane, min, max, demande, ranking
+ * - Heatmap tarifaire + pression marché
+ * - Toutes données from real file — aucune donnée fictive
  */
 
-import React, { useState, useMemo, useRef } from 'react';
-import { Calendar, TrendingUp, Activity, Download, Upload, AlertCircle } from 'lucide-react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
+import {
+  Calendar,
+  TrendingUp,
+  Activity,
+  Upload,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  X,
+  FileSpreadsheet,
+  BarChart3,
+} from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
-import { LIGHTHOUSE_REAL_DATA, getMarketPressure, COMPETITORS } from '../../data/lighthouse-real-data';
+import { LIGHTHOUSE_REAL_DATA } from '../../data/lighthouse-real-data';
+import type { LighthouseData } from '../../data/lighthouse-real-data';
+import { useLighthouseUpload } from '../../hooks/useLighthouseUpload';
 
 const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
 
+// ─── Upload Status Banner ────────────────────────────────────────────────────
+
+interface UploadBannerProps {
+  status: ReturnType<typeof useLighthouseUpload>['uploadStatus'];
+  onReset: () => void;
+}
+
+function UploadBanner({ status, onReset }: UploadBannerProps) {
+  if (status.state === 'idle') return null;
+
+  if (status.state === 'parsing') {
+    return (
+      <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <Loader2 className="w-5 h-5 text-blue-600 animate-spin flex-shrink-0" />
+        <div className="text-sm text-blue-800">
+          <strong>Chargement en cours…</strong>
+          {status.fileName && <span className="ml-2 text-blue-600">{status.fileName}</span>}
+        </div>
+      </div>
+    );
+  }
+
+  if (status.state === 'success') {
+    return (
+      <div className="flex items-start justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm space-y-1">
+            <p className="font-semibold text-emerald-900">Fichier importé avec succès</p>
+            <div className="grid grid-cols-3 gap-4 mt-2">
+              <div>
+                <p className="text-xs text-emerald-600 uppercase tracking-wide">Fichier</p>
+                <p className="text-sm font-medium text-emerald-900 flex items-center gap-1">
+                  <FileSpreadsheet className="w-3 h-3" />
+                  {status.fileName}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-emerald-600 uppercase tracking-wide">Importé le</p>
+                <p className="text-sm font-medium text-emerald-900">{status.importedAt}</p>
+              </div>
+              <div>
+                <p className="text-xs text-emerald-600 uppercase tracking-wide">Données traitées</p>
+                <p className="text-sm font-medium text-emerald-900">{status.rowCount} jours</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button onClick={onReset} className="text-emerald-400 hover:text-emerald-600">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
+  if (status.state === 'error') {
+    return (
+      <div className="flex items-start justify-between gap-3 bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold text-red-900">Erreur d'import</p>
+            {status.fileName && (
+              <p className="text-red-700 mt-1">Fichier : {status.fileName}</p>
+            )}
+            <p className="text-red-700 mt-1">{status.errorMessage}</p>
+          </div>
+        </div>
+        <button onClick={onReset} className="text-red-400 hover:text-red-600">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ─── Calculs statistiques ────────────────────────────────────────────────────
+
+function computeStats(data: LighthouseData[]) {
+  if (data.length === 0) {
+    return { median: 0, min: 0, max: 0, avgDemand: 0, avgRanking: 'N/A' };
+  }
+
+  const prices = data.map(d => d.compsetMedian).filter(p => p > 0).sort((a, b) => a - b);
+  const median = prices.length > 0
+    ? prices[Math.floor(prices.length / 2)]
+    : 0;
+  const min = prices[0] ?? 0;
+  const max = prices[prices.length - 1] ?? 0;
+  const avgDemand = Math.round(
+    (data.reduce((s, d) => s + d.marketDemand, 0) / data.length) * 100
+  );
+
+  // Parser rankings "X sur Y" → extraire X
+  const ranks = data
+    .map(d => {
+      const m = d.ranking.match(/^(\d+)/);
+      return m ? parseInt(m[1]) : null;
+    })
+    .filter((r): r is number => r !== null);
+  const avgRank = ranks.length > 0
+    ? Math.round(ranks.reduce((s, r) => s + r, 0) / ranks.length)
+    : null;
+  const avgRanking = avgRank !== null ? `#${avgRank} moyen` : 'N/A';
+
+  return { median: Math.round(median), min: Math.round(min), max: Math.round(max), avgDemand, avgRanking };
+}
+
+// ─── Composant principal ─────────────────────────────────────────────────────
+
 export const LighthouseMonthlyView: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState('2026-05');
+  const [customData, setCustomData] = useState<LighthouseData[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadStatus, handleFile, reset } = useLighthouseUpload();
 
-  // Filtrer données par mois
+  // Source de données : fichier importé ou données réelles embarquées
+  const allData = customData ?? LIGHTHOUSE_REAL_DATA;
+
+  // Filtrer par mois sélectionné
   const monthData = useMemo(() => {
-    return LIGHTHOUSE_REAL_DATA.filter(d => d.date.startsWith(selectedMonth));
-  }, [selectedMonth]);
+    return allData.filter(d => d.date.startsWith(selectedMonth));
+  }, [allData, selectedMonth]);
 
-  // KPIs période
-  const periodMedian = useMemo(() => {
-    if (monthData.length === 0) return 0;
-    const sum = monthData.reduce((acc, d) => acc + d.compsetMedian, 0);
-    return Math.round(sum / monthData.length);
-  }, [monthData]);
+  // Mois disponibles
+  const availableMonths = useMemo(() => {
+    const months = new Set(allData.map(d => d.date.slice(0, 7)));
+    return Array.from(months).sort();
+  }, [allData]);
 
-  const avgPressure = useMemo(() => {
-    if (monthData.length === 0) return 0;
-    const sum = monthData.reduce((acc, d) => acc + d.marketDemand, 0);
-    return Math.round((sum / monthData.length) * 100);
-  }, [monthData]);
+  const stats = useMemo(() => computeStats(monthData), [monthData]);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      // TODO: Parser le fichier Excel Lighthouse
-      alert(`Fichier "${file.name}" sélectionné.\n\nParsing Excel Lighthouse à implémenter.\nPour l'instant, les données réelles de folkestoneopéra_bookingdotcom sont utilisées.`);
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input pour permettre re-upload même fichier
+    e.target.value = '';
+
+    const parsed = await handleFile(file);
+    if (parsed.length > 0) {
+      setCustomData(parsed);
+      // Auto-sélectionner premier mois disponible
+      const firstMonth = parsed[0]?.date.slice(0, 7);
+      if (firstMonth) setSelectedMonth(firstMonth);
     }
-  };
+  }, [handleFile]);
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="flex-1 flex flex-col bg-[#F9FAFB]">
       <div className="p-6 pb-3">
         <RevenueHeader
-          icon={Calendar}
-          title="Veille Concurrentielle - Vue Mensuelle"
-          subtitle="Analyse marché type Lighthouse : heatmap tarifaire + pression marché"
+          icon={BarChart3}
+          title="Veille Concurrentielle"
+          subtitle="Analyse marché Lighthouse · données réelles · import Excel"
         />
       </div>
 
-      <div className="flex-1 overflow-auto px-6 pb-6">
-        <div className="space-y-6">
-          {/* Toolbar avec Upload */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-gray-700">Période :</span>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="2026-05">Mai 2026</option>
-                <option value="2026-06">Juin 2026</option>
-                <option value="2026-07">Juillet 2026</option>
-                <option value="2026-08">Août 2026</option>
-              </select>
-            </div>
+      <div className="flex-1 overflow-auto px-6 pb-6 space-y-5">
 
-            <div className="flex items-center gap-3">
+        {/* Banner feedback upload */}
+        <UploadBanner status={uploadStatus} onReset={reset} />
+
+        {/* Toolbar */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Période :</span>
+            <select
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            >
+              {availableMonths.length > 0
+                ? availableMonths.map(m => {
+                    const [y, mo] = m.split('-');
+                    const label = new Date(`${m}-01`).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+                    return <option key={m} value={m}>{label}</option>;
+                  })
+                : <option value={selectedMonth}>{selectedMonth}</option>
+              }
+            </select>
+            <span className="text-xs text-gray-400">
+              {customData ? `${allData.length} jours (fichier importé)` : `${allData.length} jours (données embarquées)`}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {customData && (
               <button
-                onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+                onClick={() => { setCustomData(null); reset(); }}
+                className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-1"
               >
-                <Upload className="w-4 h-4" />
-                Importer Lighthouse Excel
+                <X className="w-3.5 h-3.5" />
+                Réinitialiser
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </div>
-          </div>
-
-          {/* KPI Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Médiane Marché</span>
-                <Activity className="w-4 h-4 text-blue-500" />
-              </div>
-              <div className="mt-2 text-2xl font-bold text-gray-900">{periodMedian}€</div>
-              <div className="mt-1 text-xs text-gray-400">Période sélectionnée</div>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Pression Moyenne</span>
-                <TrendingUp className="w-4 h-4 text-orange-500" />
-              </div>
-              <div className="mt-2 text-2xl font-bold text-gray-900">{avgPressure}%</div>
-              <div className="mt-1 text-xs text-gray-400">Demande marché</div>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Concurrents</span>
-                <Calendar className="w-4 h-4 text-purple-500" />
-              </div>
-              <div className="mt-2 text-2xl font-bold text-gray-900">{COMPETITORS.length}</div>
-              <div className="mt-1 text-xs text-gray-400">Compset actif</div>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">Jours Données</span>
-                <Download className="w-4 h-4 text-green-500" />
-              </div>
-              <div className="mt-2 text-2xl font-bold text-gray-900">{monthData.length}</div>
-              <div className="mt-1 text-xs text-gray-400">Lighthouse</div>
-            </div>
-          </div>
-
-          {/* Graph Médiane Marché */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Médiane Marché vs Notre Prix</h3>
-            <div className="h-64 flex items-end justify-between gap-1">
-              {monthData.slice(0, 30).map((day, idx) => {
-                const maxPrice = Math.max(...monthData.slice(0, 30).map(d => Math.max(d.ourPrice, d.compsetMedian)));
-                const ourHeight = (day.ourPrice / maxPrice) * 100;
-                const medianHeight = (day.compsetMedian / maxPrice) * 100;
-
-                return (
-                  <div key={idx} className="flex-1 flex flex-col items-center gap-0.5">
-                    {/* Notre prix */}
-                    <div
-                      className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
-                      style={{ height: `${ourHeight}%` }}
-                      title={`${day.dayName} ${day.date.slice(5)}: Notre prix ${day.ourPrice}€`}
-                    />
-                    {/* Médiane */}
-                    <div
-                      className="w-full bg-gray-300 transition-all hover:bg-gray-400"
-                      style={{ height: `${medianHeight}%` }}
-                      title={`Médiane: ${day.compsetMedian}€`}
-                    />
-                    {/* Date */}
-                    {idx % 3 === 0 && (
-                      <div className="text-[8px] text-gray-400 mt-1 whitespace-nowrap">
-                        {new Date(day.date).getDate()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-4 flex items-center justify-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-blue-500 rounded" />
-                <span className="text-gray-600">Notre Prix</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-gray-300 rounded" />
-                <span className="text-gray-600">Médiane Compset</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Barres Pression Marché */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Pression Marché (0-100%)</h3>
-            <div className="h-48 flex items-end justify-between gap-1">
-              {monthData.slice(0, 30).map((day, idx) => {
-                const pressure = getMarketPressure(day.marketDemand);
-                const color = pressure >= 70 ? 'bg-red-500' : pressure >= 40 ? 'bg-yellow-500' : 'bg-green-500';
-                
-                return (
-                  <div key={idx} className="flex-1 flex flex-col items-center">
-                    <div
-                      className={cn('w-full rounded-t transition-all', color)}
-                      style={{ height: `${pressure}%` }}
-                      title={`${day.dayName} ${new Date(day.date).getDate()}: ${pressure}%`}
-                    />
-                    {idx % 3 === 0 && (
-                      <div className="text-[8px] text-gray-400 mt-1">{day.dayName[0]}</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-4 flex items-center justify-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-green-500 rounded" />
-                <span className="text-gray-600">0-40% (Faible)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-yellow-500 rounded" />
-                <span className="text-gray-600">40-70% (Moyen)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-red-500 rounded" />
-                <span className="text-gray-600">70-100% (Fort)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Heatmap Position Compset */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Position vs Compset (Ranking)</h3>
-            <div className="space-y-2">
-              {monthData.slice(0, 10).map((day, idx) => (
-                <div key={idx} className="flex items-center gap-3 text-sm">
-                  <div className="w-24 text-gray-600">{day.dayName} {day.date.slice(5)}</div>
-                  <div className="flex-1 flex items-center gap-2">
-                    <div className="flex-1 bg-gray-100 rounded-full h-6 flex items-center px-2">
-                      <span className={cn(
-                        'text-xs font-semibold',
-                        day.ranking.startsWith('1 ') || day.ranking.startsWith('2 ') || day.ranking.startsWith('3 ') 
-                          ? 'text-emerald-600' 
-                          : 'text-orange-600'
-                      )}>
-                        {day.ranking}
-                      </span>
-                    </div>
-                    <div className="w-32 text-xs text-gray-500">{day.bookingRank}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Note Upload */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-800">
-              <strong>Données Lighthouse</strong> : 87 jours de données réelles chargés depuis folkestoneopéra_bookingdotcom_lowest_los1_2guests_1.xlsx. 
-              Utilisez le bouton "Importer Lighthouse Excel" pour mettre à jour avec un nouveau fichier export Lighthouse.
-              Le parsing Excel sera ajouté en Phase 2 pour automatiser les mises à jour.
-            </div>
+            )}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadStatus.state === 'parsing'}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 text-sm font-medium"
+            >
+              {uploadStatus.state === 'parsing'
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Upload className="w-4 h-4" />
+              }
+              Importer Lighthouse Excel
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileChange}
+              className="hidden"
+            />
           </div>
         </div>
+
+        {/* KPI Cards — calculés sur vraies données */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <p className="text-xs text-gray-500 mb-1">Médiane compset</p>
+            <p className="text-2xl font-bold text-gray-900">{stats.median}€</p>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <p className="text-xs text-gray-500 mb-1">Min compset</p>
+            <p className="text-2xl font-bold text-blue-600">{stats.min}€</p>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <p className="text-xs text-gray-500 mb-1">Max compset</p>
+            <p className="text-2xl font-bold text-purple-600">{stats.max}€</p>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <p className="text-xs text-gray-500 mb-1">Demande moy.</p>
+            <p className={cn(
+              'text-2xl font-bold',
+              stats.avgDemand >= 70 ? 'text-red-600' : stats.avgDemand >= 40 ? 'text-yellow-600' : 'text-green-600'
+            )}>{stats.avgDemand}%</p>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <p className="text-xs text-gray-500 mb-1">Ranking moyen</p>
+            <p className="text-2xl font-bold text-gray-900">{stats.avgRanking}</p>
+          </div>
+        </div>
+
+        {/* Graphique : Notre prix vs Médiane compset */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="text-base font-semibold text-gray-900 mb-4">Notre Prix vs Médiane Compset</h3>
+
+          {monthData.length === 0 ? (
+            <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+              Aucune donnée pour ce mois. Importez un fichier Lighthouse ou sélectionnez un autre mois.
+            </div>
+          ) : (
+            <>
+              <div className="h-52 flex items-end gap-0.5">
+                {monthData.map((day, idx) => {
+                  const allPrices = monthData.flatMap(d => [d.ourPrice, d.compsetMedian]).filter(p => p > 0);
+                  const maxPrice = Math.max(...allPrices, 1);
+                  const ourH = (day.ourPrice / maxPrice) * 100;
+                  const medH = (day.compsetMedian / maxPrice) * 100;
+                  const ourAbove = day.ourPrice >= day.compsetMedian;
+
+                  return (
+                    <div key={idx} className="flex-1 flex flex-col items-center gap-0.5" title={
+                      `${day.dayName} ${day.date.slice(5)}\nNous: ${day.ourPrice}€\nMédiane: ${day.compsetMedian}€\nDemande: ${Math.round(day.marketDemand * 100)}%\n${day.ranking}`
+                    }>
+                      <div className={cn('w-full rounded-t-sm', ourAbove ? 'bg-blue-500' : 'bg-orange-400')} style={{ height: `${ourH}%` }} />
+                      <div className="w-full bg-gray-300 rounded-b-sm" style={{ height: `${medH}%` }} />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-blue-500" /> Notre prix ≥ médiane</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-orange-400" /> Notre prix &lt; médiane</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-300" /> Médiane compset</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Pression marché */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h3 className="text-base font-semibold text-gray-900 mb-4">Pression Marché (Demande 0–100%)</h3>
+
+          {monthData.length === 0 ? (
+            <div className="h-36 flex items-center justify-center text-gray-400 text-sm">
+              Aucune donnée disponible pour ce mois.
+            </div>
+          ) : (
+            <div className="h-36 flex items-end gap-0.5">
+              {monthData.map((day, idx) => {
+                const pressure = Math.round(day.marketDemand * 100);
+                const color = pressure >= 70 ? 'bg-red-500' : pressure >= 40 ? 'bg-yellow-400' : 'bg-emerald-500';
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center" title={`${day.dayName} ${day.date.slice(5)} : ${pressure}%`}>
+                    <div className={cn('w-full rounded-t-sm', color)} style={{ height: `${Math.max(pressure, 2)}%` }} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-500" /> &lt; 40% faible</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-yellow-400" /> 40–70% moyen</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-500" /> &gt; 70% fort</span>
+          </div>
+        </div>
+
+        {/* Tableau détaillé ranking */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-base font-semibold text-gray-900">Détail Jour par Jour</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Notre prix</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Médiane</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Écart</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Demande</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Ranking</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Booking</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Fériés / Events</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {monthData.map((day, idx) => {
+                  const diff = day.ourPrice - day.compsetMedian;
+                  const diffPct = day.compsetMedian > 0 ? ((diff / day.compsetMedian) * 100).toFixed(1) : '—';
+                  const pressure = Math.round(day.marketDemand * 100);
+                  const pressureColor = pressure >= 70 ? 'text-red-600' : pressure >= 40 ? 'text-yellow-600' : 'text-emerald-600';
+
+                  return (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5 font-medium text-gray-900">
+                        {day.dayName} {day.date.slice(5)}
+                        {day.holidays && <span className="ml-1 text-xs bg-amber-100 text-amber-700 px-1 rounded">{day.holidays}</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-blue-600">{day.ourPrice > 0 ? `${day.ourPrice}€` : '—'}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-700">{day.compsetMedian > 0 ? `${day.compsetMedian}€` : '—'}</td>
+                      <td className={cn('px-4 py-2.5 text-right font-semibold', diff >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                        {day.ourPrice > 0 && day.compsetMedian > 0
+                          ? `${diff >= 0 ? '+' : ''}${diff.toFixed(0)}€ (${diff >= 0 ? '+' : ''}${diffPct}%)`
+                          : '—'}
+                      </td>
+                      <td className={cn('px-4 py-2.5 text-right font-semibold', pressureColor)}>
+                        {pressure}%
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-600 text-xs">{day.ranking || '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-600 text-xs">{day.bookingRank || '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-600 text-xs">{day.events || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {monthData.length === 0 && (
+              <div className="px-6 py-12 text-center text-gray-400">
+                Aucune donnée pour ce mois.
+                {allData === LIGHTHOUSE_REAL_DATA && (
+                  <p className="mt-1 text-xs">Importez un fichier Excel Lighthouse ou sélectionnez mai–août 2026.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Source info */}
+        <div className="flex items-start gap-2 text-xs text-gray-400">
+          <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+          {customData
+            ? <span>Données issues du fichier importé · {allData.length} jours disponibles</span>
+            : <span>Données embarquées : folkestoneopéra_bookingdotcom_lowest_los1_2guests_1.xlsx · {allData.length} jours (mai–août 2026) · Importez votre dernier export Lighthouse pour actualiser</span>
+          }
+        </div>
+
       </div>
     </div>
   );

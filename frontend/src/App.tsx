@@ -28,6 +28,7 @@ import { MarketIntelligence }  from '@/src/pages/revenue/MarketIntelligence';
 import { PricingRules }        from '@/src/pages/revenue/PricingRules';
 import { YieldView }           from '@/src/pages/revenue/YieldView';
 import { YieldRules }          from '@/src/pages/revenue/YieldRules';
+import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
 import { PromotionsView }      from '@/src/pages/revenue/PromotionsView';
 import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
 import { VeilleConcurrentielle } from '@/src/pages/revenue/VeilleConcurrentielle';
@@ -117,11 +118,9 @@ function renderPage(page: PageId): React.ReactNode {
     case 'rev_compset':    return <LighthouseMonthlyView />;
     case 'rev_channels':   return <DistributionAnalytics />;
     case 'rev_promotions': return <PromotionsCompact />;
-    case 'rev_rules':      return <YieldRules />;
-    
-    // Anciennes versions (deprecated)
-    case 'rev_market':     return <MarketIntelligence />;
-    case 'rev_yield':      return <YieldView />;
+    case 'rev_rules':      return <YieldAndRules />;
+    // rev_yield redirige aussi vers la page fusionnée
+    case 'rev_yield':      return <YieldAndRules />;
 
     // ── FINANCE ───────────────────────────────────────────────────────────────
     case 'facturation':        return <FacturationView />;
