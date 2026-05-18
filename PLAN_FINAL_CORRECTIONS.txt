@@ -1,0 +1,28 @@
+PLAN CORRECTIONS FINALES MODULE REVENUE
+
+1. DONNÉES LIGHTHOUSE RÉELLES ✅
+   - 87 jours extraits
+   - Format TypeScript prêt
+
+2. CRÉER lighthouse-data-real.ts
+   - Exporter LIGHTHOUSE_REAL_DATA
+   
+3. REFAIRE LighthouseMonthlyView
+   - Utiliser vraies données
+   - Ajouter bouton Upload Excel
+   - Heatmap tarifaire complet
+   
+4. CRÉER RevenueDashboard COMPLET
+   - KPIs temps réel
+   - Graphiques
+   - Alertes
+   
+5. REFAIRE PromotionsCompact
+   - Ajouter système alertes
+   - Explicatif WHY/WHEN/WHO
+   
+6. BUILD + TEST COMPLET
+
+7. Vérifier routing
+
+Temps estimé: 2h
