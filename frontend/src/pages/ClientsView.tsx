@@ -19,51 +19,101 @@ import { Card, CardHeader } from '@/src/components/ui/Card';
 import { Badge } from '@/src/components/ui/Badge';
 import { Button } from '@/src/components/ui/Button';
 import { cn } from '@/src/lib/utils';
+import { useGuests } from '@/src/domains/guests/hooks';
 
-// mock context removed — data via Supabase hooks
+type ClientVM = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  company: string;
+  segment: string;
+  loyalty: string;
+  lastStay: string;
+  totalSpent: number;
+};
 
 export const ClientsView = () => {
-  const reservations = [];
   const [searchQuery, setSearchQuery] = React.useState('');
   const [segmentFilter, setSegmentFilter] = React.useState('ALL');
   const [loyaltyFilter, setLoyaltyFilter] = React.useState('ALL');
   const [countryFilter, setCountryFilter] = React.useState('ALL');
 
-  const stats = [
-    { label: 'Clients totaux', value: (1453 + (reservations.length - 5)).toLocaleString(), sub: `+${reservations.length} ce mois-ci`, icon: Users, bg: 'bg-[#8B5CF6]/10', color: 'text-[#8B5CF6]' },
-    { label: 'Taux de fidélité', value: '78%', sub: 'Clients récurrents', icon: Star, bg: 'bg-emerald-50', color: 'text-emerald-500' },
-    { label: 'CLV moyen', value: '1 240 €', sub: '+5.3% vs mois dernier', icon: Crown, bg: 'bg-amber-50', color: 'text-amber-500' },
-    { label: 'VIP actifs', value: '42', sub: 'Action requise', icon: Gem, bg: 'bg-blue-50', color: 'text-blue-500' },
-  ];
-
-  const clients = [
-    ...reservations.map(res => ({
-      name: res.client,
-      email: res.email || 'client@example.com',
-      phone: res.phone || '+33 6 00 00 00 00',
-      company: res.company || 'Individuel',
-      segment: 'leisure',
-      loyalty: 'medal',
-      lastStay: res.arrival,
-      totalSpent: 400,
-    })).slice(0, 5),
-    { name: 'Pierre Bernard', email: 'pierre.b@orange.fr', phone: '+33 6 98 76 54 32', company: 'Tech Corp', segment: 'business', loyalty: 'star', lastStay: '23/04/2026', totalSpent: 840 },
-    { name: 'Sophie Dubois', email: 'sophie.d@yahoo.fr', phone: '+33 6 54 32 10 98', company: 'Individuel', segment: 'leisure', loyalty: 'medal', lastStay: '07/04/2026', totalSpent: 360 },
-  ];
-
-  const filteredClients = clients.filter((client) => {
-    const matchesSearch =
-      client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.phone.includes(searchQuery) ||
-      (client.company && client.company.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    const matchesSegment = segmentFilter === 'ALL' || client.segment === segmentFilter;
-    const matchesLoyalty = loyaltyFilter === 'ALL' || client.loyalty === loyaltyFilter;
-    const matchesCountry = countryFilter === 'ALL' || (client as { country?: string }).country === countryFilter;
-
-    return matchesSearch && matchesSegment && matchesLoyalty && matchesCountry;
+  const guestsQ = useGuests({
+    limit: 200,
+    search: searchQuery,
+    segment: segmentFilter,
+    loyalty: loyaltyFilter,
+    country: countryFilter,
   });
+
+  const guests = guestsQ.data?.rows ?? [];
+
+  const clients: ClientVM[] = guests.map((g) => ({
+    id: g.id,
+    name: [g.first_name, g.last_name].filter(Boolean).join(' ').trim() || g.last_name,
+    email: g.email || '—',
+    phone: g.phone || '—',
+    company: 'Individuel',
+    segment: (g.segment || 'leisure').toLowerCase(),
+    loyalty: (g.loyalty_level || 'none').toLowerCase(),
+    lastStay: g.updated_at ? new Date(g.updated_at).toLocaleDateString('fr-FR') : '—',
+    totalSpent: g.total_spent ?? 0,
+  }));
+
+  // Les filtres sont déjà appliqués côté repository => pas de double filtrage local
+  const filteredClients = clients;
+
+  const totalClients = guestsQ.data?.total ?? filteredClients.length;
+
+  const loyaltyCount = clients.filter((c) => c.loyalty !== 'none').length;
+  const loyaltyRate =
+    totalClients > 0 ? Math.round((loyaltyCount / Math.max(totalClients, 1)) * 100) : 0;
+
+  const clvAvg =
+    clients.length > 0
+      ? Math.round(
+          clients.reduce((sum, c) => sum + (Number.isFinite(c.totalSpent) ? c.totalSpent : 0), 0) /
+            clients.length,
+        )
+      : 0;
+
+  const vipActive = clients.filter((c) => c.segment === 'vip' || c.loyalty === 'gem').length;
+
+  const stats = [
+    {
+      label: 'Clients totaux',
+      value: String(totalClients),
+      sub: `${filteredClients.length} affichés`,
+      icon: Users,
+      bg: 'bg-[#8B5CF6]/10',
+      color: 'text-[#8B5CF6]',
+    },
+    {
+      label: 'Taux de fidélité',
+      value: `${loyaltyRate}%`,
+      sub: `${loyaltyCount} clients fidélisés`,
+      icon: Star,
+      bg: 'bg-emerald-50',
+      color: 'text-emerald-500',
+    },
+    {
+      label: 'CLV moyen',
+      value: `${clvAvg.toLocaleString('fr-FR')} €`,
+      sub: 'Basé sur total_spent',
+      icon: Crown,
+      bg: 'bg-amber-50',
+      color: 'text-amber-500',
+    },
+    {
+      label: 'VIP actifs',
+      value: String(vipActive),
+      sub: 'Segment VIP / fidélité gem',
+      icon: Gem,
+      bg: 'bg-blue-50',
+      color: 'text-blue-500',
+    },
+  ];
 
   const getSegmentIcon = (segment: string) => {
     switch (segment) {
@@ -91,12 +141,22 @@ export const ClientsView = () => {
     }
   };
 
+  const topClients = [...clients]
+    .sort((a, b) => b.totalSpent - a.totalSpent)
+    .slice(0, 5);
+
+  const recentClients = [...clients].slice(0, 4);
+
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-[#F9FAFB]">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 leading-tight">Fiches Clients</h1>
-          <p className="text-gray-500 text-sm font-medium mt-1">Consultez et gérez la base de données de vos clients</p>
+          <p className="text-gray-500 text-sm font-medium mt-1">
+            {guestsQ.isLoading
+              ? 'Chargement des clients...'
+              : 'Consultez et gérez la base de données de vos clients'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="gap-2 px-4 shadow-sm bg-white">
@@ -108,6 +168,14 @@ export const ClientsView = () => {
         </div>
       </div>
 
+      {guestsQ.isError && (
+        <Card className="p-4 border-red-200 bg-red-50">
+          <p className="text-sm font-medium text-red-700">
+            Impossible de charger les clients pour le moment.
+          </p>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s, i) => (
           <Card key={i} className="p-4 flex flex-col justify-between">
@@ -115,14 +183,26 @@ export const ClientsView = () => {
               <div className={cn('p-2.5 rounded-xl', s.bg, s.color)}>
                 <s.icon size={20} />
               </div>
-              <Badge variant={s.color.includes('emerald') ? 'success' : 'neutral'} className="text-[10px] py-0.5">
+              <Badge
+                variant={s.color.includes('emerald') ? 'success' : 'neutral'}
+                className="text-[10px] py-0.5"
+              >
                 Stats
               </Badge>
             </div>
             <div className="mt-4">
               <div className="text-2xl font-bold text-gray-900 leading-none">{s.value}</div>
-              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-1">{s.label}</div>
-              <p className={cn('text-[10px] font-bold mt-2', s.color.includes('emerald') ? 'text-emerald-500' : 'text-gray-400')}>{s.sub}</p>
+              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                {s.label}
+              </div>
+              <p
+                className={cn(
+                  'text-[10px] font-bold mt-2',
+                  s.color.includes('emerald') ? 'text-emerald-500' : 'text-gray-400',
+                )}
+              >
+                {s.sub}
+              </p>
             </div>
           </Card>
         ))}
@@ -132,7 +212,10 @@ export const ClientsView = () => {
         <CardHeader>
           <div className="flex items-center gap-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={14}
+              />
               <input
                 className="pl-9 pr-4 py-2 bg-gray-50 border border-gray-100 rounded-xl text-xs focus:ring-1 focus:ring-[#8B5CF6] outline-none w-72"
                 placeholder="Nom, email, tél, société..."
@@ -152,7 +235,9 @@ export const ClientsView = () => {
                   <option value="business">Business</option>
                   <option value="vip">VIP</option>
                 </select>
-                <span className="text-[11px] font-bold text-gray-400 capitalize">{segmentFilter === 'ALL' ? 'Segments' : segmentFilter}</span>
+                <span className="text-[11px] font-bold text-gray-400 capitalize">
+                  {segmentFilter === 'ALL' ? 'Segments' : segmentFilter}
+                </span>
                 <ArrowRight size={10} className="text-gray-300" />
               </div>
               <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl relative group">
@@ -167,7 +252,9 @@ export const ClientsView = () => {
                   <option value="crown">Or</option>
                   <option value="gem">Diamant</option>
                 </select>
-                <span className="text-[11px] font-bold text-gray-400 capitalize">{loyaltyFilter === 'ALL' ? 'Fidélité' : loyaltyFilter}</span>
+                <span className="text-[11px] font-bold text-gray-400 capitalize">
+                  {loyaltyFilter === 'ALL' ? 'Fidélité' : loyaltyFilter}
+                </span>
                 <ArrowRight size={10} className="text-gray-300" />
               </div>
               <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-xl relative group">
@@ -181,7 +268,9 @@ export const ClientsView = () => {
                   <option value="UK">UK</option>
                   <option value="US">USA</option>
                 </select>
-                <span className="text-[11px] font-bold text-gray-400 capitalize">{countryFilter === 'ALL' ? 'Pays' : countryFilter}</span>
+                <span className="text-[11px] font-bold text-gray-400 capitalize">
+                  {countryFilter === 'ALL' ? 'Pays' : countryFilter}
+                </span>
                 <ArrowRight size={10} className="text-gray-300" />
               </div>
               <Button variant="outline" size="sm" className="font-bold gap-2 focus:ring-1 focus:ring-[#8B5CF6]">
@@ -190,7 +279,7 @@ export const ClientsView = () => {
             </div>
           </div>
           <Badge variant="neutral" className="font-bold">
-            Total {filteredClients.length} affichés
+            Total {totalClients} affichés
           </Badge>
         </CardHeader>
 
@@ -208,8 +297,8 @@ export const ClientsView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredClients.map((client, i) => (
-                <tr key={i} className="hover:bg-gray-50 transition-colors group">
+              {filteredClients.map((client) => (
+                <tr key={client.id} className="hover:bg-gray-50 transition-colors group">
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center font-bold text-[#8B5CF6]">
@@ -217,7 +306,9 @@ export const ClientsView = () => {
                       </div>
                       <div className="flex flex-col">
                         <span className="font-bold text-gray-900 text-[13px]">{client.name}</span>
-                        <span className="text-[11px] text-gray-400 font-bold uppercase tracking-tight mt-0.5">{client.company}</span>
+                        <span className="text-[11px] text-gray-400 font-bold uppercase tracking-tight mt-0.5">
+                          {client.company}
+                        </span>
                       </div>
                     </div>
                   </td>
@@ -241,8 +332,8 @@ export const ClientsView = () => {
                           client.loyalty === 'crown'
                             ? 'bg-amber-100 text-amber-600'
                             : client.loyalty === 'gem'
-                              ? 'bg-blue-100 text-blue-600'
-                              : 'bg-[#8B5CF6]/10 text-[#8B5CF6]',
+                            ? 'bg-blue-100 text-blue-600'
+                            : 'bg-[#8B5CF6]/10 text-[#8B5CF6]',
                         )}
                       >
                         {getLoyaltyIcon(client.loyalty)}
@@ -255,14 +346,20 @@ export const ClientsView = () => {
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex flex-wrap gap-1">
-                      <span className="text-[10px] font-bold bg-[#8B5CF6]/5 text-[#8B5CF6] px-1.5 py-0.5 rounded">Étage moyen</span>
+                      <span className="text-[10px] font-bold bg-[#8B5CF6]/5 text-[#8B5CF6] px-1.5 py-0.5 rounded">
+                        Étage moyen
+                      </span>
                       {client.segment === 'leisure' && (
-                        <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">Sans gluten</span>
+                        <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">
+                          Sans gluten
+                        </span>
                       )}
                     </div>
                   </td>
                   <td className="px-6 py-5 font-bold text-gray-400 text-[13px]">{client.lastStay}</td>
-                  <td className="px-6 py-5 text-right font-bold text-gray-900 text-[13px]">{client.totalSpent} €</td>
+                  <td className="px-6 py-5 text-right font-bold text-gray-900 text-[13px]">
+                    {client.totalSpent.toLocaleString('fr-FR')} €
+                  </td>
                   <td className="px-6 py-5 text-center">
                     <button
                       type="button"
@@ -273,6 +370,13 @@ export const ClientsView = () => {
                   </td>
                 </tr>
               ))}
+              {!guestsQ.isLoading && filteredClients.length === 0 && (
+                <tr>
+                  <td className="px-6 py-8 text-sm text-gray-500" colSpan={7}>
+                    Aucun client trouvé avec ces filtres.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -286,8 +390,8 @@ export const ClientsView = () => {
             <span className="text-[10px] font-bold text-[#8B5CF6] uppercase tracking-wider">Voir tout</span>
           </h3>
           <div className="space-y-4">
-            {clients.map((c, i) => (
-              <div key={i} className="flex items-center gap-4 group">
+            {topClients.map((c, i) => (
+              <div key={c.id} className="flex items-center gap-4 group">
                 <div className="text-xs font-bold text-gray-300 w-4">{i + 1}</div>
                 <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-[11px] font-bold text-gray-900">
                   {c.name.split(' ').map((n) => n[0]).join('')}
@@ -295,10 +399,15 @@ export const ClientsView = () => {
                 <div className="flex-1">
                   <div className="text-[13px] font-bold text-gray-900">{c.name}</div>
                   <div className="w-full bg-gray-100 h-1 rounded-full mt-1 overflow-hidden">
-                    <div className="h-full bg-[#8B5CF6]" style={{ width: `${(c.totalSpent / 4250) * 100}%` }} />
+                    <div
+                      className="h-full bg-[#8B5CF6]"
+                      style={{ width: `${Math.min((c.totalSpent / Math.max(clvAvg || 1, 1)) * 25, 100)}%` }}
+                    />
                   </div>
                 </div>
-                <div className="text-[13px] font-bold text-[#8B5CF6] group-hover:underline">{c.totalSpent} €</div>
+                <div className="text-[13px] font-bold text-[#8B5CF6] group-hover:underline">
+                  {c.totalSpent.toLocaleString('fr-FR')} €
+                </div>
               </div>
             ))}
           </div>
@@ -310,13 +419,8 @@ export const ClientsView = () => {
             <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Nouveaux</span>
           </h3>
           <div className="space-y-4">
-            {[
-              { name: 'Julien Moreau', stay: '25/04/2026', tag: 'NOUVEAU' },
-              { name: 'Emma Lefebvre', stay: '22/04/2026', tag: 'NOUVEAU' },
-              { name: 'Thomas Petit', stay: '20/04/2026', tag: 'NOUVEAU' },
-              { name: 'Sophie Martin', stay: '15/04/2026', tag: 'RETOUR' },
-            ].map((c, i) => (
-              <div key={i} className="flex items-center gap-4">
+            {recentClients.map((c, i) => (
+              <div key={c.id} className="flex items-center gap-4">
                 <div
                   className={cn(
                     'w-10 h-10 rounded-full border-2 border-white shadow-sm flex items-center justify-center text-[10px] font-bold text-white',
@@ -327,10 +431,10 @@ export const ClientsView = () => {
                 </div>
                 <div className="flex-1">
                   <div className="text-[13px] font-bold text-gray-900">{c.name}</div>
-                  <div className="text-[11px] text-gray-400">Dernier séjour: {c.stay}</div>
+                  <div className="text-[11px] text-gray-400">Dernier séjour: {c.lastStay}</div>
                 </div>
-                <Badge variant={c.tag === 'NOUVEAU' ? 'success' : 'info'} className="text-[9px] py-0">
-                  {c.tag}
+                <Badge variant="info" className="text-[9px] py-0">
+                  CLIENT
                 </Badge>
               </div>
             ))}
@@ -340,3 +444,5 @@ export const ClientsView = () => {
     </div>
   );
 };
+
+export default ClientsView;
