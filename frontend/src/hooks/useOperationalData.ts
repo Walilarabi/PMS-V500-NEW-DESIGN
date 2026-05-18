@@ -12,6 +12,10 @@
  *                     entre les résa créées les 7 derniers jours
  *                     et celles créées les 7 jours d'avant
  *
+ * Schéma DB utilisé (table reservations) :
+ *   - cancelled_at IS NULL AND no_show_at IS NULL = résa active
+ *   - status IN ('confirmed', 'checked_in', etc.) = whitelist applicative
+ *
  * Le paramètre optionnel `refreshToken` permet à un consumer (ex: bouton
  * "Rafraîchir" dans le RMS) de forcer un re-fetch sans changer la fenêtre
  * de dates. Bumper la valeur → le useEffect se ré-exécute.
@@ -33,14 +37,10 @@ export interface OperationalMetrics {
 }
 
 export interface UseOperationalDataResult {
-  // Métriques indexées par date ISO
   byDate: Map<string, OperationalMetrics>;
-  // Capacité hôtel totale (chambres actives)
   totalCapacity: number;
-  // État
   loading: boolean;
   error: Error | null;
-  // True si on a au moins une réservation chargée
   hasData: boolean;
 }
 
@@ -50,18 +50,23 @@ interface ReservationRow {
   check_out: string;      // YYYY-MM-DD
   created_at: string;     // ISO timestamp
   status: string | null;
-  deleted_at: string | null;
+  cancelled_at: string | null;
+  no_show_at: string | null;
 }
 
-// Statuts considérés "actifs" pour le comptage (excluent annulations, no-shows)
+// Statuts considérés "actifs" pour le comptage opérationnel
+// (whitelist applicative, en plus du filtre cancelled_at/no_show_at au niveau DB)
 const ACTIVE_STATUSES = new Set([
   'confirmed', 'checked_in', 'checked_out', 'guaranteed', 'pending', 'in_house',
   'CONFIRMED', 'CHECKED_IN', 'CHECKED_OUT', 'GUARANTEED', 'PENDING', 'IN_HOUSE',
 ]);
 
 function isActiveReservation(r: ReservationRow): boolean {
-  if (r.deleted_at) return false;
-  if (!r.status) return true; // pas de status → on compte par défaut
+  // Filtre niveau 1 : pas annulée, pas no-show
+  if (r.cancelled_at) return false;
+  if (r.no_show_at) return false;
+  // Filtre niveau 2 : statut applicatif
+  if (!r.status) return true; // pas de status explicite → on compte par défaut
   return ACTIVE_STATUSES.has(r.status);
 }
 
@@ -108,7 +113,9 @@ export function useOperationalData(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: hotelData, error: hotelErr } = await (supabase.rpc as any)('get_user_hotel_id');
         if (hotelErr || !hotelData) {
-          // Pas d'auth → on s'arrête proprement avec un dataset vide
+          if (hotelErr) {
+            console.warn('[useOperationalData] hotel_id resolution failed:', hotelErr.message);
+          }
           if (!cancelled) {
             setReservations([]);
             setTotalCapacity(0);
@@ -119,9 +126,12 @@ export function useOperationalData(
         const hotelId = String(hotelData);
 
         // ── 2. Charger les réservations qui touchent [fromDate, toDate] ───
-        //    Critère : check_out > fromDate ET check_in <= toDate
-        //    + on inclut aussi les résa créées sur l'année passée
-        //    pour pouvoir calculer pickup vs 7j-7j
+        //    Filtres DB :
+        //      - hotel_id = current (RLS aussi appliquée)
+        //      - check_out > lookbackDate (14j avant fromDate, pour calcul pickup)
+        //      - check_in <= toDate
+        //      - cancelled_at IS NULL  (résa non annulée)
+        //      - no_show_at IS NULL    (pas de no-show)
         const lookbackDate = new Date(fromDate);
         lookbackDate.setDate(lookbackDate.getDate() - 14);
         const lookbackISO = lookbackDate.toISOString().slice(0, 10);
@@ -129,13 +139,16 @@ export function useOperationalData(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: resData, error: resErr } = await (supabase as any)
           .from('reservations')
-          .select('id, check_in, check_out, created_at, status, deleted_at')
+          .select('id, check_in, check_out, created_at, status, cancelled_at, no_show_at')
           .eq('hotel_id', hotelId)
           .gte('check_out', lookbackISO)
           .lte('check_in', toDate)
+          .is('cancelled_at', null)
+          .is('no_show_at', null)
           .limit(5000);
 
         if (resErr) {
+          console.error('[useOperationalData] reservations fetch failed:', resErr);
           throw new Error(`Reservations fetch failed: ${resErr.message}`);
         }
 
@@ -148,6 +161,7 @@ export function useOperationalData(
           .eq('active', true);
 
         if (roomErr) {
+          console.error('[useOperationalData] rooms count failed:', roomErr);
           throw new Error(`Rooms fetch failed: ${roomErr.message}`);
         }
 
@@ -155,8 +169,17 @@ export function useOperationalData(
           setReservations((resData ?? []) as ReservationRow[]);
           setTotalCapacity(roomCount ?? 0);
           setLoading(false);
+
+          // Logging utile en dev pour vérifier que les données arrivent
+          if (typeof window !== 'undefined' && (resData?.length ?? 0) === 0) {
+            console.warn(
+              `[useOperationalData] 0 réservations chargées pour hotel ${hotelId} ` +
+              `entre ${lookbackISO} et ${toDate}. Vérifiez le filtre RLS et les statuts.`
+            );
+          }
         }
       } catch (err) {
+        console.error('[useOperationalData] fatal error:', err);
         if (!cancelled) {
           setError(err as Error);
           setReservations([]);
@@ -168,7 +191,6 @@ export function useOperationalData(
 
     fetchData();
     return () => { cancelled = true; };
-    // Le refreshToken déclenche un re-fetch à la demande (bouton Rafraîchir).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromDate, toDate, refreshToken]);
 
@@ -217,7 +239,7 @@ export function useOperationalData(
       });
       const leadTimeMajority = leadTimes.length > 0 ? Math.round(median(leadTimes)) : 0;
 
-      // ── Pickup : variation 7j vs 7-14j (sur les résa créées dans ces fenêtres pour cette date) ──
+      // ── Pickup : variation 7j vs 7-14j ──
       const created7d = reservationsForDate.filter(r => {
         const c = new Date(r.created_at);
         return c >= cutoff7 && c <= now;
@@ -226,7 +248,6 @@ export function useOperationalData(
         const c = new Date(r.created_at);
         return c >= cutoff14 && c < cutoff7;
       }).length;
-      // Formule : si pas d'historique précédent et qu'on a du récent → +100%
       let pickupRate: number;
       if (createdPrev7d === 0) {
         pickupRate = created7d > 0 ? 100 : 0;
