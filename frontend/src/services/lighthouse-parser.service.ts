@@ -11,8 +11,12 @@
  *   Feuille "vs. 3 jours" : Variation J-3
  *   Feuille "vs. 7 jours" : Variation J-7
  *
- * Valeurs spéciales dans la colonne tarif : "Épuisé", "1 pax seulement", null
- *   → traitées comme "non disponible" (exclues du MIN/MAX)
+ * Valeurs spéciales dans la colonne tarif : "Épuisé", "1 pax seulement", "LOS2", null
+ *   → traitées comme "non disponible" (exclues du MIN/MAX et du compset_median calculé)
+ *
+ * SÉCURITÉ TARIFAIRE : le parseur refuse strictement d'interpréter un code métier
+ * (LOS, MLOS, CTA, CTD, MIN, MAX, etc.) comme un tarif, pour prévenir toute
+ * corruption tarifaire critique en cas de cellule mal formatée.
  */
 
 import * as XLSX from 'xlsx';
@@ -91,39 +95,114 @@ function cellToDate(v: unknown): string | null {
   return null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// PARSING STRICT DES CELLULES TARIF CONCURRENT
+//
+// Codes métier RMS qui ne sont JAMAIS un tarif (case-insensitive).
+// Word-boundary regex pour éviter les faux positifs sur noms d'hôtels.
+// ─────────────────────────────────────────────────────────────────────────
+const RESTRICTION_TOKENS = [
+  'los', 'mlos', 'maxlos', 'minlos',     // Length of Stay
+  'cta', 'ctd',                          // Close To Arrival / Departure
+  'min', 'max',                          // Restrictions stay
+  'minstay', 'maxstay',
+  'pax', 'restrict',                     // Restrictions occupant
+  'closed', 'fermé', 'ferme',
+];
+
+const SOLD_OUT_TOKENS = [
+  'épuisé', 'epuise', 'sold', 'soldout', 'sold out',
+  'unavailable', 'indisponible',
+];
+
 /**
  * Parse une cellule de tarif concurrent.
- * Retourne { price, status, rawValue }.
+ *
+ * RÈGLES STRICTES (anti-corruption tarifaire) :
+ *   - Seul un nombre direct OU une chaîne purement monétaire est accepté comme tarif
+ *   - Tout token contenant LOS / CTA / CTD / MIN / MAX / MLOS est REJETÉ (statut 'restricted')
+ *   - On n'extrait JAMAIS des chiffres présents dans des codes métier
+ *   - Plage acceptée : 0 < prix ≤ 100 000 €
+ *
+ * Bug corrigé : "LOS2" était interprété comme 2 € — désormais 'restricted'.
+ *
+ * Exemples :
+ *   145         → { price: 145,    status: 'available'  }
+ *   "145.50€"   → { price: 145.5,  status: 'available'  }
+ *   "1 234,50"  → { price: 1234.5, status: 'available'  }
+ *   "Épuisé"    → { price: null,   status: 'sold_out'   }
+ *   "LOS2"      → { price: null,   status: 'restricted' }   ← bug corrigé
+ *   "[LOS2]"    → { price: null,   status: 'restricted' }
+ *   "MLOS 3"    → { price: null,   status: 'restricted' }
+ *   "CTA"       → { price: null,   status: 'restricted' }
+ *   "MIN 3"     → { price: null,   status: 'restricted' }
+ *   "1 pax"     → { price: null,   status: 'restricted' }
  */
 function parseCompetitorCell(raw: unknown): {
   price: number | null;
   status: CompetitorRate['status'];
   rawValue: string;
 } {
-  const rawStr = raw == null ? '' : String(raw);
+  // 1. Valeur nulle / vide
+  if (raw == null) return { price: null, status: 'unknown', rawValue: '' };
 
-  if (raw == null || rawStr === '') {
-    return { price: null, status: 'unknown', rawValue: '' };
+  // 2. Nombre direct fourni par Excel (cellule numérique) — sûr, mais on borne
+  if (typeof raw === 'number') {
+    if (!isFinite(raw) || raw <= 0 || raw > 100000) {
+      return { price: null, status: 'unknown', rawValue: String(raw) };
+    }
+    return { price: raw, status: 'available', rawValue: String(raw) };
   }
+
+  // 3. Cellule string : trim et garde-fou
+  const rawStr = String(raw).trim();
+  if (rawStr === '') return { price: null, status: 'unknown', rawValue: '' };
 
   const lower = rawStr.toLowerCase();
-  if (lower.includes('épuisé') || lower.includes('epuise') || lower.includes('sold')) {
-    return { price: null, status: 'sold_out', rawValue: rawStr };
+
+  // 4. Détection "épuisé" — prioritaire sur restrictions
+  for (const t of SOLD_OUT_TOKENS) {
+    if (lower.includes(t)) {
+      return { price: null, status: 'sold_out', rawValue: rawStr };
+    }
   }
-  if (lower.includes('pax') || lower.includes('restrict')) {
+
+  // 5. Détection codes métier (LOS, CTA, MIN, MAX, etc.) → restricted, JAMAIS un prix
+  //    Word-boundary regex pour éviter faux positifs sur noms d'hôtels.
+  for (const token of RESTRICTION_TOKENS) {
+    const pattern = new RegExp(`(^|[^a-z])${token}([^a-z]|$)`, 'i');
+    if (pattern.test(rawStr)) {
+      return { price: null, status: 'restricted', rawValue: rawStr };
+    }
+  }
+
+  // 6. Chaîne entre crochets/parenthèses → généralement un code (ex: "[LOS2]", "(MIN 3)")
+  if (/^[\[\(\{].*[\]\)\}]$/.test(rawStr)) {
     return { price: null, status: 'restricted', rawValue: rawStr };
   }
 
-  // Nombre direct ou string numérique
-  if (typeof raw === 'number') {
-    return { price: raw, status: 'available', rawValue: rawStr };
-  }
-  const parsed = parseFloat(rawStr.replace(/[^\d.,-]/g, '').replace(',', '.'));
-  if (!isNaN(parsed) && parsed > 0) {
-    return { price: parsed, status: 'available', rawValue: rawStr };
+  // 7. Tentative de parsing numérique STRICTE
+  //    Accepté UNIQUEMENT : chiffres + séparateur décimal + symbole monétaire optionnel
+  //    Refusé : toute lettre/code après nettoyage
+  const cleaned = rawStr
+    .replace(/[€$£]/g, '')                  // symboles monétaires
+    .replace(/\b(eur|usd|gbp)\b/gi, '')     // codes devise
+    .replace(/\s+/g, '')                    // espaces (séparateurs milliers)
+    .replace(/\u00A0/g, '')                 // NBSP explicite
+    .trim();
+
+  // Après nettoyage, la chaîne DOIT être purement numérique
+  if (!/^-?\d+([.,]\d+)?$/.test(cleaned)) {
+    // Reste alphabétique → code métier inconnu, pas un prix
+    return { price: null, status: 'restricted', rawValue: rawStr };
   }
 
-  return { price: null, status: 'unknown', rawValue: rawStr };
+  const parsed = parseFloat(cleaned.replace(',', '.'));
+  if (!isFinite(parsed) || parsed <= 0 || parsed > 100000) {
+    return { price: null, status: 'unknown', rawValue: rawStr };
+  }
+
+  return { price: parsed, status: 'available', rawValue: rawStr };
 }
 
 /** Parse "7 sur 9" → { position: 7, total: 9 } */
