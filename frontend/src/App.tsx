@@ -27,6 +27,7 @@ import { ChannelsView }        from '@/src/pages/revenue/ChannelsView';
 import { MarketIntelligence }  from '@/src/pages/revenue/MarketIntelligence';
 import { PricingRules }        from '@/src/pages/revenue/PricingRules';
 import { YieldView }           from '@/src/pages/revenue/YieldView';
+import { YieldRules }          from '@/src/pages/revenue/YieldRules';
 import { PromotionsView }      from '@/src/pages/revenue/PromotionsView';
 import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
 import { VeilleConcurrentielle } from '@/src/pages/revenue/VeilleConcurrentielle';
@@ -116,7 +117,7 @@ function renderPage(page: PageId): React.ReactNode {
     case 'rev_compset':    return <LighthouseMonthlyView />;
     case 'rev_channels':   return <DistributionAnalytics />;
     case 'rev_promotions': return <PromotionsCompact />;
-    case 'rev_rules':      return <PricingRules />;
+    case 'rev_rules':      return <YieldRules />;
     
     // Anciennes versions (deprecated)
     case 'rev_market':     return <MarketIntelligence />;
