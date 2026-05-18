@@ -1,11 +1,21 @@
 /**
  * FLOWTYM — Premium Compset Chart
  * Graphique veille concurrentielle premium (type Lighthouse mais redesigné)
+ *
+ *   - Area ombrée min↔max compset
+ *   - Ligne médiane (vert)
+ *   - Ligne notre hôtel (bleu épais avec points)
+ *   - Barres demande marché : arrondies, fines, palette pastel température
+ *     (bleu froid si <30%, vert pastel <50%, jaune <70%, orange <80%, rouge >90%)
+ *   - Tooltip riche : 11 hôtels triés par prix avec écart vs médiane
+ *   - Animations subtiles (400ms)
+ *   - Légende interactive (cliquer pour masquer/afficher série)
+ *   - KPIs synthèse du mois en header
  */
 
 import { useMemo, useState } from 'react';
 import {
-  ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid,
+  ComposedChart, Area, Line, Bar, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { Target, TrendingUp, TrendingDown } from 'lucide-react';
@@ -17,10 +27,22 @@ const COLORS = {
   ourHotel: '#2563eb',
   median: '#10b981',
   compsetRange: '#fbbf24',
-  demand: '#9ca3af',
   grid: '#f3f4f6',
   axis: '#9ca3af',
 };
+
+/**
+ * Palette pastel "température" pour les barres de demande.
+ * Plus la demande est haute, plus la couleur est chaude.
+ */
+function getDemandColor(demand: number): string {
+  if (demand >= 90) return '#ef4444';        // rouge vif (90-100%)
+  if (demand >= 80) return '#fca5a5';        // rouge pastel (80-90%)
+  if (demand >= 70) return '#fdba74';        // orange pastel (70-80%)
+  if (demand >= 50) return '#fde68a';        // jaune pastel (50-70%)
+  if (demand >= 30) return '#bbf7d0';        // vert pastel (30-50%)
+  return '#bfdbfe';                          // bleu pastel froid (<30%)
+}
 
 interface ChartDatum {
   date: string;
@@ -37,7 +59,6 @@ interface ChartDatum {
 
 interface TooltipProps {
   active?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload?: Array<{ payload: ChartDatum }>;
   ourHotelName: string;
 }
@@ -59,12 +80,10 @@ function PremiumTooltip({ active, payload, ourHotelName }: TooltipProps) {
     <div className="bg-white rounded-lg shadow-2xl border border-gray-200 px-4 py-3 min-w-[280px] max-w-[360px]">
       <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
         <div className="font-semibold text-sm text-gray-900">{d.dateLabel}</div>
-        <div className={cn(
-          'text-xs font-bold px-2 py-0.5 rounded',
-          d.demand >= 70 ? 'bg-red-50 text-red-700' :
-          d.demand >= 40 ? 'bg-amber-50 text-amber-700' :
-          'bg-emerald-50 text-emerald-700'
-        )}>
+        <div
+          className="text-xs font-bold px-2 py-0.5 rounded"
+          style={{ backgroundColor: getDemandColor(d.demand) + '40', color: '#374151' }}
+        >
           Demande {d.demand}%
         </div>
       </div>
@@ -270,17 +289,25 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
               onClick={(e: any) => toggleSeries(e.dataKey)}
             />
 
+            {/* Barres demande marché : fines (maxBarSize 18), arrondies (radius), palette pastel température */}
             {!hiddenSeries.has('demand') && (
               <Bar
                 yAxisId="demand"
                 dataKey="demand"
                 name="Demande marché"
-                fill={COLORS.demand}
-                fillOpacity={0.18}
-                radius={[2, 2, 0, 0]}
+                radius={[6, 6, 0, 0]}
+                maxBarSize={18}
                 isAnimationActive
                 animationDuration={400}
-              />
+              >
+                {data.map((entry, idx) => (
+                  <Cell
+                    key={`cell-${idx}`}
+                    fill={getDemandColor(entry.demand)}
+                    fillOpacity={0.85}
+                  />
+                ))}
+              </Bar>
             )}
 
             {!hiddenSeries.has('compsetMax') && (
@@ -353,6 +380,17 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
             )}
           </ComposedChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Légende température des barres demande */}
+      <div className="px-6 py-2 border-t border-gray-100 flex items-center gap-4 text-[10px] text-gray-500 flex-wrap">
+        <span className="font-medium text-gray-600">Demande marché :</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#bfdbfe' }} />&lt; 30 %</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#bbf7d0' }} />30-50 %</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#fde68a' }} />50-70 %</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#fdba74' }} />70-80 %</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#fca5a5' }} />80-90 %</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#ef4444' }} />&gt; 90 %</span>
       </div>
 
       <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
