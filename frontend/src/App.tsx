@@ -19,6 +19,7 @@ import { LighthouseMonthlyView } from '@/src/pages/revenue/LighthouseMonthlyView
 import { Channels }            from '@/src/pages/revenue/Channels';
 import { Promotions }          from '@/src/pages/revenue/Promotions';
 import { PromotionsCompact }   from '@/src/pages/revenue/PromotionsCompact';
+import { DistributionAnalytics } from '@/src/pages/revenue/DistributionAnalytics';
 // PricingRules already imported below
 
 // Anciennes versions (deprecated - à supprimer ultérieurement)
@@ -113,7 +114,7 @@ function renderPage(page: PageId): React.ReactNode {
     case 'rms':            return <RateManager />;
     case 'rms_history':    return <DecisionHistory />;
     case 'rev_compset':    return <LighthouseMonthlyView />;
-    case 'rev_channels':   return <Channels />;
+    case 'rev_channels':   return <DistributionAnalytics />;
     case 'rev_promotions': return <PromotionsCompact />;
     case 'rev_rules':      return <PricingRules />;
     
