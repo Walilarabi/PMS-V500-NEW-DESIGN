@@ -232,7 +232,13 @@ function parseTarifsSheet(ws: XLSX.WorkSheet): TarifsParsed {
 
 // ─── Lecture feuilles vs. ──────────────────────────────────────────────────
 
-/** Lit une feuille vs. et extrait la variation (% ou €) sur le tarif global. */
+/** Lit une feuille vs. et extrait la variation de NOTRE prix vs la date de comparaison.
+ *  Structure réelle (vérifiée sur fichier Lighthouse v2026) :
+ *    col 1 = Jour, 2 = Date, 3 = Demande marché (absolu),
+ *    col 4 = Variation demande (décimal, ex -0.067), 5 = Notre prix actuel (référence),
+ *    col 6 = Variation de notre prix en € (signed)
+ *  On extrait col 6 (variation € notre hôtel).
+ */
 function parseVsSheet(ws: XLSX.WorkSheet): Map<string, number> {
   const result = new Map<string, number>();
   const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null });
@@ -243,12 +249,14 @@ function parseVsSheet(ws: XLSX.WorkSheet): Map<string, number> {
     const dateStr = cellToDate(row[2]);
     if (!dateStr) continue;
 
-    // La variation est typiquement dans la colonne "Notre hôtel" (index 4) ou similaire
-    // Format Lighthouse : peut être nombre ou string "+5%", "-12€"
-    const v = row[4];
+    // Variation prix notre hôtel = col index 6
+    const v = row[6];
     let val: number | null = null;
-    if (typeof v === 'number') val = v;
-    else if (typeof v === 'string') {
+    if (typeof v === 'number') {
+      val = v;
+    } else if (typeof v === 'string') {
+      // Ignorer codes type "[LOS2]" — uniquement nombres
+      if (/^[\[\]]/.test(v.trim())) continue;
       const cleaned = v.replace(/[^\d.,+-]/g, '').replace(',', '.');
       const n = parseFloat(cleaned);
       if (!isNaN(n)) val = n;

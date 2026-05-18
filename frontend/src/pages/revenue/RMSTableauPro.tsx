@@ -41,6 +41,7 @@ import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '../../store/lighthouseStore';
+import { useOperationalData } from '../../hooks/useOperationalData';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -94,7 +95,12 @@ interface DayRMSData {
   currentPrice: number;
   suggestedPrice: number;
   finalPrice: number | null; // Prix validé/refusé/modifié
-  
+
+  // Variations Lighthouse (depuis feuilles vs.)
+  varVsYesterday?: number | null;
+  varVs3Days?: number | null;
+  varVs7Days?: number | null;
+
   // Validation
   validationStatus: ValidationStatus;
   selected: boolean;
@@ -416,21 +422,70 @@ export function RMSTableauPro() {
     return lighthouseImport.days.find(d => d.date === date) ?? null;
   }, [lighthouseImport]);
 
-  // Génération données RMS — alimentées par Lighthouse + Calendrier
+  // ─── Données opérationnelles depuis vraies réservations Supabase ────────
+  const operationalRange = useMemo(() => {
+    const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : viewPeriod === '30days' ? 30 : viewPeriod === '60days' ? 60 : 90;
+    const from = startDate.toISOString().slice(0, 10);
+    const to = new Date(startDate);
+    to.setDate(to.getDate() + days - 1);
+    return { from, to: to.toISOString().slice(0, 10) };
+  }, [startDate, viewPeriod]);
+
+  const { byDate: operationalByDate, totalCapacity, hasData: hasOperationalData } = useOperationalData(
+    operationalRange.from,
+    operationalRange.to,
+  );
+
+  // Génération données RMS — alimentées par Lighthouse + Calendrier + Réservations
   useMemo(() => {
     const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : viewPeriod === '30days' ? 30 : viewPeriod === '60days' ? 60 : 90;
     const generated = generateMockRMSData(startDate, days);
 
-    // ✅ Injection vraies données : Lighthouse pour marché, Calendrier pour notre prix
+    // ✅ Injection vraies données :
+    //    - Lighthouse → marché (médiane, MIN/MAX, demande, ranking)
+    //    - Calendrier RMS → notre prix actuel
+    //    - useOperationalData → occupation/dispo/lead time/pickup (réservations Supabase)
     const enriched = generated.map(row => {
       const realPrice = getPriceFromCalendar(row.date);
       const lhData = getLighthouseData(row.date);
+      const opData = operationalByDate.get(row.date);
 
-      // Si pas de données Lighthouse pour cette date → garder le mock
+      // ─── Métriques opérationnelles (réservations) ───
+      // Si on a un dataset opérationnel chargé → on remplace le mock
+      // Sinon → on garde le mock pour ne pas casser l'affichage
+      const occupancyRate = opData ? opData.occupancyRate : row.occupancyRate;
+      const availability = opData ? opData.availability : row.availability;
+      const leadTimeMajority = opData && opData.leadTimeMajority > 0 ? opData.leadTimeMajority : row.leadTimeMajority;
+      const pickupRate = opData ? opData.pickupRate : row.pickupRate;
+
+      // Si pas de Lighthouse, on retourne juste les données opérationnelles + prix calendrier
       if (!lhData) {
+        // Recalcul stratégie/reco si on a des vraies données opérationnelles
+        const partial: Partial<DayRMSData> = {
+          occupancyRate, availability, leadTimeMajority, pickupRate,
+          marketPressure: row.marketPressure,
+          isWeekend: row.isWeekend,
+          currentPrice: realPrice > 0 ? realPrice : row.currentPrice,
+          medianPrice: row.medianPrice,
+          minPrice: row.minPrice,
+          maxPrice: row.maxPrice,
+        };
+        const recalcStrategy = opData ? calculateStrategy(partial) : row.strategy;
+        const recalcReco = opData ? calculateRecommendation({ ...partial, strategy: recalcStrategy }) : null;
+
         return {
           ...row,
           currentPrice: realPrice > 0 ? realPrice : row.currentPrice,
+          occupancyRate,
+          availability,
+          leadTimeMajority,
+          pickupRate,
+          ...(recalcReco ? {
+            strategy: recalcStrategy,
+            recommendation: recalcReco.recommendation,
+            suggestedPrice: recalcReco.suggestedPrice,
+            confidenceScore: recalcReco.confidence,
+          } : {}),
         };
       }
 
@@ -447,13 +502,13 @@ export function RMSTableauPro() {
       // ─── Pression marché (= demande marché Lighthouse, 0-100) ───
       const marketPressure = lhData.marketDemandPercent;
 
-      // Recalcul stratégie + recommandation avec vraies données
+      // Recalcul stratégie + recommandation avec toutes les vraies données
       const partial: Partial<DayRMSData> = {
-        occupancyRate: row.occupancyRate,
-        leadTimeMajority: row.leadTimeMajority,
-        pickupRate: row.pickupRate,
+        occupancyRate,
+        leadTimeMajority,
+        pickupRate,
         marketPressure,
-        availability: row.availability,
+        availability,
         isWeekend: row.isWeekend,
         currentPrice: ourPrice,
         medianPrice,
@@ -470,15 +525,23 @@ export function RMSTableauPro() {
         minPrice,
         maxPrice,
         marketPressure,
+        occupancyRate,
+        availability,
+        leadTimeMajority,
+        pickupRate,
         strategy,
         recommendation: reco.recommendation,
         suggestedPrice: reco.suggestedPrice,
         confidenceScore: reco.confidence,
         events: lhData.events ? [lhData.events] : row.events,
+        // Variations Lighthouse vs Hier / J-3 / J-7
+        varVsYesterday: lhData.varVsYesterday ?? null,
+        varVs3Days: lhData.varVs3Days ?? null,
+        varVs7Days: lhData.varVs7Days ?? null,
       };
     });
     setRmsData(enriched);
-  }, [startDate, viewPeriod, getPriceFromCalendar, getLighthouseData]);
+  }, [startDate, viewPeriod, getPriceFromCalendar, getLighthouseData, operationalByDate]);
 
   // Navigation dates
   const navigateDays = (direction: 'prev' | 'next') => {
@@ -602,7 +665,11 @@ export function RMSTableauPro() {
       <RevenueHeader
         icon={Target}
         title="RMS Revenue Management"
-        subtitle={`Tableau de pilotage · ${rmsData.length} dates · ${validatedCount} validations`}
+        subtitle={
+          `Tableau de pilotage · ${rmsData.length} dates · ${validatedCount} validations` +
+          (lighthouseImport ? ` · Lighthouse ✓` : ` · Lighthouse: absent`) +
+          (hasOperationalData ? ` · Réservations ✓ (${totalCapacity} chambres)` : ` · Réservations: non chargées`)
+        }
         quickActions={[
           {
             label: 'Veille Compset',
@@ -799,6 +866,9 @@ function TableView({
             <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-200">Médiane</th>
             <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-200">Min</th>
             <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-200">Max</th>
+            <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-200" title="Variation prix vs hier (Lighthouse)">Δ Hier</th>
+            <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-200" title="Variation prix vs J-3 (Lighthouse)">Δ J-3</th>
+            <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-200" title="Variation prix vs J-7 (Lighthouse)">Δ J-7</th>
             <th className="px-3 py-2 text-center font-semibold text-gray-700 border-r border-gray-200">Lead Time</th>
             <th className="px-3 py-2 text-center font-semibold text-gray-700 border-r border-gray-200">Pickup</th>
             <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-200">Stratégie</th>
@@ -861,6 +931,42 @@ function TableView({
               <td className="px-3 py-2 border-r border-gray-200 text-right font-semibold text-orange-700">{row.medianPrice.toFixed(0)}€</td>
               <td className="px-3 py-2 border-r border-gray-200 text-right font-semibold text-emerald-700">{row.minPrice.toFixed(0)}€</td>
               <td className="px-3 py-2 border-r border-gray-200 text-right font-semibold text-red-700">{row.maxPrice.toFixed(0)}€</td>
+              {/* Δ Hier */}
+              <td className={cn(
+                'px-3 py-2 border-r border-gray-200 text-right text-xs font-medium',
+                row.varVsYesterday == null ? 'text-gray-300'
+                  : row.varVsYesterday > 0 ? 'text-emerald-600'
+                  : row.varVsYesterday < 0 ? 'text-red-600'
+                  : 'text-gray-500'
+              )}>
+                {row.varVsYesterday == null
+                  ? '—'
+                  : `${row.varVsYesterday > 0 ? '+' : ''}${row.varVsYesterday.toFixed(0)}€`}
+              </td>
+              {/* Δ J-3 */}
+              <td className={cn(
+                'px-3 py-2 border-r border-gray-200 text-right text-xs font-medium',
+                row.varVs3Days == null ? 'text-gray-300'
+                  : row.varVs3Days > 0 ? 'text-emerald-600'
+                  : row.varVs3Days < 0 ? 'text-red-600'
+                  : 'text-gray-500'
+              )}>
+                {row.varVs3Days == null
+                  ? '—'
+                  : `${row.varVs3Days > 0 ? '+' : ''}${row.varVs3Days.toFixed(0)}€`}
+              </td>
+              {/* Δ J-7 */}
+              <td className={cn(
+                'px-3 py-2 border-r border-gray-200 text-right text-xs font-medium',
+                row.varVs7Days == null ? 'text-gray-300'
+                  : row.varVs7Days > 0 ? 'text-emerald-600'
+                  : row.varVs7Days < 0 ? 'text-red-600'
+                  : 'text-gray-500'
+              )}>
+                {row.varVs7Days == null
+                  ? '—'
+                  : `${row.varVs7Days > 0 ? '+' : ''}${row.varVs7Days.toFixed(0)}€`}
+              </td>
               <td className="px-3 py-2 border-r border-gray-200 text-center">{row.leadTimeMajority}j</td>
               <td className="px-3 py-2 border-r border-gray-200 text-center">{row.pickupRate.toFixed(0)}%</td>
               <td className="px-3 py-2 border-r border-gray-200">
