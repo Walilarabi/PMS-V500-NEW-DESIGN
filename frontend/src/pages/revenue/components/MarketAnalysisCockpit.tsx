@@ -2,10 +2,15 @@
  * FLOWTYM — Market Analysis Cockpit
  *
  * Cockpit RMS de haut niveau pour la veille concurrentielle.
- * Layout en 6 sections : Pulse → Alertes → Concurrence → Restrictions → Opportunités → Recos → Briefing.
+ * Layout en sections : Pulse → Alertes → Concurrence → Restrictions → Opportunités → Recos → Briefing.
  *
  * Pas de logique métier dans ce fichier : tout passe par `market-analysis-engine.ts`.
  * Ce composant est purement présentation + interaction (changement de période).
+ *
+ * Prop `view` (optionnelle, défaut 'full') permet d'afficher uniquement certaines sections :
+ *   - 'full' : toutes les sections (utilisé dans l'onglet "Cockpit RMS")
+ *   - 'recommendations' : uniquement les recommandations (onglet "Recommandations")
+ *   - 'briefing' : uniquement le briefing texte (onglet "Briefing")
  */
 
 import { useMemo, useState } from 'react';
@@ -79,16 +84,20 @@ function ConfidenceBadge({ score }: { score: number }) {
 // COMPOSANT PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
 
+export type CockpitView = 'full' | 'recommendations' | 'briefing';
+
 export interface MarketAnalysisCockpitProps {
   importData: LighthouseImport;
   selectedMonth: string;
   onDateClick?: (date: string) => void;
+  view?: CockpitView;
 }
 
 export function MarketAnalysisCockpit({
   importData,
   selectedMonth,
   onDateClick,
+  view = 'full',
 }: MarketAnalysisCockpitProps) {
   const [period, setPeriod] = useState<AnalysisPeriod>('yesterday');
   const [briefingCopied, setBriefingCopied] = useState(false);
@@ -124,44 +133,127 @@ export function MarketAnalysisCockpit({
     );
   }
 
-  return (
-    <div className="space-y-4">
-      {/* ─── HEADER + sélecteur de période ─────────────────────────────── */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-xl shadow-lg overflow-hidden">
-        <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
-              <Activity className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold">Cockpit Revenue Management</h2>
-              <p className="text-xs text-slate-300">
-                {report.daysAnalyzed} jours analysés · {report.competitorCount} concurrents · {report.ourHotelName}
-              </p>
-            </div>
+  // ─── HEADER (period selector) toujours affiché ───────────────────────
+  const HeaderBlock = (
+    <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-xl shadow-lg overflow-hidden">
+      <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+            <Activity className="w-5 h-5" />
           </div>
-
-          {/* ─── 3 boutons d'analyse temporelle ─────────────────────── */}
-          <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
-            {PERIODS.map(p => {
-              const active = period === p.key;
-              return (
-                <button
-                  key={p.key}
-                  onClick={() => setPeriod(p.key)}
-                  className={cn(
-                    'px-4 py-2 rounded-md text-sm font-semibold transition-all',
-                    active ? 'bg-white text-slate-900 shadow-md' : 'text-white/80 hover:text-white hover:bg-white/10'
-                  )}
-                >
-                  <div>{p.label}</div>
-                  <div className={cn('text-[10px]', active ? 'text-slate-500' : 'text-white/50')}>{p.sub}</div>
-                </button>
-              );
-            })}
+          <div>
+            <h2 className="text-lg font-bold">
+              {view === 'recommendations' ? 'Recommandations actionnables' :
+               view === 'briefing' ? 'Compte rendu marché' :
+               'Cockpit Revenue Management'}
+            </h2>
+            <p className="text-xs text-slate-300">
+              {report.daysAnalyzed} jours analysés · {report.competitorCount} concurrents · {report.ourHotelName}
+            </p>
           </div>
         </div>
+
+        {/* 3 boutons d'analyse temporelle (toujours présents) */}
+        <div className="flex items-center gap-1 bg-white/10 rounded-lg p-1">
+          {PERIODS.map(p => {
+            const active = period === p.key;
+            return (
+              <button
+                key={p.key}
+                onClick={() => setPeriod(p.key)}
+                className={cn(
+                  'px-4 py-2 rounded-md text-sm font-semibold transition-all',
+                  active ? 'bg-white text-slate-900 shadow-md' : 'text-white/80 hover:text-white hover:bg-white/10'
+                )}
+              >
+                <div>{p.label}</div>
+                <div className={cn('text-[10px]', active ? 'text-slate-500' : 'text-white/50')}>{p.sub}</div>
+              </button>
+            );
+          })}
+        </div>
       </div>
+    </div>
+  );
+
+  // ─── Section : Recommandations (utilisée en mode 'full' et 'recommendations') ──
+  const RecommendationsBlock = (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+        <Sparkles className="w-4 h-4 text-violet-500" />
+        <h3 className="text-sm font-semibold text-gray-900">Recommandations actionnables</h3>
+        <span className="text-xs text-gray-400">({report.recommendations.length})</span>
+      </div>
+      {report.recommendations.length === 0 ? (
+        <div className="px-5 py-8 text-center text-sm text-gray-400">
+          Aucune action urgente détectée. Le marché est équilibré sur cette période.
+        </div>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {report.recommendations.map((r, i) => (
+            <RecommendationCard key={i} reco={r} onDateClick={() => handleDateClick(r.date)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // ─── Section : Briefing (utilisée en mode 'full' et 'briefing') ──
+  const BriefingBlock = (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-blue-500" />
+          <h3 className="text-sm font-semibold text-gray-900">Compte rendu quotidien</h3>
+        </div>
+        <button
+          onClick={handleCopyBriefing}
+          className="text-xs text-gray-500 hover:text-blue-600 flex items-center gap-1.5 px-2 py-1 rounded hover:bg-blue-50"
+        >
+          {briefingCopied ? (
+            <><CheckCircle2 className="w-3 h-3 text-emerald-600" /><span className="text-emerald-600">Copié</span></>
+          ) : (
+            <><Copy className="w-3 h-3" /> Copier le briefing</>
+          )}
+        </button>
+      </div>
+      <pre className={cn(
+        'px-5 py-4 text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed overflow-y-auto',
+        view === 'briefing' ? 'max-h-[calc(100vh-260px)]' : 'max-h-96'
+      )}>
+        {report.briefing}
+      </pre>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // RENDU CONDITIONNEL selon view
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // VIEW 'recommendations' — uniquement les recos avec le header de période
+  if (view === 'recommendations') {
+    return (
+      <div className="space-y-4">
+        {HeaderBlock}
+        {RecommendationsBlock}
+      </div>
+    );
+  }
+
+  // VIEW 'briefing' — uniquement le briefing avec le header de période
+  if (view === 'briefing') {
+    return (
+      <div className="space-y-4">
+        {HeaderBlock}
+        {BriefingBlock}
+      </div>
+    );
+  }
+
+  // VIEW 'full' — toutes les sections (comportement original du Cockpit RMS)
+  return (
+    <div className="space-y-4">
+      {HeaderBlock}
 
       {/* ─── SECTION 1 — Pulse Marché (KPI bar) ────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -336,47 +428,10 @@ export function MarketAnalysisCockpit({
       </div>
 
       {/* ─── SECTION 6 — Recommandations actionnables ──────────────────── */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-violet-500" />
-          <h3 className="text-sm font-semibold text-gray-900">Recommandations actionnables</h3>
-          <span className="text-xs text-gray-400">({report.recommendations.length})</span>
-        </div>
-        {report.recommendations.length === 0 ? (
-          <div className="px-5 py-8 text-center text-sm text-gray-400">
-            Aucune action urgente détectée. Le marché est équilibré sur cette période.
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {report.recommendations.map((r, i) => (
-              <RecommendationCard key={i} reco={r} onDateClick={() => handleDateClick(r.date)} />
-            ))}
-          </div>
-        )}
-      </div>
+      {RecommendationsBlock}
 
       {/* ─── SECTION 7 — Briefing texte ────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="w-4 h-4 text-blue-500" />
-            <h3 className="text-sm font-semibold text-gray-900">Compte rendu quotidien</h3>
-          </div>
-          <button
-            onClick={handleCopyBriefing}
-            className="text-xs text-gray-500 hover:text-blue-600 flex items-center gap-1.5 px-2 py-1 rounded hover:bg-blue-50"
-          >
-            {briefingCopied ? (
-              <><CheckCircle2 className="w-3 h-3 text-emerald-600" /><span className="text-emerald-600">Copié</span></>
-            ) : (
-              <><Copy className="w-3 h-3" /> Copier le briefing</>
-            )}
-          </button>
-        </div>
-        <pre className="px-5 py-4 text-xs text-gray-700 whitespace-pre-wrap font-sans leading-relaxed max-h-96 overflow-y-auto">
-          {report.briefing}
-        </pre>
-      </div>
+      {BriefingBlock}
     </div>
   );
 }
