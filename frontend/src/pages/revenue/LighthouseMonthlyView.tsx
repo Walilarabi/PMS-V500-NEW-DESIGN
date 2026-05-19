@@ -2,10 +2,11 @@
  * FLOWTYM — Veille Concurrentielle (Vue mensuelle organisée en onglets)
  *
  * Onglets :
- *   1. Marché             → KPIs + Graphique premium (area + line + bars + tooltip)
- *   2. Positionnement     → Vue par-date barchart horizontal (CompsetBarChart)
- *   3. Heatmap Tarifs     → Tableau croisé concurrents × dates
- *   4. Détail jour        → Tableau dense jour par jour
+ *   1. Cockpit RMS        → Analyse marché premium (Pulse, alertes, recos, briefing)
+ *   2. Marché             → KPIs + Graphique premium (area + line + bars + tooltip)
+ *   3. Positionnement     → Vue par-date barchart horizontal (CompsetBarChart)
+ *   4. Heatmap Tarifs     → Tableau croisé concurrents × dates
+ *   5. Détail jour        → Tableau dense jour par jour
  *
  * Persistance :
  *   - Import Lighthouse → snapshot versionné (archive ancien, active nouveau)
@@ -17,6 +18,7 @@ import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   BarChart3, Upload, AlertCircle, CheckCircle2, Loader2, X,
   FileSpreadsheet, Target, CalendarDays, LineChart, Layers, Table, ListFilter,
+  Activity,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { useLighthouseStore } from '../../store/lighthouseStore';
@@ -27,15 +29,17 @@ import { persistLighthouseImport, fetchActiveLighthouseImport } from '../../serv
 import { persistSalonEvents, fetchSalonEvents } from '../../services/salon-events.service';
 import { CompsetKpiBlock, CompsetBarChart } from './components/CompsetWidgets';
 import { PremiumCompsetChart } from './components/PremiumCompsetChart';
+import { MarketAnalysisCockpit } from './components/MarketAnalysisCockpit';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
 
 // ─── Onglets ──────────────────────────────────────────────────────────────
 
-type TabKey = 'marche' | 'positionnement' | 'heatmap' | 'detail';
+type TabKey = 'cockpit' | 'marche' | 'positionnement' | 'heatmap' | 'detail';
 
 const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { key: 'cockpit',        label: 'Cockpit RMS',           icon: Activity },
   { key: 'marche',         label: 'Marché',                icon: LineChart },
   { key: 'positionnement', label: 'Positionnement Compset', icon: Target },
   { key: 'heatmap',        label: 'Heatmap Tarifs Compset', icon: Layers },
@@ -164,7 +168,7 @@ export const LighthouseMonthlyView: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [compsetChartDate, setCompsetChartDate] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabKey>('marche');
+  const [activeTab, setActiveTab] = useState<TabKey>('cockpit');
 
   // ─── Upload Lighthouse ────────────────────────────────────────────────
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -393,6 +397,14 @@ export const LighthouseMonthlyView: React.FC = () => {
             </div>
 
             {/* ─── CONTENU DES ONGLETS ────────────────────────────────────── */}
+            {activeTab === 'cockpit' && importData && (
+              <MarketAnalysisCockpit
+                importData={importData}
+                selectedMonth={selectedMonth}
+                onDateClick={setSelectedDate}
+              />
+            )}
+
             {activeTab === 'marche' && (
               <div className="space-y-4">
                 <CompsetKpiBlock monthData={monthData} ourHotelName={importData?.ourHotelName ?? ''} />
