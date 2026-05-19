@@ -27,7 +27,7 @@ export interface EventTooltipData {
   location?: string | null;
   impact?: string | null;
   link?: string | null;
-  source?: string | null;   // 'salons_excel', 'planning_manual', etc.
+  source?: string | null;
 }
 
 interface EventTooltipProps {
@@ -80,7 +80,7 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
   useEffect(() => {
     if (!visible || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const tooltipHeight = 240; // estimation
+    const tooltipHeight = 280; // estimation
     setPosition(rect.top < tooltipHeight + 20 ? 'bottom' : 'top');
   }, [visible]);
 
@@ -100,33 +100,33 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
       {children}
 
       {visible && (
-        <span
+        <div
           role="tooltip"
           className={cn(
             'absolute left-1/2 -translate-x-1/2 z-50 w-80 pointer-events-auto',
             position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
           )}
         >
-          <span className="block bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
             {/* Header avec gradient subtil */}
-            <span className="block bg-gradient-to-r from-slate-50 to-white px-4 py-2.5 border-b border-gray-100">
-              <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">
+            <div className="bg-gradient-to-r from-slate-50 to-white px-4 py-2.5 border-b border-gray-100">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">
                 <Tag className="w-3 h-3" />
                 {label}
-              </span>
-              <span className="block text-sm font-bold text-gray-900 leading-snug">
+              </div>
+              <div className="text-sm font-bold text-gray-900 leading-snug">
                 {event.event_name}
-              </span>
-            </span>
+              </div>
+            </div>
 
             {/* Corps */}
-            <span className="block px-4 py-3 space-y-2">
+            <div className="px-4 py-3 space-y-2">
               {/* Dates */}
-              <span className="flex items-start gap-2">
+              <div className="flex items-start gap-2">
                 <Calendar className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
-                <span className="block text-xs">
-                  <span className="block text-gray-500">Période</span>
-                  <span className="block font-medium text-gray-900">
+                <div className="text-xs">
+                  <div className="text-gray-500">Période</div>
+                  <div className="font-medium text-gray-900">
                     {isMultiDay ? (
                       <>
                         Du <span className="font-semibold">{formatDateFR(event.start_date)}</span>
@@ -136,35 +136,37 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
                     ) : (
                       <span className="font-semibold">{formatDateFR(event.start_date)}</span>
                     )}
-                  </span>
-                </span>
-              </span>
+                  </div>
+                </div>
+              </div>
 
               {/* Lieu */}
               {event.location && (
-                <span className="flex items-start gap-2">
+                <div className="flex items-start gap-2">
                   <MapPin className="w-3.5 h-3.5 text-purple-500 flex-shrink-0 mt-0.5" />
-                  <span className="block text-xs">
-                    <span className="block text-gray-500">Lieu</span>
-                    <span className="block font-medium text-gray-900">{event.location}</span>
-                  </span>
-                </span>
+                  <div className="text-xs">
+                    <div className="text-gray-500">Lieu</div>
+                    <div className="font-medium text-gray-900">{event.location}</div>
+                  </div>
+                </div>
               )}
 
               {/* Impact */}
-              <span className="flex items-start gap-2">
+              <div className="flex items-start gap-2">
                 <Zap className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-                <span className="block text-xs">
-                  <span className="block text-gray-500">Impact estimé</span>
-                  <span className={cn(
-                    'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold mt-0.5',
-                    impact.bg,
-                    impact.text,
-                  )}>
-                    {impact.label}
-                  </span>
-                </span>
-              </span>
+                <div className="text-xs">
+                  <div className="text-gray-500">Impact estimé</div>
+                  <div className="mt-0.5">
+                    <span className={cn(
+                      'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold',
+                      impact.bg,
+                      impact.text,
+                    )}>
+                      {impact.label}
+                    </span>
+                  </div>
+                </div>
+              </div>
 
               {/* Lien (si présent) */}
               {event.link && (
@@ -182,15 +184,15 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
 
               {/* Source (discret en bas) */}
               {event.source && (
-                <span className="block text-[10px] text-gray-400 italic pt-1">
+                <div className="text-[10px] text-gray-400 italic pt-1">
                   Source : {event.source}
-                </span>
+                </div>
               )}
-            </span>
-          </span>
+            </div>
+          </div>
 
           {/* Petit triangle de la flèche */}
-          <span
+          <div
             className={cn(
               'absolute left-1/2 -translate-x-1/2 w-2 h-2 bg-white border border-gray-200 rotate-45',
               position === 'top'
@@ -198,7 +200,7 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
                 : 'top-0 -translate-y-1/2 border-l-0 border-b-0'
             )}
           />
-        </span>
+        </div>
       )}
     </span>
   );
