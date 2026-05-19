@@ -15,6 +15,7 @@
  *  - Markup +5% paramétrable appliqué au push prix
  *  - Bouton Rafraîchir (re-fetch données ops + calendrier)
  *  - Propagation Channel Manager
+ *  - Tooltip enrichie sur la colonne Événement (Palier A point 5)
  */
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -46,9 +47,11 @@ import { RMSPropagationService, RMSValidation } from '../../services/rms-propaga
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useSalonsStore } from '../../store/salonsStore';
+import type { SalonEvent } from '../../services/salons-parser.service';
 import { useOperationalData } from '../../hooks/useOperationalData';
 import { recordRmsDecision } from '../../services/rms-decisions.service';
 import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
+import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -68,6 +71,20 @@ type Recommendation = 'Augmenter' | 'Baisser' | 'Maintenir';
 
 type ValidationStatus = 'En attente' | 'Acceptée' | 'Refusée' | 'Maintenue';
 
+/**
+ * Représentation interne unifiée d'un événement pour la colonne RMS.
+ * Peut venir de plusieurs sources (salons importés, Lighthouse, planning manuel).
+ */
+interface RMSEventRow {
+  name: string;
+  startDate: string;
+  endDate: string;
+  location?: string | null;
+  impact?: string | null;
+  link?: string | null;
+  source: 'salons_excel' | 'lighthouse' | 'planning_manual';
+}
+
 interface DayRMSData {
   date: string;
   dayName: string;
@@ -76,7 +93,7 @@ interface DayRMSData {
   isWeekend: boolean;
   isToday: boolean;
 
-  events: string[];
+  events: RMSEventRow[];   // ← changé de string[] vers RMSEventRow[]
   marketPressure: number;
 
   occupancyRate: number;
@@ -113,6 +130,22 @@ type ViewPeriod = '7days' | '15days' | '30days' | '60days' | '90days';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
+
+/**
+ * Adapte un événement interne (camelCase store) au format attendu par EventTooltip (snake_case).
+ * Évite de modifier le store existant et garde l'isolation des contrats.
+ */
+function toTooltipData(ev: RMSEventRow): EventTooltipData {
+  return {
+    event_name: ev.name,
+    start_date: ev.startDate,
+    end_date: ev.endDate,
+    location: ev.location ?? null,
+    impact: ev.impact ?? null,
+    link: ev.link ?? null,
+    source: ev.source,
+  };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MOTEUR DE RECOMMANDATION (inchangé)
@@ -314,7 +347,7 @@ export function RMSTableauPro() {
 
   // ─── Salons ────────────────────────────────────────────────────────────
   const salonsImport = useSalonsStore(s => s.importData);
-  const getSalonEvents = useCallback((date: string) => {
+  const getSalonEvents = useCallback((date: string): SalonEvent[] => {
     if (!salonsImport) return [];
     return salonsImport.events.filter(e => date >= e.startDate && date <= e.endDate);
   }, [salonsImport]);
@@ -352,7 +385,6 @@ export function RMSTableauPro() {
       const availability = inventoryOverride !== undefined ? inventoryOverride : baseAvailability;
 
       // ── Recalcul TO en cascade quand dispo manuelle ──
-      // TO = (capacité - dispo) / capacité × 100
       let occupancyRate: number;
       if (inventoryOverride !== undefined && totalCapacity > 0) {
         const newRoomsSold = Math.max(0, totalCapacity - inventoryOverride);
@@ -371,9 +403,36 @@ export function RMSTableauPro() {
       const maxPrice = lhData?.compsetMax ?? 0;
       const marketPressure = lhData?.marketDemandPercent ?? 0;
 
-      const events: string[] = salonEvents.length > 0
-        ? salonEvents.map(e => e.name)
-        : (lhData?.events ? [lhData.events] : []);
+      // ── Événements unifiés (Palier A point 5) ──
+      // Source 1 : salons importés (priorité, avec tous les détails)
+      // Source 2 : événements Lighthouse (fallback)
+      const events: RMSEventRow[] = [];
+
+      // Ajouter d'abord les salons (les plus riches)
+      for (const se of salonEvents) {
+        events.push({
+          name: se.name,
+          startDate: se.startDate,
+          endDate: se.endDate,
+          location: se.location ?? null,
+          impact: se.impact ?? null,
+          link: null,  // pas encore extrait par le parser
+          source: 'salons_excel',
+        });
+      }
+
+      // Compléter avec les events Lighthouse si rien dans les salons pour cette date
+      if (events.length === 0 && lhData?.events) {
+        events.push({
+          name: lhData.events,
+          startDate: row.date,
+          endDate: row.date,
+          location: null,
+          impact: null,
+          link: null,
+          source: 'lighthouse',
+        });
+      }
 
       const partial: Partial<DayRMSData> = {
         occupancyRate, availability, leadTimeMajority, pickupRate,
@@ -422,17 +481,13 @@ export function RMSTableauPro() {
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      // 1. Bumper le token pour forcer useOperationalData à re-fetch
       setRefreshToken(t => t + 1);
-      // 2. Recharger le calendrier tarifaire
       await loadData();
-      // 3. Recharger les settings RMS (markup éventuellement changé)
       const s = await fetchRmsSettings();
       if (s) setRmsSettings(s);
     } catch (err) {
       console.warn('[RMS] refresh failed:', err);
     } finally {
-      // Petit délai pour rendre le spin visible (UX)
       setTimeout(() => setIsRefreshing(false), 600);
     }
   }, [loadData]);
@@ -684,7 +739,6 @@ export function RMSTableauPro() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Bouton refresh toolbar (raccourci visuel) */}
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -816,7 +870,6 @@ function TableView({
     isAvailabilityOverridden: (date: string) => boolean;
   };
 }) {
-  // Ref pour pouvoir focuser la cellule de dispo du jour suivant (Enter)
   const availabilityRefs = React.useRef<Map<string, () => void>>(new Map());
 
   const registerAvailabilityFocus = useCallback((date: string, focusFn: () => void) => {
@@ -897,11 +950,23 @@ function TableView({
                 {row.dayNumber}/{row.month}
                 {row.isToday && <span className="ml-1 text-[9px] font-bold text-blue-600 uppercase">aujourd'hui</span>}
               </td>
+              {/* ─── ÉVÉNEMENT (avec tooltip enrichie — Palier A point 5) ─── */}
               <td className="px-3 py-2 border-r border-gray-200">
                 {row.events.length > 0 && (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-semibold">
-                    {row.events[0]}
-                  </span>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <EventTooltip event={toTooltipData(row.events[0])} label={row.events[0].source === 'salons_excel' ? 'Salon' : 'Événement'}>
+                      <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-semibold inline-block">
+                        {row.events[0].name}
+                      </span>
+                    </EventTooltip>
+                    {row.events.length > 1 && (
+                      <EventTooltip event={toTooltipData(row.events[1])} label={row.events[1].source === 'salons_excel' ? 'Salon' : 'Événement'}>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded font-semibold inline-block">
+                          +{row.events.length - 1}
+                        </span>
+                      </EventTooltip>
+                    )}
+                  </div>
                 )}
               </td>
               <td className="px-3 py-2 border-r border-gray-200 text-center">
@@ -1265,7 +1330,6 @@ function EditableAvailability({
     setEditing(true);
   }, [value]);
 
-  // Sélection auto au focus pour overwrite rapide (pattern Excel)
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
@@ -1273,7 +1337,6 @@ function EditableAvailability({
     }
   }, [editing]);
 
-  // Enregistrer la fonction qui ouvre l'édition → permet le saut depuis le jour précédent
   useEffect(() => {
     registerFocus(date, startEdit);
     return () => unregisterFocus(date);
@@ -1286,7 +1349,6 @@ function EditableAvailability({
     }
     setEditing(false);
     if (moveToNext) {
-      // Petit délai pour laisser React re-render avant de focus le suivant
       setTimeout(() => onCommitNext(), 30);
     }
   }, [draft, value, onChange, onCommitNext]);
@@ -1309,9 +1371,8 @@ function EditableAvailability({
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            commit(true);    // Enter → commit + focus jour suivant
+            commit(true);
           } else if (e.key === 'Tab') {
-            // Tab gère lui-même le déplacement, on commit juste
             commit(false);
           } else if (e.key === 'Escape') {
             cancel();
