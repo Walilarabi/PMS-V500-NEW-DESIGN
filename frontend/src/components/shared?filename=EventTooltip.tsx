@@ -1,0 +1,205 @@
+/**
+ * FLOWTYM — EventTooltip
+ *
+ * Composant de tooltip riche pour afficher les détails d'un salon/événement
+ * au survol d'une cellule (RMS, Planning, etc.).
+ *
+ * Utilise une tooltip CSS pure (positionnement absolu) — pas de dépendance externe.
+ * S'adapte automatiquement aux bords de l'écran (placement intelligent).
+ *
+ * Usage :
+ *   <EventTooltip event={salonEvent}>
+ *     <span>{salonEvent.event_name}</span>
+ *   </EventTooltip>
+ */
+
+import { useState, useRef, useEffect } from 'react';
+import { Calendar, MapPin, Zap, ExternalLink, Tag } from 'lucide-react';
+
+const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
+
+// ─── Types ────────────────────────────────────────────────────────────────
+
+export interface EventTooltipData {
+  event_name: string;
+  start_date: string;       // ISO date 'YYYY-MM-DD'
+  end_date: string;
+  location?: string | null;
+  impact?: string | null;
+  link?: string | null;
+  source?: string | null;   // 'salons_excel', 'planning_manual', etc.
+}
+
+interface EventTooltipProps {
+  event: EventTooltipData;
+  children: React.ReactNode;
+  /** Préfixe affiché dans le header (ex: "Salon", "Événement"). Optionnel. */
+  label?: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function formatDateFR(isoDate: string): string {
+  const d = new Date(isoDate);
+  return d.toLocaleDateString('fr-FR', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function impactColor(impact: string | null | undefined): { bg: string; text: string; label: string } {
+  const v = (impact ?? '').toLowerCase().trim();
+  if (/(très fort|tres fort|critique|critical|extreme|extrême)/.test(v)) {
+    return { bg: 'bg-red-100', text: 'text-red-700', label: 'Très fort' };
+  }
+  if (/(fort|high|élevé|eleve)/.test(v)) {
+    return { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Fort' };
+  }
+  if (/(moyen|medium|modere|modéré)/.test(v)) {
+    return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Moyen' };
+  }
+  if (/(faible|low|leger|léger)/.test(v)) {
+    return { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Faible' };
+  }
+  if (v) {
+    return { bg: 'bg-gray-100', text: 'text-gray-700', label: impact ?? 'Non défini' };
+  }
+  return { bg: 'bg-gray-100', text: 'text-gray-500', label: 'Non défini' };
+}
+
+// ─── Composant principal ──────────────────────────────────────────────────
+
+export function EventTooltip({ event, children, label = 'Événement' }: EventTooltipProps) {
+  const [visible, setVisible] = useState(false);
+  const [position, setPosition] = useState<'top' | 'bottom'>('top');
+  const triggerRef = useRef<HTMLSpanElement>(null);
+
+  // Détection bord d'écran : si pas assez de place au-dessus, on affiche en dessous
+  useEffect(() => {
+    if (!visible || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const tooltipHeight = 240; // estimation
+    setPosition(rect.top < tooltipHeight + 20 ? 'bottom' : 'top');
+  }, [visible]);
+
+  const impact = impactColor(event.impact);
+  const isMultiDay = event.start_date !== event.end_date;
+
+  return (
+    <span
+      ref={triggerRef}
+      className="relative inline-block cursor-help"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+      onFocus={() => setVisible(true)}
+      onBlur={() => setVisible(false)}
+      tabIndex={0}
+    >
+      {children}
+
+      {visible && (
+        <span
+          role="tooltip"
+          className={cn(
+            'absolute left-1/2 -translate-x-1/2 z-50 w-80 pointer-events-auto',
+            position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
+          )}
+        >
+          <span className="block bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
+            {/* Header avec gradient subtil */}
+            <span className="block bg-gradient-to-r from-slate-50 to-white px-4 py-2.5 border-b border-gray-100">
+              <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">
+                <Tag className="w-3 h-3" />
+                {label}
+              </span>
+              <span className="block text-sm font-bold text-gray-900 leading-snug">
+                {event.event_name}
+              </span>
+            </span>
+
+            {/* Corps */}
+            <span className="block px-4 py-3 space-y-2">
+              {/* Dates */}
+              <span className="flex items-start gap-2">
+                <Calendar className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
+                <span className="block text-xs">
+                  <span className="block text-gray-500">Période</span>
+                  <span className="block font-medium text-gray-900">
+                    {isMultiDay ? (
+                      <>
+                        Du <span className="font-semibold">{formatDateFR(event.start_date)}</span>
+                        <br />
+                        au <span className="font-semibold">{formatDateFR(event.end_date)}</span>
+                      </>
+                    ) : (
+                      <span className="font-semibold">{formatDateFR(event.start_date)}</span>
+                    )}
+                  </span>
+                </span>
+              </span>
+
+              {/* Lieu */}
+              {event.location && (
+                <span className="flex items-start gap-2">
+                  <MapPin className="w-3.5 h-3.5 text-purple-500 flex-shrink-0 mt-0.5" />
+                  <span className="block text-xs">
+                    <span className="block text-gray-500">Lieu</span>
+                    <span className="block font-medium text-gray-900">{event.location}</span>
+                  </span>
+                </span>
+              )}
+
+              {/* Impact */}
+              <span className="flex items-start gap-2">
+                <Zap className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <span className="block text-xs">
+                  <span className="block text-gray-500">Impact estimé</span>
+                  <span className={cn(
+                    'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold mt-0.5',
+                    impact.bg,
+                    impact.text,
+                  )}>
+                    {impact.label}
+                  </span>
+                </span>
+              </span>
+
+              {/* Lien (si présent) */}
+              {event.link && (
+                
+                  href={event.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium pt-1 border-t border-gray-100"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Consulter le salon
+                </a>
+              )}
+
+              {/* Source (discret en bas) */}
+              {event.source && (
+                <span className="block text-[10px] text-gray-400 italic pt-1">
+                  Source : {event.source}
+                </span>
+              )}
+            </span>
+          </span>
+
+          {/* Petit triangle de la flèche */}
+          <span
+            className={cn(
+              'absolute left-1/2 -translate-x-1/2 w-2 h-2 bg-white border border-gray-200 rotate-45',
+              position === 'top'
+                ? 'bottom-0 translate-y-1/2 border-r-0 border-t-0'
+                : 'top-0 -translate-y-1/2 border-l-0 border-b-0'
+            )}
+          />
+        </span>
+      )}
+    </span>
+  );
+}
