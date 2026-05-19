@@ -32,8 +32,6 @@ import {
   Grid3x3,
   LayoutList,
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Filter,
   Download,
   Zap,
@@ -471,20 +469,11 @@ export function RMSTableauPro() {
     viewPeriod,
   ]);
 
- // Navigation dates (par fenêtre de viewPeriod jours)
+ // Navigation dates
   const navigateDays = (direction: 'prev' | 'next') => {
     const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : viewPeriod === '30days' ? 30 : viewPeriod === '60days' ? 60 : 90;
     const newDate = new Date(startDate);
     newDate.setDate(newDate.getDate() + (direction === 'next' ? days : -days));
-    setStartDate(newDate);
-  };
-
-  // Navigation mensuelle : saute au 1er du mois précédent ou suivant
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    const newDate = new Date(startDate);
-    newDate.setDate(1);
-    newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1));
-    newDate.setHours(0, 0, 0, 0);
     setStartDate(newDate);
   };
   // ─── Bouton Rafraîchir ──────────────────────────────────────────────────
@@ -764,18 +753,7 @@ export function RMSTableauPro() {
             {isRefreshing ? 'Rafraîchissement…' : 'Rafraîchir'}
           </button>
 
-          {/* Navigation mensuelle (sauts 1er du mois) */}
-          <button
-            onClick={() => navigateMonth('prev')}
-            className="flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-            title="Mois précédent (saute au 1er du mois)"
-          >
-            <ChevronsLeft className="w-3.5 h-3.5" />
-            Mois préc.
-          </button>
-
-          {/* Navigation fenêtre (par viewPeriod jours) */}
-          <div className="flex items-center gap-2 border border-gray-300 rounded-md overflow-hidden">
+         <div className="flex items-center gap-2 border border-gray-300 rounded-md overflow-hidden">
             <button onClick={() => navigateDays('prev')} className="px-3 py-1.5 hover:bg-gray-100">
               <ChevronRight className="w-4 h-4 rotate-180" />
             </button>
@@ -786,16 +764,6 @@ export function RMSTableauPro() {
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Navigation mensuelle (sauts 1er du mois) */}
-          <button
-            onClick={() => navigateMonth('next')}
-            className="flex items-center gap-1 px-2 py-1.5 text-xs font-semibold text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
-            title="Mois suivant (saute au 1er du mois)"
-          >
-            Mois suiv.
-            <ChevronsRight className="w-3.5 h-3.5" />
-          </button>
 
           <button
             onClick={() => setShowFilters(!showFilters)}
