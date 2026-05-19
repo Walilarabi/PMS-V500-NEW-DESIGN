@@ -194,19 +194,6 @@ export const LighthouseMonthlyView: React.FC = () => {
     return Array.from(set).sort();
   }, [importData]);
 
-  // ─── Navigation mensuelle (additive, ne remplace pas le select) ───────
-  const navigateMonth = useCallback((direction: 'prev' | 'next') => {
-    if (monthsAvailable.length === 0) return;
-    const currentIdx = monthsAvailable.indexOf(selectedMonth);
-    if (currentIdx === -1) return;
-    const newIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
-    if (newIdx < 0 || newIdx >= monthsAvailable.length) return;
-    setSelectedMonth(monthsAvailable[newIdx]);
-  }, [monthsAvailable, selectedMonth]);
-
-  const canGoPrev = monthsAvailable.length > 0 && monthsAvailable.indexOf(selectedMonth) > 0;
-  const canGoNext = monthsAvailable.length > 0 && monthsAvailable.indexOf(selectedMonth) < monthsAvailable.length - 1;
-
   // ─── Hydratation depuis DB au mount ───────────────────────────────────
   React.useEffect(() => {
     let cancelled = false;
