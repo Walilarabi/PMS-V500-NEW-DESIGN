@@ -27,7 +27,7 @@ import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   BarChart3, Upload, AlertCircle, CheckCircle2, Loader2, X,
   FileSpreadsheet, Target, CalendarDays, LineChart, Layers, Table, ListFilter,
-  Activity, Sparkles, FileText,
+  Activity, Sparkles, FileText, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { useLighthouseStore } from '../../store/lighthouseStore';
@@ -134,7 +134,18 @@ export const LighthouseMonthlyView: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [compsetChartDate, setCompsetChartDate] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('cockpit');
+// ─── Navigation mensuelle (additive, ne remplace pas le select) ───────
+  const navigateMonth = useCallback((direction: 'prev' | 'next') => {
+    if (monthsAvailable.length === 0) return;
+    const currentIdx = monthsAvailable.indexOf(selectedMonth);
+    if (currentIdx === -1) return;
+    const newIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
+    if (newIdx < 0 || newIdx >= monthsAvailable.length) return;
+    setSelectedMonth(monthsAvailable[newIdx]);
+  }, [monthsAvailable, selectedMonth]);
 
+  const canGoPrev = monthsAvailable.length > 0 && monthsAvailable.indexOf(selectedMonth) > 0;
+  const canGoNext = monthsAvailable.length > 0 && monthsAvailable.indexOf(selectedMonth) < monthsAvailable.length - 1;
   // ─── Upload Lighthouse ────────────────────────────────────────────────
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -176,12 +187,25 @@ export const LighthouseMonthlyView: React.FC = () => {
     }
   }, [salonsStore]);
 
-  // ─── Données dérivées ─────────────────────────────────────────────────
+ // ─── Données dérivées ─────────────────────────────────────────────────
   const monthsAvailable = useMemo(() => {
     if (!importData) return [];
     const set = new Set(importData.days.map(d => d.date.slice(0, 7)));
     return Array.from(set).sort();
   }, [importData]);
+
+  // ─── Navigation mensuelle (additive, ne remplace pas le select) ───────
+  const navigateMonth = useCallback((direction: 'prev' | 'next') => {
+    if (monthsAvailable.length === 0) return;
+    const currentIdx = monthsAvailable.indexOf(selectedMonth);
+    if (currentIdx === -1) return;
+    const newIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
+    if (newIdx < 0 || newIdx >= monthsAvailable.length) return;
+    setSelectedMonth(monthsAvailable[newIdx]);
+  }, [monthsAvailable, selectedMonth]);
+
+  const canGoPrev = monthsAvailable.length > 0 && monthsAvailable.indexOf(selectedMonth) > 0;
+  const canGoNext = monthsAvailable.length > 0 && monthsAvailable.indexOf(selectedMonth) < monthsAvailable.length - 1;
 
   // ─── Hydratation depuis DB au mount ───────────────────────────────────
   React.useEffect(() => {
@@ -275,6 +299,22 @@ export const LighthouseMonthlyView: React.FC = () => {
             <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium text-gray-700">Période :</span>
+
+                <button
+                  onClick={() => navigateMonth('prev')}
+                  disabled={!canGoPrev}
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-2 text-xs font-semibold border rounded-md transition-colors',
+                    canGoPrev
+                      ? 'text-gray-700 border-gray-300 hover:bg-gray-50'
+                      : 'text-gray-300 border-gray-200 cursor-not-allowed'
+                  )}
+                  title="Mois précédent"
+                >
+                  <ChevronsLeft className="w-3.5 h-3.5" />
+                  Mois préc.
+                </button>
+
                 <select
                   value={selectedMonth}
                   onChange={e => setSelectedMonth(e.target.value)}
@@ -285,6 +325,22 @@ export const LighthouseMonthlyView: React.FC = () => {
                     return <option key={m} value={m}>{label}</option>;
                   })}
                 </select>
+
+                <button
+                  onClick={() => navigateMonth('next')}
+                  disabled={!canGoNext}
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-2 text-xs font-semibold border rounded-md transition-colors',
+                    canGoNext
+                      ? 'text-gray-700 border-gray-300 hover:bg-gray-50'
+                      : 'text-gray-300 border-gray-200 cursor-not-allowed'
+                  )}
+                  title="Mois suivant"
+                >
+                  Mois suiv.
+                  <ChevronsRight className="w-3.5 h-3.5" />
+                </button>
+
                 <span className="text-xs text-gray-400">
                   {monthData.length} jours · {importData?.competitorNames.length ?? 0} concurrents
                 </span>
