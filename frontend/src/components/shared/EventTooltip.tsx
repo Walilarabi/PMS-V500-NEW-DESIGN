@@ -4,17 +4,12 @@
  * Composant de tooltip riche pour afficher les détails d'un salon/événement
  * au survol d'une cellule (RMS, Planning, etc.).
  *
- * Utilise une tooltip CSS pure (positionnement absolu) — pas de dépendance externe.
- * S'adapte automatiquement aux bords de l'écran (placement intelligent).
- *
- * Usage :
- *   <EventTooltip event={salonEvent}>
- *     <span>{salonEvent.event_name}</span>
- *   </EventTooltip>
+ * Version simplifiée Palier A : pas de section lien (à ajouter Palier C
+ * quand le parser Excel extraira le `link` du fichier).
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Calendar, MapPin, Zap, ExternalLink, Tag } from 'lucide-react';
+import { Calendar, MapPin, Zap, Tag } from 'lucide-react';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -22,7 +17,7 @@ const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' 
 
 export interface EventTooltipData {
   event_name: string;
-  start_date: string;       // ISO date 'YYYY-MM-DD'
+  start_date: string;
   end_date: string;
   location?: string | null;
   impact?: string | null;
@@ -33,7 +28,6 @@ export interface EventTooltipData {
 interface EventTooltipProps {
   event: EventTooltipData;
   children: React.ReactNode;
-  /** Préfixe affiché dans le header (ex: "Salon", "Événement"). Optionnel. */
   label?: string;
 }
 
@@ -71,21 +65,28 @@ function impactColor(impact: string | null | undefined): { bg: string; text: str
 
 // ─── Composant principal ──────────────────────────────────────────────────
 
-export function EventTooltip({ event, children, label = 'Événement' }: EventTooltipProps) {
+export function EventTooltip(props: EventTooltipProps) {
+  const event = props.event;
+  const children = props.children;
+  const label = props.label ?? 'Événement';
+
   const [visible, setVisible] = useState(false);
   const [position, setPosition] = useState<'top' | 'bottom'>('top');
   const triggerRef = useRef<HTMLSpanElement>(null);
 
-  // Détection bord d'écran : si pas assez de place au-dessus, on affiche en dessous
   useEffect(() => {
     if (!visible || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const tooltipHeight = 280; // estimation
+    const tooltipHeight = 240;
     setPosition(rect.top < tooltipHeight + 20 ? 'bottom' : 'top');
   }, [visible]);
 
   const impact = impactColor(event.impact);
   const isMultiDay = event.start_date !== event.end_date;
+
+  const datesText = isMultiDay
+    ? `Du ${formatDateFR(event.start_date)} au ${formatDateFR(event.end_date)}`
+    : formatDateFR(event.start_date);
 
   return (
     <span
@@ -99,16 +100,15 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
     >
       {children}
 
-      {visible && (
+      {visible ? (
         <div
           role="tooltip"
           className={cn(
             'absolute left-1/2 -translate-x-1/2 z-50 w-80 pointer-events-auto',
-            position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2',
+            position === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
           )}
         >
           <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden">
-            {/* Header avec gradient subtil */}
             <div className="bg-gradient-to-r from-slate-50 to-white px-4 py-2.5 border-b border-gray-100">
               <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">
                 <Tag className="w-3 h-3" />
@@ -119,29 +119,16 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
               </div>
             </div>
 
-            {/* Corps */}
             <div className="px-4 py-3 space-y-2">
-              {/* Dates */}
               <div className="flex items-start gap-2">
                 <Calendar className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" />
                 <div className="text-xs">
                   <div className="text-gray-500">Période</div>
-                  <div className="font-medium text-gray-900">
-                    {isMultiDay ? (
-                      <>
-                        Du <span className="font-semibold">{formatDateFR(event.start_date)}</span>
-                        <br />
-                        au <span className="font-semibold">{formatDateFR(event.end_date)}</span>
-                      </>
-                    ) : (
-                      <span className="font-semibold">{formatDateFR(event.start_date)}</span>
-                    )}
-                  </div>
+                  <div className="font-medium text-gray-900">{datesText}</div>
                 </div>
               </div>
 
-              {/* Lieu */}
-              {event.location && (
+              {event.location ? (
                 <div className="flex items-start gap-2">
                   <MapPin className="w-3.5 h-3.5 text-purple-500 flex-shrink-0 mt-0.5" />
                   <div className="text-xs">
@@ -149,9 +136,8 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
                     <div className="font-medium text-gray-900">{event.location}</div>
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {/* Impact */}
               <div className="flex items-start gap-2">
                 <Zap className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div className="text-xs">
@@ -160,7 +146,7 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
                     <span className={cn(
                       'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold',
                       impact.bg,
-                      impact.text,
+                      impact.text
                     )}>
                       {impact.label}
                     </span>
@@ -168,30 +154,14 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
                 </div>
               </div>
 
-              {/* Lien (si présent) */}
-              {event.link && (
-                
-                  href={event.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium pt-1 border-t border-gray-100"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  Consulter le salon
-                </a>
-              )}
-
-              {/* Source (discret en bas) */}
-              {event.source && (
+              {event.source ? (
                 <div className="text-[10px] text-gray-400 italic pt-1">
                   Source : {event.source}
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
-          {/* Petit triangle de la flèche */}
           <div
             className={cn(
               'absolute left-1/2 -translate-x-1/2 w-2 h-2 bg-white border border-gray-200 rotate-45',
@@ -201,7 +171,7 @@ export function EventTooltip({ event, children, label = 'Événement' }: EventTo
             )}
           />
         </div>
-      )}
+      ) : null}
     </span>
   );
 }
