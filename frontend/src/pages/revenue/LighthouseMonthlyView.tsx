@@ -7,6 +7,8 @@
  *   3. Positionnement     → Vue par-date barchart horizontal (CompsetBarChart)
  *   4. Heatmap Tarifs     → Tableau croisé concurrents × dates
  *   5. Détail jour        → Tableau dense jour par jour
+ *   6. Recommandations    → Recos actionnables uniquement (Palier A.5)
+ *   7. Briefing           → Compte rendu texte uniquement (Palier A.5)
  *
  * Persistance :
  *   - Import Lighthouse → snapshot versionné (archive ancien, active nouveau)
@@ -16,13 +18,16 @@
  * Améliorations Palier A :
  *   - Bandeau Lighthouse compact et repliable (LighthouseFileBanner)
  *   - Modal détail journalier premium (PremiumDayDetailModal)
+ *
+ * Améliorations Palier A.5 :
+ *   - Onglets dédiés "Recommandations" et "Briefing" pour aération de la vue Cockpit
  */
 
 import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   BarChart3, Upload, AlertCircle, CheckCircle2, Loader2, X,
   FileSpreadsheet, Target, CalendarDays, LineChart, Layers, Table, ListFilter,
-  Activity,
+  Activity, Sparkles, FileText,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { useLighthouseStore } from '../../store/lighthouseStore';
@@ -42,7 +47,7 @@ const cn = (...classes: (string | boolean | undefined)[]) =>
 
 // ─── Onglets ──────────────────────────────────────────────────────────────
 
-type TabKey = 'cockpit' | 'marche' | 'positionnement' | 'heatmap' | 'detail';
+type TabKey = 'cockpit' | 'marche' | 'positionnement' | 'heatmap' | 'detail' | 'recos' | 'briefing';
 
 const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { key: 'cockpit',        label: 'Cockpit RMS',           icon: Activity },
@@ -50,6 +55,8 @@ const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ clas
   { key: 'positionnement', label: 'Positionnement Compset', icon: Target },
   { key: 'heatmap',        label: 'Heatmap Tarifs Compset', icon: Layers },
   { key: 'detail',         label: 'Détail jour par jour',   icon: Table },
+  { key: 'recos',          label: 'Recommandations',        icon: Sparkles },
+  { key: 'briefing',       label: 'Briefing',               icon: FileText },
 ];
 
 // ─── Upload Banner Lighthouse (états parsing/error uniquement) ──────────────
@@ -344,7 +351,7 @@ export const LighthouseMonthlyView: React.FC = () => {
 
             {/* ─── BARRE D'ONGLETS ────────────────────────────────────────── */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <div className="flex border-b border-gray-200">
+              <div className="flex border-b border-gray-200 overflow-x-auto">
                 {TABS.map(tab => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.key;
@@ -353,7 +360,7 @@ export const LighthouseMonthlyView: React.FC = () => {
                       key={tab.key}
                       onClick={() => setActiveTab(tab.key)}
                       className={cn(
-                        'flex items-center gap-2 px-5 py-3 text-sm font-medium transition-all border-b-2',
+                        'flex items-center gap-2 px-5 py-3 text-sm font-medium transition-all border-b-2 whitespace-nowrap flex-shrink-0',
                         isActive
                           ? 'border-blue-600 text-blue-700 bg-blue-50/40'
                           : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
@@ -408,6 +415,25 @@ export const LighthouseMonthlyView: React.FC = () => {
 
             {activeTab === 'detail' && (
               <DailyTable days={monthData} onRowClick={setSelectedDate} />
+            )}
+
+            {/* ─── Nouveaux onglets dédiés (Palier A.5) ────────────────── */}
+            {activeTab === 'recos' && importData && (
+              <MarketAnalysisCockpit
+                importData={importData}
+                selectedMonth={selectedMonth}
+                onDateClick={setSelectedDate}
+                view="recommendations"
+              />
+            )}
+
+            {activeTab === 'briefing' && importData && (
+              <MarketAnalysisCockpit
+                importData={importData}
+                selectedMonth={selectedMonth}
+                onDateClick={setSelectedDate}
+                view="briefing"
+              />
             )}
           </>
         )}
