@@ -12,6 +12,10 @@
  *   - Import Lighthouse → snapshot versionné (archive ancien, active nouveau)
  *   - Import Salons (Dates Salons) → append-only (préserve historique)
  *   - Hydratation depuis DB au mount pour survivre aux refresh / autres devices
+ *
+ * Améliorations Palier A :
+ *   - Bandeau Lighthouse compact et repliable (LighthouseFileBanner)
+ *   - Modal détail journalier premium (PremiumDayDetailModal)
  */
 
 import React, { useState, useMemo, useRef, useCallback } from 'react';
@@ -30,6 +34,8 @@ import { persistSalonEvents, fetchSalonEvents } from '../../services/salon-event
 import { CompsetKpiBlock, CompsetBarChart } from './components/CompsetWidgets';
 import { PremiumCompsetChart } from './components/PremiumCompsetChart';
 import { MarketAnalysisCockpit } from './components/MarketAnalysisCockpit';
+import { LighthouseFileBanner } from './components/LighthouseFileBanner';
+import { PremiumDayDetailModal } from './components/PremiumDayDetailModal';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
@@ -46,12 +52,11 @@ const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ clas
   { key: 'detail',         label: 'Détail jour par jour',   icon: Table },
 ];
 
-// ─── Upload Banner ────────────────────────────────────────────────────────
+// ─── Upload Banner Lighthouse (états parsing/error uniquement) ──────────────
+// Le bandeau "actif" est désormais géré par LighthouseFileBanner (compact + repliable)
 
-function UploadBanner() {
-  const { uploadStatus, uploadError, importData, clearImport } = useLighthouseStore();
-
-  if (uploadStatus === 'idle' && !importData) return null;
+function UploadStatusBanner() {
+  const { uploadStatus, uploadError } = useLighthouseStore();
 
   if (uploadStatus === 'parsing') {
     return (
@@ -72,53 +77,6 @@ function UploadBanner() {
             <p className="text-red-700 mt-1">{uploadError}</p>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  if (importData) {
-    const importedDate = new Date(importData.importedAt).toLocaleString('fr-FR');
-    return (
-      <div className="flex items-start justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-        <div className="flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <p className="font-semibold text-emerald-900">Fichier Lighthouse actif</p>
-            <div className="grid grid-cols-4 gap-4 mt-2">
-              <div>
-                <p className="text-xs text-emerald-600 uppercase tracking-wide">Fichier</p>
-                <p className="text-sm font-medium text-emerald-900 flex items-center gap-1">
-                  <FileSpreadsheet className="w-3 h-3" />
-                  {importData.fileName}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-emerald-600 uppercase tracking-wide">Importé le</p>
-                <p className="text-sm font-medium text-emerald-900">{importedDate}</p>
-              </div>
-              <div>
-                <p className="text-xs text-emerald-600 uppercase tracking-wide">Données</p>
-                <p className="text-sm font-medium text-emerald-900">{importData.days.length} jours</p>
-              </div>
-              <div>
-                <p className="text-xs text-emerald-600 uppercase tracking-wide">Concurrents</p>
-                <p className="text-sm font-medium text-emerald-900">{importData.competitorNames.length} hôtels</p>
-              </div>
-            </div>
-            {importData.warnings.length > 0 && (
-              <div className="mt-2 text-xs text-amber-700">
-                ⚠ {importData.warnings.join(' · ')}
-              </div>
-            )}
-          </div>
-        </div>
-        <button
-          onClick={clearImport}
-          className="text-emerald-400 hover:text-emerald-600 flex-shrink-0"
-          title="Retirer l'import"
-        >
-          <X className="w-4 h-4" />
-        </button>
       </div>
     );
   }
@@ -287,7 +245,20 @@ export const LighthouseMonthlyView: React.FC = () => {
       />
 
       <div className="flex-1 overflow-auto px-6 pb-6 space-y-4">
-        <UploadBanner />
+        {/* Bandeau d'erreur ou loader si import en cours */}
+        <UploadStatusBanner />
+
+        {/* Bandeau Lighthouse compact + repliable (point 3) */}
+        {importData && (
+          <LighthouseFileBanner
+            fileName={importData.fileName}
+            importedAt={importData.importedAt}
+            daysCount={importData.days.length}
+            competitorsCount={importData.competitorNames.length}
+            warnings={importData.warnings}
+            onClear={clearImport}
+          />
+        )}
 
         {!hasData() ? (
           <EmptyState onUploadClick={() => fileInputRef.current?.click()} />
@@ -442,8 +413,9 @@ export const LighthouseMonthlyView: React.FC = () => {
         )}
       </div>
 
+      {/* Modal détail premium (remplace l'ancien DayDetailModal interne) */}
       {selectedDate && importData && (
-        <DayDetailModal
+        <PremiumDayDetailModal
           date={selectedDate}
           ourHotelName={importData.ourHotelName}
           dayData={importData.days.find(d => d.date === selectedDate) ?? null}
@@ -617,145 +589,6 @@ function DailyTable({
             })}
           </tbody>
         </table>
-      </div>
-    </div>
-  );
-}
-
-// ─── Modal Détail par date ────────────────────────────────────────────────
-
-function DayDetailModal({
-  date,
-  ourHotelName,
-  dayData,
-  onClose,
-}: {
-  date: string;
-  ourHotelName: string;
-  dayData: import('../../services/lighthouse-parser.service').LighthouseDayData | null;
-  onClose: () => void;
-}) {
-  if (!dayData) return null;
-
-  const allHotels: { name: string; price: number; isUs: boolean; status: string }[] = [
-    { name: ourHotelName, price: dayData.ourPrice, isUs: true, status: 'available' },
-    ...dayData.competitors.map(c => ({
-      name: c.hotelName,
-      price: c.price ?? Infinity,
-      isUs: false,
-      status: c.status,
-    })),
-  ];
-  const ranked = allHotels
-    .filter(h => h.status === 'available' && h.price > 0 && isFinite(h.price))
-    .sort((a, b) => a.price - b.price);
-  const unavailable = allHotels.filter(h => h.status !== 'available' || h.price === 0 || !isFinite(h.price));
-  const ourPosition = ranked.findIndex(h => h.isUs) + 1;
-  const totalRanked = ranked.length;
-  const maxPrice = ranked.length > 0 ? ranked[ranked.length - 1].price : 1;
-
-  return (
-    <div
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              Détail {dayData.dayName} {date}
-            </h2>
-            <p className="text-sm text-gray-500 mt-0.5">
-              Positionnement compset · Demande {dayData.marketDemandPercent}% · Rang {dayData.ranking}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="px-6 py-4 border-b border-gray-200 grid grid-cols-4 gap-4">
-          <div>
-            <p className="text-xs text-gray-500 uppercase">Notre prix</p>
-            <p className="text-xl font-bold text-blue-600">{dayData.ourPrice}€</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 uppercase">Médiane</p>
-            <p className="text-xl font-bold text-gray-900">{dayData.compsetMedian}€</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 uppercase">Min – Max</p>
-            <p className="text-xl font-bold text-gray-900">{dayData.compsetMin ?? '—'}€ – {dayData.compsetMax ?? '—'}€</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 uppercase">Notre rang</p>
-            <p className="text-xl font-bold text-emerald-600">
-              {ourPosition > 0 ? `#${ourPosition} / ${totalRanked}` : '—'}
-            </p>
-          </div>
-        </div>
-
-        <div className="px-6 py-4 overflow-y-auto">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Classement tarifaire</h3>
-          <div className="space-y-1.5">
-            {ranked.map((h, idx) => {
-              const widthPct = (h.price / maxPrice) * 100;
-              return (
-                <div
-                  key={h.name}
-                  className={cn(
-                    'flex items-center gap-3 px-3 py-2 rounded',
-                    h.isUs ? 'bg-blue-50 border border-blue-300' : 'bg-gray-50',
-                  )}
-                >
-                  <span className={cn(
-                    'w-6 text-xs font-bold',
-                    idx === 0 ? 'text-emerald-600' : idx < 3 ? 'text-blue-600' : 'text-gray-500',
-                  )}>
-                    #{idx + 1}
-                  </span>
-                  <span className={cn('flex-1 text-sm', h.isUs ? 'font-bold text-blue-900' : 'text-gray-700')}>
-                    {h.isUs && <Target className="inline w-3 h-3 mr-1" />}
-                    {h.name}
-                  </span>
-                  <div className="flex-1 max-w-[200px] bg-white rounded overflow-hidden h-2">
-                    <div
-                      className={cn('h-full rounded', h.isUs ? 'bg-blue-500' : 'bg-gray-400')}
-                      style={{ width: `${widthPct}%` }}
-                    />
-                  </div>
-                  <span className={cn('text-sm font-semibold w-16 text-right', h.isUs ? 'text-blue-900' : 'text-gray-900')}>
-                    {Math.round(h.price)}€
-                  </span>
-                </div>
-              );
-            })}
-
-            {unavailable.length > 0 && (
-              <>
-                <p className="text-xs text-gray-400 mt-3 mb-1">Non disponibles ({unavailable.length})</p>
-                {unavailable.map(h => (
-                  <div key={h.name} className="flex items-center gap-3 px-3 py-1.5 text-xs text-gray-400">
-                    <span className="flex-1">{h.name}</span>
-                    <span>
-                      {h.status === 'sold_out' ? 'Épuisé' : h.status === 'restricted' ? 'Restreint' : 'N/A'}
-                    </span>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-
-          {(dayData.events || dayData.holidays) && (
-            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-              {dayData.holidays && <div>📅 {dayData.holidays}</div>}
-              {dayData.events && <div>🎉 {dayData.events}</div>}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
