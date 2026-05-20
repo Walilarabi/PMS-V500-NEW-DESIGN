@@ -118,8 +118,32 @@ const defaultForm = (): PromoFormState => ({
   channels: ['Site Direct'],
 });
 
+const PROMOS_STORAGE_KEY = 'flowtym_promotions';
+
+function loadPromos(): Promotion[] {
+  try {
+    const raw = localStorage.getItem(PROMOS_STORAGE_KEY);
+    if (!raw) return generatePromotions();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : generatePromotions();
+  } catch {
+    return generatePromotions();
+  }
+}
+
 export function Promotions() {
-  const [promotions, setPromotions] = useState<Promotion[]>(generatePromotions());
+  const [promotions, setPromotionsRaw] = useState<Promotion[]>(() => loadPromos());
+  const setPromotions: typeof setPromotionsRaw = (updater) => {
+    setPromotionsRaw((prev) => {
+      const next = typeof updater === 'function' ? (updater as (p: Promotion[]) => Promotion[])(prev) : updater;
+      try {
+        localStorage.setItem(PROMOS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore quota
+      }
+      return next;
+    });
+  };
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<PromoFormState>(defaultForm());

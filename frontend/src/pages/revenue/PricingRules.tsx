@@ -230,8 +230,32 @@ function simulate(rules: PricingRule[], ctx: SimulationContext): SimulationResul
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 
+const RULES_STORAGE_KEY = 'flowtym_pricing_rules';
+
+function loadRules(): PricingRule[] {
+  try {
+    const raw = localStorage.getItem(RULES_STORAGE_KEY);
+    if (!raw) return generateMockRules();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : generateMockRules();
+  } catch {
+    return generateMockRules();
+  }
+}
+
 export function PricingRules() {
-  const [rules, setRules] = useState<PricingRule[]>(generateMockRules());
+  const [rules, setRulesRaw] = useState<PricingRule[]>(() => loadRules());
+  const setRules: typeof setRulesRaw = (updater) => {
+    setRulesRaw((prev) => {
+      const next = typeof updater === 'function' ? (updater as (p: PricingRule[]) => PricingRule[])(prev) : updater;
+      try {
+        localStorage.setItem(RULES_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore quota
+      }
+      return next;
+    });
+  };
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<RuleFormState>(defaultForm());
