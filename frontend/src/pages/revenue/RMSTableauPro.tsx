@@ -47,7 +47,8 @@ import {
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
 import { syncRMSDecision } from '../../services/rms-calendar-sync.service';
-import { MarketAnalysisCockpit } from './components/MarketAnalysisCockpit';
+import { AnalyseRMTable } from './components/AnalyseRMTable';
+import { RecommandationRMTable } from './components/RecommandationRMTable';
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useSalonsStore } from '../../store/salonsStore';
@@ -879,33 +880,12 @@ export function RMSTableauPro() {
         {viewMode === 'kanban' && (
           <KanbanView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
         )}
-        {viewMode === 'analyse' && (
-          <div className="p-6">
-            {lighthouseImport ? (
-              <MarketAnalysisCockpit
-                importData={lighthouseImport}
-                selectedMonth={(rmsData[0]?.date ?? new Date().toISOString().slice(0, 10)).slice(0, 7)}
-                onDateClick={setDetailDate}
-                view="full"
-              />
-            ) : (
-              <EmptyLighthousePrompt />
-            )}
-          </div>
-        )}
+        {viewMode === 'analyse' && <AnalyseRMTable data={rmsData} />}
         {viewMode === 'recommandation' && (
-          <div className="p-6">
-            {lighthouseImport ? (
-              <MarketAnalysisCockpit
-                importData={lighthouseImport}
-                selectedMonth={(rmsData[0]?.date ?? new Date().toISOString().slice(0, 10)).slice(0, 7)}
-                onDateClick={setDetailDate}
-                view="recommendations"
-              />
-            ) : (
-              <EmptyLighthousePrompt />
-            )}
-          </div>
+          <RecommandationRMTable
+            data={rmsData}
+            handlers={{ handleAccept, handleReject, handleMaintain, handleViewDetail: setDetailDate }}
+          />
         )}
       </div>
 
@@ -1596,28 +1576,3 @@ function RmsSettingsModal({
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// EMPTY LIGHTHOUSE PROMPT — affiché si pas de données Lighthouse importées
-// ═══════════════════════════════════════════════════════════════════════════
-
-function EmptyLighthousePrompt() {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-      <Activity className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-      <h3 className="text-sm font-semibold text-gray-700 mb-2">
-        Aucune donnée Lighthouse disponible
-      </h3>
-      <p className="text-xs text-gray-500 max-w-md mx-auto mb-4">
-        Importez d'abord un fichier Excel Lighthouse depuis la Veille concurrentielle
-        pour activer l'analyse marché et les recommandations actionnables.
-      </p>
-      <button
-        onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'rev_compset' } }))}
-        className="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 inline-flex items-center gap-2 text-sm font-medium"
-      >
-        <Target className="w-4 h-4" />
-        Aller à la Veille concurrentielle
-      </button>
-    </div>
-  );
-}
