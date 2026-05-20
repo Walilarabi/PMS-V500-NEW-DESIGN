@@ -111,9 +111,17 @@ export function DistributionAnalytics() {
 
       <div className="flex-1 overflow-auto px-6 pb-6">
         <div className="space-y-6">
-          {/* KPI Cards Globaux */}
+          {/* KPI Cards Globaux — cliquables pour pivoter le tri du tableau */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <button
+              onClick={() => setSortBy('revenue')}
+              className={cn(
+                'bg-white rounded-lg border p-4 text-left transition-all',
+                sortBy === 'revenue'
+                  ? 'border-emerald-500 ring-2 ring-emerald-200 shadow-sm'
+                  : 'border-gray-200 hover:border-emerald-300 hover:shadow-sm'
+              )}
+            >
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">CA Total</span>
                 <DollarSign className="w-4 h-4 text-emerald-500" />
@@ -121,10 +129,18 @@ export function DistributionAnalytics() {
               <div className="mt-2 text-2xl font-bold text-gray-900">
                 {Math.round(totalRevenue / 1000)}K€
               </div>
-              <div className="mt-1 text-xs text-gray-400">30 derniers jours</div>
-            </div>
+              <div className="mt-1 text-xs text-gray-400">30 derniers jours · trier ↓</div>
+            </button>
 
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <button
+              onClick={() => setSortBy('netRevenue')}
+              className={cn(
+                'bg-white rounded-lg border p-4 text-left transition-all',
+                sortBy === 'netRevenue'
+                  ? 'border-blue-500 ring-2 ring-blue-200 shadow-sm'
+                  : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'
+              )}
+            >
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">CA Net</span>
                 <TrendingUp className="w-4 h-4 text-blue-500" />
@@ -133,9 +149,9 @@ export function DistributionAnalytics() {
                 {Math.round(totalNetRevenue / 1000)}K€
               </div>
               <div className="mt-1 text-xs text-emerald-600">
-                Après commission
+                Après commission · trier ↓
               </div>
-            </div>
+            </button>
 
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center justify-between">
@@ -150,14 +166,22 @@ export function DistributionAnalytics() {
               </div>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <button
+              onClick={() => setSortBy('bookings')}
+              className={cn(
+                'bg-white rounded-lg border p-4 text-left transition-all',
+                sortBy === 'bookings'
+                  ? 'border-purple-500 ring-2 ring-purple-200 shadow-sm'
+                  : 'border-gray-200 hover:border-purple-300 hover:shadow-sm'
+              )}
+            >
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-500">Réservations</span>
                 <Users className="w-4 h-4 text-purple-500" />
               </div>
               <div className="mt-2 text-2xl font-bold text-gray-900">{totalBookings}</div>
-              <div className="mt-1 text-xs text-gray-400">Tous canaux</div>
-            </div>
+              <div className="mt-1 text-xs text-gray-400">Tous canaux · trier ↓</div>
+            </button>
 
             <div className="bg-white rounded-lg border border-gray-200 p-4">
               <div className="flex items-center justify-between">
