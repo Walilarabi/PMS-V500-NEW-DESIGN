@@ -34,6 +34,8 @@ import { useLighthouseStore } from '../../store/lighthouseStore';
 import { parseLighthouseExcel } from '../../services/lighthouse-parser.service';
 import { useSalonsStore } from '../../store/salonsStore';
 import { parseSalonsExcel } from '../../services/salons-parser.service';
+import { useExpediaStore } from '../../store/expediaStore';
+import { parseExpediaExcel } from '../../services/expedia-parser.service';
 import { persistLighthouseImport, fetchActiveLighthouseImport } from '../../services/lighthouse-persistence.service';
 import { persistSalonEvents, fetchSalonEvents } from '../../services/salon-events.service';
 import { CompsetKpiBlock, CompsetBarChart } from './components/CompsetWidgets';
@@ -128,8 +130,10 @@ function EmptyState({ onUploadClick }: { onUploadClick: () => void }) {
 export const LighthouseMonthlyView: React.FC = () => {
   const { importData, hasData, setImportData, setUploadStatus, clearImport } = useLighthouseStore();
   const salonsStore = useSalonsStore();
+  const expediaStore = useExpediaStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const salonsInputRef = useRef<HTMLInputElement>(null);
+  const expediaInputRef = useRef<HTMLInputElement>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [compsetChartDate, setCompsetChartDate] = useState<string | null>(null);
@@ -156,6 +160,22 @@ export const LighthouseMonthlyView: React.FC = () => {
       setUploadStatus('error', msg);
     }
   }, [setImportData, setUploadStatus]);
+
+  // ─── Upload Expedia ───────────────────────────────────────────────────
+  const handleExpediaFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    expediaStore.setUploadStatus('parsing');
+    try {
+      const result = await parseExpediaExcel(file);
+      expediaStore.setImportData(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+      expediaStore.setUploadStatus('error', msg);
+    }
+  }, [expediaStore]);
 
   // ─── Upload Salons ────────────────────────────────────────────────────
   const handleSalonsFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -250,6 +270,13 @@ export const LighthouseMonthlyView: React.FC = () => {
         onChange={handleSalonsFileChange}
         className="hidden"
       />
+      <input
+        ref={expediaInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={handleExpediaFileChange}
+        className="hidden"
+      />
 
       <div className="flex-1 overflow-auto px-6 pb-6 space-y-4">
         {/* Bandeau d'erreur ou loader si import en cours */}
@@ -302,6 +329,16 @@ export const LighthouseMonthlyView: React.FC = () => {
                     : 'Importer Dates Salons'}
                 </button>
                 <button
+                  onClick={() => expediaInputRef.current?.click()}
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-1.5"
+                  title="Importer le fichier Excel Expedia Revenue Management"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  {expediaStore.hasData()
+                    ? `Expedia ✓ (${expediaStore.importData?.days.length ?? 0} jours)`
+                    : 'Importer fichier Expedia'}
+                </button>
+                <button
                   onClick={() => { clearImport(); }}
                   className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
                 >
@@ -342,6 +379,46 @@ export const LighthouseMonthlyView: React.FC = () => {
                 </div>
                 <button
                   onClick={() => salonsStore.setUploadStatus('idle')}
+                  className="text-red-400 hover:text-red-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Banner upload Expedia */}
+            {expediaStore.uploadStatus === 'parsing' && (
+              <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-sm text-blue-800">
+                <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" />
+                <div className="flex-1"><strong>Analyse du fichier Expedia en cours…</strong></div>
+              </div>
+            )}
+            {expediaStore.uploadStatus === 'success' && expediaStore.importData && (
+              <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-sm text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <div className="flex-1">
+                  <strong>{expediaStore.importData.days.length} jours importés</strong>
+                  {' '}depuis {expediaStore.importData.fileName}
+                  {expediaStore.importData.globalVerdict
+                    ? ` · ${expediaStore.importData.globalVerdict}`
+                    : ''}
+                </div>
+                <button
+                  onClick={() => expediaStore.clearImport()}
+                  className="text-emerald-400 hover:text-emerald-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            {expediaStore.uploadStatus === 'error' && (
+              <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-2 text-sm text-red-800">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <strong>Erreur import Expedia :</strong> {expediaStore.uploadError}
+                </div>
+                <button
+                  onClick={() => expediaStore.setUploadStatus('idle')}
                   className="text-red-400 hover:text-red-600"
                 >
                   <X className="w-4 h-4" />
