@@ -669,6 +669,37 @@ export function RMSTableauPro() {
     );
   }, []);
 
+  // ─── Override manuel du tarif final (depuis modal Recommandation RM) ───
+  const handlePriceOverride = useCallback(async (date: string, finalPrice: number) => {
+    const row = rmsData.find(d => d.date === date);
+    if (!row || finalPrice <= 0) return;
+
+    setRmsData(prev => prev.map(d =>
+      d.date === date
+        ? { ...d, finalPrice, validationStatus: 'Acceptée' as ValidationStatus }
+        : d
+    ));
+
+    if (referenceRoom && referencePlan) {
+      updatePrice(referenceRoom.roomTypeId, referencePlan.planId, date, finalPrice);
+    }
+
+    recordRmsDecision({
+      stayDate: date,
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      action: 'accepted',
+      currentPrice: row.currentPrice,
+      suggestedPrice: row.suggestedPrice,
+      finalPrice,
+      strategy: row.strategy,
+      recommendation: row.recommendation,
+      confidenceScore: row.confidenceScore,
+      marketPressurePercent: Math.round(row.marketPressure),
+      occupancyRate: row.occupancyRate,
+      medianPrice: row.medianPrice,
+    });
+  }, [rmsData, referenceRoom, referencePlan, updatePrice]);
+
   // ─── Override manuel de la disponibilité ───────────────────────────────
   const isAvailabilityOverridden = useCallback((date: string) => {
     return inventoryOverrides.has(date);
@@ -954,6 +985,8 @@ export function RMSTableauPro() {
               onAccept: handleAccept,
               onReject: handleReject,
               onMaintain: handleMaintain,
+              onPriceOverride: handlePriceOverride,
+              onRecalculate: handleRefresh,
             }}
           />
         ) : (

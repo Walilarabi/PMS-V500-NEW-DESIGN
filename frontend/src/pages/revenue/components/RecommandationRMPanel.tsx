@@ -1,23 +1,26 @@
 /**
- * FLOWTYM — RecommandationRMPanel
+ * FLOWTYM — RecommandationRMPanel (cockpit refonte)
  *
- * Onglet "Recommandation RM" du module RMS.
- * Couche d'explication des décisions du moteur déterministe.
+ * Cockpit RMS premium · zéro scroll vertical sur la page principale.
  *
- * Structure :
- *   - Sélecteur de date en haut (dropdown + navigation ←/→)
- *   - Vue détail inline (sections A → E) calquée sur PremiumDayDetailModal
- *   - Tableau 17 colonnes en bas — clic sur ligne = sélection de la date
- *
- * Alimenté par les mêmes données que le Tableau RMS (data: DayRMSData[]).
+ * Layout :
+ *   ┌──────────────────────────────────────────────────────────────────┐
+ *   │ Toolbar fixe (filtres · mode source · KPI · recalcul · export)   │
+ *   ├──────────────────────────────────────────────────────────────────┤
+ *   │ Table compacte (sticky header + sticky 1re colonne)              │
+ *   │   ↳ 11 colonnes maximum · pas de texte long                      │
+ *   │   ↳ clic ligne → modal détail premium                            │
+ *   │   ↳ scroll interne uniquement                                    │
+ *   ├──────────────────────────────────────────────────────────────────┤
+ *   │ Pagination + compteur                                            │
+ *   └──────────────────────────────────────────────────────────────────┘
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
-  Target, TrendingUp, TrendingDown, Minus, Activity,
-  AlertTriangle, AlertCircle, Calendar, Sparkles,
-  Check, X, Edit3, Lock, Database, ChevronLeft, ChevronRight,
-  Info,
+  RefreshCw, Download, Filter, Search, Check, X, Minus, Eye,
+  ChevronLeft, ChevronRight, AlertTriangle, Database, Lightbulb,
+  TrendingUp, TrendingDown, ChevronDown,
 } from 'lucide-react';
 import type { DayRMSData } from '../RMSTableauPro';
 import {
@@ -25,6 +28,7 @@ import {
   type RMRecommendation,
   type SourceMode,
 } from '../../../services/recommandation-rm.service';
+import { RMRecommendationDetailModal, type RMDetailEnrichment } from './RMRecommendationDetailModal';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
@@ -32,16 +36,8 @@ import {
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
-function fmtDateLong(date: string): string {
-  return new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
-}
-
 function fmtDateShort(date: string): string {
-  return new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', {
-    day: '2-digit', month: 'short',
-  });
+  return new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
 }
 
 type DemandLevel = 'Faible' | 'Moyenne' | 'Forte' | 'Très forte';
@@ -61,43 +57,22 @@ function getCompressionLevel(score: number): CompressionLevel {
   return 'Faible';
 }
 
-const DEMAND_COLORS: Record<DemandLevel, string> = {
-  'Très forte': 'bg-red-100 text-red-800',
-  'Forte':      'bg-amber-100 text-amber-800',
-  'Moyenne':    'bg-blue-100 text-blue-800',
-  'Faible':     'bg-gray-100 text-gray-600',
+const DEMAND_DOT: Record<DemandLevel, string> = {
+  'Très forte': 'bg-red-500',
+  'Forte':      'bg-amber-500',
+  'Moyenne':    'bg-blue-500',
+  'Faible':     'bg-gray-300',
 };
 
-const COMPRESSION_COLORS: Record<CompressionLevel, string> = {
-  'Très élevée': 'bg-red-100 text-red-800',
-  'Élevée':      'bg-orange-100 text-orange-800',
-  'Moyenne':     'bg-amber-100 text-amber-800',
-  'Faible':      'bg-gray-100 text-gray-600',
-};
-
-const SOURCE_LABEL: Record<string, string> = {
-  lighthouse: 'LH',
-  expedia:    'EX',
-  tie:        'LH=EX',
-  none:       '–',
-};
-
-const SOURCE_BADGE_COLOR: Record<string, string> = {
-  LH:      'bg-blue-100 text-blue-800',
-  EX:      'bg-orange-100 text-orange-800',
-  'LH=EX': 'bg-violet-100 text-violet-800',
-  '–':     'bg-gray-100 text-gray-400',
-};
-
-const SOURCE_MODE_BADGE: Record<SourceMode, { cls: string; icon: typeof Database }> = {
-  crossed:         { cls: 'bg-violet-50 text-violet-800 border-violet-200', icon: Database },
-  lighthouse_only: { cls: 'bg-blue-50 text-blue-800 border-blue-200',       icon: Database },
-  expedia_only:    { cls: 'bg-orange-50 text-orange-800 border-orange-200', icon: Database },
-  none:            { cls: 'bg-gray-50 text-gray-500 border-gray-200',       icon: AlertCircle },
+const COMPRESSION_DOT: Record<CompressionLevel, string> = {
+  'Très élevée': 'bg-red-500',
+  'Élevée':      'bg-orange-500',
+  'Moyenne':     'bg-amber-400',
+  'Faible':      'bg-gray-300',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ENRICHED ROW (mémoïsé)
+// ENRICHED ROW
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface EnrichedRow {
@@ -113,8 +88,11 @@ interface EnrichedRow {
   dominantSourceLabel: string;
   confidenceScore: number;
   isContradiction: boolean;
-  validationStatus: DayRMSData['validationStatus'];
 }
+
+const SOURCE_LABEL: Record<string, string> = {
+  lighthouse: 'LH', expedia: 'EX', tie: 'LH=EX', none: '–',
+};
 
 function enrichRow(row: DayRMSData, totalCapacity: number): EnrichedRow {
   const bundle = row.marketBundle;
@@ -122,8 +100,7 @@ function enrichRow(row: DayRMSData, totalCapacity: number): EnrichedRow {
   const combinedPressure = bundle?.consensus.combinedPressure ?? row.marketPressure;
   const demandScore = breakdown?.demandScore.value ?? combinedPressure;
   const compressionScore = breakdown?.compressionScore.value ?? 0;
-  const confidenceBonus = breakdown?.confidenceBonus ?? 0;
-  const confidenceScore = Math.min(100, row.confidenceScore + confidenceBonus);
+  const confidenceScore = Math.min(100, row.confidenceScore + (breakdown?.confidenceBonus ?? 0));
 
   const recommendation = buildRMRecommendation({
     date: row.date,
@@ -144,8 +121,6 @@ function enrichRow(row: DayRMSData, totalCapacity: number): EnrichedRow {
     strategy: row.strategy,
   });
 
-  const dominantSourceLabel = SOURCE_LABEL[bundle?.consensus.dominantSource ?? 'none'] ?? '–';
-
   return {
     raw: row,
     recommendation,
@@ -156,10 +131,9 @@ function enrichRow(row: DayRMSData, totalCapacity: number): EnrichedRow {
     combinedPressure,
     scoreLH: bundle?.lighthouse.pressurePercent ?? null,
     scoreEX: bundle?.expedia.pressurePercentNeighborhood ?? null,
-    dominantSourceLabel,
+    dominantSourceLabel: SOURCE_LABEL[bundle?.consensus.dominantSource ?? 'none'] ?? '–',
     confidenceScore,
     isContradiction: bundle?.consensus.agreement === 'diverge',
-    validationStatus: row.validationStatus,
   };
 }
 
@@ -171,6 +145,8 @@ interface Handlers {
   onAccept: (date: string) => void;
   onReject: (date: string) => void;
   onMaintain: (date: string) => void;
+  onPriceOverride?: (date: string, price: number) => void;
+  onRecalculate?: () => void;
 }
 
 interface Props {
@@ -179,603 +155,556 @@ interface Props {
   handlers: Handlers;
 }
 
+const PAGE_SIZE = 15;
+
 export function RecommandationRMPanel({ data, totalCapacity, handlers }: Props) {
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [detailDate, setDetailDate] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [filterSource, setFilterSource] = useState<'all' | 'lighthouse' | 'expedia' | 'crossed'>('all');
+  const [filterReco, setFilterReco] = useState<'all' | 'Augmenter' | 'Baisser' | 'Maintenir'>('all');
 
   const enriched = useMemo(() => data.map(r => enrichRow(r, totalCapacity)), [data, totalCapacity]);
 
-  // Sélectionne automatiquement la 1re date si rien n'est choisi
-  useEffect(() => {
-    if (!selectedDate && enriched.length > 0) {
-      const today = enriched.find(r => r.raw.isToday);
-      setSelectedDate(today?.raw.date ?? enriched[0].raw.date);
+  // ─── Filtrage ──────────────────────────────────────────────────────
+  const filtered = useMemo(() => enriched.filter(r => {
+    if (filterSource !== 'all') {
+      const mode = r.recommendation.sourceMode;
+      if (filterSource === 'lighthouse' && mode !== 'lighthouse_only') return false;
+      if (filterSource === 'expedia'    && mode !== 'expedia_only')    return false;
+      if (filterSource === 'crossed'    && mode !== 'crossed')         return false;
     }
-  }, [enriched, selectedDate]);
+    if (filterReco !== 'all' && r.raw.recommendation !== filterReco) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const eventStr = r.raw.events.map(e => e.name).join(' ').toLowerCase();
+      if (!r.raw.date.includes(q) && !eventStr.includes(q) && !r.raw.dayName.toLowerCase().includes(q)) {
+        return false;
+      }
+    }
+    return true;
+  }), [enriched, filterSource, filterReco, search]);
 
-  const selected = useMemo(
-    () => enriched.find(r => r.raw.date === selectedDate) ?? null,
-    [enriched, selectedDate],
+  // ─── Pagination ────────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageRows = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  React.useEffect(() => {
+    if (page > 0 && safePage !== page) setPage(safePage);
+  }, [filtered.length, page, safePage]);
+
+  // ─── KPI synthèse ──────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    if (enriched.length === 0) return null;
+    const avgPressure  = Math.round(enriched.reduce((s, r) => s + r.combinedPressure, 0) / enriched.length);
+    const nbHighDemand = enriched.filter(r => r.demandLevel === 'Forte' || r.demandLevel === 'Très forte').length;
+    const nbHighCompr  = enriched.filter(r => r.compressionLevel === 'Élevée' || r.compressionLevel === 'Très élevée').length;
+    const avgConfidence = Math.round(enriched.reduce((s, r) => s + r.confidenceScore, 0) / enriched.length);
+    const nbToValidate  = enriched.filter(r => r.raw.validationStatus === 'En attente').length;
+    return { avgPressure, nbHighDemand, nbHighCompr, avgConfidence, nbToValidate };
+  }, [enriched]);
+
+  // ─── Mode source global ────────────────────────────────────────────
+  const globalSourceMode = useMemo((): SourceMode => {
+    const modes = enriched.map(r => r.recommendation.sourceMode);
+    const hasLH = modes.some(m => m === 'lighthouse_only' || m === 'crossed');
+    const hasEX = modes.some(m => m === 'expedia_only'    || m === 'crossed');
+    if (hasLH && hasEX) return 'crossed';
+    if (hasLH) return 'lighthouse_only';
+    if (hasEX) return 'expedia_only';
+    return 'none';
+  }, [enriched]);
+
+  // ─── Selected detail row ───────────────────────────────────────────
+  const detailRow = useMemo(
+    () => detailDate ? enriched.find(r => r.raw.date === detailDate) ?? null : null,
+    [enriched, detailDate],
   );
 
-  const selectedIdx = selected ? enriched.findIndex(r => r.raw.date === selected.raw.date) : -1;
-  const canPrev = selectedIdx > 0;
-  const canNext = selectedIdx >= 0 && selectedIdx < enriched.length - 1;
+  const detailIdx = detailRow ? enriched.findIndex(r => r.raw.date === detailRow.raw.date) : -1;
+  const hasPrevDetail = detailIdx > 0;
+  const hasNextDetail = detailIdx >= 0 && detailIdx < enriched.length - 1;
 
-  const navigatePrev = () => { if (canPrev) setSelectedDate(enriched[selectedIdx - 1].raw.date); };
-  const navigateNext = () => { if (canNext) setSelectedDate(enriched[selectedIdx + 1].raw.date); };
+  const openDetail = useCallback((date: string) => setDetailDate(date), []);
+  const navPrev = useCallback(() => { if (hasPrevDetail) setDetailDate(enriched[detailIdx - 1].raw.date); }, [enriched, detailIdx, hasPrevDetail]);
+  const navNext = useCallback(() => { if (hasNextDetail) setDetailDate(enriched[detailIdx + 1].raw.date); }, [enriched, detailIdx, hasNextDetail]);
 
+  // ─── Export CSV ────────────────────────────────────────────────────
+  const handleExport = useCallback(() => {
+    const header = ['Date', 'Jour', 'Événement', 'Pression', 'Compression', 'Médiane', 'Notre tarif', 'Recommandation', 'Confiance', 'Statut'];
+    const rows = filtered.map(r => [
+      r.raw.date,
+      r.raw.dayName,
+      r.raw.events.map(e => e.name).join(' | '),
+      Math.round(r.combinedPressure),
+      Math.round(r.compressionScore),
+      r.raw.medianPrice,
+      r.raw.currentPrice,
+      `${r.raw.recommendation} (${r.recommendation.priceDeltaPercent >= 0 ? '+' : ''}${r.recommendation.priceDeltaPercent.toFixed(1)}%)`,
+      r.confidenceScore,
+      r.raw.validationStatus,
+    ]);
+    const csv = [header, ...rows]
+      .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `recommandation_rm_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [filtered]);
+
+  const handleRecalculate = useCallback(() => {
+    if (handlers.onRecalculate) handlers.onRecalculate();
+    else window.dispatchEvent(new CustomEvent('rms:recalculate'));
+  }, [handlers]);
+
+  // ─── Render ────────────────────────────────────────────────────────
   return (
-    <div className="p-4 space-y-5">
-      {/* ── DATE SELECTOR ──────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-3 bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
-        <Calendar className="w-4 h-4 text-violet-600" />
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Date analysée</span>
+    <div className="h-full flex flex-col overflow-hidden bg-gray-50/40">
 
-        <div className="flex items-center gap-1 ml-2">
-          <button
-            onClick={navigatePrev}
-            disabled={!canPrev}
-            className={cn(
-              'p-1.5 rounded transition-colors',
-              canPrev ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed',
-            )}
-            title="Date précédente"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+      {/* ═══ TOOLBAR ════════════════════════════════════════════════ */}
+      <div className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-3 flex-wrap shrink-0">
 
-          <select
-            value={selectedDate ?? ''}
-            onChange={e => setSelectedDate(e.target.value)}
-            className="px-3 py-1.5 text-sm font-semibold border border-gray-300 rounded-md focus:ring-2 focus:ring-violet-500 focus:outline-none min-w-[260px]"
-          >
-            {enriched.map(r => (
-              <option key={r.raw.date} value={r.raw.date}>
-                {fmtDateLong(r.raw.date)}{r.raw.isToday ? ' — aujourd\'hui' : ''}
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={navigateNext}
-            disabled={!canNext}
-            className={cn(
-              'p-1.5 rounded transition-colors',
-              canNext ? 'hover:bg-gray-100 text-gray-700' : 'text-gray-300 cursor-not-allowed',
-            )}
-            title="Date suivante"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+        {/* Search */}
+        <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-md px-2.5 py-1.5 min-w-[200px]">
+          <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <input
+            type="text"
+            placeholder="Date, jour, événement…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="flex-1 text-xs bg-transparent outline-none placeholder:text-gray-400"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-700">
+              <X className="w-3 h-3" />
+            </button>
+          )}
         </div>
 
-        <span className="text-xs text-gray-400 ml-auto">
-          {selectedIdx + 1} / {enriched.length} dates · couche d'explication des recommandations RMS
-        </span>
-      </div>
-
-      {/* ── DETAIL VIEW ────────────────────────────────────────────────── */}
-      {selected && <DetailView row={selected} handlers={handlers} />}
-
-      {/* ── 17-COLUMN TABLE ────────────────────────────────────────────── */}
-      <div className="space-y-2">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Toutes les recommandations · {enriched.length} dates
-        </h3>
-        <RecoTable
-          rows={enriched}
-          selectedDate={selectedDate}
-          onSelect={setSelectedDate}
+        {/* Filter source */}
+        <FilterSelect
+          icon={Database}
+          label="Source"
+          value={filterSource}
+          onChange={v => setFilterSource(v as typeof filterSource)}
+          options={[
+            { value: 'all',        label: 'Toutes sources' },
+            { value: 'lighthouse', label: 'Lighthouse seul' },
+            { value: 'expedia',    label: 'Expedia seul' },
+            { value: 'crossed',    label: 'Croisé LH + EX' },
+          ]}
         />
-      </div>
-    </div>
-  );
-}
 
-// ═══════════════════════════════════════════════════════════════════════════
-// DETAIL VIEW — sections A → E
-// ═══════════════════════════════════════════════════════════════════════════
+        {/* Filter reco */}
+        <FilterSelect
+          icon={Filter}
+          label="Reco"
+          value={filterReco}
+          onChange={v => setFilterReco(v as typeof filterReco)}
+          options={[
+            { value: 'all',       label: 'Toutes' },
+            { value: 'Augmenter', label: '↑ Augmenter' },
+            { value: 'Baisser',   label: '↓ Baisser' },
+            { value: 'Maintenir', label: '= Maintenir' },
+          ]}
+        />
 
-function DetailView({ row, handlers }: { row: EnrichedRow; handlers: Handlers }) {
-  const reco = row.recommendation;
-  const bundle = row.raw.marketBundle;
+        {/* Source mode badge */}
+        <SourceModeBadge mode={globalSourceMode} />
 
-  const demandColor =
-    row.demandScore >= 80 ? 'bg-red-50 text-red-700 border-red-200' :
-    row.demandScore >= 60 ? 'bg-orange-50 text-orange-700 border-orange-200' :
-    row.demandScore >= 30 ? 'bg-amber-50 text-amber-700 border-amber-200' :
-    'bg-emerald-50 text-emerald-700 border-emerald-200';
+        {/* Divider */}
+        <div className="border-l border-gray-200 h-6" />
 
-  const sourceModeBadge = SOURCE_MODE_BADGE[reco.sourceMode];
-  const SourceIcon = sourceModeBadge.icon;
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-
-      {/* ─── HEADER premium ───────────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white px-7 py-5 relative">
-        <div className="flex items-center gap-3 mb-1">
-          <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
-            <Calendar className="w-5 h-5" />
+        {/* KPIs */}
+        {kpis && (
+          <div className="flex items-center gap-4 text-xs">
+            <KpiInline label="Pression moy."  value={`${kpis.avgPressure}%`}  accent={kpis.avgPressure >= 60 ? 'text-red-700' : kpis.avgPressure >= 40 ? 'text-amber-700' : 'text-gray-700'} />
+            <KpiInline label="Forte demande"  value={kpis.nbHighDemand}       accent={kpis.nbHighDemand > 0 ? 'text-amber-700' : 'text-gray-600'} />
+            <KpiInline label="Forte compr."   value={kpis.nbHighCompr}        accent={kpis.nbHighCompr > 0 ? 'text-orange-700' : 'text-gray-600'} />
+            <KpiInline label="Confiance moy." value={`${kpis.avgConfidence}%`} accent={kpis.avgConfidence >= 80 ? 'text-emerald-700' : kpis.avgConfidence >= 60 ? 'text-amber-700' : 'text-red-600'} />
+            <KpiInline label="À valider"      value={kpis.nbToValidate}       accent={kpis.nbToValidate > 0 ? 'text-violet-700' : 'text-gray-600'} />
           </div>
-          <div>
-            <h2 className="text-xl font-bold tracking-tight">{fmtDateLong(row.raw.date)}</h2>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Recommandation RM · {row.raw.strategy} · Confiance {row.confidenceScore}%
-            </p>
-          </div>
-        </div>
+        )}
 
-        <div className="flex items-center gap-2 mt-3 flex-wrap">
-          <span className={cn(
-            'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border',
-            demandColor,
-          )}>
-            <Activity className="w-3 h-3" />
-            Demande {Math.round(row.demandScore)}% — {row.demandLevel}
-          </span>
-          <span className={cn(
-            'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border',
-            sourceModeBadge.cls,
-          )}>
-            <SourceIcon className="w-3 h-3" />
-            {reco.sourceModeLabel}
-          </span>
-          {row.raw.events.length > 0 && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/20 text-purple-200 text-xs font-medium border border-purple-400/30">
-              🎉 {row.raw.events.length} événement{row.raw.events.length > 1 ? 's' : ''}
-            </span>
-          )}
-          {reco.hasContradiction && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/20 text-red-200 text-xs font-medium border border-red-400/40">
-              <AlertTriangle className="w-3 h-3" />
-              Signal contradictoire
-            </span>
-          )}
+        {/* Spacer + actions */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={handleRecalculate}
+            title="Recalculer toutes les recommandations RMS"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 border border-gray-300 rounded-md bg-white hover:bg-gray-50"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Recalculer
+          </button>
+          <button
+            onClick={handleExport}
+            title="Exporter CSV des recommandations filtrées"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-violet-600 rounded-md hover:bg-violet-700"
+          >
+            <Download className="w-3 h-3" />
+            Exporter
+          </button>
         </div>
       </div>
 
-      {/* ─── Contradiction banner ─────────────────────────────────── */}
-      {reco.contradictionMessage && (
-        <div className="px-6 py-3 bg-red-50 border-b border-red-200 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-700 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-red-800 font-medium">{reco.contradictionMessage}</p>
-        </div>
-      )}
+      {/* ═══ TABLE (zone flex avec scroll interne) ═══════════════════ */}
+      <div className="flex-1 min-h-0 flex flex-col px-4 pt-3 pb-2 overflow-hidden">
+        <div className="flex-1 min-h-0 bg-white border border-gray-200 rounded-lg shadow-sm flex flex-col overflow-hidden">
 
-      {/* ─── SECTION A — Résumé KPI ───────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 divide-x divide-gray-100 border-b border-gray-100">
-        <KpiTile label="Pression marché"  value={`${Math.round(row.combinedPressure)}%`} accent={pressureAccent(row.combinedPressure)} />
-        <KpiTile label="Compression"      value={Math.round(row.compressionScore)}        accent={compressionAccent(row.compressionScore)} sub={row.compressionLevel} />
-        <KpiTile label="Confiance"        value={`${row.confidenceScore}%`}               accent={confidenceAccent(row.confidenceScore)} />
-        <KpiTile label="Score Lighthouse" value={row.scoreLH !== null ? `${Math.round(row.scoreLH)}` : '–'} sub={row.scoreLH !== null ? '/ 100' : 'absent'} />
-        <KpiTile label="Score Expedia"    value={row.scoreEX !== null ? `${Math.round(row.scoreEX)}` : '–'} sub={row.scoreEX !== null ? '/ 100' : 'absent'} />
-        <KpiTile label="Source dominante" value={row.dominantSourceLabel} sub="signal arbitré" />
-      </div>
-
-      <div className="px-6 py-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-        {/* ─── SECTION B — Analyse marché ───────────────────────── */}
-        <Section title="Analyse marché" icon={Activity}>
-          <ul className="space-y-2 text-sm text-gray-700">
-            <li>
-              <strong>Lecture pression :</strong>{' '}
-              {row.combinedPressure >= 70 ? 'Marché tendu, opportunité de yield agressif.' :
-               row.combinedPressure >= 40 ? 'Marché actif, ajustement modéré recommandé.' :
-               'Marché calme, prudence sur les hausses.'}
-            </li>
-            <li>
-              <strong>Tendance tarifaire compset :</strong>{' '}
-              {row.raw.varVsYesterday !== null && Math.abs(row.raw.varVsYesterday) >= 0.5
-                ? `${row.raw.varVsYesterday >= 0 ? '+' : ''}${row.raw.varVsYesterday.toFixed(1)}% vs hier`
-                : 'stable vs hier'}
-              {row.raw.varVs7Days !== null && Math.abs(row.raw.varVs7Days) >= 0.5
-                ? `, ${row.raw.varVs7Days >= 0 ? '+' : ''}${row.raw.varVs7Days.toFixed(1)}% vs J-7`
-                : ''}
-            </li>
-            <li>
-              <strong>Niveau de tension :</strong>{' '}
-              <span className={cn('px-2 py-0.5 rounded text-xs font-semibold ml-1', COMPRESSION_COLORS[row.compressionLevel])}>
-                {row.compressionLevel}
-              </span>
-            </li>
-            {bundle?.expedia.available && bundle.expedia.competitorCount > 0 && (
-              <li>
-                <strong>Risque sold-out concurrent :</strong>{' '}
-                {bundle.expedia.soldOutCount} / {bundle.expedia.competitorCount} concurrents épuisés
-                {bundle.expedia.soldOutCount / bundle.expedia.competitorCount >= 0.5 && (
-                  <span className="ml-2 text-red-700 font-semibold">⚠ élevé</span>
+          {/* Table avec sticky header + sticky first col */}
+          <div className="flex-1 min-h-0 overflow-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead className="sticky top-0 z-20 bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <Th sticky className="text-left">Jour</Th>
+                  <Th className="text-left">Date</Th>
+                  <Th className="text-left">Événement</Th>
+                  <Th className="text-center">Pression</Th>
+                  <Th className="text-center">Compression</Th>
+                  <Th className="text-right">Médiane</Th>
+                  <Th className="text-right">Notre tarif</Th>
+                  <Th className="text-center">Recommandation</Th>
+                  <Th className="text-center">Confiance</Th>
+                  <Th className="text-center">Statut</Th>
+                  <Th className="text-right pr-3">Actions</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-16 text-center text-gray-400">
+                      Aucune date ne correspond aux filtres actifs.
+                    </td>
+                  </tr>
                 )}
-              </li>
-            )}
-          </ul>
-        </Section>
-
-        {/* ─── SECTION C — Analyse concurrence ──────────────────── */}
-        <Section title="Analyse concurrence" icon={Target}>
-          <div className="grid grid-cols-3 gap-2 text-sm">
-            <CompsetMetric label="Médiane" value={row.raw.medianPrice ? `${row.raw.medianPrice}€` : '–'} />
-            <CompsetMetric label="Min"     value={row.raw.minPrice    ? `${row.raw.minPrice}€`    : '–'} accent="text-emerald-600" />
-            <CompsetMetric label="Max"     value={row.raw.maxPrice    ? `${row.raw.maxPrice}€`    : '–'} accent="text-orange-600" />
-            <CompsetMetric label="Notre tarif" value={row.raw.currentPrice ? `${row.raw.currentPrice}€` : '–'} accent="text-blue-700" wide />
-            {row.raw.medianPrice > 0 && row.raw.currentPrice > 0 && (
-              <CompsetMetric
-                label="Écart médiane"
-                value={`${((row.raw.currentPrice - row.raw.medianPrice) / row.raw.medianPrice * 100).toFixed(1)}%`}
-                accent={
-                  row.raw.currentPrice > row.raw.medianPrice ? 'text-emerald-600' : 'text-red-600'
-                }
-                wide
-              />
-            )}
+                {pageRows.map(r => (
+                  <TableRow
+                    key={r.raw.date}
+                    row={r}
+                    onOpen={openDetail}
+                    onAccept={handlers.onAccept}
+                    onReject={handlers.onReject}
+                    onMaintain={handlers.onMaintain}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <span className="text-xs text-gray-500">Positionnement :</span>{' '}
-            <span className={cn(
-              'px-2 py-0.5 rounded text-xs font-semibold',
-              reco.pricePositioning === 'sous_marche' ? 'bg-blue-100 text-blue-800' :
-              reco.pricePositioning === 'mid_market'  ? 'bg-gray-100 text-gray-700' :
-              reco.pricePositioning === 'premium'     ? 'bg-emerald-100 text-emerald-800' :
-              reco.pricePositioning === 'trop_cher'   ? 'bg-red-100 text-red-800' :
-              'bg-gray-100 text-gray-400',
-            )}>
-              {reco.pricePositioningLabel}
+
+          {/* Pagination */}
+          <div className="border-t border-gray-200 bg-white px-3 py-2 flex items-center justify-between shrink-0">
+            <span className="text-xs text-gray-500">
+              {filtered.length === 0 ? '0' : `${safePage * PAGE_SIZE + 1}-${Math.min(filtered.length, (safePage + 1) * PAGE_SIZE)}`}
+              {' '}sur {filtered.length} dates
+              {filtered.length !== enriched.length && <span className="text-gray-400"> ({enriched.length} total)</span>}
             </span>
-          </div>
-        </Section>
-      </div>
-
-      {/* ─── SECTION D — Recommandation explicative ───────────────── */}
-      <div className="px-6 py-5 bg-violet-50/30 border-t border-violet-100">
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles className="w-4 h-4 text-violet-600" />
-          <h3 className="text-sm font-semibold text-gray-900">Recommandation RM</h3>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Recommandation principale + action tarifaire */}
-          <div className="space-y-3">
-            <div className="bg-white border border-violet-200 rounded-lg p-4">
-              <div className="text-xs text-violet-700 font-semibold uppercase tracking-wide mb-1">Recommandation principale</div>
-              <div className={cn(
-                'text-xl font-bold mb-2',
-                row.raw.recommendation === 'Augmenter' ? 'text-emerald-700' :
-                row.raw.recommendation === 'Baisser'   ? 'text-red-700' :
-                'text-gray-700',
-              )}>
-                {reco.actionLabel}
-              </div>
-              <div className="text-sm text-gray-700">{reco.priceAction}</div>
-            </div>
-
-            {/* Restrictions */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Lock className="w-3.5 h-3.5 text-amber-700" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-gray-700">Restrictions recommandées</span>
-              </div>
-              {reco.restrictions.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">Aucune restriction calculée.</p>
-              ) : (
-                <ul className="space-y-1">
-                  {reco.restrictions.map((r, i) => (
-                    <li key={i} className="text-sm text-gray-700 flex items-start gap-1.5">
-                      <span className="w-1 h-1 rounded-full bg-amber-500 mt-2 flex-shrink-0" />
-                      {r}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          {/* Risques + explication */}
-          <div className="space-y-3">
-            {/* Risques */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center gap-1.5 mb-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-gray-700">Risques détectés</span>
-              </div>
-              {reco.risks.length === 0 ? (
-                <p className="text-xs text-emerald-700 flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> Aucun risque détecté sur cette date.
-                </p>
-              ) : (
-                <ul className="space-y-1">
-                  {reco.risks.map((r, i) => (
-                    <li key={i} className="text-sm text-red-700 flex items-start gap-1.5">
-                      <AlertTriangle className="w-3 h-3 mt-1 flex-shrink-0" />
-                      {r}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Explication détaillée — bloc large pleine largeur */}
-        <div className="mt-4 bg-white border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Info className="w-3.5 h-3.5 text-violet-600" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-700">Explication détaillée</span>
-          </div>
-          {reco.detailedExplanation.length === 0 ? (
-            <p className="text-xs text-gray-400 italic">Pas d'éléments d'analyse disponibles pour cette date.</p>
-          ) : (
-            <div className="space-y-2 text-sm text-gray-700 leading-relaxed">
-              {reco.detailedExplanation.map((p, i) => (
-                <p key={i}>{p}</p>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ─── SECTION E — Actions ──────────────────────────────────── */}
-      <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center gap-2 justify-between">
-        <div className="text-xs text-gray-600">
-          Statut actuel :{' '}
-          <span className={cn(
-            'px-2 py-0.5 rounded font-semibold',
-            row.validationStatus === 'Acceptée'  ? 'bg-emerald-100 text-emerald-800' :
-            row.validationStatus === 'Refusée'   ? 'bg-red-100 text-red-800' :
-            row.validationStatus === 'Maintenue' ? 'bg-gray-200 text-gray-700' :
-            'bg-amber-100 text-amber-800',
-          )}>
-            {row.validationStatus}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handlers.onAccept(row.raw.date)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-sm font-semibold rounded-md hover:bg-emerald-700 transition-colors"
-          >
-            <Check className="w-3.5 h-3.5" />
-            Accepter
-          </button>
-          <button
-            onClick={() => handlers.onMaintain(row.raw.date)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-700 text-sm font-semibold rounded-md border border-gray-300 hover:bg-gray-100 transition-colors"
-          >
-            <Minus className="w-3.5 h-3.5" />
-            Maintenir
-          </button>
-          <button
-            onClick={() => handlers.onReject(row.raw.date)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-red-700 text-sm font-semibold rounded-md border border-red-300 hover:bg-red-50 transition-colors"
-          >
-            <X className="w-3.5 h-3.5" />
-            Refuser
-          </button>
-          <button
-            disabled
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-gray-400 text-sm font-semibold rounded-md border border-gray-200 cursor-not-allowed"
-            title="Modification manuelle du tarif final — disponible dans le tableau RMS principal"
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-            Modifier
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 17-COLUMN TABLE
-// ═══════════════════════════════════════════════════════════════════════════
-
-function RecoTable({
-  rows, selectedDate, onSelect,
-}: {
-  rows: EnrichedRow[];
-  selectedDate: string | null;
-  onSelect: (date: string) => void;
-}) {
-  return (
-    <div className="overflow-x-auto border border-gray-200 rounded-lg">
-      <table className="w-full text-xs">
-        <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-          <tr>
-            <th className="px-2 py-2 text-left  font-semibold text-gray-700 whitespace-nowrap">Date</th>
-            <th className="px-2 py-2 text-left  font-semibold text-gray-700">Jour</th>
-            <th className="px-2 py-2 text-left  font-semibold text-gray-700 min-w-[140px]">Événement</th>
-            <th className="px-2 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">Niv. demande</th>
-            <th className="px-2 py-2 text-center font-semibold text-gray-700">Pression</th>
-            <th className="px-2 py-2 text-center font-semibold text-blue-700">LH</th>
-            <th className="px-2 py-2 text-center font-semibold text-orange-700">EX</th>
-            <th className="px-2 py-2 text-center font-semibold text-violet-700 whitespace-nowrap">Score croisé</th>
-            <th className="px-2 py-2 text-center font-semibold text-gray-700 whitespace-nowrap">Niv. compression</th>
-            <th className="px-2 py-2 text-center font-semibold text-gray-700">Source</th>
-            <th className="px-2 py-2 text-center font-semibold text-gray-700">Confiance</th>
-            <th className="px-2 py-2 text-left  font-semibold text-gray-700 whitespace-nowrap">Recommandation</th>
-            <th className="px-2 py-2 text-left  font-semibold text-gray-700 whitespace-nowrap">Action tarifaire</th>
-            <th className="px-2 py-2 text-left  font-semibold text-amber-700 min-w-[140px]">Restriction</th>
-            <th className="px-2 py-2 text-left  font-semibold text-red-700 min-w-[140px]">Risque</th>
-            <th className="px-2 py-2 text-left  font-semibold text-gray-700 min-w-[220px]">Explication</th>
-            <th className="px-2 py-2 text-left  font-semibold text-gray-700 whitespace-nowrap">Statut</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => {
-            const isSelected = r.raw.date === selectedDate;
-            const eventStr   = r.raw.events.map(e => e.name).join(', ') || '–';
-            const restrictionStr = r.recommendation.restrictions.join(' · ') || '–';
-            const riskStr = r.recommendation.risks.length > 0
-              ? r.recommendation.risks[0] + (r.recommendation.risks.length > 1 ? ` (+${r.recommendation.risks.length - 1})` : '')
-              : '–';
-            const explanationFirst = r.recommendation.detailedExplanation[0] ?? '–';
-
-            return (
-              <tr
-                key={r.raw.date}
-                onClick={() => onSelect(r.raw.date)}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={safePage === 0}
                 className={cn(
-                  'border-b border-gray-100 cursor-pointer transition-colors',
-                  isSelected         ? 'bg-violet-100 hover:bg-violet-100 ring-1 ring-inset ring-violet-300' :
-                  r.raw.isToday      ? 'bg-blue-50/30 hover:bg-blue-50' :
-                  r.raw.isWeekend    ? 'bg-gray-50/40 hover:bg-gray-100' :
-                  'hover:bg-gray-50',
+                  'p-1.5 rounded transition-colors',
+                  safePage === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100',
                 )}
               >
-                <td className="px-2 py-1.5 font-medium text-gray-900 whitespace-nowrap">{fmtDateShort(r.raw.date)}</td>
-                <td className="px-2 py-1.5 text-gray-600">{r.raw.dayName}</td>
-                <td className="px-2 py-1.5 text-gray-700 truncate max-w-[140px]" title={eventStr}>{eventStr}</td>
-                <td className="px-2 py-1.5 text-center">
-                  <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-semibold', DEMAND_COLORS[r.demandLevel])}>
-                    {r.demandLevel}
-                  </span>
-                </td>
-                <td className={cn('px-2 py-1.5 text-center font-bold tabular-nums',
-                  r.combinedPressure >= 70 ? 'text-red-700' :
-                  r.combinedPressure >= 40 ? 'text-amber-700' : 'text-gray-600',
-                )}>
-                  {Math.round(r.combinedPressure)}%
-                </td>
-                <td className="px-2 py-1.5 text-center tabular-nums text-blue-700">
-                  {r.scoreLH !== null ? Math.round(r.scoreLH) : <span className="text-gray-300">–</span>}
-                </td>
-                <td className="px-2 py-1.5 text-center tabular-nums text-orange-700">
-                  {r.scoreEX !== null ? Math.round(r.scoreEX) : <span className="text-gray-300">–</span>}
-                </td>
-                <td className={cn('px-2 py-1.5 text-center font-bold tabular-nums',
-                  r.combinedPressure >= 70 ? 'text-red-700' :
-                  r.combinedPressure >= 40 ? 'text-amber-700' : 'text-gray-600',
-                )}>
-                  {Math.round(r.combinedPressure)}
-                </td>
-                <td className="px-2 py-1.5 text-center">
-                  <span className={cn('px-1.5 py-0.5 rounded text-[10px] font-semibold', COMPRESSION_COLORS[r.compressionLevel])}>
-                    {r.compressionLevel}
-                  </span>
-                </td>
-                <td className="px-2 py-1.5 text-center">
-                  <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded', SOURCE_BADGE_COLOR[r.dominantSourceLabel] ?? 'bg-gray-100 text-gray-400')}>
-                    {r.dominantSourceLabel}
-                  </span>
-                </td>
-                <td className={cn('px-2 py-1.5 text-center font-semibold tabular-nums',
-                  r.confidenceScore >= 80 ? 'text-emerald-700' :
-                  r.confidenceScore >= 60 ? 'text-amber-700' : 'text-red-600',
-                )}>
-                  {r.confidenceScore}%
-                </td>
-                <td className={cn('px-2 py-1.5 font-semibold whitespace-nowrap',
-                  r.raw.recommendation === 'Augmenter' ? 'text-emerald-700' :
-                  r.raw.recommendation === 'Baisser'   ? 'text-red-700' : 'text-gray-700',
-                )}>
-                  {r.recommendation.actionLabel}
-                </td>
-                <td className="px-2 py-1.5 text-gray-700 whitespace-nowrap">{r.recommendation.priceAction}</td>
-                <td className="px-2 py-1.5 text-amber-800 truncate max-w-[140px]" title={restrictionStr}>{restrictionStr}</td>
-                <td className="px-2 py-1.5 text-red-700 truncate max-w-[140px]" title={riskStr}>
-                  {r.recommendation.risks.length > 0 && <AlertTriangle className="w-3 h-3 inline mr-1" />}
-                  {riskStr}
-                </td>
-                <td className="px-2 py-1.5 text-gray-600 truncate max-w-[220px]" title={explanationFirst}>{explanationFirst}</td>
-                <td className="px-2 py-1.5">
-                  <span className={cn(
-                    'px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap',
-                    r.validationStatus === 'Acceptée'  ? 'bg-emerald-100 text-emerald-800' :
-                    r.validationStatus === 'Refusée'   ? 'bg-red-100 text-red-800' :
-                    r.validationStatus === 'Maintenue' ? 'bg-gray-200 text-gray-700' :
-                    'bg-amber-100 text-amber-800',
-                  )}>
-                    {r.validationStatus}
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={17} className="px-6 py-12 text-center text-gray-400 text-sm">
-                Aucune donnée à afficher.
-              </td>
-            </tr>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="px-3 py-1 text-xs font-semibold text-gray-700 tabular-nums">
+                {safePage + 1} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={safePage >= totalPages - 1}
+                className={cn(
+                  'p-1.5 rounded transition-colors',
+                  safePage >= totalPages - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:bg-gray-100',
+                )}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ MODAL DÉTAIL ═══════════════════════════════════════════ */}
+      {detailRow && (
+        <RMRecommendationDetailModal
+          row={detailRow.raw}
+          enrichment={{
+            recommendation: detailRow.recommendation,
+            demandScore: detailRow.demandScore,
+            compressionScore: detailRow.compressionScore,
+            combinedPressure: detailRow.combinedPressure,
+            scoreLH: detailRow.scoreLH,
+            scoreEX: detailRow.scoreEX,
+            dominantSourceLabel: detailRow.dominantSourceLabel,
+            confidenceScore: detailRow.confidenceScore,
+            isContradiction: detailRow.isContradiction,
+          }}
+          onClose={() => setDetailDate(null)}
+          onAccept={handlers.onAccept}
+          onReject={handlers.onReject}
+          onMaintain={handlers.onMaintain}
+          onPriceOverride={handlers.onPriceOverride}
+          onPrev={navPrev}
+          onNext={navNext}
+          hasPrev={hasPrevDetail}
+          hasNext={hasNextDetail}
+        />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUB COMPONENTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function Th({ children, sticky, className }: { children: React.ReactNode; sticky?: boolean; className?: string }) {
+  return (
+    <th className={cn(
+      'px-3 py-2 font-semibold text-gray-600 uppercase text-[10px] tracking-wide whitespace-nowrap',
+      sticky && 'sticky left-0 z-20 bg-gray-50 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]',
+      className,
+    )}>
+      {children}
+    </th>
+  );
+}
+
+function TableRow({
+  row, onOpen, onAccept, onReject, onMaintain,
+}: {
+  row: EnrichedRow;
+  onOpen: (date: string) => void;
+  onAccept: (date: string) => void;
+  onReject: (date: string) => void;
+  onMaintain: (date: string) => void;
+}) {
+  const r = row.raw;
+  const reco = row.recommendation;
+  const events = r.events.map(e => e.name).join(', ');
+
+  const pressureCls =
+    row.combinedPressure >= 70 ? 'text-red-700 font-bold' :
+    row.combinedPressure >= 40 ? 'text-amber-700 font-semibold' : 'text-gray-600';
+
+  const compressionCls =
+    row.compressionScore >= 75 ? 'text-red-700 font-bold' :
+    row.compressionScore >= 50 ? 'text-orange-700 font-semibold' : 'text-gray-600';
+
+  const recoIcon =
+    r.recommendation === 'Augmenter' ? TrendingUp :
+    r.recommendation === 'Baisser'   ? TrendingDown : Minus;
+
+  const recoColor =
+    r.recommendation === 'Augmenter' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' :
+    r.recommendation === 'Baisser'   ? 'text-red-700 bg-red-50 border-red-200' :
+    'text-gray-700 bg-gray-50 border-gray-200';
+
+  return (
+    <tr
+      onClick={() => onOpen(r.date)}
+      className={cn(
+        'border-b border-gray-100 cursor-pointer transition-colors group',
+        r.isToday      ? 'bg-blue-50/40 hover:bg-blue-50' :
+        r.isWeekend    ? 'bg-gray-50/40 hover:bg-gray-100' :
+        'hover:bg-violet-50/40',
+      )}
+    >
+      {/* Sticky : Jour */}
+      <td className="px-3 py-2 sticky left-0 z-10 bg-inherit font-medium text-gray-900 whitespace-nowrap shadow-[2px_0_4px_-2px_rgba(0,0,0,0.04)]">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">{r.dayName}</span>
+          {r.isToday && <span className="text-[9px] bg-blue-600 text-white rounded px-1 font-bold">Auj.</span>}
+          {row.isContradiction && (
+            <AlertTriangle className="w-3 h-3 text-red-500" />
           )}
-        </tbody>
-      </table>
-    </div>
+        </div>
+      </td>
+
+      {/* Date */}
+      <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{fmtDateShort(r.date)}</td>
+
+      {/* Événement */}
+      <td className="px-3 py-2 text-gray-700 max-w-[160px] truncate" title={events || 'Aucun événement'}>
+        {events ? (
+          <span className="inline-flex items-center gap-1">
+            <span className="w-1 h-1 rounded-full bg-purple-500" />
+            <span className="truncate">{events}</span>
+          </span>
+        ) : <span className="text-gray-300">—</span>}
+      </td>
+
+      {/* Pression */}
+      <td className="px-3 py-2 text-center whitespace-nowrap">
+        <div className="inline-flex items-center gap-1.5">
+          <span className={cn('inline-block w-1.5 h-1.5 rounded-full', DEMAND_DOT[row.demandLevel])} />
+          <span className={cn('tabular-nums', pressureCls)}>{Math.round(row.combinedPressure)}%</span>
+        </div>
+      </td>
+
+      {/* Compression */}
+      <td className="px-3 py-2 text-center whitespace-nowrap">
+        <div className="inline-flex items-center gap-1.5">
+          <span className={cn('inline-block w-1.5 h-1.5 rounded-full', COMPRESSION_DOT[row.compressionLevel])} />
+          <span className={cn('tabular-nums', compressionCls)}>{Math.round(row.compressionScore)}</span>
+        </div>
+      </td>
+
+      {/* Médiane */}
+      <td className="px-3 py-2 text-right tabular-nums text-gray-700">
+        {r.medianPrice > 0 ? `${r.medianPrice}€` : <span className="text-gray-300">—</span>}
+      </td>
+
+      {/* Notre tarif */}
+      <td className="px-3 py-2 text-right tabular-nums font-semibold text-blue-700">
+        {r.currentPrice > 0 ? `${r.currentPrice}€` : <span className="text-gray-300">—</span>}
+      </td>
+
+      {/* Recommandation */}
+      <td className="px-3 py-2 text-center">
+        <span
+          className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-bold border', recoColor)}
+          title={reco.priceAction}
+        >
+          {React.createElement(recoIcon, { className: 'w-3 h-3' })}
+          {r.recommendation === 'Maintenir' ? '0%' : `${reco.priceDeltaPercent >= 0 ? '+' : ''}${reco.priceDeltaPercent.toFixed(0)}%`}
+        </span>
+      </td>
+
+      {/* Confiance */}
+      <td className="px-3 py-2 text-center">
+        <div className="inline-flex items-center gap-1.5">
+          <div className="w-10 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                'h-full rounded-full',
+                row.confidenceScore >= 80 ? 'bg-emerald-500' :
+                row.confidenceScore >= 60 ? 'bg-amber-400' : 'bg-red-400',
+              )}
+              style={{ width: `${row.confidenceScore}%` }}
+            />
+          </div>
+          <span className={cn(
+            'text-xs font-semibold tabular-nums',
+            row.confidenceScore >= 80 ? 'text-emerald-700' :
+            row.confidenceScore >= 60 ? 'text-amber-700' : 'text-red-600',
+          )}>
+            {row.confidenceScore}%
+          </span>
+        </div>
+      </td>
+
+      {/* Statut */}
+      <td className="px-3 py-2 text-center">
+        <span className={cn(
+          'inline-block w-2 h-2 rounded-full',
+          r.validationStatus === 'Acceptée'  ? 'bg-emerald-500' :
+          r.validationStatus === 'Refusée'   ? 'bg-red-500' :
+          r.validationStatus === 'Maintenue' ? 'bg-gray-400' :
+          'bg-amber-400',
+        )}
+        title={r.validationStatus}
+        />
+      </td>
+
+      {/* Actions */}
+      <td className="px-2 py-2 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+        <div className="inline-flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+          <ActionBtn icon={Check}   color="emerald" title="Accepter"  onClick={() => onAccept(r.date)} />
+          <ActionBtn icon={Minus}   color="gray"    title="Maintenir" onClick={() => onMaintain(r.date)} />
+          <ActionBtn icon={X}       color="red"     title="Refuser"   onClick={() => onReject(r.date)} />
+          <ActionBtn icon={Eye}     color="violet"  title="Détail"    onClick={() => onOpen(r.date)} />
+        </div>
+      </td>
+    </tr>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SOUS-COMPOSANTS
-// ═══════════════════════════════════════════════════════════════════════════
-
-function KpiTile({
-  label, value, sub, accent,
+function ActionBtn({
+  icon: Icon, color, title, onClick,
 }: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  accent?: string;
-}) {
-  return (
-    <div className="px-4 py-3">
-      <div className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">{label}</div>
-      <div className={cn('text-xl font-bold tabular-nums', accent ?? 'text-gray-900')}>{value}</div>
-      {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
-
-function Section({
-  title, icon: Icon, children,
-}: {
+  icon: typeof Check;
+  color: 'emerald' | 'gray' | 'red' | 'violet';
   title: string;
-  icon: typeof Activity;
-  children: React.ReactNode;
+  onClick: () => void;
 }) {
+  const colorMap = {
+    emerald: 'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50',
+    gray:    'text-gray-400 hover:text-gray-700 hover:bg-gray-100',
+    red:     'text-gray-400 hover:text-red-600 hover:bg-red-50',
+    violet:  'text-gray-400 hover:text-violet-600 hover:bg-violet-50',
+  };
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-1.5">
-        <Icon className="w-3.5 h-3.5 text-gray-500" />
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-700">{title}</h3>
-      </div>
-      <div className="bg-white border border-gray-200 rounded-lg p-3">
-        {children}
-      </div>
+    <button
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={cn('p-1 rounded transition-colors', colorMap[color])}
+    >
+      <Icon className="w-3.5 h-3.5" />
+    </button>
+  );
+}
+
+function KpiInline({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[9px] text-gray-500 uppercase tracking-wide font-semibold leading-none">{label}</span>
+      <span className={cn('text-sm font-bold tabular-nums leading-tight', accent ?? 'text-gray-900')}>{value}</span>
     </div>
   );
 }
 
-function CompsetMetric({
-  label, value, accent, wide,
+function SourceModeBadge({ mode }: { mode: SourceMode }) {
+  const cfg: Record<SourceMode, { label: string; cls: string }> = {
+    crossed:         { label: 'Croisé LH + EX',    cls: 'bg-violet-50 text-violet-700 border-violet-200' },
+    lighthouse_only: { label: 'Lighthouse seul',   cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+    expedia_only:    { label: 'Expedia seul',      cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+    none:            { label: 'Aucune source',     cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+  };
+  const c = cfg[mode];
+  return (
+    <span className={cn('inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold border', c.cls)}>
+      <Database className="w-3 h-3" />
+      {c.label}
+    </span>
+  );
+}
+
+function FilterSelect<T extends string>({
+  icon: Icon, label, value, onChange, options,
 }: {
+  icon: typeof Filter;
   label: string;
-  value: string;
-  accent?: string;
-  wide?: boolean;
+  value: T;
+  onChange: (v: T) => void;
+  options: Array<{ value: T; label: string }>;
 }) {
+  const selected = options.find(o => o.value === value);
   return (
-    <div className={cn('px-2 py-1.5', wide && 'col-span-3 sm:col-span-2 md:col-span-3 lg:col-span-3 border-t border-gray-100 mt-1 pt-2')}>
-      <div className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</div>
-      <div className={cn('text-base font-bold tabular-nums', accent ?? 'text-gray-900')}>{value}</div>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value as T)}
+        className="appearance-none pl-6 pr-7 py-1.5 text-xs font-semibold bg-white border border-gray-200 rounded-md text-gray-700 cursor-pointer hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+        title={label}
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <Icon className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+      <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
     </div>
   );
-}
-
-// ─── Accent helpers ─────────────────────────────────────────────────────────
-
-function pressureAccent(v: number): string {
-  if (v >= 70) return 'text-red-700';
-  if (v >= 40) return 'text-amber-700';
-  return 'text-gray-700';
-}
-
-function compressionAccent(v: number): string {
-  if (v >= 75) return 'text-red-700';
-  if (v >= 50) return 'text-orange-700';
-  return 'text-gray-700';
-}
-
-function confidenceAccent(v: number): string {
-  if (v >= 80) return 'text-emerald-700';
-  if (v >= 60) return 'text-amber-700';
-  return 'text-red-600';
 }
