@@ -49,6 +49,15 @@ import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useSalonsStore } from '../../store/salonsStore';
 import { useExpediaStore } from '../../store/expediaStore';
 import { getExpediaDataForDate } from '../../services/expedia-parser.service';
+import { buildMarketSignalBundle } from '../../services/market-signal-normalizer';
+import type { MarketSignalBundle } from '../../services/market-signal-normalizer';
+import {
+  buildRecommendationBreakdown,
+} from '../../services/market-analysis-engine';
+import type {
+  Recommendation as EngineRecommendation,
+  RecommendationBreakdown,
+} from '../../services/market-analysis-engine';
 import type { SalonEvent } from '../../services/salons-parser.service';
 import { useOperationalData } from '../../hooks/useOperationalData';
 import { recordRmsDecision } from '../../services/rms-decisions.service';
@@ -121,6 +130,10 @@ interface DayRMSData {
   varVs7Days?: number | null;
 
   expediaMarketPressureNeighborhoodPercent: number | null;
+
+  // Palier 4a — Bundle multi-sources + breakdown explicatif
+  marketBundle: MarketSignalBundle | null;
+  recommendationBreakdown: RecommendationBreakdown | null;
 
   validationStatus: ValidationStatus;
   selected: boolean;
@@ -267,6 +280,8 @@ function generateSkeletonRMSData(startDate: Date, days: number): DayRMSData[] {
       validationStatus: 'En attente', selected: false,
       varVsYesterday: null, varVs3Days: null, varVs7Days: null,
       expediaMarketPressureNeighborhoodPercent: null,
+      marketBundle: null,
+      recommendationBreakdown: null,
     });
   }
   return data;
@@ -288,6 +303,7 @@ export function RMSTableauPro() {
   });
 
   const [showFilters, setShowFilters] = useState(false);
+  const [showAdvancedColumns, setShowAdvancedColumns] = useState(false);
   const [rmsData, setRmsData] = useState<DayRMSData[]>([]);
   const [detailDate, setDetailDate] = useState<string | null>(null);
 
@@ -468,6 +484,32 @@ export function RMSTableauPro() {
       const strategy = calculateStrategy(partial);
       const reco = calculateRecommendation({ ...partial, strategy });
 
+      // ── Bundle multi-sources + breakdown explicatif (Palier 4a) ──
+      const marketBundle = buildMarketSignalBundle(
+        row.date,
+        lhData,
+        expData,
+        salonEvents,
+        opData ?? null,
+        {
+          lighthouseImportedAt: lighthouseImport?.importedAt ?? null,
+          expediaImportedAt: expediaImport?.importedAt ?? null,
+        },
+      );
+      const minimalReco: EngineRecommendation = {
+        date: row.date,
+        dayLabel: row.dayName,
+        action: 'maintain_price',
+        actionLabel: reco.recommendation,
+        justification: `Stratégie ${strategy} · recommandation locale : ${reco.recommendation}.`,
+        numericImpact: '',
+        confidenceScore: reco.confidence,
+        ruleId: `local_${strategy.toLowerCase().replace(/ /g, '_')}`,
+        signalCompleteness: marketBundle.consensus.agreement === 'no_data' ? 'partial' : 'full',
+        priority: reco.confidence > 80 ? 'high' : reco.confidence > 60 ? 'medium' : 'low',
+      };
+      const recommendationBreakdown = buildRecommendationBreakdown(marketBundle, minimalReco);
+
       return {
         ...row,
         events, marketPressure,
@@ -483,6 +525,8 @@ export function RMSTableauPro() {
         varVs3Days: lhData?.varVs3Days ?? null,
         varVs7Days: lhData?.varVs7Days ?? null,
         expediaMarketPressureNeighborhoodPercent,
+        marketBundle,
+        recommendationBreakdown,
       };
     }));
   }, [
@@ -495,7 +539,16 @@ export function RMSTableauPro() {
     inventoryOverrides,
     startDate,
     viewPeriod,
+    lighthouseImport,
+    expediaImport,
   ]);
+
+  // ─── Listener "rms:recalculate" (déclenché par Sources marché — Palier 3) ──
+  useEffect(() => {
+    const handler = () => setRefreshToken(t => t + 1);
+    window.addEventListener('rms:recalculate', handler);
+    return () => window.removeEventListener('rms:recalculate', handler);
+  }, []);
 
  // Navigation dates
   const navigateDays = (direction: 'prev' | 'next') => {
@@ -804,6 +857,18 @@ export function RMSTableauPro() {
             Filtres
           </button>
 
+          <button
+            onClick={() => setShowAdvancedColumns(!showAdvancedColumns)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors border',
+              showAdvancedColumns ? 'bg-violet-500 text-white border-violet-500' : 'bg-white text-violet-700 border-violet-300 hover:bg-violet-50'
+            )}
+            title="Affiche Source signal / Score LH / Score EX / Score croisé / Confiance / Justification"
+          >
+            <Activity className="w-3.5 h-3.5" />
+            Sources
+          </button>
+
           <button className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 transition-colors">
             <Download className="w-3.5 h-3.5" />
             Exporter
@@ -849,7 +914,7 @@ export function RMSTableauPro() {
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-auto">
         {viewMode === 'table' ? (
-          <TableView data={rmsData} handlers={{
+          <TableView data={rmsData} showAdvancedColumns={showAdvancedColumns} handlers={{
             handleAccept, handleReject, handleMaintain, handleToggleSelect,
             handleViewDetail: setDetailDate,
             handleAvailabilityChange,
@@ -885,6 +950,7 @@ export function RMSTableauPro() {
 function TableView({
   data,
   handlers,
+  showAdvancedColumns,
 }: {
   data: DayRMSData[];
   handlers: {
@@ -896,6 +962,7 @@ function TableView({
     handleAvailabilityChange: (date: string, value: number) => void;
     isAvailabilityOverridden: (date: string) => boolean;
   };
+  showAdvancedColumns: boolean;
 }) {
   const availabilityRefs = React.useRef<Map<string, () => void>>(new Map());
 
@@ -941,6 +1008,16 @@ function TableView({
             <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-200">Actuel</th>
             <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-200">Suggéré</th>
             <th className="px-3 py-2 text-right font-semibold text-gray-700 border-r border-gray-200">Final</th>
+            {showAdvancedColumns && (
+              <>
+                <th className="px-3 py-2 text-center font-semibold text-violet-700 border-r border-gray-200 bg-violet-50" title="Source dominante du signal marché">Source</th>
+                <th className="px-3 py-2 text-center font-semibold text-violet-700 border-r border-gray-200 bg-violet-50" title="Pression marché Lighthouse (0-100)">Score LH</th>
+                <th className="px-3 py-2 text-center font-semibold text-violet-700 border-r border-gray-200 bg-violet-50" title="Pression marché Expedia voisinage (0-100)">Score EX</th>
+                <th className="px-3 py-2 text-center font-semibold text-violet-700 border-r border-gray-200 bg-violet-50" title="Pression croisée pondérée par confiance">Score croisé</th>
+                <th className="px-3 py-2 text-center font-semibold text-violet-700 border-r border-gray-200 bg-violet-50" title="Accord ou contradiction entre Lighthouse et Expedia">Confiance</th>
+                <th className="px-3 py-2 text-center font-semibold text-violet-700 border-r border-gray-200 bg-violet-50" title="Pourquoi cette recommandation">Justification</th>
+              </>
+            )}
             <th className="px-3 py-2 text-center font-semibold text-gray-700 border-r border-gray-200">Actions</th>
             <th className="px-3 py-2 text-left font-semibold text-gray-700">Statut</th>
           </tr>
@@ -1086,6 +1163,12 @@ function TableView({
               <td className="px-3 py-2 border-r border-gray-200 text-right font-bold text-blue-700">
                 {row.finalPrice ? `${row.finalPrice}€` : '—'}
               </td>
+              {showAdvancedColumns && (
+                <AdvancedSignalCells
+                  bundle={row.marketBundle}
+                  breakdown={row.recommendationBreakdown}
+                />
+              )}
               <td className="px-2 py-2 border-r border-gray-200">
                 <div className="flex items-center gap-1 justify-center">
                   <button onClick={() => handlers.handleAccept(row.date)} className="p-1 rounded hover:bg-emerald-100" title="Accepter">
@@ -1546,3 +1629,88 @@ function RmsSettingsModal({
     </div>
   );
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PALIER 4a — Cellules avancées Source signal / Scores / Confiance / Justification
+// ═══════════════════════════════════════════════════════════════════════════
+
+function AdvancedSignalCells({
+  bundle,
+  breakdown,
+}: {
+  bundle: MarketSignalBundle | null;
+  breakdown: RecommendationBreakdown | null;
+}) {
+  if (!bundle || !breakdown) {
+    return (
+      <>
+        <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-300 text-xs">—</td>
+        <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-300 text-xs">—</td>
+        <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-300 text-xs">—</td>
+        <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-300 text-xs">—</td>
+        <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-300 text-xs">—</td>
+        <td className="px-3 py-2 border-r border-gray-200 text-center text-gray-300 text-xs">—</td>
+      </>
+    );
+  }
+
+  const srcBadge: Record<typeof bundle.consensus.dominantSource, { label: string; cls: string }> = {
+    lighthouse: { label: "LH",  cls: "bg-blue-100 text-blue-800" },
+    expedia:    { label: "EX",  cls: "bg-orange-100 text-orange-800" },
+    tie:        { label: "LH=EX", cls: "bg-violet-100 text-violet-800" },
+    none:       { label: "—",   cls: "bg-gray-100 text-gray-500" },
+  };
+  const src = srcBadge[bundle.consensus.dominantSource];
+
+  const agreementCls = (() => {
+    switch (bundle.consensus.agreement) {
+      case "converge": return { label: "Convergent", cls: "bg-emerald-100 text-emerald-800" };
+      case "diverge":  return { label: "Contradictoire", cls: "bg-red-100 text-red-800" };
+      case "partial":  return { label: "Partiel", cls: "bg-amber-100 text-amber-800" };
+      case "no_data":  return { label: "Aucun", cls: "bg-gray-100 text-gray-500" };
+    }
+  })();
+
+  const pressureColor = (v: number | null) => {
+    if (v === null) return "text-gray-300";
+    if (v >= 70) return "text-red-700 font-bold";
+    if (v >= 40) return "text-amber-700 font-semibold";
+    return "text-emerald-700";
+  };
+
+  return (
+    <>
+      <td className="px-3 py-2 border-r border-gray-200 text-center">
+        <span className={cn("px-2 py-0.5 rounded text-[10px] font-bold", src.cls)}>{src.label}</span>
+      </td>
+      <td className={cn("px-3 py-2 border-r border-gray-200 text-center text-sm", pressureColor(bundle.lighthouse.pressurePercent))}>
+        {bundle.lighthouse.pressurePercent !== null ? `${Math.round(bundle.lighthouse.pressurePercent)}` : "—"}
+      </td>
+      <td className={cn("px-3 py-2 border-r border-gray-200 text-center text-sm", pressureColor(bundle.expedia.pressurePercentNeighborhood))}>
+        {bundle.expedia.pressurePercentNeighborhood !== null ? `${Math.round(bundle.expedia.pressurePercentNeighborhood)}` : "—"}
+      </td>
+      <td className={cn("px-3 py-2 border-r border-gray-200 text-center font-bold", pressureColor(bundle.consensus.combinedPressure))}>
+        {bundle.consensus.combinedPressure}
+      </td>
+      <td className="px-3 py-2 border-r border-gray-200 text-center">
+        <span className={cn("px-2 py-0.5 rounded text-[10px] font-semibold", agreementCls.cls)}>
+          {agreementCls.label}
+        </span>
+        {bundle.consensus.agreement === "diverge" && bundle.consensus.contradictionDelta !== null && (
+          <div className="text-[9px] text-red-600 mt-0.5">Δ {Math.round(bundle.consensus.contradictionDelta)} pts</div>
+        )}
+      </td>
+      <td className="px-3 py-2 border-r border-gray-200 text-center">
+        <button
+          className="text-violet-600 hover:text-violet-800 inline-flex"
+          title={breakdown.justificationFR}
+          aria-label={breakdown.justificationFR}
+        >
+          <Eye className="w-4 h-4" />
+        </button>
+      </td>
+    </>
+  );
+}
+
