@@ -11,28 +11,13 @@ import { ClientsView }      from '@/src/pages/ClientsView';
 import { RevenueDashboard }    from '@/src/pages/revenue/RevenueDashboard';
 import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
 
-// RMS ENTERPRISE ULTIMATE (6 pages complètes)
-import { RateManager }         from '@/src/pages/revenue/RateManager';
-import { DecisionHistory }     from '@/src/pages/revenue/DecisionHistory';
+// RMS ENTERPRISE ULTIMATE
 import { DecisionHistoryPage } from '@/src/pages/revenue/DecisionHistoryPage';
-import { CompetitiveIntel }    from '@/src/pages/revenue/CompetitiveIntel';
 import { LighthouseMonthlyView } from '@/src/pages/revenue/LighthouseMonthlyView';
-import { Channels }            from '@/src/pages/revenue/Channels';
-import { Promotions }          from '@/src/pages/revenue/Promotions';
 import { PromotionsCompact }   from '@/src/pages/revenue/PromotionsCompact';
 import { DistributionAnalytics } from '@/src/pages/revenue/DistributionAnalytics';
-// PricingRules already imported below
-
-// Anciennes versions (deprecated - à supprimer ultérieurement)
-import { ChannelsView }        from '@/src/pages/revenue/ChannelsView';
-import { MarketIntelligence }  from '@/src/pages/revenue/MarketIntelligence';
-import { PricingRules }        from '@/src/pages/revenue/PricingRules';
-import { YieldView }           from '@/src/pages/revenue/YieldView';
-import { YieldRules }          from '@/src/pages/revenue/YieldRules';
 import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
-import { PromotionsView }      from '@/src/pages/revenue/PromotionsView';
 import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
-import { VeilleConcurrentielle } from '@/src/pages/revenue/VeilleConcurrentielle';
 import { FinanceView }      from '@/src/pages/FinanceView';
 import { AnalysisView }     from '@/src/pages/AnalysisView';
 import { FlowboardView }    from '@/src/pages/FlowboardView';
