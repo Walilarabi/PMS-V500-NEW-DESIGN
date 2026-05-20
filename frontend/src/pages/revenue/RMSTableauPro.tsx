@@ -42,6 +42,7 @@ import {
   Settings2,
   RefreshCw,
   BarChart2,
+  Lightbulb,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
@@ -65,6 +66,7 @@ import { recordRmsDecision } from '../../services/rms-decisions.service';
 import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 import { AnalyseRMPanel } from './components/AnalyseRMPanel';
+import { RecommandationRMPanel } from './components/RecommandationRMPanel';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -141,7 +143,7 @@ export interface DayRMSData {
   selected: boolean;
 }
 
-type ViewMode = 'table' | 'kanban' | 'analyse';
+type ViewMode = 'table' | 'kanban' | 'analyse' | 'recommandation';
 type ViewPeriod = '7days' | '15days' | '30days' | '60days' | '90days';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -827,6 +829,16 @@ export function RMSTableauPro() {
               <BarChart2 className="w-3.5 h-3.5" />
               Analyse RM
             </button>
+            <button
+              onClick={() => setViewMode('recommandation')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold rounded flex items-center gap-1.5 transition-all duration-150',
+                viewMode === 'recommandation' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              )}
+            >
+              <Lightbulb className="w-3.5 h-3.5" />
+              Recommandation RM
+            </button>
           </div>
         </div>
 
@@ -934,6 +946,16 @@ export function RMSTableauPro() {
           }} />
         ) : viewMode === 'analyse' ? (
           <AnalyseRMPanel data={rmsData} />
+        ) : viewMode === 'recommandation' ? (
+          <RecommandationRMPanel
+            data={rmsData}
+            totalCapacity={totalCapacity}
+            handlers={{
+              onAccept: handleAccept,
+              onReject: handleReject,
+              onMaintain: handleMaintain,
+            }}
+          />
         ) : (
           <KanbanView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
         )}
