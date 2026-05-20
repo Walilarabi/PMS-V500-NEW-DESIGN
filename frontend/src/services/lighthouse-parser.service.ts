@@ -55,6 +55,12 @@ export interface LighthouseDayData {
   varVsYesterday?: number | null;
   varVs3Days?: number | null;
   varVs7Days?: number | null;
+
+  // Snapshots de référence pour la comparaison graphique (médiane compset + demande)
+  // Extraits des feuilles "vs. Hier / vs. 3 jours / vs. 7 jours" col 3-4
+  vsYesterday?: { compsetMedian: number | null; demandPercent: number | null } | null;
+  vs3Days?:     { compsetMedian: number | null; demandPercent: number | null } | null;
+  vs7Days?:     { compsetMedian: number | null; demandPercent: number | null } | null;
 }
 
 export interface LighthouseImport {
@@ -318,8 +324,24 @@ function parseTarifsSheet(ws: XLSX.WorkSheet): TarifsParsed {
  *    col 6 = Variation de notre prix en € (signed)
  *  On extrait col 6 (variation € notre hôtel).
  */
-function parseVsSheet(ws: XLSX.WorkSheet): Map<string, number> {
-  const result = new Map<string, number>();
+interface VsRowData {
+  priceVar: number | null;      // col 6 — variation notre hôtel (backward compat)
+  compsetMedian: number | null; // col 4 — médiane compset snapshot N jours avant
+  demandFraction: number | null;// col 5 — demande marché (0..1) snapshot N jours avant
+}
+
+function parseNum(v: unknown): number | null {
+  if (typeof v === 'number' && isFinite(v)) return v;
+  if (typeof v === 'string') {
+    if (/^[\[\]]/.test(v.trim())) return null;
+    const n = parseFloat(v.replace(/[^\d.,+-]/g, '').replace(',', '.'));
+    return isNaN(n) ? null : n;
+  }
+  return null;
+}
+
+function parseVsSheet(ws: XLSX.WorkSheet): Map<string, VsRowData> {
+  const result = new Map<string, VsRowData>();
   const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: null });
 
   for (let i = 5; i < raw.length; i++) {
@@ -328,19 +350,16 @@ function parseVsSheet(ws: XLSX.WorkSheet): Map<string, number> {
     const dateStr = cellToDate(row[2]);
     if (!dateStr) continue;
 
-    // Variation prix notre hôtel = col index 6
-    const v = row[6];
-    let val: number | null = null;
-    if (typeof v === 'number') {
-      val = v;
-    } else if (typeof v === 'string') {
-      // Ignorer codes type "[LOS2]" — uniquement nombres
-      if (/^[\[\]]/.test(v.trim())) continue;
-      const cleaned = v.replace(/[^\d.,+-]/g, '').replace(',', '.');
-      const n = parseFloat(cleaned);
-      if (!isNaN(n)) val = n;
+    // col 4 → compset median snapshot (même layout que feuille Aperçu)
+    // col 5 → demande marché snapshot (0..1 fraction)
+    // col 6 → variation prix notre hôtel (valeur historique)
+    const compsetMedian  = parseNum(row[4]);
+    const demandFraction = parseNum(row[5]);
+    const priceVar       = parseNum(row[6]);
+
+    if (priceVar !== null || compsetMedian !== null || demandFraction !== null) {
+      result.set(dateStr, { priceVar, compsetMedian, demandFraction });
     }
-    if (val !== null) result.set(dateStr, val);
   }
 
   return result;
@@ -429,9 +448,27 @@ export async function parseLighthouseExcel(file: File): Promise<LighthouseImport
       competitors,
       compsetMin,
       compsetMax,
-      varVsYesterday: varHier.get(row.date) ?? null,
-      varVs3Days: var3J.get(row.date) ?? null,
-      varVs7Days: var7J.get(row.date) ?? null,
+      varVsYesterday: varHier.get(row.date)?.priceVar ?? null,
+      varVs3Days:    var3J.get(row.date)?.priceVar ?? null,
+      varVs7Days:    var7J.get(row.date)?.priceVar ?? null,
+      vsYesterday: varHier.has(row.date) ? {
+        compsetMedian: varHier.get(row.date)!.compsetMedian,
+        demandPercent: varHier.get(row.date)!.demandFraction !== null
+          ? varHier.get(row.date)!.demandFraction! * 100
+          : null,
+      } : null,
+      vs3Days: var3J.has(row.date) ? {
+        compsetMedian: var3J.get(row.date)!.compsetMedian,
+        demandPercent: var3J.get(row.date)!.demandFraction !== null
+          ? var3J.get(row.date)!.demandFraction! * 100
+          : null,
+      } : null,
+      vs7Days: var7J.has(row.date) ? {
+        compsetMedian: var7J.get(row.date)!.compsetMedian,
+        demandPercent: var7J.get(row.date)!.demandFraction !== null
+          ? var7J.get(row.date)!.demandFraction! * 100
+          : null,
+      } : null,
     };
   });
 
