@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
+import { syncRMSDecision } from '../../services/rms-calendar-sync.service';
 import { getEventsForDate } from '../../utils/events-parser';
 import { getMarketDataForDate, getMarketPressure, getMarketPressureColor } from '../../utils/lighthouse-parser';
 
@@ -368,28 +369,37 @@ export function RateManager() {
     window.dispatchEvent(new CustomEvent('navigate', { detail: { page } }));
   };
 
-  // Handlers validation
+  // Handlers validation (avec sync immédiat vers Calendrier Tarifaire)
   const handleAccept = useCallback((date: string) => {
     setRmsData((prev) =>
-      prev.map((d) =>
-        d.date === date
-          ? { ...d, finalPrice: d.suggestedPrice, validationStatus: 'Acceptée' as ValidationStatus }
-          : d
-      )
+      prev.map((d) => {
+        if (d.date !== date) return d;
+        const next = { ...d, finalPrice: d.suggestedPrice, validationStatus: 'Acceptée' as ValidationStatus };
+        syncRMSDecision({
+          date: next.date,
+          finalPrice: next.suggestedPrice,
+          status: 'Acceptée',
+          source: 'table',
+        });
+        return next;
+      })
     );
   }, []);
 
   const handleReject = useCallback((date: string) => {
     setRmsData((prev) =>
-      prev.map((d) =>
-        d.date === date
-          ? { 
-              ...d, 
-              finalPrice: manualPrices.get(date) || d.currentPrice, 
-              validationStatus: 'Refusée' as ValidationStatus 
-            }
-          : d
-      )
+      prev.map((d) => {
+        if (d.date !== date) return d;
+        const finalPrice = manualPrices.get(date) || d.currentPrice;
+        const next = { ...d, finalPrice, validationStatus: 'Refusée' as ValidationStatus };
+        syncRMSDecision({
+          date: next.date,
+          finalPrice,
+          status: 'Refusée',
+          source: 'table',
+        });
+        return next;
+      })
     );
   }, [manualPrices]);
 
@@ -409,11 +419,17 @@ export function RateManager() {
 
   const handleMaintain = useCallback((date: string) => {
     setRmsData((prev) =>
-      prev.map((d) =>
-        d.date === date
-          ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Maintenue' as ValidationStatus }
-          : d
-      )
+      prev.map((d) => {
+        if (d.date !== date) return d;
+        const next = { ...d, finalPrice: d.currentPrice, validationStatus: 'Maintenue' as ValidationStatus };
+        syncRMSDecision({
+          date: next.date,
+          finalPrice: d.currentPrice,
+          status: 'Maintenue',
+          source: 'table',
+        });
+        return next;
+      })
     );
   }, []);
 
