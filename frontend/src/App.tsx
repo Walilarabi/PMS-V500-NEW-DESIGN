@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Topbar } from '@/src/components/layout/Topbar';
 import { Sidebar } from '@/src/components/layout/Sidebar';
 import { PageId } from '@/src/types';
@@ -201,6 +201,18 @@ export default function App() {
   useRevenueAnomaliesRealtime();
   useSasIncomingRealtime();
   useSupabaseSync();  // Synchronise les rooms et réservations depuis Supabase vers les stores locaux
+
+  // Écouteur global pour la navigation par CustomEvent (utilisé par les CTA des pages)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ page?: string }>).detail;
+      if (detail?.page) {
+        setActivePage(detail.page as PageId);
+      }
+    };
+    window.addEventListener('navigate', handler);
+    return () => window.removeEventListener('navigate', handler);
+  }, []);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#F9FAFB]">

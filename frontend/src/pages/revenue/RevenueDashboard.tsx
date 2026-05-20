@@ -149,9 +149,13 @@ export const RevenueDashboard: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-auto px-6 pb-6 space-y-5">
-        {/* KPIs */}
+        {/* KPIs — cliquables pour drill-down */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'rev_pricing' } }))}
+            className="bg-white rounded-lg border border-gray-200 p-4 text-left hover:border-blue-400 hover:shadow-sm transition-all"
+            title="Ouvrir le Calendrier tarifaire"
+          >
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">ADR moyen 30j</span>
               <DollarSign className="w-4 h-4 text-blue-500" />
@@ -164,9 +168,13 @@ export const RevenueDashboard: React.FC = () => {
               {trends.adrDelta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
               {trends.adrDelta.toFixed(1)}% vs 7j précédents
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'rev_compset' } }))}
+            className="bg-white rounded-lg border border-gray-200 p-4 text-left hover:border-purple-400 hover:shadow-sm transition-all"
+            title="Ouvrir la Veille concurrentielle"
+          >
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Médiane compset</span>
               <Target className="w-4 h-4 text-purple-500" />
@@ -178,9 +186,13 @@ export const RevenueDashboard: React.FC = () => {
             )}>
               {kpis.gap >= 0 ? '+' : ''}{kpis.gap}€ écart ({kpis.gapPct.toFixed(1)}%)
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'rms' } }))}
+            className="bg-white rounded-lg border border-gray-200 p-4 text-left hover:border-orange-400 hover:shadow-sm transition-all"
+            title="Ouvrir le RMS Tableau Pro"
+          >
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Demande moy.</span>
               <Users className="w-4 h-4 text-orange-500" />
@@ -193,9 +205,13 @@ export const RevenueDashboard: React.FC = () => {
               {trends.demDelta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
               {trends.demDelta.toFixed(1)}% vs 7j précédents
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'rev_compset' } }))}
+            className="bg-white rounded-lg border border-gray-200 p-4 text-left hover:border-emerald-400 hover:shadow-sm transition-all"
+            title="Voir le détail du positionnement"
+          >
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-500">Rang moyen</span>
               <Calendar className="w-4 h-4 text-emerald-500" />
@@ -204,10 +220,10 @@ export const RevenueDashboard: React.FC = () => {
               #{kpis.avgRank || '—'}{kpis.avgRankTotal > 0 ? ` / ${kpis.avgRankTotal}` : ''}
             </div>
             <div className="mt-1 text-xs text-gray-400">Position compset</div>
-          </div>
+          </button>
         </div>
 
-        {/* Alertes */}
+        {/* Alertes — cliquables pour naviguer vers la bonne page */}
         {alerts.length > 0 && (
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -216,20 +232,22 @@ export const RevenueDashboard: React.FC = () => {
             </h3>
             <div className="space-y-2">
               {alerts.map((alert, idx) => (
-                <div
+                <button
                   key={idx}
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'rms' } }))}
                   className={cn(
-                    'flex items-start gap-2 p-3 rounded-md text-sm',
+                    'flex items-start gap-2 p-3 rounded-md text-sm text-left w-full hover:brightness-95 transition-all',
                     alert.type === 'warning' ? 'bg-orange-50 text-orange-800' :
                     alert.type === 'success' ? 'bg-emerald-50 text-emerald-800' :
                     'bg-blue-50 text-blue-800'
                   )}
+                  title="Cliquer pour ouvrir le RMS Tableau Pro"
                 >
                   {alert.type === 'success'
                     ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                     : <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
                   <span>{alert.message}</span>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -257,15 +275,20 @@ export const RevenueDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Position vs marché 5 prochains jours */}
+        {/* Position vs marché 5 prochains jours — cliquable */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Position vs marché (5 prochains jours)</h3>
+          <p className="text-xs text-gray-500 mb-3">Cliquer sur une journée pour ouvrir le RMS</p>
           <div className="space-y-4">
             {window30.slice(0, 5).map((day, idx) => {
               const diff = day.ourPrice - day.compsetMedian;
               const diffPct = day.compsetMedian > 0 ? (diff / day.compsetMedian) * 100 : 0;
               return (
-                <div key={idx}>
+                <button
+                  key={idx}
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'rms' } }))}
+                  className="w-full text-left hover:bg-gray-50 rounded p-2 -mx-2 transition-colors"
+                >
                   <div className="flex items-center justify-between text-sm mb-1">
                     <span className="font-medium text-gray-700">{day.dayName} {day.date.slice(5)}</span>
                     <span className={cn(
@@ -286,7 +309,7 @@ export const RevenueDashboard: React.FC = () => {
                       {day.ourPrice}€ vs {day.compsetMedian}€
                     </span>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
