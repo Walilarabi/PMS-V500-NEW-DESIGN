@@ -47,6 +47,8 @@ import { RMSPropagationService, RMSValidation } from '../../services/rms-propaga
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useSalonsStore } from '../../store/salonsStore';
+import { useExpediaStore } from '../../store/expediaStore';
+import { getExpediaDataForDate } from '../../services/expedia-parser.service';
 import type { SalonEvent } from '../../services/salons-parser.service';
 import { useOperationalData } from '../../hooks/useOperationalData';
 import { recordRmsDecision } from '../../services/rms-decisions.service';
@@ -117,6 +119,8 @@ interface DayRMSData {
   varVsYesterday?: number | null;
   varVs3Days?: number | null;
   varVs7Days?: number | null;
+
+  expediaMarketPressureNeighborhoodPercent: number | null;
 
   validationStatus: ValidationStatus;
   selected: boolean;
@@ -262,6 +266,7 @@ function generateSkeletonRMSData(startDate: Date, days: number): DayRMSData[] {
       currentPrice: 0, suggestedPrice: 0, finalPrice: null,
       validationStatus: 'En attente', selected: false,
       varVsYesterday: null, varVs3Days: null, varVs7Days: null,
+      expediaMarketPressureNeighborhoodPercent: null,
     });
   }
   return data;
@@ -330,6 +335,13 @@ export function RMSTableauPro() {
     return lighthouseImport.days.find(d => d.date === date) ?? null;
   }, [lighthouseImport]);
 
+  // ─── Expedia ────────────────────────────────────────────────────────────
+  const expediaImport = useExpediaStore(s => s.importData);
+  const getExpediaData = useCallback((date: string) => {
+    if (!expediaImport) return null;
+    return getExpediaDataForDate(expediaImport, date);
+  }, [expediaImport]);
+
   // ─── Réservations Supabase ─────────────────────────────────────────────
   const operationalRange = useMemo(() => {
     const days = viewPeriod === '7days' ? 7 : viewPeriod === '15days' ? 15 : viewPeriod === '30days' ? 30 : viewPeriod === '60days' ? 60 : 90;
@@ -376,6 +388,7 @@ export function RMSTableauPro() {
     setRmsData(prev => prev.map(row => {
       const realPrice = getPriceFromCalendar(row.date);
       const lhData = getLighthouseData(row.date);
+      const expData = getExpediaData(row.date);
       const opData = operationalByDate.get(row.date);
       const salonEvents = getSalonEvents(row.date);
       const inventoryOverride = inventoryOverrides.get(row.date);
@@ -401,7 +414,20 @@ export function RMSTableauPro() {
       const medianPrice = lhData?.compsetMedian ?? 0;
       const minPrice = lhData?.compsetMin ?? 0;
       const maxPrice = lhData?.compsetMax ?? 0;
-      const marketPressure = lhData?.marketDemandPercent ?? 0;
+
+      // Pression marché unifiée : 55% Lighthouse + 45% Expedia voisinage
+      // Si une seule source disponible → utilisée seule (comportement préservé)
+      const lhPressure = lhData?.marketDemandPercent ?? null;
+      const exPressure = expData?.marketPressureNeighborhoodPercent ?? null;
+      let marketPressure: number;
+      if (lhPressure !== null && exPressure !== null) {
+        marketPressure = Math.round(lhPressure * 0.55 + exPressure * 0.45);
+      } else if (exPressure !== null) {
+        marketPressure = exPressure;
+      } else {
+        marketPressure = lhPressure ?? 0;
+      }
+      const expediaMarketPressureNeighborhoodPercent = exPressure;
 
       // ── Événements unifiés (Palier A point 5) ──
       // Source 1 : salons importés (priorité, avec tous les détails)
@@ -456,11 +482,13 @@ export function RMSTableauPro() {
         varVsYesterday: lhData?.varVsYesterday ?? null,
         varVs3Days: lhData?.varVs3Days ?? null,
         varVs7Days: lhData?.varVs7Days ?? null,
+        expediaMarketPressureNeighborhoodPercent,
       };
     }));
   }, [
     getPriceFromCalendar,
     getLighthouseData,
+    getExpediaData,
     operationalByDate,
     totalCapacity,
     getSalonEvents,
