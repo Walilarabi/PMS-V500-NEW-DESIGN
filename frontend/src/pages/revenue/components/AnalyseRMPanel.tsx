@@ -18,59 +18,19 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { DayRMSData } from '../RMSTableauPro';
+import {
+  cn,
+  DEMAND_COLORS, COMPRESSION_COLORS,
+  getPricingOpportunity, getMissingEventAlert,
+  DOMINANT_SOURCE_LABEL,
+  type DemandLevel, type CompressionLevel,
+} from '../lib/rms-theme';
+import { computeRMSScores } from '../lib/rms-enrichment';
 
-// ─── Niveau types ─────────────────────────────────────────────────────────
+// ─── Sort types (locaux à ce panel) ───────────────────────────────────────
 
-type DemandLevel = 'Faible' | 'Moyenne' | 'Forte' | 'Très forte';
-type CompressionLevel = 'Faible' | 'Moyenne' | 'Élevée' | 'Très élevée';
 type SortKey = 'date' | 'demand' | 'confidence';
 type SortDir = 'asc' | 'desc';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
-
-function getDemandLevel(score: number): DemandLevel {
-  if (score >= 80) return 'Très forte';
-  if (score >= 60) return 'Forte';
-  if (score >= 30) return 'Moyenne';
-  return 'Faible';
-}
-
-function getCompressionLevel(score: number): CompressionLevel {
-  if (score >= 75) return 'Très élevée';
-  if (score >= 50) return 'Élevée';
-  if (score >= 25) return 'Moyenne';
-  return 'Faible';
-}
-
-function getPricingOpportunity(demandScore: number, compressionScore: number): string {
-  if (demandScore < 30) return '–';
-  if (demandScore < 60) return '+5% à +10%';
-  if (demandScore < 80) return '+10% à +25%';
-  if (compressionScore >= 50) return '+25% à +50%';
-  return '+15% à +30%';
-}
-
-function getMissingEventAlert(marketPressure: number, eventsCount: number): boolean {
-  return marketPressure > 70 && eventsCount === 0;
-}
-
-const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
-
-// ─── Colour maps ──────────────────────────────────────────────────────────
-
-const DEMAND_COLORS: Record<DemandLevel, string> = {
-  'Très forte': 'bg-red-100 text-red-800',
-  'Forte':      'bg-amber-100 text-amber-800',
-  'Moyenne':    'bg-blue-100 text-blue-800',
-  'Faible':     'bg-gray-100 text-gray-600',
-};
-
-const COMPRESSION_COLORS: Record<CompressionLevel, string> = {
-  'Très élevée': 'bg-red-100 text-red-800',
-  'Élevée':      'bg-orange-100 text-orange-800',
-  'Moyenne':     'bg-amber-100 text-amber-800',
-  'Faible':      'bg-gray-100 text-gray-600',
-};
 
 // ─── Enriched row ─────────────────────────────────────────────────────────
 
@@ -94,43 +54,29 @@ interface AnalyseRow {
   confidenceScore: number;
 }
 
-const SOURCE_LABEL: Record<string, string> = {
-  lighthouse: 'LH',
-  expedia:    'EX',
-  tie:        'LH=EX',
-  none:       '–',
-};
-
 function enrichRow(row: DayRMSData): AnalyseRow {
-  const marketPressure = row.marketBundle?.consensus.combinedPressure ?? row.marketPressure;
-  const demandScore    = row.recommendationBreakdown?.demandScore.value ?? marketPressure;
-  const compressionScore = row.recommendationBreakdown?.compressionScore.value ?? 0;
-  const confidenceBonus  = row.recommendationBreakdown?.confidenceBonus ?? 0;
-  const confidenceScore  = Math.min(100, row.confidenceScore + confidenceBonus);
-
-  const dominantSource = SOURCE_LABEL[row.recommendationBreakdown?.dominantSource ?? 'none'] ?? '–';
+  const scores = computeRMSScores(row);
+  const dominantSource = DOMINANT_SOURCE_LABEL[row.recommendationBreakdown?.dominantSource ?? 'none'] ?? '–';
   const events = row.events.map(e => e.name).join(', ');
-  const demandLevel    = getDemandLevel(demandScore);
-  const compressionLevel = getCompressionLevel(compressionScore);
 
   return {
     date: row.date,
     dayName: row.dayName,
     isWeekend: row.isWeekend,
     isToday: row.isToday,
-    marketPressure,
-    demandScore,
-    demandLevel,
-    compressionScore,
-    compressionLevel,
+    marketPressure: scores.combinedPressure,
+    demandScore: scores.demandScore,
+    demandLevel: scores.demandLevel,
+    compressionScore: scores.compressionScore,
+    compressionLevel: scores.compressionLevel,
     occupancyRate: row.occupancyRate,
     events,
-    missingEventAlert: getMissingEventAlert(marketPressure, row.events.length),
+    missingEventAlert: getMissingEventAlert(scores.combinedPressure, row.events.length),
     currentPrice: row.currentPrice,
     suggestedPrice: row.suggestedPrice,
-    pricingOpportunity: getPricingOpportunity(demandScore, compressionScore),
+    pricingOpportunity: getPricingOpportunity(scores.demandScore, scores.compressionScore),
     dominantSource,
-    confidenceScore,
+    confidenceScore: scores.confidenceScore,
   };
 }
 

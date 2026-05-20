@@ -23,119 +23,25 @@ import {
   TrendingUp, TrendingDown, ChevronDown, History,
 } from 'lucide-react';
 import type { DayRMSData } from '../RMSTableauPro';
+import type { SourceMode } from '../../../services/recommandation-rm.service';
+import { RMRecommendationDetailModal } from './RMRecommendationDetailModal';
 import {
-  buildRMRecommendation,
-  type RMRecommendation,
-  type SourceMode,
-} from '../../../services/recommandation-rm.service';
-import { RMRecommendationDetailModal, type RMDetailEnrichment } from './RMRecommendationDetailModal';
+  cn,
+  DEMAND_DOT, COMPRESSION_DOT,
+  SOURCE_MODE_BADGE,
+} from '../lib/rms-theme';
+import { enrichRMSRow, type EnrichedRMSRow } from '../lib/rms-enrichment';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
-
 function fmtDateShort(date: string): string {
   return new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
 }
 
-type DemandLevel = 'Faible' | 'Moyenne' | 'Forte' | 'Très forte';
-type CompressionLevel = 'Faible' | 'Moyenne' | 'Élevée' | 'Très élevée';
-
-function getDemandLevel(score: number): DemandLevel {
-  if (score >= 80) return 'Très forte';
-  if (score >= 60) return 'Forte';
-  if (score >= 30) return 'Moyenne';
-  return 'Faible';
-}
-
-function getCompressionLevel(score: number): CompressionLevel {
-  if (score >= 75) return 'Très élevée';
-  if (score >= 50) return 'Élevée';
-  if (score >= 25) return 'Moyenne';
-  return 'Faible';
-}
-
-const DEMAND_DOT: Record<DemandLevel, string> = {
-  'Très forte': 'bg-red-500',
-  'Forte':      'bg-amber-500',
-  'Moyenne':    'bg-blue-500',
-  'Faible':     'bg-gray-300',
-};
-
-const COMPRESSION_DOT: Record<CompressionLevel, string> = {
-  'Très élevée': 'bg-red-500',
-  'Élevée':      'bg-orange-500',
-  'Moyenne':     'bg-amber-400',
-  'Faible':      'bg-gray-300',
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ENRICHED ROW
-// ═══════════════════════════════════════════════════════════════════════════
-
-interface EnrichedRow {
-  raw: DayRMSData;
-  recommendation: RMRecommendation;
-  demandScore: number;
-  demandLevel: DemandLevel;
-  compressionScore: number;
-  compressionLevel: CompressionLevel;
-  combinedPressure: number;
-  scoreLH: number | null;
-  scoreEX: number | null;
-  dominantSourceLabel: string;
-  confidenceScore: number;
-  isContradiction: boolean;
-}
-
-const SOURCE_LABEL: Record<string, string> = {
-  lighthouse: 'LH', expedia: 'EX', tie: 'LH=EX', none: '–',
-};
-
-function enrichRow(row: DayRMSData, totalCapacity: number): EnrichedRow {
-  const bundle = row.marketBundle;
-  const breakdown = row.recommendationBreakdown;
-  const combinedPressure = bundle?.consensus.combinedPressure ?? row.marketPressure;
-  const demandScore = breakdown?.demandScore.value ?? combinedPressure;
-  const compressionScore = breakdown?.compressionScore.value ?? 0;
-  const confidenceScore = Math.min(100, row.confidenceScore + (breakdown?.confidenceBonus ?? 0));
-
-  const recommendation = buildRMRecommendation({
-    date: row.date,
-    bundle,
-    breakdown,
-    currentPrice: row.currentPrice,
-    suggestedPrice: row.suggestedPrice,
-    medianPrice: row.medianPrice,
-    occupancyRate: row.occupancyRate,
-    availability: row.availability,
-    totalCapacity,
-    pickupRate: row.pickupRate,
-    varVsYesterday: row.varVsYesterday ?? null,
-    varVs3Days: row.varVs3Days ?? null,
-    varVs7Days: row.varVs7Days ?? null,
-    eventsCount: row.events.length,
-    recommendationLabel: row.recommendation,
-    strategy: row.strategy,
-  });
-
-  return {
-    raw: row,
-    recommendation,
-    demandScore,
-    demandLevel: getDemandLevel(demandScore),
-    compressionScore,
-    compressionLevel: getCompressionLevel(compressionScore),
-    combinedPressure,
-    scoreLH: bundle?.lighthouse.pressurePercent ?? null,
-    scoreEX: bundle?.expedia.pressurePercentNeighborhood ?? null,
-    dominantSourceLabel: SOURCE_LABEL[bundle?.consensus.dominantSource ?? 'none'] ?? '–',
-    confidenceScore,
-    isContradiction: bundle?.consensus.agreement === 'diverge',
-  };
-}
+// Alias local pour cohérence avec l'ancien nom (utilisé dans TableRow)
+type EnrichedRow = EnrichedRMSRow;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MAIN
@@ -167,7 +73,7 @@ export function RecommandationRMPanel({ data, totalCapacity, handlers }: Props) 
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
-  const enriched = useMemo(() => data.map(r => enrichRow(r, totalCapacity)), [data, totalCapacity]);
+  const enriched = useMemo(() => data.map(r => enrichRMSRow(r, totalCapacity)), [data, totalCapacity]);
 
   // ─── Filtrage ──────────────────────────────────────────────────────
   const filtered = useMemo(() => enriched.filter(r => {
@@ -685,13 +591,7 @@ function KpiInline({ label, value, accent }: { label: string; value: string | nu
 }
 
 function SourceModeBadge({ mode }: { mode: SourceMode }) {
-  const cfg: Record<SourceMode, { label: string; cls: string }> = {
-    crossed:         { label: 'Croisé LH + EX',    cls: 'bg-violet-50 text-violet-700 border-violet-200' },
-    lighthouse_only: { label: 'Lighthouse seul',   cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-    expedia_only:    { label: 'Expedia seul',      cls: 'bg-orange-50 text-orange-700 border-orange-200' },
-    none:            { label: 'Aucune source',     cls: 'bg-gray-50 text-gray-500 border-gray-200' },
-  };
-  const c = cfg[mode];
+  const c = SOURCE_MODE_BADGE[mode];
   return (
     <span className={cn('inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold border', c.cls)}>
       <Database className="w-3 h-3" />

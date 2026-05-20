@@ -17,58 +17,25 @@ import React, { useState } from 'react';
 import {
   X, ChevronLeft, ChevronRight, Calendar, Activity, Target,
   Sparkles, Lock, Clock, AlertTriangle, Check, Minus, Edit3,
-  TrendingUp, TrendingDown, Database, Info, Lightbulb,
+  TrendingUp, Database, Info, Lightbulb,
 } from 'lucide-react';
 import type { DayRMSData } from '../RMSTableauPro';
-import type { RMRecommendation, SourceMode } from '../../../services/recommandation-rm.service';
+import type { RMRecommendation } from '../../../services/recommandation-rm.service';
+import {
+  cn,
+  getDemandLevel, getCompressionLevel,
+  DEMAND_COLORS, SOURCE_MODE_BADGE,
+  pressureAccent,
+} from '../lib/rms-theme';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
-
 function fmtDateLong(date: string): string {
   return new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
   });
-}
-
-type DemandLevel = 'Faible' | 'Moyenne' | 'Forte' | 'Très forte';
-type CompressionLevel = 'Faible' | 'Moyenne' | 'Élevée' | 'Très élevée';
-
-function getDemandLevel(score: number): DemandLevel {
-  if (score >= 80) return 'Très forte';
-  if (score >= 60) return 'Forte';
-  if (score >= 30) return 'Moyenne';
-  return 'Faible';
-}
-
-function getCompressionLevel(score: number): CompressionLevel {
-  if (score >= 75) return 'Très élevée';
-  if (score >= 50) return 'Élevée';
-  if (score >= 25) return 'Moyenne';
-  return 'Faible';
-}
-
-const DEMAND_COLORS: Record<DemandLevel, string> = {
-  'Très forte': 'bg-red-100 text-red-800 border-red-200',
-  'Forte':      'bg-amber-100 text-amber-800 border-amber-200',
-  'Moyenne':    'bg-blue-100 text-blue-800 border-blue-200',
-  'Faible':     'bg-gray-100 text-gray-600 border-gray-200',
-};
-
-const SOURCE_MODE_BADGE: Record<SourceMode, { cls: string; label: string }> = {
-  crossed:         { cls: 'bg-violet-50 text-violet-800 border-violet-200', label: 'Croisé LH + EX' },
-  lighthouse_only: { cls: 'bg-blue-50 text-blue-800 border-blue-200',       label: 'Lighthouse seul' },
-  expedia_only:    { cls: 'bg-orange-50 text-orange-800 border-orange-200', label: 'Expedia seul' },
-  none:            { cls: 'bg-gray-50 text-gray-500 border-gray-200',       label: 'Aucune source' },
-};
-
-function pressureAccent(v: number): string {
-  if (v >= 70) return 'text-red-700';
-  if (v >= 40) return 'text-amber-700';
-  return 'text-gray-700';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
