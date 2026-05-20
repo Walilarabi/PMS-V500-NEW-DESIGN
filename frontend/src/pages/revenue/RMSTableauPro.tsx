@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
+import { syncRMSDecision } from '../../services/rms-calendar-sync.service';
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useSalonsStore } from '../../store/salonsStore';
@@ -300,7 +301,7 @@ export function RMSTableauPro() {
   };
 
   // ─── Store RMS Calendrier ───────────────────────────────────────────────
-  const { roomTypes, updatePrice, loadData } = useRateCalendarStore();
+  const { roomTypes, loadData } = useRateCalendarStore();
 
   useEffect(() => {
     if (roomTypes.length === 0) {
@@ -506,9 +507,15 @@ export function RMSTableauPro() {
         : d
     ));
 
-    if (referenceRoom && referencePlan) {
-      updatePrice(referenceRoom.roomTypeId, referencePlan.planId, date, pushedPrice);
-    }
+    // Sync unifiée : injecte dans le Calendrier + déclenche push Channel Manager + journalise
+    syncRMSDecision({
+      date,
+      finalPrice: pushedPrice,
+      status: 'Acceptée',
+      source: 'table',
+      roomTypeId: referenceRoom?.roomTypeId,
+      planId: referencePlan?.planId,
+    });
 
     recordRmsDecision({
       stayDate: date,
@@ -524,7 +531,7 @@ export function RMSTableauPro() {
       occupancyRate: row.occupancyRate,
       medianPrice: row.medianPrice,
     });
-  }, [rmsData, referenceRoom, referencePlan, updatePrice, rmsSettings]);
+  }, [rmsData, referenceRoom, referencePlan, rmsSettings]);
 
   const handleReject = useCallback(async (date: string) => {
     const row = rmsData.find(d => d.date === date);
@@ -535,6 +542,15 @@ export function RMSTableauPro() {
         ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Refusée' as ValidationStatus }
         : d
     ));
+
+    syncRMSDecision({
+      date,
+      finalPrice: row.currentPrice,
+      status: 'Refusée',
+      source: 'table',
+      roomTypeId: referenceRoom?.roomTypeId,
+      planId: referencePlan?.planId,
+    });
 
     recordRmsDecision({
       stayDate: date,
@@ -550,7 +566,7 @@ export function RMSTableauPro() {
       occupancyRate: row.occupancyRate,
       medianPrice: row.medianPrice,
     });
-  }, [rmsData, referenceRoom]);
+  }, [rmsData, referenceRoom, referencePlan]);
 
   const handleMaintain = useCallback(async (date: string) => {
     const row = rmsData.find(d => d.date === date);
@@ -561,6 +577,15 @@ export function RMSTableauPro() {
         ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Maintenue' as ValidationStatus }
         : d
     ));
+
+    syncRMSDecision({
+      date,
+      finalPrice: row.currentPrice,
+      status: 'Maintenue',
+      source: 'table',
+      roomTypeId: referenceRoom?.roomTypeId,
+      planId: referencePlan?.planId,
+    });
 
     recordRmsDecision({
       stayDate: date,
@@ -576,7 +601,7 @@ export function RMSTableauPro() {
       occupancyRate: row.occupancyRate,
       medianPrice: row.medianPrice,
     });
-  }, [rmsData, referenceRoom]);
+  }, [rmsData, referenceRoom, referencePlan]);
 
   const handleToggleSelect = useCallback((date: string) => {
     setRmsData((prev) =>
