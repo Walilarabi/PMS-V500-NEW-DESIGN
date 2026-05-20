@@ -19,8 +19,8 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   RefreshCw, Download, Filter, Search, Check, X, Minus, Eye,
-  ChevronLeft, ChevronRight, AlertTriangle, Database, Lightbulb,
-  TrendingUp, TrendingDown, ChevronDown,
+  ChevronLeft, ChevronRight, AlertTriangle, Database,
+  TrendingUp, TrendingDown, ChevronDown, History,
 } from 'lucide-react';
 import type { DayRMSData } from '../RMSTableauPro';
 import {
@@ -163,11 +163,15 @@ export function RecommandationRMPanel({ data, totalCapacity, handlers }: Props) 
   const [search, setSearch] = useState('');
   const [filterSource, setFilterSource] = useState<'all' | 'lighthouse' | 'expedia' | 'crossed'>('all');
   const [filterReco, setFilterReco] = useState<'all' | 'Augmenter' | 'Baisser' | 'Maintenir'>('all');
+  const [showPastDates, setShowPastDates] = useState(false);
+
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   const enriched = useMemo(() => data.map(r => enrichRow(r, totalCapacity)), [data, totalCapacity]);
 
   // ─── Filtrage ──────────────────────────────────────────────────────
   const filtered = useMemo(() => enriched.filter(r => {
+    if (!showPastDates && r.raw.date < todayStr) return false;
     if (filterSource !== 'all') {
       const mode = r.recommendation.sourceMode;
       if (filterSource === 'lighthouse' && mode !== 'lighthouse_only') return false;
@@ -183,7 +187,7 @@ export function RecommandationRMPanel({ data, totalCapacity, handlers }: Props) 
       }
     }
     return true;
-  }), [enriched, filterSource, filterReco, search]);
+  }), [enriched, showPastDates, todayStr, filterSource, filterReco, search]);
 
   // ─── Pagination ────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -287,6 +291,21 @@ export function RecommandationRMPanel({ data, totalCapacity, handlers }: Props) 
             </button>
           )}
         </div>
+
+        {/* Past dates toggle */}
+        <button
+          onClick={() => setShowPastDates(p => !p)}
+          title={showPastDates ? 'Masquer les dates passées' : 'Afficher les dates passées'}
+          className={cn(
+            'flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold border rounded-md transition-colors',
+            showPastDates
+              ? 'bg-amber-100 text-amber-800 border-amber-300'
+              : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700',
+          )}
+        >
+          <History className="w-3 h-3" />
+          {showPastDates ? 'Avec passé' : 'Futur seul'}
+        </button>
 
         {/* Filter source */}
         <FilterSelect

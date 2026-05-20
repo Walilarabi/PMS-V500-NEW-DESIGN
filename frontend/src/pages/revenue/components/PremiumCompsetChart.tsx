@@ -3,15 +3,15 @@
  * Graphique veille concurrentielle premium (type Lighthouse mais redesigné)
  *
  *   - Area ombrée min↔max compset
- *   - Ligne médiane (vert)
- *   - Ligne notre hôtel (bleu épais avec points)
- *   - Barres demande marché : arrondies, fines, palette pastel température
- *     (bleu froid si <30%, vert pastel <50%, jaune <70%, orange <80%, rouge >90%)
- *   - Tooltip riche : 11 hôtels triés par prix avec écart vs médiane
- *   - Animations subtiles (400ms)
- *   - Légende interactive (cliquer pour masquer/afficher série)
- *   - KPIs synthèse du mois en header
- *   - Boutons VS Hier / VS 3j / VS 7j : overlay référence médiane + demande
+ *   - Ligne médiane actuelle (vert fort, dominant)
+ *   - Ligne notre hôtel (bleu épais, premium)
+ *   - Barres demande marché : arrondies, palette pastel température, translucides
+ *   - 3 courbes de référence simultanées (J-1 / J-3 / J-7) — toggles indépendants
+ *     Hiérarchie visuelle : J-1 vert atténué, J-3 gris, J-7 gris clair
+ *   - 3 courbes de demande référence (lignes minces violet → atténué)
+ *   - Tooltip riche multi-périodes
+ *   - KPIs synthèse mois en header
+ *   - Légende interactive (cliquer pour masquer/afficher)
  */
 
 import { useMemo, useState } from 'react';
@@ -19,33 +19,27 @@ import {
   ComposedChart, Area, Line, Bar, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { Target, TrendingUp, TrendingDown, GitCompare } from 'lucide-react';
+import { Target, TrendingUp, TrendingDown, GitCompare, Eye, EyeOff } from 'lucide-react';
 import type { LighthouseImport } from '../../../services/lighthouse-parser.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
+// ── Palette de couleurs avec hiérarchie visuelle ──────────────────────────
 const COLORS = {
-  ourHotel:     '#2563eb',
-  median:       '#10b981',
-  medianRef:    '#6b7280',   // ligne référence médiane — gris dashed
-  demandRef:    '#a78bfa',   // barres/ligne demande référence — violet pastel
-  compsetRange: '#fbbf24',
-  grid:         '#f3f4f6',
-  axis:         '#9ca3af',
+  ourHotel:      '#2563eb',   // Bleu fort — notre tarif (dominant)
+  median:        '#059669',   // Vert émeraude fort — médiane actuelle (primaire)
+  median1:       '#34d399',   // Vert clair — médiane J-1 (secondaire)
+  median3:       '#9ca3af',   // Gris — médiane J-3 (tertiaire)
+  median7:       '#d1d5db',   // Gris clair — médiane J-7 (quaternaire)
+  demand1:       '#7c3aed',   // Violet — demande J-1
+  demand3:       '#a78bfa',   // Violet pastel — demande J-3
+  demand7:       '#c4b5fd',   // Violet très clair — demande J-7
+  compsetRange:  '#fbbf24',
+  grid:          '#f3f4f6',
+  axis:          '#9ca3af',
 };
 
-type CompareMode = 'none' | 'hier' | '3j' | '7j';
-
-const COMPARE_LABELS: Record<CompareMode, string> = {
-  none: 'Actuel',
-  hier: 'vs Hier',
-  '3j': 'vs 3j',
-  '7j': 'vs 7j',
-};
-
-/**
- * Palette pastel "température" pour les barres de demande.
- */
+// ── Palette température pour les barres de demande ────────────────────────
 function getDemandColor(demand: number): string {
   if (demand >= 90) return '#ef4444';
   if (demand >= 80) return '#fca5a5';
@@ -54,6 +48,8 @@ function getDemandColor(demand: number): string {
   if (demand >= 30) return '#bbf7d0';
   return '#bfdbfe';
 }
+
+// ── Types ─────────────────────────────────────────────────────────────────
 
 interface ChartDatum {
   date: string;
@@ -66,19 +62,77 @@ interface ChartDatum {
   events: string;
   ranking: string;
   competitors: Array<{ name: string; price: number | null; status: string }>;
-  // Snapshot référence (vs Hier / 3j / 7j)
-  refMedian: number | null;
-  refDemand: number | null;
+  // Référence J-1 (vs Hier)
+  ref1Median: number | null;
+  ref1Demand: number | null;
+  // Référence J-3
+  ref3Median: number | null;
+  ref3Demand: number | null;
+  // Référence J-7
+  ref7Median: number | null;
+  ref7Demand: number | null;
 }
+
+interface RefPeriodConfig {
+  key: 'j1' | 'j3' | 'j7';
+  label: string;
+  medianKey: keyof ChartDatum;
+  demandKey: keyof ChartDatum;
+  medianColor: string;
+  demandColor: string;
+  medianWidth: number;
+  medianDash: string;
+  demandDash: string;
+}
+
+const REF_PERIODS: RefPeriodConfig[] = [
+  {
+    key: 'j1',
+    label: 'vs Hier',
+    medianKey: 'ref1Median',
+    demandKey: 'ref1Demand',
+    medianColor: COLORS.median1,
+    demandColor: COLORS.demand1,
+    medianWidth: 1.5,
+    medianDash: '8 4',
+    demandDash: '5 3',
+  },
+  {
+    key: 'j3',
+    label: 'vs 3j',
+    medianKey: 'ref3Median',
+    demandKey: 'ref3Demand',
+    medianColor: COLORS.median3,
+    demandColor: COLORS.demand3,
+    medianWidth: 1.5,
+    medianDash: '5 4',
+    demandDash: '4 3',
+  },
+  {
+    key: 'j7',
+    label: 'vs 7j',
+    medianKey: 'ref7Median',
+    demandKey: 'ref7Demand',
+    medianColor: COLORS.median7,
+    demandColor: COLORS.demand7,
+    medianWidth: 1,
+    medianDash: '3 3',
+    demandDash: '3 3',
+  },
+];
+
+// ── Tooltip premium ───────────────────────────────────────────────────────
 
 interface TooltipProps {
   active?: boolean;
   payload?: Array<{ payload: ChartDatum }>;
   ourHotelName: string;
-  compareMode: CompareMode;
+  showJ1: boolean;
+  showJ3: boolean;
+  showJ7: boolean;
 }
 
-function PremiumTooltip({ active, payload, ourHotelName, compareMode }: TooltipProps) {
+function PremiumTooltip({ active, payload, ourHotelName, showJ1, showJ3, showJ7 }: TooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const d = payload[0].payload;
   if (!d) return null;
@@ -91,10 +145,16 @@ function PremiumTooltip({ active, payload, ourHotelName, compareMode }: TooltipP
     .filter(h => h.status === 'available' && h.price > 0)
     .sort((a, b) => b.price - a.price);
 
-  const hasRef = compareMode !== 'none' && (d.refMedian !== null || d.refDemand !== null);
+  const refData: Array<{ label: string; median: number | null; demand: number | null; color: string }> = [];
+  if (showJ1 && (d.ref1Median !== null || d.ref1Demand !== null))
+    refData.push({ label: 'vs Hier',  median: d.ref1Median, demand: d.ref1Demand, color: COLORS.median1 });
+  if (showJ3 && (d.ref3Median !== null || d.ref3Demand !== null))
+    refData.push({ label: 'vs 3j',    median: d.ref3Median, demand: d.ref3Demand, color: COLORS.median3 });
+  if (showJ7 && (d.ref7Median !== null || d.ref7Demand !== null))
+    refData.push({ label: 'vs 7j',    median: d.ref7Median, demand: d.ref7Demand, color: COLORS.median7 });
 
   return (
-    <div className="bg-white rounded-lg shadow-2xl border border-gray-200 px-4 py-3 min-w-[280px] max-w-[380px]">
+    <div className="bg-white rounded-lg shadow-2xl border border-gray-200 px-4 py-3 min-w-[280px] max-w-[400px]">
       <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
         <div className="font-semibold text-sm text-gray-900">{d.dateLabel}</div>
         <div
@@ -105,53 +165,65 @@ function PremiumTooltip({ active, payload, ourHotelName, compareMode }: TooltipP
         </div>
       </div>
 
-      {/* Comparaison médiane si référence disponible */}
-      {hasRef && (
+      {/* Comparaison multi-périodes */}
+      {refData.length > 0 && (
         <div className="mb-3 pb-2 border-b border-gray-100">
-          <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1.5 font-semibold">
-            Comparaison {COMPARE_LABELS[compareMode]}
+          <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-2 font-semibold flex items-center gap-1">
+            <GitCompare className="w-3 h-3" />
+            Comparaison temporelle
           </div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <div className="text-[10px] text-emerald-600 font-medium">Médiane actuelle</div>
-              <div className="font-bold text-gray-900">{d.compsetMedian ?? '—'}€</div>
+          <div className="space-y-1.5">
+            {/* En-tête */}
+            <div className="grid grid-cols-4 gap-1 text-[9px] text-gray-400 uppercase tracking-wide font-medium pb-1 border-b border-gray-100">
+              <div>Période</div>
+              <div className="text-right">Médiane</div>
+              <div className="text-right">Δ méd.</div>
+              <div className="text-right">Demande</div>
             </div>
-            {d.refMedian !== null && (
-              <div>
-                <div className="text-[10px] text-gray-500 font-medium">Médiane référence</div>
-                <div className="font-bold text-gray-600">{Math.round(d.refMedian)}€</div>
-                {d.compsetMedian !== null && (
-                  <div className={cn(
-                    'text-[10px] font-semibold',
-                    d.compsetMedian > d.refMedian ? 'text-emerald-600' : 'text-red-600'
-                  )}>
-                    {d.compsetMedian > d.refMedian ? '+' : ''}{Math.round(d.compsetMedian - d.refMedian)}€
-                  </div>
-                )}
+            {/* Ligne actuelle */}
+            <div className="grid grid-cols-4 gap-1 text-xs items-center">
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-0.5 rounded" style={{ background: COLORS.median, display: 'inline-block' }} />
+                <span className="font-semibold text-gray-800">Actuel</span>
               </div>
-            )}
-            {d.refDemand !== null && (
-              <>
-                <div>
-                  <div className="text-[10px] text-violet-600 font-medium">Demande actuelle</div>
-                  <div className="font-bold text-gray-900">{d.demand}%</div>
-                </div>
-                <div>
-                  <div className="text-[10px] text-gray-500 font-medium">Demande référence</div>
-                  <div className="font-bold text-gray-600">{Math.round(d.refDemand)}%</div>
+              <div className="text-right font-bold text-gray-900">{d.compsetMedian ?? '—'}€</div>
+              <div className="text-right text-gray-400">—</div>
+              <div className="text-right font-semibold text-gray-800">{d.demand}%</div>
+            </div>
+            {refData.map(ref => {
+              const deltaMedian = d.compsetMedian !== null && ref.median !== null
+                ? Math.round(d.compsetMedian - ref.median) : null;
+              const deltaDemand = ref.demand !== null
+                ? Math.round(d.demand - ref.demand) : null;
+              return (
+                <div key={ref.label} className="grid grid-cols-4 gap-1 text-xs items-center">
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-0.5 rounded border-dashed" style={{ background: ref.color, display: 'inline-block' }} />
+                    <span className="text-gray-600">{ref.label}</span>
+                  </div>
+                  <div className="text-right text-gray-600">{ref.median !== null ? `${Math.round(ref.median)}€` : '—'}</div>
                   <div className={cn(
-                    'text-[10px] font-semibold',
-                    d.demand > d.refDemand ? 'text-emerald-600' : 'text-red-600'
+                    'text-right font-semibold',
+                    deltaMedian === null ? 'text-gray-300' :
+                    deltaMedian > 0 ? 'text-emerald-600' : deltaMedian < 0 ? 'text-red-600' : 'text-gray-400',
                   )}>
-                    {d.demand > d.refDemand ? '+' : ''}{Math.round(d.demand - d.refDemand)} pts
+                    {deltaMedian !== null ? `${deltaMedian > 0 ? '+' : ''}${deltaMedian}€` : '—'}
+                  </div>
+                  <div className={cn(
+                    'text-right',
+                    deltaDemand === null ? 'text-gray-300' :
+                    deltaDemand > 0 ? 'text-emerald-600' : deltaDemand < 0 ? 'text-red-600' : 'text-gray-400',
+                  )}>
+                    {deltaDemand !== null ? `${deltaDemand > 0 ? '+' : ''}${deltaDemand}pts` : '—'}
                   </div>
                 </div>
-              </>
-            )}
+              );
+            })}
           </div>
         </div>
       )}
 
+      {/* Min / Médiane / Max */}
       <div className="grid grid-cols-3 gap-2 mb-3 text-center">
         <div>
           <div className="text-[10px] text-gray-500 uppercase tracking-wide">Min</div>
@@ -167,6 +239,7 @@ function PremiumTooltip({ active, payload, ourHotelName, compareMode }: TooltipP
         </div>
       </div>
 
+      {/* Classement concurrents */}
       <div className="space-y-1 max-h-48 overflow-y-auto">
         {ranked.map((h, idx) => {
           const median = d.compsetMedian ?? 0;
@@ -186,7 +259,7 @@ function PremiumTooltip({ active, payload, ourHotelName, compareMode }: TooltipP
               </span>
               <span className={cn(
                 'w-12 text-right text-[10px]',
-                diff > 5 ? 'text-emerald-600' : diff < -5 ? 'text-red-600' : 'text-gray-400'
+                diff > 5 ? 'text-emerald-600' : diff < -5 ? 'text-red-600' : 'text-gray-400',
               )}>
                 {diff > 0 ? '+' : ''}{diff.toFixed(0)}%
               </span>
@@ -204,82 +277,93 @@ function PremiumTooltip({ active, payload, ourHotelName, compareMode }: TooltipP
   );
 }
 
+// ── Props publiques ───────────────────────────────────────────────────────
+
 export interface PremiumCompsetChartProps {
   importData: LighthouseImport;
   selectedMonth: string;
   onDateClick?: (date: string) => void;
 }
 
+// ── Composant principal ────────────────────────────────────────────────────
+
 export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: PremiumCompsetChartProps) {
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
-  const [compareMode, setCompareMode] = useState<CompareMode>('none');
+  const [showJ1, setShowJ1] = useState(false);
+  const [showJ3, setShowJ3] = useState(false);
+  const [showJ7, setShowJ7] = useState(false);
 
+  // ── Données graphique ─────────────────────────────────────────────
   const data = useMemo<ChartDatum[]>(() => {
     return importData.days
       .filter(d => d.date.startsWith(selectedMonth))
-      .map(d => {
-        // Sélectionner les données de référence selon le mode actif
-        const ref =
-          compareMode === 'hier' ? d.vsYesterday :
-          compareMode === '3j'   ? d.vs3Days     :
-          compareMode === '7j'   ? d.vs7Days     :
-          null;
+      .map(d => ({
+        date: d.date,
+        dateLabel: `${d.dayName} ${d.date.slice(8, 10)}`,
+        ourPrice: d.ourPrice > 0 ? d.ourPrice : null,
+        compsetMedian: d.compsetMedian > 0 ? d.compsetMedian : null,
+        compsetMin: d.compsetMin,
+        compsetMax: d.compsetMax,
+        demand: d.marketDemandPercent,
+        events: d.events,
+        ranking: d.ranking,
+        competitors: d.competitors.map(c => ({ name: c.hotelName, price: c.price, status: c.status })),
+        ref1Median: d.vsYesterday?.compsetMedian ?? null,
+        ref1Demand: d.vsYesterday?.demandPercent ?? null,
+        ref3Median: d.vs3Days?.compsetMedian ?? null,
+        ref3Demand: d.vs3Days?.demandPercent ?? null,
+        ref7Median: d.vs7Days?.compsetMedian ?? null,
+        ref7Demand: d.vs7Days?.demandPercent ?? null,
+      }));
+  }, [importData, selectedMonth]);
 
-        return {
-          date: d.date,
-          dateLabel: `${d.dayName} ${d.date.slice(8, 10)}`,
-          ourPrice: d.ourPrice > 0 ? d.ourPrice : null,
-          compsetMedian: d.compsetMedian > 0 ? d.compsetMedian : null,
-          compsetMin: d.compsetMin,
-          compsetMax: d.compsetMax,
-          demand: d.marketDemandPercent,
-          events: d.events,
-          ranking: d.ranking,
-          competitors: d.competitors.map(c => ({ name: c.hotelName, price: c.price, status: c.status })),
-          refMedian: ref?.compsetMedian ?? null,
-          refDemand: ref?.demandPercent ?? null,
-        };
-      });
-  }, [importData, selectedMonth, compareMode]);
-
+  // ── KPIs mensuels ─────────────────────────────────────────────────
   const kpis = useMemo(() => {
     if (data.length === 0) return null;
     const ourPrices = data.map(d => d.ourPrice).filter((v): v is number => v !== null);
-    const medians = data.map(d => d.compsetMedian).filter((v): v is number => v !== null);
-    const avgOur = ourPrices.length > 0 ? Math.round(ourPrices.reduce((s, p) => s + p, 0) / ourPrices.length) : 0;
-    const avgMedian = medians.length > 0 ? Math.round(medians.reduce((s, p) => s + p, 0) / medians.length) : 0;
-    const gap = avgOur - avgMedian;
+    const medians   = data.map(d => d.compsetMedian).filter((v): v is number => v !== null);
+    const avgOur    = ourPrices.length > 0 ? Math.round(ourPrices.reduce((s, p) => s + p, 0) / ourPrices.length) : 0;
+    const avgMedian = medians.length   > 0 ? Math.round(medians.reduce((s, p) => s + p, 0) / medians.length) : 0;
+    const gap    = avgOur - avgMedian;
     const gapPct = avgMedian > 0 ? (gap / avgMedian) * 100 : 0;
     return { avgOur, avgMedian, gap, gapPct };
   }, [data]);
 
-  // Calcul delta KPI entre médiane actuelle et médiane référence
-  const refKpis = useMemo(() => {
-    if (compareMode === 'none') return null;
-    const withRef = data.filter(d => d.refMedian !== null && d.compsetMedian !== null);
-    if (withRef.length === 0) return null;
-    const avgCurrent = withRef.reduce((s, d) => s + d.compsetMedian!, 0) / withRef.length;
-    const avgRef = withRef.reduce((s, d) => s + d.refMedian!, 0) / withRef.length;
-    const deltaMedian = Math.round(avgCurrent - avgRef);
-
-    const withDemandRef = data.filter(d => d.refDemand !== null);
-    const avgCurrentDemand = data.length > 0 ? data.reduce((s, d) => s + d.demand, 0) / data.length : 0;
-    const avgRefDemand = withDemandRef.length > 0
-      ? withDemandRef.reduce((s, d) => s + d.refDemand!, 0) / withDemandRef.length
-      : null;
-
-    return { deltaMedian, avgCurrentDemand: Math.round(avgCurrentDemand), avgRefDemand: avgRefDemand !== null ? Math.round(avgRefDemand) : null, datesWithRef: withRef.length };
-  }, [compareMode, data]);
-
+  // ── Détection feuilles VS disponibles ─────────────────────────────
   const hasVsSheets = useMemo(() => {
     const day = importData.days[0];
-    if (!day) return { hier: false, j3: false, j7: false };
+    if (!day) return { j1: false, j3: false, j7: false };
     return {
-      hier: day.vsYesterday !== undefined && day.vsYesterday !== null,
-      j3:   day.vs3Days     !== undefined && day.vs3Days     !== null,
-      j7:   day.vs7Days     !== undefined && day.vs7Days     !== null,
+      j1: day.vsYesterday != null,
+      j3: day.vs3Days     != null,
+      j7: day.vs7Days     != null,
     };
   }, [importData]);
+
+  const anyRefEnabled = showJ1 || showJ3 || showJ7;
+
+  // ── KPI delta agrégé (pour la barre de comparaison) ───────────────
+  const refSummary = useMemo(() => {
+    if (!anyRefEnabled) return null;
+    const results: Array<{ label: string; deltaMedian: number | null; deltaDemand: number | null; count: number }> = [];
+
+    const compute = (enabled: boolean, medianKey: keyof ChartDatum, demandKey: keyof ChartDatum, label: string) => {
+      if (!enabled) return;
+      const pairs = data.filter(d => d[medianKey] !== null && d.compsetMedian !== null);
+      if (pairs.length === 0) { results.push({ label, deltaMedian: null, deltaDemand: null, count: 0 }); return; }
+      const avgDelta = Math.round(pairs.reduce((s, d) => s + ((d.compsetMedian ?? 0) - (d[medianKey] as number)), 0) / pairs.length);
+      const demandPairs = data.filter(d => d[demandKey] !== null);
+      const avgDemandDelta = demandPairs.length > 0
+        ? Math.round(demandPairs.reduce((s, d) => s + (d.demand - (d[demandKey] as number)), 0) / demandPairs.length)
+        : null;
+      results.push({ label, deltaMedian: avgDelta, deltaDemand: avgDemandDelta, count: pairs.length });
+    };
+
+    compute(showJ1, 'ref1Median', 'ref1Demand', 'vs Hier');
+    compute(showJ3, 'ref3Median', 'ref3Demand', 'vs 3j');
+    compute(showJ7, 'ref7Median', 'ref7Demand', 'vs 7j');
+    return results;
+  }, [anyRefEnabled, showJ1, showJ3, showJ7, data]);
 
   const toggleSeries = (key: string) => {
     setHiddenSeries(prev => {
@@ -287,10 +371,6 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
-  };
-
-  const toggleCompare = (mode: CompareMode) => {
-    setCompareMode(prev => prev === mode ? 'none' : mode);
   };
 
   if (data.length === 0) {
@@ -301,8 +381,10 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
     );
   }
 
+  // ── Rendu ─────────────────────────────────────────────────────────
   return (
     <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+
       {/* ── HEADER ──────────────────────────────────────────────────── */}
       <div className="px-6 py-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -312,7 +394,6 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
           </p>
         </div>
 
-        {/* ── KPIs synthèse ───────────────────────────────────────── */}
         {kpis && (
           <div className="flex items-center gap-5 text-xs">
             <div>
@@ -321,13 +402,13 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
             </div>
             <div>
               <div className="text-gray-400">Médiane compset</div>
-              <div className="text-sm font-semibold text-emerald-600">{kpis.avgMedian}€</div>
+              <div className="text-sm font-semibold" style={{ color: COLORS.median }}>{kpis.avgMedian}€</div>
             </div>
             <div>
               <div className="text-gray-400">Écart moyen</div>
               <div className={cn(
                 'text-sm font-bold flex items-center gap-1',
-                kpis.gap >= 0 ? 'text-emerald-600' : 'text-red-600'
+                kpis.gap >= 0 ? 'text-emerald-600' : 'text-red-600',
               )}>
                 {kpis.gap >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                 {kpis.gap >= 0 ? '+' : ''}{kpis.gap}€ ({kpis.gapPct >= 0 ? '+' : ''}{kpis.gapPct.toFixed(1)}%)
@@ -337,86 +418,94 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
         )}
       </div>
 
-      {/* ── BOUTONS COMPARAISON ─────────────────────────────────────── */}
+      {/* ── BOUTONS COMPARAISON TEMPORELLE ──────────────────────────── */}
       <div className="px-6 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-wrap">
         <div className="flex items-center gap-1.5 text-xs text-gray-500">
           <GitCompare className="w-3.5 h-3.5" />
-          <span className="font-medium">Comparer à :</span>
+          <span className="font-medium">Superposer :</span>
         </div>
 
-        {([ 'hier', '3j', '7j' ] as CompareMode[]).map(mode => {
-          const available = mode === 'hier' ? hasVsSheets.hier : mode === '3j' ? hasVsSheets.j3 : hasVsSheets.j7;
-          const active = compareMode === mode;
+        {REF_PERIODS.map(period => {
+          const available = hasVsSheets[period.key];
+          const active = period.key === 'j1' ? showJ1 : period.key === 'j3' ? showJ3 : showJ7;
+          const toggle = () => {
+            if (!available) return;
+            if (period.key === 'j1') setShowJ1(p => !p);
+            else if (period.key === 'j3') setShowJ3(p => !p);
+            else setShowJ7(p => !p);
+          };
           return (
             <button
-              key={mode}
-              onClick={() => available && toggleCompare(mode)}
+              key={period.key}
+              onClick={toggle}
               disabled={!available}
-              title={available ? `Comparer médiane et demande marché avec les données d'il y a ${mode === 'hier' ? '1 jour' : mode === '3j' ? '3 jours' : '7 jours'}` : 'Feuille vs. non présente dans le fichier Lighthouse importé'}
+              title={
+                available
+                  ? `${active ? 'Masquer' : 'Afficher'} la médiane et la demande ${period.label}`
+                  : `Feuille vs. ${period.label} non présente dans le fichier Lighthouse`
+              }
               className={cn(
-                'px-3 py-1 rounded-full text-xs font-semibold border transition-all',
+                'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all',
                 active
-                  ? 'bg-violet-600 text-white border-violet-600 shadow-sm'
+                  ? 'text-white shadow-sm border-transparent'
                   : available
-                  ? 'bg-white text-gray-700 border-gray-300 hover:border-violet-400 hover:text-violet-700'
+                  ? 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
                   : 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed',
               )}
+              style={active ? { backgroundColor: period.medianColor, borderColor: period.medianColor } : {}}
             >
-              {COMPARE_LABELS[mode]}
+              {active
+                ? <EyeOff className="w-3 h-3" />
+                : <Eye className="w-3 h-3 opacity-60" />
+              }
+              {period.label}
             </button>
           );
         })}
 
-        {compareMode !== 'none' && (
+        {anyRefEnabled && (
           <button
-            onClick={() => setCompareMode('none')}
+            onClick={() => { setShowJ1(false); setShowJ3(false); setShowJ7(false); }}
             className="px-3 py-1 rounded-full text-xs font-semibold border bg-white text-gray-500 border-gray-200 hover:text-gray-700 ml-1"
           >
-            ✕ Retirer
+            ✕ Tout retirer
           </button>
         )}
 
-        {/* Delta KPI en mode comparaison */}
-        {refKpis && compareMode !== 'none' && (
-          <div className="ml-auto flex items-center gap-4 text-xs bg-gray-50 rounded-full px-3 py-1 border border-gray-200">
-            {refKpis.datesWithRef > 0 && (
-              <>
-                <span className="text-gray-500">{refKpis.datesWithRef} dates avec référence</span>
-                <span className="border-l border-gray-200 h-3" />
-                <span>
-                  <span className="text-gray-500">Δ médiane : </span>
-                  <span className={cn(
-                    'font-bold',
-                    refKpis.deltaMedian > 0 ? 'text-emerald-600' : refKpis.deltaMedian < 0 ? 'text-red-600' : 'text-gray-600',
-                  )}>
-                    {refKpis.deltaMedian >= 0 ? '+' : ''}{refKpis.deltaMedian}€
-                  </span>
-                </span>
-                {refKpis.avgRefDemand !== null && (
+        {/* KPI delta synthétique */}
+        {refSummary && refSummary.length > 0 && (
+          <div className="ml-auto flex items-center gap-4 text-xs bg-gray-50 rounded-full px-3 py-1 border border-gray-200 flex-wrap">
+            {refSummary.map((r, i) => (
+              <span key={r.label} className={cn('flex items-center gap-2', i > 0 && 'border-l border-gray-200 pl-4')}>
+                <span className="text-gray-500 font-medium">{r.label} :</span>
+                {r.count > 0 ? (
                   <>
-                    <span className="border-l border-gray-200 h-3" />
-                    <span>
-                      <span className="text-gray-500">Δ demande : </span>
-                      <span className={cn(
-                        'font-bold',
-                        refKpis.avgCurrentDemand > refKpis.avgRefDemand ? 'text-emerald-600' :
-                        refKpis.avgCurrentDemand < refKpis.avgRefDemand ? 'text-red-600' : 'text-gray-600',
-                      )}>
-                        {refKpis.avgCurrentDemand > refKpis.avgRefDemand ? '+' : ''}{refKpis.avgCurrentDemand - refKpis.avgRefDemand} pts
-                      </span>
+                    <span className={cn(
+                      'font-bold',
+                      r.deltaMedian === null ? 'text-gray-400' :
+                      r.deltaMedian > 0 ? 'text-emerald-600' : r.deltaMedian < 0 ? 'text-red-600' : 'text-gray-600',
+                    )}>
+                      {r.deltaMedian !== null ? `${r.deltaMedian > 0 ? '+' : ''}${r.deltaMedian}€` : '—'}
                     </span>
+                    {r.deltaDemand !== null && (
+                      <span className={cn(
+                        'text-gray-400',
+                        r.deltaDemand > 0 ? 'text-emerald-600' : r.deltaDemand < 0 ? 'text-red-600' : '',
+                      )}>
+                        {r.deltaDemand > 0 ? '+' : ''}{r.deltaDemand}pts
+                      </span>
+                    )}
                   </>
+                ) : (
+                  <span className="text-amber-600 text-[10px]">non disponible</span>
                 )}
-              </>
-            )}
-            {refKpis.datesWithRef === 0 && (
-              <span className="text-amber-700 text-xs">Données de référence non disponibles pour ce mois</span>
-            )}
+              </span>
+            ))}
           </div>
         )}
       </div>
 
-      {/* ── GRAPHIQUE ─────────────────────────────────────────────────── */}
+      {/* ── GRAPHIQUE ──────────────────────────────────────────────────── */}
       <div className="px-2 pt-4 pb-2">
         <ResponsiveContainer width="100%" height={420}>
           <ComposedChart
@@ -431,8 +520,8 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
           >
             <defs>
               <linearGradient id="compset-area" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={COLORS.compsetRange} stopOpacity={0.30} />
-                <stop offset="100%" stopColor={COLORS.compsetRange} stopOpacity={0.05} />
+                <stop offset="0%" stopColor={COLORS.compsetRange} stopOpacity={0.25} />
+                <stop offset="100%" stopColor={COLORS.compsetRange} stopOpacity={0.04} />
               </linearGradient>
             </defs>
 
@@ -466,7 +555,14 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
             />
 
             <Tooltip
-              content={<PremiumTooltip ourHotelName={importData.ourHotelName} compareMode={compareMode} />}
+              content={
+                <PremiumTooltip
+                  ourHotelName={importData.ourHotelName}
+                  showJ1={showJ1}
+                  showJ3={showJ3}
+                  showJ7={showJ7}
+                />
+              }
               cursor={{ stroke: COLORS.ourHotel, strokeWidth: 1, strokeDasharray: '3 3' }}
               animationDuration={150}
             />
@@ -480,7 +576,7 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
               onClick={(e: any) => toggleSeries(e.dataKey)}
             />
 
-            {/* Barres demande marché (actuelle) */}
+            {/* ── Barres demande marché (translucides, fond) ──────── */}
             {!hiddenSeries.has('demand') && (
               <Bar
                 yAxisId="demand"
@@ -495,30 +591,67 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
                   <Cell
                     key={`cell-${idx}`}
                     fill={getDemandColor(entry.demand)}
-                    fillOpacity={0.85}
+                    fillOpacity={0.65}
                   />
                 ))}
               </Bar>
             )}
 
-            {/* Ligne demande marché référence (mode comparaison) */}
-            {compareMode !== 'none' && !hiddenSeries.has('refDemand') && (
+            {/* ── Référence J-7 demande (la plus atténuée — d'abord) ── */}
+            {showJ7 && !hiddenSeries.has('ref7Demand') && (
               <Line
                 yAxisId="demand"
                 type="monotone"
-                dataKey="refDemand"
-                name={`Demande ${COMPARE_LABELS[compareMode]}`}
-                stroke={COLORS.demandRef}
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
+                dataKey="ref7Demand"
+                name="Demande vs 7j"
+                stroke={COLORS.demand7}
+                strokeWidth={1}
+                strokeDasharray="3 3"
                 dot={false}
-                activeDot={{ r: 4, fill: COLORS.demandRef }}
+                activeDot={{ r: 3, fill: COLORS.demand7 }}
                 isAnimationActive
                 animationDuration={400}
                 connectNulls
               />
             )}
 
+            {/* ── Référence J-3 demande ───────────────────────────── */}
+            {showJ3 && !hiddenSeries.has('ref3Demand') && (
+              <Line
+                yAxisId="demand"
+                type="monotone"
+                dataKey="ref3Demand"
+                name="Demande vs 3j"
+                stroke={COLORS.demand3}
+                strokeWidth={1}
+                strokeDasharray="4 3"
+                dot={false}
+                activeDot={{ r: 3, fill: COLORS.demand3 }}
+                isAnimationActive
+                animationDuration={400}
+                connectNulls
+              />
+            )}
+
+            {/* ── Référence J-1 demande ───────────────────────────── */}
+            {showJ1 && !hiddenSeries.has('ref1Demand') && (
+              <Line
+                yAxisId="demand"
+                type="monotone"
+                dataKey="ref1Demand"
+                name="Demande vs Hier"
+                stroke={COLORS.demand1}
+                strokeWidth={1.5}
+                strokeDasharray="5 3"
+                dot={false}
+                activeDot={{ r: 4, fill: COLORS.demand1 }}
+                isAnimationActive
+                animationDuration={400}
+                connectNulls
+              />
+            )}
+
+            {/* ── Zone compset min↔max (fond) ──────────────────────── */}
             {!hiddenSeries.has('compsetMax') && (
               <Area
                 yAxisId="price"
@@ -546,7 +679,61 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
               />
             )}
 
-            {/* Ligne médiane actuelle */}
+            {/* ── Références médiane (J-7 en premier, plus atténué) ── */}
+            {showJ7 && !hiddenSeries.has('ref7Median') && (
+              <Line
+                yAxisId="price"
+                type="monotone"
+                dataKey="ref7Median"
+                name="Médiane vs 7j"
+                stroke={COLORS.median7}
+                strokeWidth={1}
+                strokeDasharray="3 3"
+                dot={false}
+                activeDot={{ r: 4, stroke: COLORS.median7, strokeWidth: 2, fill: '#fff' }}
+                isAnimationActive
+                animationDuration={400}
+                connectNulls
+              />
+            )}
+
+            {/* ── Référence médiane J-3 ───────────────────────────── */}
+            {showJ3 && !hiddenSeries.has('ref3Median') && (
+              <Line
+                yAxisId="price"
+                type="monotone"
+                dataKey="ref3Median"
+                name="Médiane vs 3j"
+                stroke={COLORS.median3}
+                strokeWidth={1.5}
+                strokeDasharray="5 4"
+                dot={false}
+                activeDot={{ r: 4, stroke: COLORS.median3, strokeWidth: 2, fill: '#fff' }}
+                isAnimationActive
+                animationDuration={400}
+                connectNulls
+              />
+            )}
+
+            {/* ── Référence médiane J-1 ───────────────────────────── */}
+            {showJ1 && !hiddenSeries.has('ref1Median') && (
+              <Line
+                yAxisId="price"
+                type="monotone"
+                dataKey="ref1Median"
+                name="Médiane vs Hier"
+                stroke={COLORS.median1}
+                strokeWidth={1.5}
+                strokeDasharray="8 4"
+                dot={false}
+                activeDot={{ r: 4, stroke: COLORS.median1, strokeWidth: 2, fill: '#fff' }}
+                isAnimationActive
+                animationDuration={400}
+                connectNulls
+              />
+            )}
+
+            {/* ── Médiane actuelle (primaire, au-dessus des références) */}
             {!hiddenSeries.has('compsetMedian') && (
               <Line
                 yAxisId="price"
@@ -554,7 +741,7 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
                 dataKey="compsetMedian"
                 name="Médiane compset"
                 stroke={COLORS.median}
-                strokeWidth={2}
+                strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 5, stroke: COLORS.median, strokeWidth: 2, fill: '#fff' }}
                 isAnimationActive
@@ -563,24 +750,7 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
               />
             )}
 
-            {/* Ligne médiane référence (mode comparaison) — dashed gris */}
-            {compareMode !== 'none' && !hiddenSeries.has('refMedian') && (
-              <Line
-                yAxisId="price"
-                type="monotone"
-                dataKey="refMedian"
-                name={`Médiane ${COMPARE_LABELS[compareMode]}`}
-                stroke={COLORS.medianRef}
-                strokeWidth={2}
-                strokeDasharray="6 4"
-                dot={false}
-                activeDot={{ r: 5, stroke: COLORS.medianRef, strokeWidth: 2, fill: '#fff' }}
-                isAnimationActive
-                animationDuration={400}
-                connectNulls
-              />
-            )}
-
+            {/* ── Notre tarif (dominant, tout au-dessus) ─────────── */}
             {!hiddenSeries.has('ourPrice') && (
               <Line
                 yAxisId="price"
@@ -597,12 +767,13 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
               />
             )}
 
+            {/* ── Ligne médiane moyenne (référence horizontale) ───── */}
             {kpis && (
               <ReferenceLine
                 yAxisId="price"
                 y={kpis.avgMedian}
                 stroke={COLORS.median}
-                strokeOpacity={0.3}
+                strokeOpacity={0.25}
                 strokeDasharray="5 5"
               />
             )}
@@ -610,7 +781,7 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
         </ResponsiveContainer>
       </div>
 
-      {/* Légende température des barres demande */}
+      {/* ── LÉGENDE TEMPÉRATURE ──────────────────────────────────────── */}
       <div className="px-6 py-2 border-t border-gray-100 flex items-center gap-4 text-[10px] text-gray-500 flex-wrap">
         <span className="font-medium text-gray-600">Demande marché :</span>
         <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#bfdbfe' }} />&lt; 30 %</span>
@@ -619,25 +790,38 @@ export function PremiumCompsetChart({ importData, selectedMonth, onDateClick }: 
         <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#fdba74' }} />70-80 %</span>
         <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#fca5a5' }} />80-90 %</span>
         <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 rounded" style={{ background: '#ef4444' }} />&gt; 90 %</span>
-        {compareMode !== 'none' && (
+
+        {anyRefEnabled && (
           <>
-            <span className="border-l border-gray-200 h-3" />
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-5 h-0 border border-gray-400 border-dashed" />
-              Médiane {COMPARE_LABELS[compareMode]}
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-5 h-0 border border-violet-400 border-dashed" />
-              Demande {COMPARE_LABELS[compareMode]}
-            </span>
+            <span className="border-l border-gray-200 h-3 mx-1" />
+            <span className="font-medium text-gray-600">Références :</span>
+            {showJ1 && (
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-5 h-0 rounded" style={{ borderTop: `2px dashed ${COLORS.median1}` }} />
+                vs Hier
+              </span>
+            )}
+            {showJ3 && (
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-5 h-0 rounded" style={{ borderTop: `2px dashed ${COLORS.median3}` }} />
+                vs 3j
+              </span>
+            )}
+            {showJ7 && (
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-5 h-0 rounded" style={{ borderTop: `1px dashed ${COLORS.median7}` }} />
+                vs 7j
+              </span>
+            )}
           </>
         )}
       </div>
 
+      {/* ── FOOTER ───────────────────────────────────────────────────── */}
       <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
         <span>
-          Cliquez sur un point pour le détail. Cliquez sur une légende pour masquer/afficher.
-          {compareMode !== 'none' && ' · Lignes pointillées = données de référence.'}
+          Cliquez sur un point pour le détail · Cliquez sur une légende pour masquer.
+          {anyRefEnabled && ' · Les courbes en pointillés sont les références temporelles.'}
         </span>
         <span>{importData.competitorNames.length} concurrents · MAJ {new Date(importData.importedAt).toLocaleDateString('fr-FR')}</span>
       </div>
