@@ -121,6 +121,7 @@ const defaultForm = (): PromoFormState => ({
 export function Promotions() {
   const [promotions, setPromotions] = useState<Promotion[]>(generatePromotions());
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<PromoFormState>(defaultForm());
   const [formError, setFormError] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -146,7 +147,23 @@ export function Promotions() {
   };
 
   const openCreate = () => {
+    setEditingId(null);
     setForm(defaultForm());
+    setFormError(null);
+    setShowCreateModal(true);
+  };
+
+  const openEdit = (promo: Promotion) => {
+    setEditingId(promo.id);
+    setForm({
+      name: promo.name,
+      code: promo.code ?? '',
+      type: promo.type,
+      value: promo.value,
+      startDate: promo.startDate,
+      endDate: promo.endDate,
+      channels: [...promo.channels],
+    });
     setFormError(null);
     setShowCreateModal(true);
   };
@@ -169,21 +186,41 @@ export function Promotions() {
       return;
     }
 
-    const newPromo: Promotion = {
-      id: `promo_${Date.now()}`,
-      name: form.name.trim(),
-      type: form.type,
-      value: form.value,
-      code: form.code.trim() || null,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      channels: form.channels,
-      bookingsGenerated: 0,
-      revenueGenerated: 0,
-      active: true,
-    };
-    setPromotions([newPromo, ...promotions]);
+    if (editingId) {
+      setPromotions(
+        promotions.map((p) =>
+          p.id === editingId
+            ? {
+                ...p,
+                name: form.name.trim(),
+                type: form.type,
+                value: form.value,
+                code: form.code.trim() || null,
+                startDate: form.startDate,
+                endDate: form.endDate,
+                channels: form.channels,
+              }
+            : p
+        )
+      );
+    } else {
+      const newPromo: Promotion = {
+        id: `promo_${Date.now()}`,
+        name: form.name.trim(),
+        type: form.type,
+        value: form.value,
+        code: form.code.trim() || null,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        channels: form.channels,
+        bookingsGenerated: 0,
+        revenueGenerated: 0,
+        active: true,
+      };
+      setPromotions([newPromo, ...promotions]);
+    }
     setShowCreateModal(false);
+    setEditingId(null);
   };
 
   const toggleFormChannel = (channel: string) => {
@@ -274,6 +311,7 @@ export function Promotions() {
                     promo={promo}
                     onToggle={() => togglePromo(promo.id)}
                     onDelete={() => deletePromo(promo.id)}
+                    onEdit={() => openEdit(promo)}
                   />
                 ))}
               </div>
@@ -307,6 +345,7 @@ export function Promotions() {
                     promo={promo}
                     onToggle={() => togglePromo(promo.id)}
                     onDelete={() => deletePromo(promo.id)}
+                    onEdit={() => openEdit(promo)}
                   />
                 ))}
               </div>
@@ -326,7 +365,7 @@ export function Promotions() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-bold text-gray-900 mb-4">
-              Créer une nouvelle promotion
+              {editingId ? 'Modifier la promotion' : 'Créer une nouvelle promotion'}
             </h2>
 
             <div className="space-y-4 mb-6">
@@ -461,7 +500,7 @@ export function Promotions() {
                 onClick={submitCreate}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
-                Créer la promotion
+                {editingId ? 'Enregistrer' : 'Créer la promotion'}
               </button>
             </div>
           </div>
@@ -479,10 +518,12 @@ function PromoCard({
   promo,
   onToggle,
   onDelete,
+  onEdit,
 }: {
   promo: Promotion;
   onToggle: () => void;
   onDelete: () => void;
+  onEdit?: () => void;
 }) {
   const formatValue = () => {
     if (promo.type === 'percentage') return `-${promo.value}%`;
@@ -614,7 +655,9 @@ function PromoCard({
       {/* ACTIONS */}
       <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
         <button
-          className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs font-bold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 hover:shadow-md flex items-center justify-center gap-1.5"
+          onClick={onEdit}
+          disabled={!onEdit}
+          className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs font-bold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 hover:shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Edit className="w-3.5 h-3.5" />
           Éditer
