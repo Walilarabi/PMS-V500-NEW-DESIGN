@@ -108,18 +108,18 @@ function renderPage(page: PageId): React.ReactNode {
 
     // ── ANALYSE ───────────────────────────────────────────────────────────────
     case 'analysis':
-    case 'kpi':                      return <AnalysisView />;
-    case 'performance':              return <Placeholder title="Performance" icon="🏆" />;
-    case 'forecast':                 return <Placeholder title="Prévisionnel" icon="🔭" />;
-    case 'rapports':                 return <Placeholder title="Rapports (93)" icon="📊" />;
-    case 'rapports_exploitation':    return <Placeholder title="Rapports Exploitation" icon="🏨" />;
-    case 'rapports_reservations':    return <Placeholder title="Rapports Réservations" icon="📅" />;
-    case 'rapports_backoffice':      return <Placeholder title="Rapports Back office" icon="🏦" />;
-    case 'rapports_comptabilite':    return <Placeholder title="Rapports Comptabilité" icon="📒" />;
-    case 'rapports_tva':             return <Placeholder title="Rapports TVA 2026" icon="🧾" />;
-    case 'rapports_stats':           return <Placeholder title="Statistiques" icon="📈" />;
-    case 'rapports_revenue':         return <Placeholder title="Rapports Revenue" icon="💹" />;
-    case 'rapports_housekeeping':    return <Placeholder title="Rapports Housekeeping" icon="🛏️" />;
+    case 'kpi':
+    case 'performance':
+    case 'forecast':
+    case 'rapports':
+    case 'rapports_exploitation':
+    case 'rapports_reservations':
+    case 'rapports_backoffice':
+    case 'rapports_comptabilite':
+    case 'rapports_tva':
+    case 'rapports_stats':
+    case 'rapports_revenue':
+    case 'rapports_housekeeping':    return <AnalysisView />;
 
     // ── PARAMÈTRES ────────────────────────────────────────────────────────────
     case 'settings':

@@ -1,0 +1,124 @@
+DATABASE_ARCHITECTURE.md
+DATABASE ARCHITECTURE — FLOWTYM PMS
+OBJECTIF
+
+La base de données est le cœur critique du PMS.
+
+Elle doit être :
+
+cohérente,
+transactionnelle,
+performante,
+multi-tenant,
+auditables,
+scalable,
+sécurisée.
+
+Aucune décision DB ne doit être improvisée.
+
+STACK OBLIGATOIRE
+PostgreSQL
+Prisma ORM
+PostgreSQL RLS
+UUIDs
+Transactions robustes
+Soft delete quand pertinent
+Immutable audit logs
+PRINCIPES ABSOLUS
+1. Multi-tenant strict
+
+Toutes les tables doivent contenir :
+
+tenant_id
+
+Toutes les requêtes doivent respecter :
+
+tenant scope,
+RLS,
+isolation stricte.
+2. Intégrité métier
+
+Les contraintes DB doivent empêcher :
+
+overbooking,
+incohérences,
+doublons critiques,
+corruption métier.
+
+Utiliser :
+
+unique constraints,
+transactions,
+locking,
+optimistic concurrency.
+3. Soft Delete
+
+Ne jamais supprimer physiquement :
+
+réservations,
+factures,
+paiements,
+données auditables.
+
+Utiliser :
+
+deleted_at,
+archived_at.
+4. Auditabilité
+
+Toutes les opérations critiques doivent être traçables.
+
+Prévoir :
+
+created_by,
+updated_by,
+timestamps,
+audit logs,
+event history.
+STRATÉGIE D’INDEXATION
+
+Index obligatoires :
+
+tenant_id
+reservation dates
+room_id
+availability lookups
+pricing queries
+financial queries
+realtime events
+
+Toujours profiler les requêtes critiques.
+
+RÈGLES PRISMA
+
+Interdictions :
+
+any Prisma,
+includes massifs inutiles,
+N+1,
+requêtes non paginées.
+
+Obligatoire :
+
+repositories dédiés,
+transactions encapsulées,
+typage strict,
+pagination,
+selects explicites.
+TABLES CRITIQUES
+Reservations
+immutable reference
+lifecycle strict
+conflict prevention
+Availability
+temps réel
+verrouillage cohérent
+recalcul déterministe
+Pricing
+historisation
+auditabilité
+versioning
+Finance
+append-only logic
+immutable accounting
+correction entries
