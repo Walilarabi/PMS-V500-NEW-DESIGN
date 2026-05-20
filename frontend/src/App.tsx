@@ -20,6 +20,8 @@ import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
 import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
 import { FinanceView }      from '@/src/pages/FinanceView';
 import { AnalysisView }     from '@/src/pages/AnalysisView';
+import { PerformanceView }  from '@/src/pages/PerformanceView';
+import { ForecastView }     from '@/src/pages/ForecastView';
 import { FlowboardView }    from '@/src/pages/FlowboardView';
 import { SettingsView }     from '@/src/pages/SettingsView';
 import { FacturationView }  from '@/src/pages/finance/FacturationView';
@@ -124,17 +126,17 @@ function renderPage(page: PageId): React.ReactNode {
     // ── ANALYSE ───────────────────────────────────────────────────────────────
     case 'analysis':
     case 'kpi':                      return <AnalysisView />;
-    case 'performance':              return <Placeholder title="Performance" icon="🏆" />;
-    case 'forecast':                 return <Placeholder title="Prévisionnel" icon="🔭" />;
-    case 'rapports':                 return <Placeholder title="Rapports (93)" icon="📊" />;
-    case 'rapports_exploitation':    return <Placeholder title="Rapports Exploitation" icon="🏨" />;
-    case 'rapports_reservations':    return <Placeholder title="Rapports Réservations" icon="📅" />;
-    case 'rapports_backoffice':      return <Placeholder title="Rapports Back office" icon="🏦" />;
-    case 'rapports_comptabilite':    return <Placeholder title="Rapports Comptabilité" icon="📒" />;
-    case 'rapports_tva':             return <Placeholder title="Rapports TVA 2026" icon="🧾" />;
-    case 'rapports_stats':           return <Placeholder title="Statistiques" icon="📈" />;
-    case 'rapports_revenue':         return <Placeholder title="Rapports Revenue" icon="💹" />;
-    case 'rapports_housekeeping':    return <Placeholder title="Rapports Housekeeping" icon="🛏️" />;
+    case 'performance':              return <PerformanceView />;
+    case 'forecast':                 return <ForecastView />;
+    case 'rapports':                 return <AnalysisView />;
+    case 'rapports_exploitation':    return <AnalysisView defaultCategory="EXPLOITATION" />;
+    case 'rapports_reservations':    return <AnalysisView defaultCategory="EXPLOITATION" searchHint="réservation" />;
+    case 'rapports_backoffice':      return <AnalysisView defaultCategory="FINANCIER" />;
+    case 'rapports_comptabilite':    return <AnalysisView defaultCategory="FINANCIER" />;
+    case 'rapports_tva':             return <AnalysisView defaultCategory="FINANCIER" searchHint="TVA" />;
+    case 'rapports_stats':           return <AnalysisView defaultCategory="STATISTIQUES" />;
+    case 'rapports_revenue':         return <AnalysisView defaultCategory="STATISTIQUES" searchHint="revenue" />;
+    case 'rapports_housekeeping':    return <AnalysisView defaultCategory="EXPLOITATION" searchHint="ménage" />;
 
     // ── PARAMÈTRES ────────────────────────────────────────────────────────────
     case 'settings':
