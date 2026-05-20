@@ -41,6 +41,7 @@ import {
   Loader2,
   Settings2,
   RefreshCw,
+  BarChart2,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
@@ -63,6 +64,7 @@ import { useOperationalData } from '../../hooks/useOperationalData';
 import { recordRmsDecision } from '../../services/rms-decisions.service';
 import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
+import { AnalyseRMPanel } from './components/AnalyseRMPanel';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -96,7 +98,7 @@ interface RMSEventRow {
   source: 'salons_excel' | 'lighthouse' | 'planning_manual';
 }
 
-interface DayRMSData {
+export interface DayRMSData {
   date: string;
   dayName: string;
   dayNumber: number;
@@ -139,7 +141,7 @@ interface DayRMSData {
   selected: boolean;
 }
 
-type ViewMode = 'table' | 'kanban';
+type ViewMode = 'table' | 'kanban' | 'analyse';
 type ViewPeriod = '7days' | '15days' | '30days' | '60days' | '90days';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -815,6 +817,16 @@ export function RMSTableauPro() {
               <Grid3x3 className="w-3.5 h-3.5" />
               Kanban
             </button>
+            <button
+              onClick={() => setViewMode('analyse')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold rounded flex items-center gap-1.5 transition-all duration-150',
+                viewMode === 'analyse' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              )}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              Analyse RM
+            </button>
           </div>
         </div>
 
@@ -920,6 +932,8 @@ export function RMSTableauPro() {
             handleAvailabilityChange,
             isAvailabilityOverridden,
           }} />
+        ) : viewMode === 'analyse' ? (
+          <AnalyseRMPanel data={rmsData} />
         ) : (
           <KanbanView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
         )}
