@@ -154,7 +154,9 @@ function generatePerformance30j(channels: ChannelData[]) {
 export function Channels() {
   const [autoAllocation, setAutoAllocation] = useState(true);
   const [perfMetric, setPerfMetric] = useState<PerfMetric>('volume');
-  const channels = useMemo(() => generateChannelData(), []);
+  const [channels, setChannels] = useState<ChannelData[]>(() => generateChannelData());
+  const [dirtyRestrictions, setDirtyRestrictions] = useState<Set<string>>(new Set());
+  const [appliedFeedback, setAppliedFeedback] = useState<string | null>(null);
   const perfData = useMemo(() => generatePerformance30j(channels), [channels]);
 
   const metricLabel: Record<PerfMetric, string> = {
@@ -163,12 +165,45 @@ export function Channels() {
     revpar: 'RevPAR (€)',
   };
 
+  const updateChannel = (id: string, patch: Partial<ChannelData>) => {
+    setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    setDirtyRestrictions((prev) => new Set(prev).add(id));
+  };
+
+  const updateAllocation = (id: string, value: number) => {
+    setChannels((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, currentAllocation: Math.max(0, Math.min(c.allocationMax, value)) }
+          : c
+      )
+    );
+  };
+
+  const applyRestrictions = (id: string) => {
+    setDirtyRestrictions((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    const channel = channels.find((c) => c.id === id);
+    setAppliedFeedback(
+      channel ? `Restrictions appliquées pour ${channel.name}` : 'Restrictions appliquées'
+    );
+    setTimeout(() => setAppliedFeedback(null), 2500);
+  };
+
   const totalVolume = channels.reduce((sum, c) => sum + c.volume, 0);
   const avgADR = Math.round(channels.reduce((sum, c) => sum + c.adr * c.volume, 0) / totalVolume);
   const totalRevpar = channels.reduce((sum, c) => sum + c.revparContribution, 0);
 
   return (
-    <div className="flex flex-col h-screen w-full bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-screen w-full bg-gray-50 overflow-hidden relative">
+      {appliedFeedback && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-4 py-2 rounded-md shadow-lg text-sm font-semibold animate-pulse">
+          ✓ {appliedFeedback}
+        </div>
+      )}
       {/* HEADER */}
       <RevenueHeader
         icon={Globe}
@@ -390,6 +425,7 @@ export function Channels() {
                       min="0"
                       max={channel.allocationMax}
                       value={channel.currentAllocation}
+                      onChange={(e) => updateAllocation(channel.id, Number(e.target.value))}
                       disabled={autoAllocation}
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                     />
@@ -436,6 +472,11 @@ export function Channels() {
                           min="1"
                           max="14"
                           value={channel.mlos}
+                          onChange={(e) =>
+                            updateChannel(channel.id, {
+                              mlos: Math.max(1, Math.min(14, Number(e.target.value) || 1)),
+                            })
+                          }
                           className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         />
                       </td>
@@ -443,6 +484,7 @@ export function Channels() {
                         <input
                           type="checkbox"
                           checked={channel.cta}
+                          onChange={(e) => updateChannel(channel.id, { cta: e.target.checked })}
                           className="w-4 h-4 accent-blue-600"
                         />
                       </td>
@@ -450,12 +492,22 @@ export function Channels() {
                         <input
                           type="checkbox"
                           checked={channel.ctd}
+                          onChange={(e) => updateChannel(channel.id, { ctd: e.target.checked })}
                           className="w-4 h-4 accent-blue-600"
                         />
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold">
-                          Appliquer
+                        <button
+                          onClick={() => applyRestrictions(channel.id)}
+                          disabled={!dirtyRestrictions.has(channel.id)}
+                          className={cn(
+                            'text-xs px-3 py-1 rounded font-semibold transition-colors',
+                            dirtyRestrictions.has(channel.id)
+                              ? 'bg-blue-600 text-white hover:bg-blue-700'
+                              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                          )}
+                        >
+                          {dirtyRestrictions.has(channel.id) ? 'Appliquer' : 'À jour'}
                         </button>
                       </td>
                     </tr>
