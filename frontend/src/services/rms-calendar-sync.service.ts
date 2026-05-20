@@ -11,6 +11,7 @@
  */
 
 import { useRateCalendarStore } from '../components/rms/store/rateCalendarStore';
+import { pushToAllChannels } from './channel-manager.service';
 
 export type RMSDecisionStatus = 'En attente' | 'Acceptée' | 'Refusée' | 'Maintenue';
 
@@ -110,6 +111,14 @@ export function syncRMSDecision(payload: RMSDecisionPayload): SyncRecord {
         .getState()
         .updatePrice(roomTypeId, planId, payload.date, payload.finalPrice);
       record.applied = true;
+
+      // Push automatique vers les Channel Managers (fire-and-forget)
+      void pushToAllChannels({
+        date: payload.date,
+        roomTypeId,
+        planId,
+        price: payload.finalPrice,
+      });
     } catch (e) {
       record.error = e instanceof Error ? e.message : String(e);
     }
