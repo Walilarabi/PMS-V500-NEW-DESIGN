@@ -27,7 +27,7 @@ import React, { useState, useMemo, useRef, useCallback } from 'react';
 import {
   BarChart3, Upload, AlertCircle, CheckCircle2, Loader2, X,
   FileSpreadsheet, Target, CalendarDays, LineChart, Layers, Table, ListFilter,
-  Activity, Sparkles, FileText,
+  Activity, Sparkles, FileText, Database,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { useLighthouseStore } from '../../store/lighthouseStore';
@@ -43,13 +43,14 @@ import { PremiumCompsetChart } from './components/PremiumCompsetChart';
 import { MarketAnalysisCockpit } from './components/MarketAnalysisCockpit';
 import { LighthouseFileBanner } from './components/LighthouseFileBanner';
 import { PremiumDayDetailModal } from './components/PremiumDayDetailModal';
+import { MarketSourcesPanel } from './components/MarketSourcesPanel';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
 
 // ─── Onglets ──────────────────────────────────────────────────────────────
 
-type TabKey = 'cockpit' | 'marche' | 'positionnement' | 'heatmap' | 'detail' | 'recos' | 'briefing';
+type TabKey = 'cockpit' | 'marche' | 'positionnement' | 'heatmap' | 'detail' | 'recos' | 'briefing' | 'sources';
 
 const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { key: 'cockpit',        label: 'Cockpit RMS',           icon: Activity },
@@ -59,6 +60,7 @@ const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ clas
   { key: 'detail',         label: 'Détail jour par jour',   icon: Table },
   { key: 'recos',          label: 'Recommandations',        icon: Sparkles },
   { key: 'briefing',       label: 'Briefing',               icon: FileText },
+  { key: 'sources',        label: 'Sources marché',         icon: Database },
 ];
 
 // ─── Upload Banner Lighthouse (états parsing/error uniquement) ──────────────
@@ -511,6 +513,11 @@ export const LighthouseMonthlyView: React.FC = () => {
                 onDateClick={setSelectedDate}
                 view="briefing"
               />
+            )}
+
+            {/* ─── Onglet Sources marché (Palier 3) ─────────────────────── */}
+            {activeTab === 'sources' && (
+              <MarketSourcesPanel />
             )}
           </>
         )}
