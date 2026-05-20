@@ -465,7 +465,13 @@ function CompetitorHeatmap({
   ourHotelName: string;
   onDateClick: (date: string) => void;
 }) {
+  const [competitorSearch, setCompetitorSearch] = useState('');
   if (days.length === 0 || competitorNames.length === 0) return null;
+
+  const q = competitorSearch.trim().toLowerCase();
+  const filteredCompetitors = q
+    ? competitorNames.filter((n) => n.toLowerCase().includes(q))
+    : competitorNames;
 
   const cellColor = (price: number | null, ourPrice: number, status: string) => {
     if (status === 'sold_out') return 'bg-gray-200 text-gray-500';
@@ -482,12 +488,24 @@ function CompetitorHeatmap({
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4 flex-wrap">
         <h3 className="text-base font-semibold text-gray-900">Heatmap Tarifs Concurrents</h3>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-100" /> Nous moins chers</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-100" /> Nous plus chers</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-200" /> Épuisé</span>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            value={competitorSearch}
+            onChange={(e) => setCompetitorSearch(e.target.value)}
+            placeholder="Filtrer concurrent..."
+            className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none w-48"
+          />
+          <span className="text-xs text-gray-400 whitespace-nowrap">
+            {filteredCompetitors.length}/{competitorNames.length}
+          </span>
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-100" /> Nous moins chers</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-100" /> Nous plus chers</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-200" /> Épuisé</span>
+          </div>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -520,7 +538,7 @@ function CompetitorHeatmap({
                 </td>
               ))}
             </tr>
-            {competitorNames.map((name) => (
+            {filteredCompetitors.map((name) => (
               <tr key={name} className="hover:bg-gray-50">
                 <td className="px-2 py-2 text-gray-700 sticky left-0 bg-white hover:bg-gray-50">{name}</td>
                 {days.map(d => {
@@ -549,6 +567,8 @@ function CompetitorHeatmap({
   );
 }
 
+type DailySortKey = 'date' | 'ourPrice' | 'compsetMedian' | 'compsetMin' | 'compsetMax' | 'diff' | 'pressure';
+
 function DailyTable({
   days,
   onRowClick,
@@ -556,30 +576,58 @@ function DailyTable({
   days: import('../../services/lighthouse-parser.service').LighthouseDayData[];
   onRowClick: (date: string) => void;
 }) {
+  const [sortKey, setSortKey] = useState<DailySortKey>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
   if (days.length === 0) return null;
+
+  const toggleSort = (key: DailySortKey) => {
+    if (sortKey === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const sortedDays = [...days].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    let av: number | string;
+    let bv: number | string;
+    switch (sortKey) {
+      case 'date': av = a.date; bv = b.date; break;
+      case 'ourPrice': av = a.ourPrice; bv = b.ourPrice; break;
+      case 'compsetMedian': av = a.compsetMedian; bv = b.compsetMedian; break;
+      case 'compsetMin': av = a.compsetMin ?? 0; bv = b.compsetMin ?? 0; break;
+      case 'compsetMax': av = a.compsetMax ?? 0; bv = b.compsetMax ?? 0; break;
+      case 'diff': av = a.ourPrice - a.compsetMedian; bv = b.ourPrice - b.compsetMedian; break;
+      case 'pressure': av = a.marketDemandPercent; bv = b.marketDemandPercent; break;
+    }
+    if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir;
+    return ((av as number) - (bv as number)) * dir;
+  });
+
+  const arrow = (k: DailySortKey) => sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-200">
         <h3 className="text-base font-semibold text-gray-900">Détail jour par jour</h3>
+        <p className="text-xs text-gray-500 mt-1">Cliquer sur un en-tête pour trier</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Notre prix</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Médiane</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Min compset</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Max compset</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Écart médiane</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Demande</th>
+              <th onClick={() => toggleSort('date')} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Date{arrow('date')}</th>
+              <th onClick={() => toggleSort('ourPrice')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Notre prix{arrow('ourPrice')}</th>
+              <th onClick={() => toggleSort('compsetMedian')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Médiane{arrow('compsetMedian')}</th>
+              <th onClick={() => toggleSort('compsetMin')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Min compset{arrow('compsetMin')}</th>
+              <th onClick={() => toggleSort('compsetMax')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Max compset{arrow('compsetMax')}</th>
+              <th onClick={() => toggleSort('diff')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Écart médiane{arrow('diff')}</th>
+              <th onClick={() => toggleSort('pressure')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Demande{arrow('pressure')}</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Rang</th>
               <th className="px-3 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">Détail</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {days.map((day) => {
+            {sortedDays.map((day) => {
               const diff = day.ourPrice - day.compsetMedian;
               const diffPct = day.compsetMedian > 0 ? ((diff / day.compsetMedian) * 100).toFixed(1) : '—';
               const pressure = day.marketDemandPercent;
