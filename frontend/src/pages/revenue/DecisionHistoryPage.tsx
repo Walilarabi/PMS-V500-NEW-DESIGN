@@ -5,8 +5,8 @@
  * Affiche horodaté chaque action utilisateur sur les recommandations IA.
  */
 
-import React, { useEffect, useState } from 'react';
-import { History, CheckCircle2, XCircle, MinusCircle, AlertCircle, Loader2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { History, CheckCircle2, XCircle, MinusCircle, AlertCircle, Loader2, Download, Search } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { fetchRmsDecisions, type RmsDecisionRecord } from '../../services/rms-decisions.service';
 
@@ -38,11 +38,18 @@ function ActionBadge({ action }: { action: string }) {
   );
 }
 
+type SortKey = 'created_at' | 'stay_date' | 'current_price' | 'suggested_price' | 'final_price' | 'confidence_score' | 'market_pressure_percent';
+
 export const DecisionHistoryPage: React.FC = () => {
   const [decisions, setDecisions] = useState<RmsDecisionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterAction, setFilterAction] = useState<'all' | 'accepted' | 'rejected' | 'maintained'>('all');
+  const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('created_at');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     let cancelled = false;
@@ -66,9 +73,73 @@ export const DecisionHistoryPage: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  const filtered = filterAction === 'all'
-    ? decisions
-    : decisions.filter(d => d.action === filterAction);
+  const filtered = useMemo(() => {
+    let list = decisions;
+    if (filterAction !== 'all') list = list.filter(d => d.action === filterAction);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(d =>
+        d.stay_date.toLowerCase().includes(q) ||
+        d.strategy.toLowerCase().includes(q) ||
+        d.recommendation.toLowerCase().includes(q)
+      );
+    }
+    if (dateFrom) list = list.filter(d => d.created_at.slice(0, 10) >= dateFrom);
+    if (dateTo) list = list.filter(d => d.created_at.slice(0, 10) <= dateTo);
+
+    const dir = sortDir === 'asc' ? 1 : -1;
+    list = [...list].sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
+      if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir;
+      return ((av as number) - (bv as number)) * dir;
+    });
+    return list;
+  }, [decisions, filterAction, search, dateFrom, dateTo, sortKey, sortDir]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('desc'); }
+  };
+  const arrow = (k: SortKey) => sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+
+  const exportCSV = () => {
+    if (filtered.length === 0) return;
+    const headers = [
+      'Horodatage', 'Date séjour', 'Action', 'Stratégie', 'Recommandation',
+      'Tarif actuel', 'Tarif suggéré', 'Tarif final', 'Confiance %', 'Pression %',
+    ];
+    const escape = (v: unknown) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"`
+        : s;
+    };
+    const rows = filtered.map(d => [
+      d.created_at,
+      d.stay_date,
+      ACTION_LABEL[d.action] ?? d.action,
+      d.strategy,
+      d.recommendation,
+      d.current_price,
+      d.suggested_price,
+      d.final_price,
+      d.confidence_score ?? '',
+      d.market_pressure_percent ?? '',
+    ].map(escape).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `decisions_rms_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   // Stats globales
   const stats = {
@@ -98,29 +169,53 @@ export const DecisionHistoryPage: React.FC = () => {
 
       <div className="flex-1 overflow-auto px-6 pb-6 space-y-5">
 
-        {/* Stats */}
+        {/* Stats — cliquables pour pivoter le filtre */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <button
+            onClick={() => setFilterAction('all')}
+            className={cn(
+              'bg-white rounded-lg border p-4 text-left transition-all',
+              filterAction === 'all' ? 'border-gray-700 ring-2 ring-gray-200' : 'border-gray-200 hover:border-gray-400'
+            )}
+          >
             <p className="text-xs text-gray-500 mb-1">Total décisions</p>
             <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          </button>
+          <button
+            onClick={() => setFilterAction('accepted')}
+            className={cn(
+              'bg-white rounded-lg border p-4 text-left transition-all',
+              filterAction === 'accepted' ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-gray-200 hover:border-emerald-300'
+            )}
+          >
             <p className="text-xs text-gray-500 mb-1">Acceptées</p>
             <p className="text-2xl font-bold text-emerald-600">{stats.accepted}</p>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          </button>
+          <button
+            onClick={() => setFilterAction('rejected')}
+            className={cn(
+              'bg-white rounded-lg border p-4 text-left transition-all',
+              filterAction === 'rejected' ? 'border-red-500 ring-2 ring-red-200' : 'border-gray-200 hover:border-red-300'
+            )}
+          >
             <p className="text-xs text-gray-500 mb-1">Refusées</p>
             <p className="text-2xl font-bold text-red-600">{stats.rejected}</p>
-          </div>
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
+          </button>
+          <button
+            onClick={() => setFilterAction('maintained')}
+            className={cn(
+              'bg-white rounded-lg border p-4 text-left transition-all',
+              filterAction === 'maintained' ? 'border-gray-500 ring-2 ring-gray-300' : 'border-gray-200 hover:border-gray-400'
+            )}
+          >
             <p className="text-xs text-gray-500 mb-1">Maintenues</p>
             <p className="text-2xl font-bold text-gray-600">{stats.maintained}</p>
-          </div>
+          </button>
         </div>
 
-        {/* Filtre */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700">Filtrer :</span>
+        {/* Filtres avancés + actions */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 flex items-center gap-3 flex-wrap">
+          <span className="text-sm font-medium text-gray-700">Filtres :</span>
           {(['all', 'accepted', 'rejected', 'maintained'] as const).map(action => (
             <button
               key={action}
@@ -135,8 +230,60 @@ export const DecisionHistoryPage: React.FC = () => {
               {action === 'all' ? 'Toutes' : ACTION_LABEL[action]}
             </button>
           ))}
-          <span className="ml-auto text-xs text-gray-400">
-            {filtered.length} affichées · table append-only (immutable)
+
+          <div className="h-6 w-px bg-gray-200 mx-1" />
+
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Date séjour, stratégie..."
+              className="pl-7 pr-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none w-56"
+            />
+          </div>
+
+          <label className="text-xs text-gray-600 flex items-center gap-1">
+            Du
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </label>
+          <label className="text-xs text-gray-600 flex items-center gap-1">
+            au
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+          </label>
+
+          {(search || dateFrom || dateTo || filterAction !== 'all') && (
+            <button
+              onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); setFilterAction('all'); }}
+              className="text-xs text-gray-500 hover:text-red-600 underline"
+            >
+              Réinitialiser
+            </button>
+          )}
+
+          <button
+            onClick={exportCSV}
+            disabled={filtered.length === 0}
+            className="ml-auto px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-md hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 flex items-center gap-1.5 font-semibold"
+            title="Exporter en CSV"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Exporter CSV
+          </button>
+
+          <span className="text-xs text-gray-400 w-full mt-1">
+            {filtered.length} / {decisions.length} affichées · table append-only (immutable)
           </span>
         </div>
 
@@ -180,16 +327,16 @@ export const DecisionHistoryPage: React.FC = () => {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Horodatage</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Date séjour</th>
+                    <th onClick={() => toggleSort('created_at')} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Horodatage{arrow('created_at')}</th>
+                    <th onClick={() => toggleSort('stay_date')} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Date séjour{arrow('stay_date')}</th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Action</th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Stratégie</th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Recommandation IA</th>
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Tarif actuel</th>
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Tarif suggéré</th>
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Tarif final</th>
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Confiance</th>
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Pression</th>
+                    <th onClick={() => toggleSort('current_price')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Tarif actuel{arrow('current_price')}</th>
+                    <th onClick={() => toggleSort('suggested_price')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Tarif suggéré{arrow('suggested_price')}</th>
+                    <th onClick={() => toggleSort('final_price')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Tarif final{arrow('final_price')}</th>
+                    <th onClick={() => toggleSort('confidence_score')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Confiance{arrow('confidence_score')}</th>
+                    <th onClick={() => toggleSort('market_pressure_percent')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Pression{arrow('market_pressure_percent')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
