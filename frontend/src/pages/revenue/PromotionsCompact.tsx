@@ -54,7 +54,56 @@ interface Promotion {
   alert?: PromoAlert;
 }
 
-// Générer alertes intelligentes
+const STORAGE_KEY = 'flowtym_promotions_compact';
+
+function loadPromotions(): Promotion[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return generatePromoAlerts();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : generatePromoAlerts();
+  } catch {
+    return generatePromoAlerts();
+  }
+}
+
+function emptyPromo(): Promotion {
+  const today = new Date().toISOString().slice(0, 10);
+  const inOneMonth = new Date();
+  inOneMonth.setMonth(inOneMonth.getMonth() + 1);
+  return {
+    id: `promo_${Date.now()}`,
+    name: '',
+    type: 'mobile_rate',
+    typeLabel: 'Mobile Rate',
+    discount: '10%',
+    code: null,
+    startDate: today,
+    endDate: inOneMonth.toISOString().slice(0, 10),
+    channels: ['Direct'],
+    minNights: 1,
+    bookings: 0,
+    revenue: 0,
+    active: true,
+  };
+}
+
+const PROMO_TYPE_OPTIONS: { value: PromoType; label: string }[] = [
+  { value: 'mobile_rate', label: 'Mobile Rate' },
+  { value: 'early_booker', label: 'Early Booker' },
+  { value: 'last_minute', label: 'Last Minute' },
+  { value: 'long_stay', label: 'Long Stay' },
+  { value: 'non_refundable', label: 'Non Remboursable' },
+  { value: 'genius', label: 'Genius' },
+  { value: 'couple_escape', label: 'Couple Escape' },
+  { value: 'family_deal', label: 'Family Deal' },
+  { value: 'free_breakfast', label: 'Free Breakfast' },
+  { value: 'secret_deal', label: 'Secret Deal' },
+];
+
+const CHANNEL_OPTIONS = ['Direct', 'Booking.com', 'Expedia', 'Airbnb', 'Hotelbeds', 'Mobile'];
+
+// Générer alertes intelligentes (jeu de données par défaut)
 function generatePromoAlerts(): Promotion[] {
   const promos: Promotion[] = [
     {
@@ -273,10 +322,23 @@ function generatePromoAlerts(): Promotion[] {
 }
 
 export function PromotionsCompact() {
-  const [promotions, setPromotions] = useState<Promotion[]>(generatePromoAlerts());
+  const [promotions, setPromotionsRaw] = useState<Promotion[]>(() => loadPromotions());
+  const setPromotions: typeof setPromotionsRaw = (updater) => {
+    setPromotionsRaw((prev) => {
+      const next = typeof updater === 'function' ? (updater as (p: Promotion[]) => Promotion[])(prev) : updater;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore quota
+      }
+      return next;
+    });
+  };
   const [searchTerm, setSearchTerm] = useState('');
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all');
   const [selectedPromo, setSelectedPromo] = useState<Promotion | null>(null);
+  const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Filtrage
   const filteredPromos = useMemo(() => {
@@ -308,6 +370,44 @@ export function PromotionsCompact() {
     setPromotions(promotions.map(p => 
       p.id === id ? { ...p, active: !p.active } : p
     ));
+  };
+
+  const openCreate = () => {
+    setEditError(null);
+    setEditingPromo(emptyPromo());
+  };
+
+  const openEdit = (promo: Promotion) => {
+    setEditError(null);
+    setEditingPromo({ ...promo, channels: [...promo.channels] });
+  };
+
+  const savePromo = () => {
+    if (!editingPromo) return;
+    const trimmed = editingPromo.name.trim();
+    if (!trimmed) {
+      setEditError('Le nom est obligatoire');
+      return;
+    }
+    if (new Date(editingPromo.endDate) <= new Date(editingPromo.startDate)) {
+      setEditError('La date de fin doit être après la date de début');
+      return;
+    }
+    if (editingPromo.channels.length === 0) {
+      setEditError('Au moins un canal est requis');
+      return;
+    }
+    const exists = promotions.some((p) => p.id === editingPromo.id);
+    const typeLabel = PROMO_TYPE_OPTIONS.find((o) => o.value === editingPromo.type)?.label
+      ?? editingPromo.typeLabel;
+    const normalized: Promotion = { ...editingPromo, name: trimmed, typeLabel };
+    setPromotions(
+      exists
+        ? promotions.map((p) => (p.id === normalized.id ? normalized : p))
+        : [normalized, ...promotions]
+    );
+    setEditingPromo(null);
+    setEditError(null);
   };
 
   const deletePromo = (id: string) => {
@@ -449,7 +549,10 @@ export function PromotionsCompact() {
               </div>
             </div>
 
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2 text-sm font-medium">
+            <button
+              onClick={openCreate}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center gap-2 text-sm font-medium"
+            >
               <Plus className="w-4 h-4" />
               Nouvelle promotion
             </button>
@@ -512,13 +615,15 @@ export function PromotionsCompact() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => setSelectedPromo(promo)}
+                            onClick={() => openEdit(promo)}
+                            title="Modifier"
                             className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => deletePromo(promo.id)}
+                            title="Supprimer"
                             className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -577,6 +682,165 @@ export function PromotionsCompact() {
                 className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
               >
                 Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Édition / Création */}
+      {editingPromo && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setEditingPromo(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-gray-900 mb-4">
+              {promotions.some((p) => p.id === editingPromo.id) ? 'Modifier la promotion' : 'Nouvelle promotion'}
+            </h2>
+
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <label className="col-span-2">
+                <span className="block text-xs font-semibold text-gray-600 mb-1">Nom</span>
+                <input
+                  type="text"
+                  value={editingPromo.name}
+                  onChange={(e) => setEditingPromo({ ...editingPromo, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </label>
+
+              <label>
+                <span className="block text-xs font-semibold text-gray-600 mb-1">Type</span>
+                <select
+                  value={editingPromo.type}
+                  onChange={(e) => {
+                    const value = e.target.value as PromoType;
+                    const typeLabel = PROMO_TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value;
+                    setEditingPromo({ ...editingPromo, type: value, typeLabel });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  {PROMO_TYPE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <span className="block text-xs font-semibold text-gray-600 mb-1">Réduction</span>
+                <input
+                  type="text"
+                  value={editingPromo.discount}
+                  onChange={(e) => setEditingPromo({ ...editingPromo, discount: e.target.value })}
+                  placeholder="ex: 10% ou -20€"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </label>
+
+              <label>
+                <span className="block text-xs font-semibold text-gray-600 mb-1">Code promo (optionnel)</span>
+                <input
+                  type="text"
+                  value={editingPromo.code ?? ''}
+                  onChange={(e) => setEditingPromo({ ...editingPromo, code: e.target.value.trim() || null })}
+                  placeholder="ex: MOBILE10"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </label>
+
+              <label>
+                <span className="block text-xs font-semibold text-gray-600 mb-1">Nuits minimum</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={editingPromo.minNights}
+                  onChange={(e) => setEditingPromo({ ...editingPromo, minNights: Math.max(1, Number(e.target.value) || 1) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </label>
+
+              <label>
+                <span className="block text-xs font-semibold text-gray-600 mb-1">Date début</span>
+                <input
+                  type="date"
+                  value={editingPromo.startDate}
+                  onChange={(e) => setEditingPromo({ ...editingPromo, startDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </label>
+
+              <label>
+                <span className="block text-xs font-semibold text-gray-600 mb-1">Date fin</span>
+                <input
+                  type="date"
+                  value={editingPromo.endDate}
+                  onChange={(e) => setEditingPromo({ ...editingPromo, endDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </label>
+
+              <div className="col-span-2">
+                <span className="block text-xs font-semibold text-gray-600 mb-1">Canaux</span>
+                <div className="flex flex-wrap gap-2">
+                  {CHANNEL_OPTIONS.map((c) => {
+                    const active = editingPromo.channels.includes(c);
+                    return (
+                      <button
+                        type="button"
+                        key={c}
+                        onClick={() => setEditingPromo({
+                          ...editingPromo,
+                          channels: active
+                            ? editingPromo.channels.filter((x) => x !== c)
+                            : [...editingPromo.channels, c],
+                        })}
+                        className={cn(
+                          'px-3 py-1 text-xs font-semibold rounded-full border transition-colors',
+                          active
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        )}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <label className="col-span-2 flex items-center gap-2 mt-1">
+                <input
+                  type="checkbox"
+                  checked={editingPromo.active}
+                  onChange={(e) => setEditingPromo({ ...editingPromo, active: e.target.checked })}
+                  className="w-4 h-4 accent-blue-600"
+                />
+                <span className="text-sm text-gray-700">Promotion active</span>
+              </label>
+            </div>
+
+            {editError && (
+              <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+                {editError}
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setEditingPromo(null)}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={savePromo}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Enregistrer
               </button>
             </div>
           </div>
