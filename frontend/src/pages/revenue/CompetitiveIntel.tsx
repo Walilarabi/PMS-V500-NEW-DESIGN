@@ -84,6 +84,30 @@ function generateCompetitors(): CompetitorData[] {
   });
 }
 
+type AvailabilityLevel = 'Faible' | 'Moyenne' | 'Élevée';
+
+interface CompetitorAvailabilityRow {
+  competitorId: string;
+  competitorName: string;
+  days: { date: Date; level: AvailabilityLevel }[];
+}
+
+function generateCompetitorAvailability(
+  competitors: CompetitorData[]
+): CompetitorAvailabilityRow[] {
+  const levels: AvailabilityLevel[] = ['Faible', 'Moyenne', 'Élevée'];
+  const today = new Date();
+  return competitors.slice(0, 6).map((c) => ({
+    competitorId: c.id,
+    competitorName: c.name,
+    days: Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      return { date: d, level: levels[Math.floor(Math.random() * levels.length)] };
+    }),
+  }));
+}
+
 function generateHistoricalData(): HistoricalDataPoint[] {
   const data: HistoricalDataPoint[] = [];
   const baseOurPrice = 172;
@@ -111,6 +135,7 @@ export function CompetitiveIntel() {
 
   const competitors = useMemo(() => generateCompetitors(), []);
   const historicalData = useMemo(() => generateHistoricalData(), []);
+  const competitorAvailability = useMemo(() => generateCompetitorAvailability(competitors), [competitors]);
 
   // KPIs
   const kpis = useMemo(() => {
@@ -431,6 +456,83 @@ export function CompetitiveIntel() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* DISPONIBILITÉ ESTIMÉE CONCURRENTS — 7 JOURS */}
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-700">
+                Disponibilité estimée des concurrents — 7 prochains jours
+              </h3>
+              <div className="flex items-center gap-3 text-[10px]">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-red-100 border border-red-300" />
+                  <span>Faible</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-amber-100 border border-amber-300" />
+                  <span>Moyenne</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-emerald-100 border border-emerald-300" />
+                  <span>Élevée</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold text-gray-700 sticky left-0 bg-gray-50 z-10">
+                      Concurrent
+                    </th>
+                    {competitorAvailability[0]?.days.map((d, i) => (
+                      <th
+                        key={i}
+                        className="px-2 py-2 text-center font-semibold text-gray-700 min-w-[80px]"
+                      >
+                        <div className="text-[10px] uppercase text-gray-500">
+                          {d.date.toLocaleDateString('fr-FR', { weekday: 'short' })}
+                        </div>
+                        <div className="text-xs">
+                          {d.date.toLocaleDateString('fr-FR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                          })}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {competitorAvailability.map((row) => (
+                    <tr key={row.competitorId} className="border-b border-gray-100">
+                      <td className="px-4 py-2 font-semibold text-gray-900 sticky left-0 bg-white z-10">
+                        {row.competitorName}
+                      </td>
+                      {row.days.map((d, i) => (
+                        <td key={i} className="px-2 py-2 text-center">
+                          <div
+                            className={cn(
+                              'mx-auto inline-block px-2 py-1 rounded text-[10px] font-bold border',
+                              d.level === 'Faible' &&
+                                'bg-red-100 text-red-700 border-red-300',
+                              d.level === 'Moyenne' &&
+                                'bg-amber-100 text-amber-700 border-amber-300',
+                              d.level === 'Élevée' &&
+                                'bg-emerald-100 text-emerald-700 border-emerald-300'
+                            )}
+                          >
+                            {d.level}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
