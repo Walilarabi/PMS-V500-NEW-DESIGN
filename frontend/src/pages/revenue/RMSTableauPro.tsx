@@ -40,6 +40,8 @@ import {
   Building2,
   Loader2,
   Settings2,
+  BarChart3,
+  Lightbulb,
   RefreshCw,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
@@ -123,7 +125,7 @@ interface DayRMSData {
   selected: boolean;
 }
 
-type ViewMode = 'table' | 'kanban';
+type ViewMode = 'table' | 'kanban' | 'analyse' | 'recommandation';
 type ViewPeriod = '7days' | '15days' | '30days' | '60days' | '90days';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -759,6 +761,26 @@ export function RMSTableauPro() {
               <Grid3x3 className="w-3.5 h-3.5" />
               Kanban
             </button>
+            <button
+              onClick={() => setViewMode('analyse')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold rounded flex items-center gap-1.5 transition-all duration-150',
+                viewMode === 'analyse' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              )}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Analyse RM
+            </button>
+            <button
+              onClick={() => setViewMode('recommandation')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold rounded flex items-center gap-1.5 transition-all duration-150',
+                viewMode === 'recommandation' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              )}
+            >
+              <Lightbulb className="w-3.5 h-3.5" />
+              Recommandation RM
+            </button>
           </div>
         </div>
 
@@ -845,15 +867,20 @@ export function RMSTableauPro() {
 
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-auto">
-        {viewMode === 'table' ? (
+        {viewMode === 'table' && (
           <TableView data={rmsData} handlers={{
             handleAccept, handleReject, handleMaintain, handleToggleSelect,
             handleViewDetail: setDetailDate,
             handleAvailabilityChange,
             isAvailabilityOverridden,
           }} />
-        ) : (
+        )}
+        {viewMode === 'kanban' && (
           <KanbanView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
+        )}
+        {viewMode === 'analyse' && <AnalyseRMView data={rmsData} />}
+        {viewMode === 'recommandation' && (
+          <RecommandationRMView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
         )}
       </div>
 
@@ -1543,3 +1570,334 @@ function RmsSettingsModal({
     </div>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ANALYSE RM — Vue analytique synthétique
+// ═══════════════════════════════════════════════════════════════════════════
+
+function AnalyseRMView({ data }: { data: DayRMSData[] }) {
+  const stats = useMemo(() => {
+    if (data.length === 0) return null;
+    const accepted = data.filter(d => d.validationStatus === 'Acceptée');
+    const rejected = data.filter(d => d.validationStatus === 'Refusée');
+    const maintained = data.filter(d => d.validationStatus === 'Maintenue');
+    const pending = data.filter(d => d.validationStatus === 'En attente');
+    const validated = data.filter(d => d.finalPrice !== null);
+
+    const avgConfidence = data.reduce((s, d) => s + d.confidenceScore, 0) / data.length;
+    const avgOccupancy = data.reduce((s, d) => s + d.occupancyRate, 0) / data.length;
+    const avgMarketPressure = data.reduce((s, d) => s + d.marketPressure, 0) / data.length;
+    const adrCurrent = data.reduce((s, d) => s + d.currentPrice, 0) / data.length;
+    const adrSuggested = data.reduce((s, d) => s + d.suggestedPrice, 0) / data.length;
+    const adrFinal = validated.length > 0
+      ? validated.reduce((s, d) => s + (d.finalPrice ?? 0), 0) / validated.length
+      : 0;
+    const adrDeltaPct = adrCurrent > 0 ? ((adrSuggested - adrCurrent) / adrCurrent) * 100 : 0;
+
+    const byStrategy = new Map<string, number>();
+    data.forEach(d => byStrategy.set(d.strategy, (byStrategy.get(d.strategy) ?? 0) + 1));
+    const strategies = Array.from(byStrategy.entries()).sort((a, b) => b[1] - a[1]);
+
+    const byReco = new Map<string, number>();
+    data.forEach(d => byReco.set(d.recommendation, (byReco.get(d.recommendation) ?? 0) + 1));
+
+    const potentialUplift = data.reduce((s, d) => s + (d.suggestedPrice - d.currentPrice), 0);
+
+    return {
+      total: data.length,
+      accepted: accepted.length,
+      rejected: rejected.length,
+      maintained: maintained.length,
+      pending: pending.length,
+      avgConfidence, avgOccupancy, avgMarketPressure,
+      adrCurrent, adrSuggested, adrFinal, adrDeltaPct,
+      strategies, byReco, potentialUplift,
+    };
+  }, [data]);
+
+  if (!stats) {
+    return <div className="flex items-center justify-center h-64 text-gray-400 text-sm">Aucune donnée à analyser</div>;
+  }
+
+  const acceptanceRate = stats.total > 0 ? Math.round((stats.accepted / stats.total) * 100) : 0;
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <KpiCardLocal label="Dates analysées" value={`${stats.total}`} sub={`${stats.pending} en attente`} color="violet" />
+        <KpiCardLocal label="Taux acceptation" value={`${acceptanceRate}%`} sub={`${stats.accepted} acceptées · ${stats.rejected} refusées`} color={acceptanceRate >= 60 ? 'emerald' : 'amber'} />
+        <KpiCardLocal label="Confiance moyenne" value={`${Math.round(stats.avgConfidence)}%`} sub={`Pression marché ${Math.round(stats.avgMarketPressure)}%`} color="blue" />
+        <KpiCardLocal label="ADR actuel → suggéré" value={`${Math.round(stats.adrCurrent)}€ → ${Math.round(stats.adrSuggested)}€`} sub={`${stats.adrDeltaPct >= 0 ? '+' : ''}${stats.adrDeltaPct.toFixed(1)}%`} color={stats.adrDeltaPct >= 0 ? 'emerald' : 'red'} />
+        <KpiCardLocal label="Uplift CA potentiel" value={`${stats.potentialUplift >= 0 ? '+' : ''}${Math.round(stats.potentialUplift)}€`} sub="Σ (suggéré − actuel)" color={stats.potentialUplift >= 0 ? 'emerald' : 'red'} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-5">
+          <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <Target className="w-4 h-4 text-violet-500" />
+            Stratégies appliquées
+          </h3>
+          <ul className="space-y-2">
+            {stats.strategies.map(([strategy, count]) => {
+              const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
+              return (
+                <li key={strategy}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-gray-700">{strategy}</span>
+                    <span className="text-gray-500">{count} · {Math.round(pct)}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-violet-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-5">
+          <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            Recommandations IA
+          </h3>
+          <ul className="space-y-2">
+            {(['Augmenter', 'Maintenir', 'Baisser'] as const).map(reco => {
+              const count = stats.byReco.get(reco) ?? 0;
+              const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
+              const color = reco === 'Augmenter' ? 'bg-emerald-500' : reco === 'Baisser' ? 'bg-red-500' : 'bg-gray-400';
+              const Icon = reco === 'Augmenter' ? TrendingUp : reco === 'Baisser' ? TrendingDown : Minus;
+              return (
+                <li key={reco}>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-semibold text-gray-700 flex items-center gap-1.5">
+                      <Icon className="w-3 h-3" />
+                      {reco}
+                    </span>
+                    <span className="text-gray-500">{count} · {Math.round(pct)}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full transition-all', color)} style={{ width: `${pct}%` }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 p-5">
+        <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+          <Activity className="w-4 h-4 text-blue-500" />
+          Prix actuel vs suggéré — {stats.total} jours
+        </h3>
+        {(() => {
+          if (data.length === 0) return null;
+          const W = 800;
+          const H = 120;
+          const all = [...data.map(d => d.currentPrice), ...data.map(d => d.suggestedPrice)].filter(v => v > 0);
+          if (all.length === 0) return null;
+          const minP = Math.min(...all) * 0.95;
+          const maxP = Math.max(...all) * 1.05;
+          const stepX = data.length > 1 ? W / (data.length - 1) : W;
+          const yFor = (v: number) => H - ((v - minP) / (maxP - minP || 1)) * (H - 8) - 4;
+          const ptsCurrent = data.map((d, i) => `${i * stepX},${yFor(d.currentPrice)}`).join(' ');
+          const ptsSug = data.map((d, i) => `${i * stepX},${yFor(d.suggestedPrice)}`).join(' ');
+          return (
+            <div>
+              <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-32" preserveAspectRatio="none">
+                <polyline points={ptsCurrent} fill="none" stroke="#94A3B8" strokeWidth="2" strokeDasharray="4,3" />
+                <polyline points={ptsSug} fill="none" stroke="#8B5CF6" strokeWidth="2.5" />
+              </svg>
+              <div className="flex items-center justify-center gap-6 mt-2 text-xs">
+                <span className="flex items-center gap-1.5 text-gray-500">
+                  <span className="inline-block w-4 border-t-2 border-dashed border-slate-400" />
+                  Prix actuel
+                </span>
+                <span className="flex items-center gap-1.5 text-violet-700 font-semibold">
+                  <span className="inline-block w-4 h-0.5 bg-violet-500" />
+                  Prix suggéré
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
+function KpiCardLocal({
+  label, value, sub, color,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  color: 'violet' | 'emerald' | 'blue' | 'amber' | 'red';
+}) {
+  const colorMap = {
+    violet: 'border-violet-200 bg-violet-50/50',
+    emerald: 'border-emerald-200 bg-emerald-50/50',
+    blue: 'border-blue-200 bg-blue-50/50',
+    amber: 'border-amber-200 bg-amber-50/50',
+    red: 'border-red-200 bg-red-50/50',
+  };
+  return (
+    <div className={cn('rounded-lg border p-4', colorMap[color])}>
+      <div className="text-xs text-gray-600 font-medium">{label}</div>
+      <div className="text-xl font-extrabold text-gray-900 mt-1">{value}</div>
+      <div className="text-[11px] text-gray-500 mt-1">{sub}</div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RECOMMANDATION RM — Focus sur les recommandations à valider
+// ═══════════════════════════════════════════════════════════════════════════
+
+function RecommandationRMView({
+  data,
+  handlers,
+}: {
+  data: DayRMSData[];
+  handlers: {
+    handleAccept: (date: string) => void;
+    handleReject: (date: string) => void;
+    handleMaintain: (date: string) => void;
+  };
+}) {
+  const [filter, setFilter] = useState<'all' | 'pending' | 'high-confidence' | 'high-impact'>('pending');
+
+  const filtered = useMemo(() => {
+    let list = data.filter(d => d.recommendation !== 'Maintenir');
+    if (filter === 'pending') list = list.filter(d => d.validationStatus === 'En attente');
+    if (filter === 'high-confidence') list = list.filter(d => d.confidenceScore >= 80);
+    if (filter === 'high-impact') list = list.filter(d => Math.abs(d.suggestedPrice - d.currentPrice) >= 10);
+    return list.sort((a, b) => b.confidenceScore - a.confidenceScore);
+  }, [data, filter]);
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-medium text-gray-700 mr-2">Filtrer :</span>
+        {([
+          { key: 'pending', label: 'En attente uniquement' },
+          { key: 'high-confidence', label: 'Confiance ≥ 80%' },
+          { key: 'high-impact', label: 'Impact ≥ 10€' },
+          { key: 'all', label: 'Toutes' },
+        ] as const).map(opt => (
+          <button
+            key={opt.key}
+            onClick={() => setFilter(opt.key)}
+            className={cn(
+              'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
+              filter === opt.key
+                ? 'bg-violet-600 text-white'
+                : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <span className="ml-auto text-xs text-gray-500">
+          {filtered.length} recommandation{filtered.length > 1 ? 's' : ''}
+        </span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+          <Lightbulb className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+          <p className="text-sm font-medium text-gray-500">Aucune recommandation à valider</p>
+          <p className="text-xs text-gray-400 mt-1">Modifie le filtre pour voir d'autres dates.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map(d => {
+            const isUp = d.recommendation === 'Augmenter';
+            const delta = d.suggestedPrice - d.currentPrice;
+            const deltaPct = d.currentPrice > 0 ? ((delta / d.currentPrice) * 100).toFixed(1) : '0';
+            return (
+              <div
+                key={d.date}
+                className={cn(
+                  'bg-white rounded-lg border-2 p-4',
+                  isUp ? 'border-emerald-200' : 'border-red-200',
+                  d.validationStatus === 'Acceptée' && 'bg-emerald-50/30',
+                  d.validationStatus === 'Refusée' && 'bg-red-50/30',
+                  d.validationStatus === 'Maintenue' && 'bg-gray-50/50'
+                )}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="text-sm font-bold text-gray-900">
+                      {d.dayName} {d.date.slice(5)}
+                      {d.isWeekend && <span className="ml-1 text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">WE</span>}
+                    </div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">{d.strategy}</div>
+                  </div>
+                  <span className={cn(
+                    'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase',
+                    isUp ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                  )}>
+                    {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    {d.recommendation}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
+                  <div>
+                    <div className="text-[10px] text-gray-500 uppercase">Actuel</div>
+                    <div className="text-lg font-bold text-gray-700">{Math.round(d.currentPrice)}€</div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                  <div className="text-right">
+                    <div className="text-[10px] text-gray-500 uppercase">Suggéré</div>
+                    <div className="text-lg font-extrabold text-violet-700">{Math.round(d.suggestedPrice)}€</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs mb-3">
+                  <span className={cn('font-bold', delta >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                    {delta >= 0 ? '+' : ''}{Math.round(delta)}€ ({delta >= 0 ? '+' : ''}{deltaPct}%)
+                  </span>
+                  <span className="text-gray-500">
+                    Conf. <span className="font-bold text-gray-800">{d.confidenceScore}%</span>
+                  </span>
+                </div>
+
+                <div className="text-[11px] text-gray-600 mb-3 italic">
+                  {d.recommendation === 'Augmenter'
+                    ? 'Demande marché et occupation justifient une hausse.'
+                    : 'Demande faible : baisse conseillée pour stimuler la conversion.'}
+                </div>
+
+                {d.validationStatus === 'En attente' ? (
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => handlers.handleAccept(d.date)} className="flex-1 px-2 py-1.5 text-xs font-bold rounded bg-emerald-600 text-white hover:bg-emerald-700 flex items-center justify-center gap-1">
+                      <Check className="w-3 h-3" /> Accepter
+                    </button>
+                    <button onClick={() => handlers.handleMaintain(d.date)} className="flex-1 px-2 py-1.5 text-xs font-bold rounded bg-gray-200 text-gray-700 hover:bg-gray-300 flex items-center justify-center gap-1">
+                      <Minus className="w-3 h-3" /> Maintenir
+                    </button>
+                    <button onClick={() => handlers.handleReject(d.date)} className="flex-1 px-2 py-1.5 text-xs font-bold rounded bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-1">
+                      <X className="w-3 h-3" /> Refuser
+                    </button>
+                  </div>
+                ) : (
+                  <div className={cn(
+                    'text-center py-1.5 text-xs font-bold rounded',
+                    d.validationStatus === 'Acceptée' && 'bg-emerald-100 text-emerald-800',
+                    d.validationStatus === 'Refusée' && 'bg-red-100 text-red-800',
+                    d.validationStatus === 'Maintenue' && 'bg-gray-100 text-gray-700'
+                  )}>
+                    ✓ {d.validationStatus}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+

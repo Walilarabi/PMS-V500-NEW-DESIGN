@@ -31,7 +31,9 @@ import {
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { useLighthouseStore } from '../../store/lighthouseStore';
+import { useExpediaStore } from '../../store/expediaStore';
 import { parseLighthouseExcel } from '../../services/lighthouse-parser.service';
+import { parseExpediaExcel } from '../../services/expedia-parser.service';
 import { useSalonsStore } from '../../store/salonsStore';
 import { parseSalonsExcel } from '../../services/salons-parser.service';
 import { persistLighthouseImport, fetchActiveLighthouseImport } from '../../services/lighthouse-persistence.service';
@@ -127,8 +129,10 @@ function EmptyState({ onUploadClick }: { onUploadClick: () => void }) {
 
 export const LighthouseMonthlyView: React.FC = () => {
   const { importData, hasData, setImportData, setUploadStatus, clearImport } = useLighthouseStore();
+  const expediaStore = useExpediaStore();
   const salonsStore = useSalonsStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const expediaInputRef = useRef<HTMLInputElement>(null);
   const salonsInputRef = useRef<HTMLInputElement>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -156,6 +160,22 @@ export const LighthouseMonthlyView: React.FC = () => {
       setUploadStatus('error', msg);
     }
   }, [setImportData, setUploadStatus]);
+
+  // ─── Upload Expedia ───────────────────────────────────────────────────
+  const handleExpediaFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    expediaStore.setUploadStatus('parsing');
+    try {
+      const result = await parseExpediaExcel(file);
+      expediaStore.setImportData(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+      expediaStore.setUploadStatus('error', msg);
+    }
+  }, [expediaStore]);
 
   // ─── Upload Salons ────────────────────────────────────────────────────
   const handleSalonsFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -244,6 +264,13 @@ export const LighthouseMonthlyView: React.FC = () => {
         className="hidden"
       />
       <input
+        ref={expediaInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={handleExpediaFileChange}
+        className="hidden"
+      />
+      <input
         ref={salonsInputRef}
         type="file"
         accept=".xlsx,.xls"
@@ -313,6 +340,21 @@ export const LighthouseMonthlyView: React.FC = () => {
                 >
                   <Upload className="w-4 h-4" />
                   Nouvel import Lighthouse
+                </button>
+                <button
+                  onClick={() => expediaInputRef.current?.click()}
+                  className={cn(
+                    'px-4 py-2 rounded-md flex items-center gap-2 text-sm font-medium border transition-colors',
+                    expediaStore.hasData()
+                      ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+                      : 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600'
+                  )}
+                  title="Importer le fichier Excel Expedia Revenue Management"
+                >
+                  <Upload className="w-4 h-4" />
+                  {expediaStore.hasData()
+                    ? `Expedia ✓ (${expediaStore.importData?.days.length ?? 0}j)`
+                    : 'Upload Expedia'}
                 </button>
               </div>
             </div>
