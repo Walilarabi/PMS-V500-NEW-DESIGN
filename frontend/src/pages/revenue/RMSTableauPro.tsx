@@ -67,6 +67,10 @@ import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } fr
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 import { AnalyseRMPanel } from './components/AnalyseRMPanel';
 import { RecommandationRMPanel } from './components/RecommandationRMPanel';
+import { SimulationBanner } from './components/SimulationBanner';
+import { SimulationPanel } from './components/SimulationPanel';
+import { useSimulationStore, applySimulationOverride, applySimulationShift } from '../../store/simulationStore';
+import { FlaskConical } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -387,6 +391,12 @@ export function RMSTableauPro() {
   // Override manuel d'inventaire
   const [inventoryOverrides, setInventoryOverrides] = useState<Map<string, number>>(new Map());
 
+  // ─── Mode Simulation ───────────────────────────────────────────────────
+  const simActive = useSimulationStore(s => s.active);
+  const simDateOverrides = useSimulationStore(s => s.dateOverrides);
+  const simGlobalOverride = useSimulationStore(s => s.globalOverride);
+  const [showSimulationPanel, setShowSimulationPanel] = useState(false);
+
   // Paramètres RMS (markup paramétrable)
   const [rmsSettings, setRmsSettings] = useState<RmsSettings | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -415,19 +425,30 @@ export function RMSTableauPro() {
 
       // ── Disponibilité ──
       const baseAvailability = opData ? opData.availability : 0;
-      const availability = inventoryOverride !== undefined ? inventoryOverride : baseAvailability;
+      const realAvailability = inventoryOverride !== undefined ? inventoryOverride : baseAvailability;
 
-      // ── Recalcul TO en cascade quand dispo manuelle ──
+      // ── Mode Simulation : applique les overrides éventuels ──
+      const simOverride = simActive ? simDateOverrides[row.date] ?? null : null;
+      const availability = applySimulationOverride(simActive, realAvailability, simOverride?.availability);
+
+      // ── Recalcul TO en cascade quand dispo manuelle (réelle OU simulée) ──
       let occupancyRate: number;
-      if (inventoryOverride !== undefined && totalCapacity > 0) {
-        const newRoomsSold = Math.max(0, totalCapacity - inventoryOverride);
+      if (simActive && simOverride?.occupancyRate !== null && simOverride?.occupancyRate !== undefined) {
+        occupancyRate = simOverride.occupancyRate;
+      } else if (availability !== baseAvailability && totalCapacity > 0) {
+        // Disponibilité surchargée (manuel ou simulation) → recalcul TO en cascade
+        const newRoomsSold = Math.max(0, totalCapacity - availability);
         occupancyRate = (newRoomsSold / totalCapacity) * 100;
       } else {
         occupancyRate = opData ? opData.occupancyRate : 0;
       }
 
-      const leadTimeMajority = opData && opData.leadTimeMajority > 0 ? opData.leadTimeMajority : 0;
-      const pickupRate = opData ? opData.pickupRate : 0;
+      const realLeadTime = opData && opData.leadTimeMajority > 0 ? opData.leadTimeMajority : 0;
+      const leadTimeMajority = applySimulationOverride(simActive, realLeadTime, simOverride?.leadTimeMajority);
+
+      const realPickup = opData ? opData.pickupRate : 0;
+      const pickupAfterDate = applySimulationOverride(simActive, realPickup, simOverride?.pickupRate);
+      const pickupRate = applySimulationShift(simActive, pickupAfterDate, simGlobalOverride.pickupShift, false);
 
       // ── Marché ──
       const ourPrice = realPrice > 0 ? realPrice : (lhData?.ourPrice ?? 0);
@@ -439,14 +460,18 @@ export function RMSTableauPro() {
       // Si une seule source disponible → utilisée seule (comportement préservé)
       const lhPressure = lhData?.marketDemandPercent ?? null;
       const exPressure = expData?.marketPressureNeighborhoodPercent ?? null;
-      let marketPressure: number;
+      let realMarketPressure: number;
       if (lhPressure !== null && exPressure !== null) {
-        marketPressure = Math.round(lhPressure * 0.55 + exPressure * 0.45);
+        realMarketPressure = Math.round(lhPressure * 0.55 + exPressure * 0.45);
       } else if (exPressure !== null) {
-        marketPressure = exPressure;
+        realMarketPressure = exPressure;
       } else {
-        marketPressure = lhPressure ?? 0;
+        realMarketPressure = lhPressure ?? 0;
       }
+      // Override par date (priorité sur shift global)
+      const pressureAfterDate = applySimulationOverride(simActive, realMarketPressure, simOverride?.marketDemand);
+      // Shift global (clamp 0-100)
+      const marketPressure = applySimulationShift(simActive, pressureAfterDate, simGlobalOverride.demandShift, true);
       const expediaMarketPressureNeighborhoodPercent = exPressure;
 
       // ── Événements unifiés (Palier A point 5) ──
@@ -545,6 +570,9 @@ export function RMSTableauPro() {
     viewPeriod,
     lighthouseImport,
     expediaImport,
+    simActive,
+    simDateOverrides,
+    simGlobalOverride,
   ]);
 
   // ─── Listener "rms:recalculate" (déclenché par Sources marché — Palier 3) ──
@@ -924,12 +952,29 @@ export function RMSTableauPro() {
             Sources
           </button>
 
+          <button
+            onClick={() => setShowSimulationPanel(true)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-md transition-colors border',
+              simActive
+                ? 'bg-orange-500 text-white border-orange-500'
+                : 'bg-white text-orange-700 border-orange-300 hover:bg-orange-50',
+            )}
+            title="Mode Simulation : tester des scénarios sans toucher au planning réel"
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            {simActive ? 'Simulation ON' : 'Simulation'}
+          </button>
+
           <button className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 transition-colors">
             <Download className="w-3.5 h-3.5" />
             Exporter
           </button>
         </div>
       </div>
+
+      {/* SIMULATION BANNER (orange, persistant si simActive) */}
+      <SimulationBanner onOpenPanel={() => setShowSimulationPanel(true)} />
 
       {/* STATUS BAR */}
       {validatedCount > 0 && (
@@ -1008,6 +1053,13 @@ export function RMSTableauPro() {
           onSaved={(next) => setRmsSettings(next)}
         />
       )}
+
+      {/* SIMULATION PANEL (drawer droit) */}
+      <SimulationPanel
+        isOpen={showSimulationPanel}
+        onClose={() => setShowSimulationPanel(false)}
+        visibleDates={rmsData.map(d => d.date)}
+      />
     </div>
   );
 }
