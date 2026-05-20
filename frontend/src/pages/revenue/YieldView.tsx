@@ -25,7 +25,9 @@ interface YieldRule {
   active: boolean;
 }
 
-const YIELD_RULES: YieldRule[] = [
+const STORAGE_KEY = 'flowtym_yield_view_rules';
+
+const DEFAULT_YIELD_RULES: YieldRule[] = [
   { title: 'R1 — Forte demande (volume)',  trigger: 'Volume de ventes > 4 paliers',  desc: 'Augmente les prix lorsque les ventes dépassent des seuils de capacité.', active: true },
   { title: 'R2 — Annulations tardives',    trigger: 'Annulations tardives > 2 paliers', desc: 'Réagit aux annulations de dernière minute pour reconquérir la demande.', active: true },
   { title: 'R3 — Creux prolongé',          trigger: 'Creux de demande > 3 paliers',  desc: 'Réduit les prix si aucune réservation sur J+7 à J+45.', active: true },
@@ -40,17 +42,39 @@ const RULE_ICONS = [TrendingUp, XCircle, BarChart2, Zap];
 
 export const YieldView: React.FC = () => {
   const [selectedRule, setSelectedRule] = useState<YieldRule | null>(null);
+  const [rules, setRulesRaw] = useState<YieldRule[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return DEFAULT_YIELD_RULES;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_YIELD_RULES;
+    } catch {
+      return DEFAULT_YIELD_RULES;
+    }
+  });
+  const setRules = (next: YieldRule[]) => {
+    setRulesRaw(next);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  };
+  const toggleRule = (title: string) => {
+    setRules(rules.map((r) => (r.title === title ? { ...r, active: !r.active } : r)));
+    if (selectedRule?.title === title) {
+      setSelectedRule({ ...selectedRule, active: !selectedRule.active });
+    }
+  };
+
+  const activeCount = rules.filter((r) => r.active).length;
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F9FAFB] p-6">
       <RevenueHeader
         icon={TrendingUp}
         title="Yield management"
-        subtitle="Règles dynamiques pour optimiser le RevPAR en fonction de la demande et du marché"
+        subtitle={`Règles dynamiques pour optimiser le RevPAR · ${activeCount}/${rules.length} actives`}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-        {YIELD_RULES.map((rule, i) => {
+        {rules.map((rule, i) => {
           const RuleIcon = RULE_ICONS[i % RULE_ICONS.length];
           return (
             <Card
@@ -76,15 +100,20 @@ export const YieldView: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className={cn(
-                    'w-9 h-5 rounded-full p-0.5 relative transition-colors',
-                    rule.active ? 'bg-[#8B5CF6]' : 'bg-gray-200',
-                  )}>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); toggleRule(rule.title); }}
+                    title={rule.active ? 'Désactiver' : 'Activer'}
+                    className={cn(
+                      'w-9 h-5 rounded-full p-0.5 relative transition-colors',
+                      rule.active ? 'bg-[#8B5CF6]' : 'bg-gray-200',
+                    )}
+                  >
                     <div className={cn(
                       'absolute h-4 w-4 bg-white rounded-full shadow-sm transition-all',
                       rule.active ? 'right-0.5' : 'left-0.5',
                     )} />
-                  </div>
+                  </button>
                   <button
                     type="button"
                     onClick={(e) => e.stopPropagation()}
@@ -144,6 +173,12 @@ export const YieldView: React.FC = () => {
                 </div>
               </div>
               <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-2 rounded-b-3xl">
+                <Button
+                  variant={selectedRule.active ? 'ghost' : 'primary'}
+                  onClick={() => toggleRule(selectedRule.title)}
+                >
+                  {selectedRule.active ? 'Désactiver la règle' : 'Activer la règle'}
+                </Button>
                 <Button variant="ghost" onClick={() => setSelectedRule(null)}>Fermer</Button>
               </div>
             </motion.div>
