@@ -115,6 +115,8 @@ interface RateCalendarStore {
 
   // Room Ordering
   reorderRoomTypes: (newRoomTypes: RoomTypeData[]) => void;
+  reorderRatePlans: (roomTypeId: string, newRatePlans: RatePlanData[]) => void;
+  resetRatePlansOrder: (roomTypeId?: string) => void;
   resetRoomTypesOrder: () => void;
 
   // CRUD
@@ -184,8 +186,8 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       set({ isLoading: true });
       try {
         let { roomTypes, dateColumns } = await fetchCalendarData(startDate, viewMode);
-        
-        // ✅ Appliquer ordre sauvegardé utilisateur
+
+        // ✅ Appliquer ordre sauvegardé utilisateur (rooms)
         const savedOrder = localStorage.getItem('flowtym_room_order');
         if (savedOrder) {
           try {
@@ -199,8 +201,46 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
           } catch (e) {
             console.warn('[RMS] Failed to apply saved room order:', e);
           }
+        } else {
+          // ✅ Défaut : chambre référente en premier
+          roomTypes = [...roomTypes].sort((a, b) => {
+            if (a.isReference && !b.isReference) return -1;
+            if (!a.isReference && b.isReference) return 1;
+            return 0;
+          });
         }
-        
+
+        // ✅ Appliquer ordre sauvegardé utilisateur (rate plans) + défaut référent
+        const savedPlanOrderRaw = localStorage.getItem('flowtym_plan_order');
+        let savedPlanOrder: Record<string, string[]> = {};
+        if (savedPlanOrderRaw) {
+          try {
+            savedPlanOrder = JSON.parse(savedPlanOrderRaw);
+          } catch (e) {
+            console.warn('[RMS] Failed to parse saved plan order:', e);
+          }
+        }
+        roomTypes = roomTypes.map((rt) => {
+          const orderForRoom = savedPlanOrder[rt.roomTypeId];
+          let plans = [...rt.ratePlans];
+          if (orderForRoom && orderForRoom.length > 0) {
+            const orderMap = new Map(orderForRoom.map((id, idx) => [id, idx]));
+            plans.sort((a, b) => {
+              const aIdx = orderMap.get(a.planId) ?? 999;
+              const bIdx = orderMap.get(b.planId) ?? 999;
+              return aIdx - bIdx;
+            });
+          } else {
+            // Défaut : plan référent en premier
+            plans.sort((a, b) => {
+              if (a.isReference && !b.isReference) return -1;
+              if (!a.isReference && b.isReference) return 1;
+              return 0;
+            });
+          }
+          return { ...rt, ratePlans: plans };
+        });
+
         const expandedRooms: Record<string, boolean> = {};
         roomTypes.forEach((rt) => { expandedRooms[rt.roomTypeId] = true; });
         const roomIds = roomTypes.map(r => r.roomTypeId);
@@ -395,6 +435,43 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       get().loadData();
     },
 
+    // ─── Rate Plan Ordering ───────────────────────────────────────────
+    reorderRatePlans: (roomTypeId, newRatePlans) => {
+      set((s) => ({
+        roomTypes: s.roomTypes.map((r) =>
+          r.roomTypeId === roomTypeId ? { ...r, ratePlans: newRatePlans } : r
+        ),
+      }));
+      try {
+        const raw = localStorage.getItem('flowtym_plan_order');
+        const all: Record<string, string[]> = raw ? JSON.parse(raw) : {};
+        all[roomTypeId] = newRatePlans.map((p) => p.planId);
+        localStorage.setItem('flowtym_plan_order', JSON.stringify(all));
+      } catch (e) {
+        console.warn('[RMS] Failed to persist plan order:', e);
+      }
+    },
+
+    resetRatePlansOrder: (roomTypeId) => {
+      try {
+        const raw = localStorage.getItem('flowtym_plan_order');
+        if (!raw) {
+          get().loadData();
+          return;
+        }
+        const all: Record<string, string[]> = JSON.parse(raw);
+        if (roomTypeId) {
+          delete all[roomTypeId];
+          localStorage.setItem('flowtym_plan_order', JSON.stringify(all));
+        } else {
+          localStorage.removeItem('flowtym_plan_order');
+        }
+      } catch {
+        localStorage.removeItem('flowtym_plan_order');
+      }
+      get().loadData();
+    },
+
     addRoomType: (payload) => set((state) => {
       const roomTypeId = `rt_${payload.roomCode.toLowerCase()}`;
       const statuses = state.dateColumns.map(dc => ({
@@ -417,7 +494,19 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
 
     deleteRoomType: (roomTypeId) => set((s) => ({ roomTypes: s.roomTypes.filter(r => r.roomTypeId !== roomTypeId) })),
     toggleRoomActive: (roomTypeId) => set((s) => ({ roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, isActive: !r.isActive } : r) })),
-    setRoomAsReference: (roomTypeId) => set((s) => ({ roomTypes: s.roomTypes.map(r => ({ ...r, isReference: r.roomTypeId === roomTypeId })) })),
+    setRoomAsReference: (roomTypeId) => set((s) => {
+      const next = s.roomTypes.map(r => ({ ...r, isReference: r.roomTypeId === roomTypeId }));
+      // Si aucun ordre custom enregistré, replacer la nouvelle référence en tête
+      const hasCustomOrder = !!localStorage.getItem('flowtym_room_order');
+      if (!hasCustomOrder) {
+        next.sort((a, b) => {
+          if (a.isReference && !b.isReference) return -1;
+          if (!a.isReference && b.isReference) return 1;
+          return 0;
+        });
+      }
+      return { roomTypes: next };
+    }),
 
     addRatePlan: (payload) => set((state) => {
       const planId = `plan_${payload.planCode.toLowerCase()}`;
