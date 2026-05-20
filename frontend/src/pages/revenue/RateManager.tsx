@@ -30,6 +30,7 @@ import {
   Eye,
   Grid3x3,
   LayoutList,
+  Columns3,
   ChevronRight,
   Filter,
   Download,
@@ -601,6 +602,16 @@ export function RateManager() {
               <Grid3x3 className="w-3.5 h-3.5" />
               Jour
             </button>
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={cn(
+                'px-3 py-1.5 text-xs font-semibold rounded flex items-center gap-1.5 transition-all',
+                viewMode === 'kanban' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600'
+              )}
+            >
+              <Columns3 className="w-3.5 h-3.5" />
+              Kanban
+            </button>
           </div>
 
           {/* AutoPilot */}
@@ -721,7 +732,7 @@ export function RateManager() {
           <CardsView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
         )}
         {viewMode === 'kanban' && (
-          <div className="p-6 text-center text-gray-500">Vue Kanban en développement</div>
+          <KanbanView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
         )}
       </div>
 
@@ -1169,6 +1180,225 @@ function CardsView({
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KANBAN VIEW — 3 colonnes (Augmenter / Maintenir / Baisser)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function KanbanView({
+  data,
+  handlers,
+}: {
+  data: DayData[];
+  handlers: {
+    handleAccept: (date: string) => void;
+    handleReject: (date: string) => void;
+    handleMaintain: (date: string) => void;
+  };
+}) {
+  const columns: {
+    key: Recommendation;
+    title: string;
+    accent: string;
+    badge: string;
+    icon: typeof TrendingUp;
+  }[] = [
+    {
+      key: 'Augmenter',
+      title: 'Augmenter',
+      accent: 'border-emerald-300 bg-emerald-50',
+      badge: 'bg-emerald-500 text-white',
+      icon: TrendingUp,
+    },
+    {
+      key: 'Maintenir',
+      title: 'Maintenir',
+      accent: 'border-blue-300 bg-blue-50',
+      badge: 'bg-blue-500 text-white',
+      icon: Minus,
+    },
+    {
+      key: 'Baisser',
+      title: 'Baisser',
+      accent: 'border-red-300 bg-red-50',
+      badge: 'bg-red-500 text-white',
+      icon: TrendingDown,
+    },
+  ];
+
+  const grouped = useMemo(() => {
+    const map: Record<Recommendation, DayData[]> = {
+      Augmenter: [],
+      Maintenir: [],
+      Baisser: [],
+    };
+    data.forEach((d) => {
+      map[d.recommendation].push(d);
+    });
+    return map;
+  }, [data]);
+
+  return (
+    <div className="p-6 bg-gray-50">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {columns.map((col) => {
+          const items = grouped[col.key];
+          const Icon = col.icon;
+          return (
+            <div
+              key={col.key}
+              className={cn('border-2 rounded-lg flex flex-col', col.accent)}
+            >
+              {/* Column header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white/60 rounded-t-lg">
+                <div className="flex items-center gap-2">
+                  <span className={cn('flex items-center justify-center w-7 h-7 rounded-full', col.badge)}>
+                    <Icon className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-sm font-bold text-gray-800">{col.title}</h3>
+                </div>
+                <span className="text-xs font-bold text-gray-700 bg-white px-2 py-0.5 rounded-full border border-gray-200">
+                  {items.length}
+                </span>
+              </div>
+
+              {/* Cards */}
+              <div className="flex-1 p-3 space-y-2 min-h-[200px]">
+                {items.length === 0 && (
+                  <div className="text-center text-xs text-gray-400 italic py-6">
+                    Aucune date
+                  </div>
+                )}
+                {items.map((row) => {
+                  const delta = row.suggestedPrice - row.currentPrice;
+                  const deltaPct = row.currentPrice
+                    ? Math.round((delta / row.currentPrice) * 100)
+                    : 0;
+                  return (
+                    <div
+                      key={row.date}
+                      className="bg-white border border-gray-200 rounded-md p-3 hover:shadow-md transition-shadow"
+                    >
+                      {/* Date + status */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-xs font-bold text-gray-800">
+                          {row.dayName}. {row.dayNumber}/{row.month}
+                        </div>
+                        {row.validationStatus !== 'En attente' && (
+                          <span
+                            className={cn(
+                              'px-1.5 py-0.5 text-[9px] font-bold rounded uppercase',
+                              row.validationStatus === 'Acceptée' && 'bg-emerald-100 text-emerald-700',
+                              row.validationStatus === 'Refusée' && 'bg-red-100 text-red-700',
+                              row.validationStatus === 'Maintenue' && 'bg-blue-100 text-blue-700'
+                            )}
+                          >
+                            {row.validationStatus}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Event */}
+                      {row.events.length > 0 && (
+                        <div className="mb-2">
+                          <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-semibold">
+                            {row.events[0]}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Prices */}
+                      <div className="grid grid-cols-2 gap-2 mb-2 text-[11px]">
+                        <div>
+                          <div className="text-gray-500">Actuel</div>
+                          <div className="font-bold text-gray-900">{row.currentPrice}€</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Suggéré</div>
+                          <div
+                            className={cn(
+                              'font-bold',
+                              col.key === 'Augmenter' && 'text-emerald-700',
+                              col.key === 'Baisser' && 'text-red-700',
+                              col.key === 'Maintenir' && 'text-blue-700'
+                            )}
+                          >
+                            {row.suggestedPrice}€{' '}
+                            <span className="text-[10px] font-semibold text-gray-500">
+                              ({delta >= 0 ? '+' : ''}
+                              {deltaPct}%)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* TO + confidence */}
+                      <div className="flex items-center justify-between text-[10px] mb-2">
+                        <span className="text-gray-500">
+                          TO <span className="font-bold text-gray-700">{row.occupancyRate.toFixed(0)}%</span>
+                        </span>
+                        <span
+                          className={cn(
+                            'px-1.5 py-0.5 font-bold rounded',
+                            row.confidenceScore >= 80 && 'bg-emerald-100 text-emerald-700',
+                            row.confidenceScore >= 60 && row.confidenceScore < 80 && 'bg-yellow-100 text-yellow-700',
+                            row.confidenceScore < 60 && 'bg-red-100 text-red-700'
+                          )}
+                        >
+                          {row.confidenceScore}%
+                        </span>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handlers.handleAccept(row.date)}
+                          className={cn(
+                            'flex-1 px-1 py-1 text-[10px] font-bold rounded border transition-colors',
+                            row.validationStatus === 'Acceptée'
+                              ? 'bg-emerald-500 text-white border-emerald-500'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-emerald-500'
+                          )}
+                          title="Accepter"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          onClick={() => handlers.handleMaintain(row.date)}
+                          className={cn(
+                            'flex-1 px-1 py-1 text-[10px] font-bold rounded border transition-colors',
+                            row.validationStatus === 'Maintenue'
+                              ? 'bg-blue-500 text-white border-blue-500'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-blue-500'
+                          )}
+                          title="Maintenir"
+                        >
+                          −
+                        </button>
+                        <button
+                          onClick={() => handlers.handleReject(row.date)}
+                          className={cn(
+                            'flex-1 px-1 py-1 text-[10px] font-bold rounded border transition-colors',
+                            row.validationStatus === 'Refusée'
+                              ? 'bg-red-500 text-white border-red-500'
+                              : 'bg-white text-gray-700 border-gray-300 hover:border-red-500'
+                          )}
+                          title="Refuser"
+                        >
+                          ✗
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
