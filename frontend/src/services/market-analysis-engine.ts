@@ -24,6 +24,11 @@ import type {
   LighthouseImport,
   LighthouseDayData,
 } from './lighthouse-parser.service';
+import type {
+  MarketSignalBundle,
+  DominantSource,
+  ConsensusAgreement,
+} from './market-signal-normalizer';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES PUBLICS
@@ -973,5 +978,218 @@ function emptyReport(period: AnalysisPeriod, periodLabel: string, importData: Li
     opportunities: { undervalued: [], overpriced: [], protectInventory: [], openRates: [] },
     recommendations: [],
     briefing: `Aucune donnée disponible pour le mois sélectionné.`,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PALIER 2 — SCORES MULTI-SOURCES + RECOMMENDATION BREAKDOWN
+//
+// Extension non-destructive du moteur : les 8 règles déterministes existantes
+// restent inchangées. buildRecommendationBreakdown() enrichit une Recommendation
+// déjà calculée avec le détail de contribution par source.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Types publics ────────────────────────────────────────────────────────
+
+export interface DemandScore {
+  value: number;                  // 0–100 cappé
+  pmsContribution: number;        // pts apportés par occupancy + pickup
+  lighthouseContribution: number; // pts apportés par pression Lighthouse
+  expediaContribution: number;    // pts apportés par sold_out / pression Expedia
+  salonsContribution: number;     // pts apportés par les événements salons
+}
+
+export interface CompressionScore {
+  value: number;                  // 0–100 cappé
+  soldOutRatio: number;           // % concurrents Expedia en sold_out (0–1)
+  restrictionRatio: number;       // % concurrents Expedia en restriction (0–1)
+  occupancyPressure: number;      // contribution PMS en pts
+}
+
+export interface RecommendationBreakdown {
+  dominantSource: DominantSource;
+  signalAgreement: ConsensusAgreement;
+  contradictionDelta: number | null;  // |LH% − EX%|, non nul si diverge
+  demandScore: DemandScore;
+  compressionScore: CompressionScore;
+  ruleApplied: string;                // identifiant règle déterministe appliquée
+  justificationFR: string;            // phrase explicative finale
+  confidenceBonus: number;            // +10 si converge, −5 si diverge, 0 sinon
+  isDataReliable: boolean;            // false si consensus.agreement === 'no_data'
+}
+
+// ─── Constantes scoring ───────────────────────────────────────────────────
+
+const DEMAND_THRESHOLDS = {
+  OCC_HIGH: 90,    // occupancy > 90% → +30 pts
+  OCC_MED: 70,     // occupancy > 70% → +20 pts
+  PICKUP_HIGH: 20, // pickup > 20%    → +15 pts
+  LH_HIGH: 75,     // pression LH ≥75 → +20 pts
+  LH_MED: 50,      // pression LH ≥50 → +10 pts
+  EX_SO_HIGH: 0.5, // sold_out ≥ 50%  → +20 pts
+  EX_SO_MED: 0.25, // sold_out ≥ 25%  → +10 pts
+  SALON_HIGH: 3,   // impactScore ≥ 3  → +15 pts
+  SALON_LOW: 1,    // impactScore ≥ 1  → +8 pts
+};
+
+const COMPRESSION_THRESHOLDS = {
+  SO_HIGH: 0.5,  // sold_out ≥ 50%   → +40 pts
+  SO_MED: 0.25,  // sold_out ≥ 25%   → +25 pts
+  REST_MED: 0.25,// restriction ≥25% → +20 pts
+  OCC_HIGH: 90,  // occupancy ≥ 90%  → +25 pts
+  OCC_MED: 75,   // occupancy ≥ 75%  → +15 pts
+};
+
+// ─── Scoring ─────────────────────────────────────────────────────────────
+
+function computeDemandScore(bundle: MarketSignalBundle): DemandScore {
+  let pms = 0;
+  let lh = 0;
+  let ex = 0;
+  let salons = 0;
+
+  // PMS
+  const occ = bundle.pms.occupancyRate ?? 0;
+  const pickup = bundle.pms.pickupRate ?? 0;
+  if (occ > DEMAND_THRESHOLDS.OCC_HIGH) pms += 30;
+  else if (occ > DEMAND_THRESHOLDS.OCC_MED) pms += 20;
+  if (pickup > DEMAND_THRESHOLDS.PICKUP_HIGH) pms += 15;
+
+  // Lighthouse (pondéré par confidence)
+  const lhPressure = bundle.lighthouse.pressurePercent ?? 0;
+  const lhWeight = bundle.lighthouse.confidence === 'absent' ? 0
+    : bundle.lighthouse.confidence === 'low' ? 0.4
+    : bundle.lighthouse.confidence === 'medium' ? 0.7
+    : 1.0;
+  if (lhPressure >= DEMAND_THRESHOLDS.LH_HIGH) lh += Math.round(20 * lhWeight);
+  else if (lhPressure >= DEMAND_THRESHOLDS.LH_MED) lh += Math.round(10 * lhWeight);
+
+  // Expedia
+  const compCount = bundle.expedia.competitorCount;
+  const soRatio = compCount > 0 ? bundle.expedia.soldOutCount / compCount : 0;
+  const exWeight = bundle.expedia.confidence === 'absent' ? 0
+    : bundle.expedia.confidence === 'low' ? 0.4
+    : bundle.expedia.confidence === 'medium' ? 0.7
+    : 1.0;
+  if (soRatio >= DEMAND_THRESHOLDS.EX_SO_HIGH) ex += Math.round(20 * exWeight);
+  else if (soRatio >= DEMAND_THRESHOLDS.EX_SO_MED) ex += Math.round(10 * exWeight);
+
+  // Salons
+  const impact = bundle.salons.impactScore;
+  if (impact >= DEMAND_THRESHOLDS.SALON_HIGH) salons += 15;
+  else if (impact >= DEMAND_THRESHOLDS.SALON_LOW) salons += 8;
+
+  return {
+    value: Math.min(100, pms + lh + ex + salons),
+    pmsContribution: pms,
+    lighthouseContribution: lh,
+    expediaContribution: ex,
+    salonsContribution: salons,
+  };
+}
+
+function computeCompressionScore(bundle: MarketSignalBundle): CompressionScore {
+  const compCount = bundle.expedia.competitorCount;
+  const soldOutRatio = compCount > 0 ? bundle.expedia.soldOutCount / compCount : 0;
+  const restrictionRatio = compCount > 0 ? bundle.expedia.restrictedCount / compCount : 0;
+  const occ = bundle.pms.occupancyRate ?? 0;
+
+  let pts = 0;
+  let occupancyPressure = 0;
+
+  if (soldOutRatio >= COMPRESSION_THRESHOLDS.SO_HIGH) pts += 40;
+  else if (soldOutRatio >= COMPRESSION_THRESHOLDS.SO_MED) pts += 25;
+
+  if (restrictionRatio >= COMPRESSION_THRESHOLDS.REST_MED) pts += 20;
+
+  if (occ >= COMPRESSION_THRESHOLDS.OCC_HIGH) { pts += 25; occupancyPressure = 25; }
+  else if (occ >= COMPRESSION_THRESHOLDS.OCC_MED) { pts += 15; occupancyPressure = 15; }
+
+  return {
+    value: Math.min(100, pts),
+    soldOutRatio,
+    restrictionRatio,
+    occupancyPressure,
+  };
+}
+
+// ─── Justification FR ────────────────────────────────────────────────────
+
+function buildJustificationFR(
+  reco: Recommendation,
+  bundle: MarketSignalBundle,
+  demand: DemandScore,
+  compression: CompressionScore,
+): string {
+  const parts: string[] = [];
+
+  // Action principale
+  parts.push(reco.justification);
+
+  // Source dominante
+  const src = bundle.consensus.dominantSource;
+  if (src === 'lighthouse') parts.push('Signal principal : Lighthouse (source primaire).');
+  else if (src === 'expedia') parts.push('Signal principal : Expedia (Lighthouse absent ou dégradé).');
+  else if (src === 'tie') parts.push('Lighthouse et Expedia convergent avec une confiance équivalente.');
+
+  // Contradiction
+  if (bundle.consensus.agreement === 'diverge' && bundle.consensus.contradictionDelta !== null) {
+    parts.push(
+      `⚠ Signal contradictoire : écart de ${Math.round(bundle.consensus.contradictionDelta)} pts entre Lighthouse et Expedia.`
+    );
+  }
+
+  // Compression Expedia
+  if (compression.soldOutRatio >= 0.5) {
+    parts.push(`${Math.round(compression.soldOutRatio * 100)}% des concurrents Expedia sont sold-out.`);
+  } else if (compression.soldOutRatio >= 0.25) {
+    parts.push(`${Math.round(compression.soldOutRatio * 100)}% des concurrents Expedia sont sold-out.`);
+  }
+
+  // Événements salons
+  if (bundle.salons.count > 0) {
+    const names = bundle.salons.events.map(e => e.name).join(', ');
+    parts.push(`Événement(s) détecté(s) : ${names}.`);
+  }
+
+  // Fiabilité
+  if (bundle.consensus.agreement === 'no_data') {
+    parts.push('Données marché insuffisantes — recommandation basée sur PMS seul.');
+  }
+
+  return parts.join(' ');
+}
+
+// ─── Fonction publique principale ─────────────────────────────────────────
+
+/**
+ * Enrichit une Recommendation (produite par les 8 règles déterministes existantes)
+ * avec le détail multi-sources : scores demand/compression, source dominante,
+ * détection de contradiction Lighthouse↔Expedia, et justification FR complète.
+ *
+ * Les 8 règles déterministes ne sont pas modifiées.
+ */
+export function buildRecommendationBreakdown(
+  bundle: MarketSignalBundle,
+  existingReco: Recommendation,
+): RecommendationBreakdown {
+  const demandScore = computeDemandScore(bundle);
+  const compressionScore = computeCompressionScore(bundle);
+
+  const confidenceBonus =
+    bundle.consensus.agreement === 'converge' ? 10
+    : bundle.consensus.agreement === 'diverge' ? -5
+    : 0;
+
+  return {
+    dominantSource: bundle.consensus.dominantSource,
+    signalAgreement: bundle.consensus.agreement,
+    contradictionDelta: bundle.consensus.contradictionDelta,
+    demandScore,
+    compressionScore,
+    ruleApplied: existingReco.ruleId,
+    justificationFR: buildJustificationFR(existingReco, bundle, demandScore, compressionScore),
+    confidenceBonus,
+    isDataReliable: bundle.consensus.agreement !== 'no_data',
   };
 }
