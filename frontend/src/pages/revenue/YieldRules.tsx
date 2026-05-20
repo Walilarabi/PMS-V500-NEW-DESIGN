@@ -166,7 +166,23 @@ function generateYieldRules(): YieldRule[] {
 }
 
 export function YieldRules() {
-  const [rules, setRules] = useState<YieldRule[]>(generateYieldRules());
+  const [rules, setRulesRaw] = useState<YieldRule[]>(() => {
+    try {
+      const raw = localStorage.getItem('flowtym_yield_rules');
+      if (!raw) return generateYieldRules();
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : generateYieldRules();
+    } catch {
+      return generateYieldRules();
+    }
+  });
+  const setRules: typeof setRulesRaw = (updater) => {
+    setRulesRaw((prev) => {
+      const next = typeof updater === 'function' ? (updater as (p: YieldRule[]) => YieldRule[])(prev) : updater;
+      try { localStorage.setItem('flowtym_yield_rules', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
   const [selectedRule, setSelectedRule] = useState<YieldRule | null>(null);
 
   // KPIs
