@@ -49,6 +49,7 @@ import { RMSPropagationService, RMSValidation } from '../../services/rms-propaga
 import { syncRMSDecision } from '../../services/rms-calendar-sync.service';
 import { AnalyseRMTable } from './components/AnalyseRMTable';
 import { RecommandationRMTable } from './components/RecommandationRMTable';
+import { RMSRecommendationModal } from './components/RMSRecommendationModal';
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useSalonsStore } from '../../store/salonsStore';
@@ -889,12 +890,25 @@ export function RMSTableauPro() {
         )}
       </div>
 
-      {detailDate && (
-        <CompsetDetailModal
-          date={detailDate}
-          onClose={() => setDetailDate(null)}
-        />
-      )}
+      {detailDate && (() => {
+        const day = rmsData.find(d => d.date === detailDate);
+        if (!day) return null;
+        return (
+          <RMSRecommendationModal
+            date={detailDate}
+            rmsDay={day}
+            lighthouseDay={lighthouseImport?.days.find(d => d.date === detailDate) ?? null}
+            allDates={rmsData.map(d => d.date)}
+            totalCapacity={totalCapacity}
+            restrictions={undefined}
+            onClose={() => setDetailDate(null)}
+            onNavigate={(d) => setDetailDate(d)}
+            onAccept={(d) => { handleAccept(d); setDetailDate(null); }}
+            onReject={(d) => { handleReject(d); setDetailDate(null); }}
+            onMaintain={(d) => { handleMaintain(d); setDetailDate(null); }}
+          />
+        );
+      })()}
 
       {showSettingsModal && (
         <RmsSettingsModal
