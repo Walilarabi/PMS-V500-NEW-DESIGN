@@ -19,7 +19,7 @@ import { DistributionAnalytics } from '@/src/pages/revenue/DistributionAnalytics
 import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
 import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
 import { FinanceView }      from '@/src/pages/FinanceView';
-import { AnalysisView }     from '@/src/pages/AnalysisView';
+import { AnalysisLayout }   from '@/src/pages/analysis/AnalysisLayout';
 import { FlowboardView }    from '@/src/pages/FlowboardView';
 import { SettingsView }     from '@/src/pages/SettingsView';
 import { FacturationView }  from '@/src/pages/finance/FacturationView';
@@ -54,7 +54,7 @@ const Placeholder = ({ title, icon }: { title: string; icon?: string }) => (
   </div>
 );
 
-function renderPage(page: PageId): React.ReactNode {
+function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.ReactNode {
   switch (page) {
     // ── FLOWDAY ───────────────────────────────────────────────────────────────
     case 'flowboard':   return <FlowboardView />;
@@ -123,18 +123,25 @@ function renderPage(page: PageId): React.ReactNode {
 
     // ── ANALYSE ───────────────────────────────────────────────────────────────
     case 'analysis':
-    case 'kpi':                      return <AnalysisView />;
-    case 'performance':              return <Placeholder title="Performance" icon="🏆" />;
-    case 'forecast':                 return <Placeholder title="Prévisionnel" icon="🔭" />;
-    case 'rapports':                 return <Placeholder title="Rapports (93)" icon="📊" />;
-    case 'rapports_exploitation':    return <Placeholder title="Rapports Exploitation" icon="🏨" />;
-    case 'rapports_reservations':    return <Placeholder title="Rapports Réservations" icon="📅" />;
-    case 'rapports_backoffice':      return <Placeholder title="Rapports Back office" icon="🏦" />;
-    case 'rapports_comptabilite':    return <Placeholder title="Rapports Comptabilité" icon="📒" />;
-    case 'rapports_tva':             return <Placeholder title="Rapports TVA 2026" icon="🧾" />;
-    case 'rapports_stats':           return <Placeholder title="Statistiques" icon="📈" />;
-    case 'rapports_revenue':         return <Placeholder title="Rapports Revenue" icon="💹" />;
-    case 'rapports_housekeeping':    return <Placeholder title="Rapports Housekeeping" icon="🛏️" />;
+    case 'analysis_library':
+    case 'analysis_favorites':
+    case 'analysis_recent':
+    case 'analysis_saved':
+      return <AnalysisLayout activePage={page} onNavigateSubPage={(p) => setActivePage(p)} />;
+    // Legacy redirections (anciennes PageIds → nouvelle vue d'ensemble)
+    case 'kpi':
+    case 'performance':
+    case 'forecast':
+    case 'rapports':
+    case 'rapports_exploitation':
+    case 'rapports_reservations':
+    case 'rapports_backoffice':
+    case 'rapports_comptabilite':
+    case 'rapports_tva':
+    case 'rapports_stats':
+    case 'rapports_revenue':
+    case 'rapports_housekeeping':
+      return <AnalysisLayout activePage="analysis" onNavigateSubPage={(p) => setActivePage(p)} />;
 
     // ── PARAMÈTRES ────────────────────────────────────────────────────────────
     case 'settings':
@@ -210,7 +217,7 @@ export default function App() {
           setIsCollapsed={setSidebarCollapsed}
         />
         <main className="flex-1 overflow-hidden flex flex-col">
-          {renderPage(activePage)}
+          {renderPage(activePage, setActivePage)}
         </main>
       </div>
       <DebugPanel />

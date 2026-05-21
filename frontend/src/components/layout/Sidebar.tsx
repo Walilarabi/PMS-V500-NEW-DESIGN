@@ -140,24 +140,13 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
 
   analysis: [
     {
-      label: 'Analyse',
+      label: 'Analyse & Rapports',
       items: [
-        { id: 'kpi',         label: 'KPI',          icon: Activity },
-        { id: 'performance', label: 'Performance',  icon: BarChart2 },
-        { id: 'forecast',    label: 'Prévisionnel', icon: TrendingUp },
-      ],
-    },
-    {
-      label: 'Rapports (93)',
-      items: [
-        { id: 'rapports_exploitation', label: 'Exploitation',      icon: Bed },
-        { id: 'rapports_reservations', label: 'Réservations',      icon: Calendar },
-        { id: 'rapports_backoffice',   label: 'Back office',       icon: Building2 },
-        { id: 'rapports_comptabilite', label: 'Comptabilité',      icon: BookOpen },
-        { id: 'rapports_tva',          label: 'TVA 2026 & e-fact.', icon: Percent },
-        { id: 'rapports_stats',        label: 'Statistiques',      icon: PieChart },
-        { id: 'rapports_revenue',      label: 'Revenue Management',icon: TrendingUp },
-        { id: 'rapports_housekeeping', label: 'Housekeeping',      icon: Sparkles },
+        { id: 'analysis',           label: "Vue d'ensemble",     icon: LayoutDashboard },
+        { id: 'analysis_library',   label: 'Bibliothèque',       icon: BookOpen },
+        { id: 'analysis_favorites', label: 'Mes favoris',        icon: Star },
+        { id: 'analysis_recent',    label: 'Récents',            icon: Clock },
+        { id: 'analysis_saved',     label: 'Vues sauvegardées',  icon: FileText },
       ],
     },
   ],
@@ -257,6 +246,8 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   rapports_reservations: 'analysis', rapports_backoffice: 'analysis',
   rapports_comptabilite: 'analysis', rapports_tva: 'analysis',
   rapports_stats: 'analysis', rapports_revenue: 'analysis', rapports_housekeeping: 'analysis',
+  analysis_library: 'analysis', analysis_favorites: 'analysis',
+  analysis_recent: 'analysis', analysis_saved: 'analysis',
   settings: 'settings', settings_hotel: 'settings', settings_multihotel: 'settings',
   settings_room_types: 'settings', settings_rooms: 'settings', settings_floors: 'settings',
   settings_room_status: 'settings', settings_preferences: 'settings',

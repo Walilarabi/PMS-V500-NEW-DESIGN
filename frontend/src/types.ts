@@ -65,6 +65,10 @@ export type PageId =
   | 'cash_management'
   // ── 7. ANALYSE ─────────────────────────────────────────────────────────────
   | 'analysis'
+  | 'analysis_library'
+  | 'analysis_favorites'
+  | 'analysis_recent'
+  | 'analysis_saved'
   | 'kpi'
   | 'performance'
   | 'forecast'
