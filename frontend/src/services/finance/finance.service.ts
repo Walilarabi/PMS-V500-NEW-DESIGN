@@ -147,6 +147,42 @@ export async function listClosures(limit = 30): Promise<ClosureWorkflow[]> {
   return (data ?? []) as ClosureWorkflow[];
 }
 
+// ─── Closure RPCs (vraies opérations) ────────────────────────────────────
+
+export interface ClosureStepResult {
+  step: number;
+  success: boolean;
+  duration_ms?: number;
+  completed_at?: string;
+  warnings?: any[];
+  [key: string]: any;
+}
+
+export async function startClosure(closureDate: string): Promise<string> {
+  const { data, error } = await (supabase.rpc as any)('closure_start', {
+    p_closure_date: closureDate,
+  });
+  if (error) throw error;
+  return String(data);
+}
+
+export async function executeClosureStep(closureId: string, step: number): Promise<ClosureStepResult> {
+  const { data, error } = await (supabase.rpc as any)('closure_execute_step', {
+    p_closure_id: closureId,
+    p_step: step,
+  });
+  if (error) throw error;
+  return data as ClosureStepResult;
+}
+
+export async function rollbackClosure(closureId: string): Promise<{ recouchants_reverted: number; noshows_reverted: number }> {
+  const { data, error } = await (supabase.rpc as any)('closure_rollback', {
+    p_closure_id: closureId,
+  });
+  if (error) throw error;
+  return data;
+}
+
 // ─── Proforma ────────────────────────────────────────────────────────────
 
 export interface ProformaQuote {

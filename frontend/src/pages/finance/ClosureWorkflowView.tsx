@@ -1,14 +1,20 @@
 /**
- * FLOWTYM — Workflow Clôture journalière (midi/midi) 8 étapes
+ * FLOWTYM — Workflow Clôture journalière (midi/midi) 8 étapes — VRAIES RPCs
+ *
+ * Vague F2 : exécute chaque étape via Supabase RPC (vs simulation setTimeout).
+ * Avec gestion d'erreur + rollback.
  */
 
 import React, { useEffect, useState } from 'react';
 import {
-  Lock, CheckCircle2, Loader2, AlertCircle, ChevronRight, RefreshCw,
+  Lock, CheckCircle2, Loader2, AlertCircle, RefreshCw, RotateCcw,
   Database, Calculator, FileText, ArrowRightLeft, Save, Printer, Calendar,
+  AlertTriangle,
 } from 'lucide-react';
-import { listClosures, type ClosureWorkflow } from '../../services/finance/finance.service';
-import { supabase } from '../../lib/supabase';
+import {
+  listClosures, startClosure, executeClosureStep, rollbackClosure,
+  type ClosureWorkflow, type ClosureStepResult,
+} from '../../services/finance/finance.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -17,18 +23,18 @@ interface Step {
   label: string;
   description: string;
   icon: any;
-  targetMs: number;
+  reversible: boolean;
 }
 
 const STEPS: Step[] = [
-  { num: 1, label: 'Pré-contrôles', description: 'Vérification départs soldés, no-shows traités', icon: CheckCircle2, targetMs: 1000 },
-  { num: 2, label: 'Récupération arrivées', description: 'Bascule réservations → fiches arrivée', icon: ArrowRightLeft, targetMs: 2000 },
-  { num: 3, label: 'Mise à jour factures', description: 'Recouchants (hébergement, petit-déj)', icon: FileText, targetMs: 5000 },
-  { num: 4, label: 'Sauvegarde express', description: 'Fichiers critiques → S3 + local', icon: Save, targetMs: 10000 },
-  { num: 5, label: 'MC Règlements brouillon', description: 'Contrôle caisse', icon: Calculator, targetMs: 3000 },
-  { num: 6, label: 'Impression états', description: 'PDF (12001, 12003, 12006)', icon: Printer, targetMs: 15000 },
-  { num: 7, label: 'Changement date', description: 'Date hôtel +1, bascule réservations', icon: Calendar, targetMs: 2000 },
-  { num: 8, label: 'Verrouillage fiscal', description: 'Snapshots TVA, factures + event closure.completed', icon: Lock, targetMs: 5000 },
+  { num: 1, label: 'Pré-contrôles', description: 'Départs soldés, no-shows, chambres sales', icon: CheckCircle2, reversible: false },
+  { num: 2, label: 'Récupération arrivées', description: 'Marquage no-shows passés', icon: ArrowRightLeft, reversible: true },
+  { num: 3, label: 'Recouchants', description: 'Création prestations Nuitée pour présents', icon: FileText, reversible: true },
+  { num: 4, label: 'Sauvegarde express', description: 'Snapshot transactionnel + audit log', icon: Save, reversible: false },
+  { num: 5, label: 'MC Règlements', description: 'Total Espèces/CB/Virement/Débiteur', icon: Calculator, reversible: false },
+  { num: 6, label: 'Impression états', description: 'Rapports 12001/12003/12006 marqués prêts', icon: Printer, reversible: false },
+  { num: 7, label: 'Changement date', description: 'Date hôtel +1 (audit log)', icon: Calendar, reversible: false },
+  { num: 8, label: 'Verrouillage fiscal', description: 'Snapshot TVA + signature SHA-256', icon: Lock, reversible: false },
 ];
 
 export const ClosureWorkflowView: React.FC = () => {
@@ -36,7 +42,9 @@ export const ClosureWorkflowView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [stepResults, setStepResults] = useState<ClosureStepResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [rollbacking, setRollbacking] = useState(false);
 
   const reload = async () => {
     setLoading(true);
@@ -53,46 +61,20 @@ export const ClosureWorkflowView: React.FC = () => {
     setRunning(true);
     setError(null);
     setCurrentStep(0);
+    setStepResults([]);
 
     try {
-      // Crée la ligne de workflow
-      const { data: hotelData } = await (supabase.rpc as any)('get_user_hotel_id');
-      const hotelId = String(hotelData ?? '');
-      const stepsDone: any[] = [];
-      const startedAt = new Date().toISOString();
+      const closureId = await startClosure(today);
+      const results: ClosureStepResult[] = [];
 
-      const { data: created, error: insErr } = await supabase
-        .from('closure_workflow')
-        .insert({
-          hotel_id: hotelId,
-          closure_date: today,
-          state: 'in_progress',
-          step_current: 0,
-          started_at: startedAt,
-        })
-        .select('*').single();
-      if (insErr) throw insErr;
-
-      // Simulation des 8 étapes (UX premium)
-      for (let i = 0; i < STEPS.length; i++) {
-        setCurrentStep(i + 1);
-        await new Promise(r => setTimeout(r, Math.min(STEPS[i].targetMs / 4, 1500)));
-        stepsDone.push({ step: STEPS[i].num, label: STEPS[i].label, completed_at: new Date().toISOString() });
-        await supabase
-          .from('closure_workflow')
-          .update({ step_current: i + 1, steps_done: stepsDone })
-          .eq('id', created.id);
+      for (let i = 1; i <= 8; i++) {
+        setCurrentStep(i);
+        const result = await executeClosureStep(closureId, i);
+        results.push(result);
+        setStepResults([...results]);
+        // Petite pause UX entre les étapes pour permettre à l'utilisateur de voir
+        await new Promise(r => setTimeout(r, 400));
       }
-
-      const finishedAt = new Date().toISOString();
-      await supabase
-        .from('closure_workflow')
-        .update({
-          state: 'completed',
-          finished_at: finishedAt,
-          duration_ms: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
-        })
-        .eq('id', created.id);
 
       await reload();
     } catch (e) {
@@ -100,6 +82,21 @@ export const ClosureWorkflowView: React.FC = () => {
     } finally {
       setRunning(false);
       setCurrentStep(0);
+    }
+  };
+
+  const handleRollback = async (closureId: string) => {
+    if (!confirm("Rollback : annuler les étapes 2 (no-shows) et 3 (recouchants) ?\nLes étapes 4-8 ne sont pas réversibles.")) return;
+    setRollbacking(true);
+    setError(null);
+    try {
+      const result = await rollbackClosure(closureId);
+      alert(`Rollback effectué :\n${result.recouchants_reverted} recouchants supprimés\n${result.noshows_reverted} no-shows annulés`);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRollbacking(false);
     }
   };
 
@@ -111,34 +108,54 @@ export const ClosureWorkflowView: React.FC = () => {
           <div className="text-[10px] uppercase tracking-widest text-violet-300 font-bold">Clôture journalière</div>
           <div className="text-xl font-extrabold">{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
           {todayClosure ? (
-            <div className="text-xs text-emerald-300 mt-1 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Clôturée à {todayClosure.finished_at ? new Date(todayClosure.finished_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—'}
-              {todayClosure.duration_ms && <span className="text-violet-300">· {Math.round(todayClosure.duration_ms / 1000)}s</span>}
+            <div className="text-xs mt-1 flex items-center gap-2">
+              <StatusBadge state={todayClosure.state} />
+              {todayClosure.finished_at && (
+                <span className="text-violet-200">
+                  Terminée à {new Date(todayClosure.finished_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                  {todayClosure.duration_ms && <> · {Math.round(todayClosure.duration_ms / 1000)}s</>}
+                </span>
+              )}
             </div>
           ) : (
             <div className="text-xs text-amber-300 mt-1">Non clôturée</div>
           )}
         </div>
-        {!todayClosure && (
-          <button
-            onClick={handleStart}
-            disabled={running}
-            className={cn(
-              'px-5 py-2.5 bg-white text-violet-900 rounded-md text-sm font-extrabold inline-flex items-center gap-2 transition-all',
-              running ? 'opacity-50' : 'hover:scale-105 shadow-lg shadow-violet-500/30'
-            )}
-          >
-            {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-            {running ? 'Clôture en cours…' : 'Démarrer la clôture'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {todayClosure && todayClosure.state !== 'completed' && (
+            <button
+              onClick={() => handleRollback(todayClosure.id)}
+              disabled={rollbacking || running}
+              className="px-4 py-2 bg-amber-100 text-amber-900 rounded-md text-sm font-bold inline-flex items-center gap-2 hover:bg-amber-200 disabled:opacity-50"
+              title="Annuler les étapes réversibles (2 et 3)"
+            >
+              {rollbacking ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+              Rollback
+            </button>
+          )}
+          {(!todayClosure || todayClosure.state === 'failed' || todayClosure.state === 'rolled_back') && (
+            <button
+              onClick={handleStart}
+              disabled={running}
+              className={cn(
+                'px-5 py-2.5 bg-white text-violet-900 rounded-md text-sm font-extrabold inline-flex items-center gap-2 transition-all',
+                running ? 'opacity-50' : 'hover:scale-105 shadow-lg shadow-violet-500/30'
+              )}
+            >
+              {running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+              {running ? `Étape ${currentStep}/8 en cours…` : todayClosure?.state === 'failed' ? 'Réessayer' : 'Démarrer la clôture'}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4" />
-          {error}
+        <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <div className="font-bold">Erreur d'exécution</div>
+            <div>{error}</div>
+          </div>
         </div>
       )}
 
@@ -146,13 +163,16 @@ export const ClosureWorkflowView: React.FC = () => {
       <div className="bg-white rounded-lg border border-gray-200 p-5">
         <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
           <Database className="w-4 h-4 text-violet-500" />
-          Workflow en 8 étapes
+          Workflow en 8 étapes (RPCs Supabase atomiques)
         </h3>
         <div className="space-y-2">
           {STEPS.map((step) => {
-            const done = todayClosure ? (todayClosure.steps_done as any[])?.some(s => s.step === step.num) : false;
+            const result = stepResults.find(r => r.step === step.num)
+              ?? (todayClosure?.steps_done as ClosureStepResult[])?.find((s: any) => s.step === step.num);
+            const done = !!result?.success;
             const inProgress = running && currentStep === step.num;
-            const future = running && currentStep < step.num;
+            const future = (running && currentStep < step.num) || (!running && !done && !todayClosure);
+            const failed = !!todayClosure?.steps_errors?.[String(step.num)];
             const Icon = step.icon;
             return (
               <div
@@ -160,6 +180,7 @@ export const ClosureWorkflowView: React.FC = () => {
                 className={cn(
                   'flex items-center gap-4 p-3 rounded-lg border transition-all',
                   done ? 'bg-emerald-50 border-emerald-200' :
+                  failed ? 'bg-red-50 border-red-200' :
                   inProgress ? 'bg-violet-50 border-violet-300 ring-2 ring-violet-200' :
                   future ? 'bg-gray-50 border-gray-200 opacity-50' :
                   'bg-white border-gray-200'
@@ -168,19 +189,38 @@ export const ClosureWorkflowView: React.FC = () => {
                 <div className={cn(
                   'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-extrabold',
                   done ? 'bg-emerald-500 text-white' :
+                  failed ? 'bg-red-500 text-white' :
                   inProgress ? 'bg-violet-600 text-white' :
                   'bg-gray-200 text-gray-600'
                 )}>
                   {done ? <CheckCircle2 className="w-5 h-5" /> :
+                   failed ? <AlertTriangle className="w-5 h-5" /> :
                    inProgress ? <Loader2 className="w-5 h-5 animate-spin" /> :
                    step.num}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-gray-900">{step.label}</div>
+                  <div className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    {step.label}
+                    {step.reversible && (
+                      <span className="text-[9px] font-bold uppercase bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Réversible</span>
+                    )}
+                  </div>
                   <div className="text-xs text-gray-500">{step.description}</div>
+                  {result && (
+                    <div className="text-[11px] text-emerald-700 mt-1 font-mono">
+                      {renderStepSummary(step.num, result)}
+                    </div>
+                  )}
+                  {failed && todayClosure?.steps_errors?.[String(step.num)] && (
+                    <div className="text-[11px] text-red-700 mt-1 font-mono">
+                      ⚠ {todayClosure.steps_errors[String(step.num)]}
+                    </div>
+                  )}
                 </div>
                 <Icon className={cn('w-5 h-5', done ? 'text-emerald-600' : inProgress ? 'text-violet-600' : 'text-gray-300')} />
-                <span className="text-[10px] text-gray-400 font-mono">cible {step.targetMs}ms</span>
+                {result?.duration_ms !== undefined && (
+                  <span className="text-[10px] text-gray-400 font-mono">{result.duration_ms}ms</span>
+                )}
               </div>
             );
           })}
@@ -210,21 +250,36 @@ export const ClosureWorkflowView: React.FC = () => {
                 <th className="px-4 py-2 text-left font-bold">Démarrée</th>
                 <th className="px-4 py-2 text-left font-bold">Terminée</th>
                 <th className="px-4 py-2 text-right font-bold">Durée</th>
+                <th className="px-4 py-2 text-center font-bold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {closures.map(c => (
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2 font-semibold">{new Date(c.closure_date).toLocaleDateString('fr-FR')}</td>
-                  <td className="px-4 py-2 text-center">
-                    <StatusBadge state={c.state} />
-                  </td>
-                  <td className="px-4 py-2 text-center font-mono">
-                    {c.step_current}/8
-                  </td>
+                  <td className="px-4 py-2 text-center"><StatusBadge state={c.state} /></td>
+                  <td className="px-4 py-2 text-center font-mono">{c.step_current}/8</td>
                   <td className="px-4 py-2 text-xs">{c.started_at ? new Date(c.started_at).toLocaleString('fr-FR') : '—'}</td>
                   <td className="px-4 py-2 text-xs">{c.finished_at ? new Date(c.finished_at).toLocaleString('fr-FR') : '—'}</td>
                   <td className="px-4 py-2 text-right text-xs">{c.duration_ms ? `${Math.round(c.duration_ms / 1000)}s` : '—'}</td>
+                  <td className="px-4 py-2 text-center">
+                    {(c.state === 'in_progress' || c.state === 'failed') && c.step_current < 8 && (
+                      <button
+                        onClick={() => handleRollback(c.id)}
+                        disabled={rollbacking}
+                        className="text-xs text-amber-700 hover:underline inline-flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Rollback
+                      </button>
+                    )}
+                    {c.state === 'completed' && c.step_current === 8 && (
+                      <span className="text-[10px] text-emerald-700 inline-flex items-center gap-1">
+                        <Lock className="w-3 h-3" />
+                        Verrouillée
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -239,9 +294,25 @@ function StatusBadge({ state }: { state: ClosureWorkflow['state'] }) {
   const cfg = {
     pending:     { bg: 'bg-gray-100',    text: 'text-gray-700',    label: 'En attente' },
     in_progress: { bg: 'bg-blue-100',    text: 'text-blue-800',    label: 'En cours' },
-    completed:   { bg: 'bg-emerald-100', text: 'text-emerald-800', label: 'Terminée' },
-    failed:      { bg: 'bg-red-100',     text: 'text-red-800',     label: 'Échec' },
-    rolled_back: { bg: 'bg-orange-100',  text: 'text-orange-800',  label: 'Rollback' },
+    completed:   { bg: 'bg-emerald-100', text: 'text-emerald-800', label: '✓ Terminée' },
+    failed:      { bg: 'bg-red-100',     text: 'text-red-800',     label: '✗ Échec' },
+    rolled_back: { bg: 'bg-orange-100',  text: 'text-orange-800',  label: '↶ Rollback' },
   }[state];
   return <span className={cn('inline-block px-2 py-0.5 rounded text-[10px] font-bold', cfg.bg, cfg.text)}>{cfg.label}</span>;
+}
+
+function renderStepSummary(step: number, r: ClosureStepResult): string {
+  switch (step) {
+    case 1: return `Présents ${r.unfinished_departures ?? 0} départs non libérés, ${r.pending_arrivals ?? 0} arrivées en attente`;
+    case 2: return `${r.no_shows_marked ?? 0} no-shows marqués`;
+    case 3: return `${r.recouchants_created ?? 0} recouchants créés · ${r.total_amount?.toLocaleString?.('fr-FR') ?? 0}€`;
+    case 4: return `Snapshot : ${r.reservations_snapshot ?? 0} résa · ${r.payments_snapshot ?? 0} paiements`;
+    case 5: return `Total caisse ${r.total?.toLocaleString?.('fr-FR') ?? 0}€ sur ${r.transactions ?? 0} transactions`;
+    case 6: return `Rapports prêts : ${r.reports_ready?.join?.(', ') ?? '—'}`;
+    case 7: return `Date avancée : ${r.previous_date} → ${r.next_date}`;
+    case 8: return r.is_month_end
+      ? `Snapshot TVA verrouillé · ${r.fiscal_stamp ?? '—'}`
+      : `Verrouillage appliqué · ${r.invoices_locked ?? 0} factures · pas fin de mois`;
+    default: return JSON.stringify(r);
+  }
 }
