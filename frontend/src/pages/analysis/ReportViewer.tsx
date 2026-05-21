@@ -15,6 +15,8 @@ import { getReportById, type ReportDefinition } from './reports/registry';
 import { ReportShell, type ReportFilters, type Granularity, type ComparisonMode } from './ReportShell';
 import { useReportData } from '../../hooks/analysis/useReportData';
 import { REPORT_RENDERERS } from './reports/renderers';
+import { exportReportToPDF, exportReportToExcel } from '../../services/analysis/report-export.service';
+import { useConfigStore } from '../../store/configStore';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -51,6 +53,27 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ reportId, initialFil
   }));
 
   const query = useReportData({ reportId, filters, enabled: !!report });
+  const hotelName = useConfigStore(s => s.hotel?.name ?? '');
+
+  const handleExportPDF = () => {
+    if (!report || !query.data) return;
+    exportReportToPDF({
+      report,
+      filters,
+      rows: query.data.rows as Array<Record<string, unknown>>,
+      hotelName: hotelName || undefined,
+    });
+  };
+
+  const handleExportExcel = () => {
+    if (!report || !query.data) return;
+    exportReportToExcel({
+      report,
+      filters,
+      rows: query.data.rows as Array<Record<string, unknown>>,
+      hotelName: hotelName || undefined,
+    });
+  };
 
   useEffect(() => {
     if (report) {
@@ -83,8 +106,8 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ reportId, initialFil
       onFiltersChange={setFilters}
       onBack={onBack}
       onRefresh={() => query.refetch()}
-      onExportPDF={() => alert('Export PDF — vague 5')}
-      onExportExcel={() => alert('Export Excel — vague 5')}
+      onExportPDF={handleExportPDF}
+      onExportExcel={handleExportExcel}
       loading={query.isFetching}
     >
       {!Renderer ? (
