@@ -20,17 +20,19 @@ import { ReportLibrary } from './ReportLibrary';
 import { FavoritesView } from './FavoritesView';
 import { RecentView } from './RecentView';
 import { SavedViewsView } from './SavedViewsView';
+import { AlertsCenterView } from './AlertsCenterView';
 import { ReportViewer } from './ReportViewer';
 import { pushRecent } from '../../services/analysis/report-prefs.service';
 
-type AnalysisPage = 'analysis' | 'analysis_library' | 'analysis_favorites' | 'analysis_recent' | 'analysis_saved';
+type AnalysisPage = 'analysis' | 'analysis_library' | 'analysis_favorites' | 'analysis_recent' | 'analysis_saved' | 'analysis_alerts';
 
 const TITLES: Record<AnalysisPage, { title: string; subtitle: string }> = {
   analysis:           { title: 'Analyse & Rapports', subtitle: "Vue d'ensemble pilotage et reporting" },
-  analysis_library:   { title: 'Bibliothèque',       subtitle: '30+ rapports organisés par catégorie' },
+  analysis_library:   { title: 'Bibliothèque',       subtitle: '119 rapports organisés par catégorie' },
   analysis_favorites: { title: 'Mes favoris',        subtitle: 'Rapports épinglés pour accès rapide' },
   analysis_recent:    { title: 'Récents',            subtitle: 'Vos 10 derniers rapports consultés' },
   analysis_saved:     { title: 'Vues sauvegardées',  subtitle: 'Rapports + filtres mémorisés' },
+  analysis_alerts:    { title: "Centre d'alertes",   subtitle: 'Watchers KPI + inbox des déclenchements' },
 };
 
 export interface AnalysisLayoutProps {
@@ -97,6 +99,7 @@ export const AnalysisLayout: React.FC<AnalysisLayoutProps> = ({ activePage, onNa
         {activePage === 'analysis_favorites' && <FavoritesView onNavigateLibrary={() => onNavigateSubPage?.('analysis_library')} onOpenReport={openReport} />}
         {activePage === 'analysis_recent' && <RecentView onNavigateLibrary={() => onNavigateSubPage?.('analysis_library')} onOpenReport={openReport} />}
         {activePage === 'analysis_saved' && <SavedViewsView onNavigateLibrary={() => onNavigateSubPage?.('analysis_library')} onOpenReport={openReport} />}
+        {activePage === 'analysis_alerts' && <AlertsCenterView />}
       </div>
     </div>
   );

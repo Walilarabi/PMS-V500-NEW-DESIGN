@@ -11,6 +11,7 @@ import React, { useMemo } from 'react';
 import { Star, Clock, FileText, BookOpen, ChevronRight, Sparkles, Lock } from 'lucide-react';
 import { ALL_REPORTS, REPORT_CATEGORIES, getReportsByCategory, REPORT_STATS } from './reports/registry';
 import { getFavorites, getRecent, getSavedViews } from '../../services/analysis/report-prefs.service';
+import { DailyBriefing } from './DailyBriefing';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -43,6 +44,9 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigate
 
   return (
     <div className="space-y-6">
+      {/* Briefing matinal IA */}
+      <DailyBriefing onOpenAlerts={() => onNavigateSubPage?.('analysis_alerts' as any)} />
+
       {/* 4 raccourcis */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <ShortcutCard

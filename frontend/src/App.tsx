@@ -127,6 +127,7 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'analysis_favorites':
     case 'analysis_recent':
     case 'analysis_saved':
+    case 'analysis_alerts':
       return <AnalysisLayout activePage={page} onNavigateSubPage={(p) => setActivePage(p)} />;
     // Legacy redirections (anciennes PageIds → nouvelle vue d'ensemble)
     case 'kpi':

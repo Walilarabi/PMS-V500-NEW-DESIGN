@@ -69,6 +69,7 @@ export type PageId =
   | 'analysis_favorites'
   | 'analysis_recent'
   | 'analysis_saved'
+  | 'analysis_alerts'
   | 'kpi'
   | 'performance'
   | 'forecast'
