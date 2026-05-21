@@ -7,11 +7,12 @@
  *  - Rapports tendance / suggérés
  */
 
-import React, { useMemo } from 'react';
-import { Star, Clock, FileText, BookOpen, ChevronRight, Sparkles, Lock } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Star, Clock, FileText, BookOpen, ChevronRight, Sparkles, Lock, Tv } from 'lucide-react';
 import { ALL_REPORTS, REPORT_CATEGORIES, getReportsByCategory, REPORT_STATS } from './reports/registry';
 import { getFavorites, getRecent, getSavedViews } from '../../services/analysis/report-prefs.service';
 import { DailyBriefing } from './DailyBriefing';
+import { DirectionCockpit } from './cockpit/DirectionCockpit';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -35,6 +36,8 @@ export interface AnalysisDashboardProps {
 }
 
 export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigateSubPage, onOpenReport }) => {
+  const [cockpitOpen, setCockpitOpen] = useState(false);
+
   const stats = useMemo(() => ({
     total: ALL_REPORTS.length,
     favorites: getFavorites().length,
@@ -44,6 +47,19 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigate
 
   return (
     <div className="space-y-6">
+      {/* Bouton Cockpit Direction */}
+      <div className="flex items-center justify-end">
+        <button
+          onClick={() => setCockpitOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-slate-900 to-violet-900 text-white text-sm font-bold shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 transition-all"
+        >
+          <Tv className="w-4 h-4" />
+          Mode Cockpit Direction
+        </button>
+      </div>
+
+      <DirectionCockpit open={cockpitOpen} onClose={() => setCockpitOpen(false)} />
+
       {/* Briefing matinal IA */}
       <DailyBriefing onOpenAlerts={() => onNavigateSubPage?.('analysis_alerts' as any)} />
 
