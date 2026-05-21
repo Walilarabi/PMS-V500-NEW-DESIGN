@@ -30,9 +30,10 @@ const COLOR_MAP: Record<string, { text: string; iconBg: string; border: string }
 
 export interface ReportLibraryProps {
   initialSearch?: string;
+  onOpenReport?: (reportId: string) => void;
 }
 
-export const ReportLibrary: React.FC<ReportLibraryProps> = ({ initialSearch = '' }) => {
+export const ReportLibrary: React.FC<ReportLibraryProps> = ({ initialSearch = '', onOpenReport }) => {
   const [category, setCategory] = useState<ReportCategory | 'all'>('all');
   const [search, setSearch] = useState(initialSearch);
   const [favorites, setFavorites] = useState<string[]>(() => getFavorites());
@@ -50,8 +51,7 @@ export const ReportLibrary: React.FC<ReportLibraryProps> = ({ initialSearch = ''
 
   const handleOpenReport = (reportId: string) => {
     pushRecent(reportId);
-    // ReportViewer ouvrira ici — vague 2
-    alert(`Ouverture du rapport ${reportId} — implémentation Vague 2`);
+    onOpenReport?.(reportId);
   };
 
   return (

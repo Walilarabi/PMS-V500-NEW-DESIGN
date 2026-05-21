@@ -20,7 +20,7 @@ const COLOR_TEXT: Record<string, string> = {
   rose: 'text-rose-700', purple: 'text-purple-700', slate: 'text-slate-700', pink: 'text-pink-700',
 };
 
-export const RecentView: React.FC<{ onNavigateLibrary: () => void }> = ({ onNavigateLibrary }) => {
+export const RecentView: React.FC<{ onNavigateLibrary: () => void; onOpenReport?: (id: string) => void }> = ({ onNavigateLibrary, onOpenReport }) => {
   const [recent, setRecent] = useState(() => getRecent());
   const entries = useMemo(
     () => recent
@@ -69,7 +69,7 @@ export const RecentView: React.FC<{ onNavigateLibrary: () => void }> = ({ onNavi
           return (
             <button
               key={entry.reportId}
-              onClick={() => { pushRecent(entry.reportId); alert(`Ouverture ${entry.reportId} — Vague 2`); }}
+              onClick={() => { pushRecent(entry.reportId); onOpenReport?.(entry.reportId); }}
               className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
             >
               <div className={cn('w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0', COLOR_BG[color])}>

@@ -20,7 +20,7 @@ const COLOR_TEXT: Record<string, string> = {
   rose: 'text-rose-700', purple: 'text-purple-700', slate: 'text-slate-700', pink: 'text-pink-700',
 };
 
-export const SavedViewsView: React.FC<{ onNavigateLibrary: () => void }> = ({ onNavigateLibrary }) => {
+export const SavedViewsView: React.FC<{ onNavigateLibrary: () => void; onOpenReport?: (id: string) => void }> = ({ onNavigateLibrary, onOpenReport }) => {
   const [views, setViews] = useState(() => getSavedViews());
   const enriched = useMemo(
     () => views.map(v => ({ view: v, report: ALL_REPORTS.find(r => r.id === v.reportId) })).filter(e => !!e.report),
@@ -72,7 +72,7 @@ export const SavedViewsView: React.FC<{ onNavigateLibrary: () => void }> = ({ on
               <Icon className={cn('w-4 h-4', COLOR_TEXT[color])} />
             </div>
             <button
-              onClick={() => { pushRecent(view.reportId); alert(`Ouverture vue ${view.name} — Vague 2`); }}
+              onClick={() => { pushRecent(view.reportId); onOpenReport?.(view.reportId); }}
               className="flex-1 min-w-0 text-left"
             >
               <div className="text-sm font-semibold text-gray-900 truncate">{view.name}</div>

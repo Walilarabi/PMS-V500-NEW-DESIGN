@@ -20,7 +20,7 @@ const COLOR_BG: Record<string, string> = {
   rose: 'bg-rose-100', purple: 'bg-purple-100', slate: 'bg-slate-200', pink: 'bg-pink-100',
 };
 
-export const FavoritesView: React.FC<{ onNavigateLibrary: () => void }> = ({ onNavigateLibrary }) => {
+export const FavoritesView: React.FC<{ onNavigateLibrary: () => void; onOpenReport?: (id: string) => void }> = ({ onNavigateLibrary, onOpenReport }) => {
   const [favs, setFavs] = useState<string[]>(() => getFavorites());
 
   const reports = useMemo(
@@ -59,7 +59,7 @@ export const FavoritesView: React.FC<{ onNavigateLibrary: () => void }> = ({ onN
             className="group bg-white rounded-lg border border-gray-200 hover:border-violet-300 hover:shadow-sm transition-all"
           >
             <button
-              onClick={() => { pushRecent(r.id); alert(`Ouverture ${r.id} — Vague 2`); }}
+              onClick={() => { pushRecent(r.id); onOpenReport?.(r.id); }}
               className="w-full p-4 text-left"
             >
               <div className="flex items-start gap-3 mb-2">
@@ -84,7 +84,7 @@ export const FavoritesView: React.FC<{ onNavigateLibrary: () => void }> = ({ onN
                 Retirer des favoris
               </button>
               <button
-                onClick={() => { pushRecent(r.id); alert(`Ouverture ${r.id} — Vague 2`); }}
+                onClick={() => { pushRecent(r.id); onOpenReport?.(r.id); }}
                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700"
               >
                 Ouvrir

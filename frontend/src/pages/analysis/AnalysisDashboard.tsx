@@ -29,9 +29,10 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
 
 export interface AnalysisDashboardProps {
   onNavigateSubPage?: (page: 'analysis_library' | 'analysis_favorites' | 'analysis_recent' | 'analysis_saved') => void;
+  onOpenReport?: (reportId: string) => void;
 }
 
-export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigateSubPage }) => {
+export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigateSubPage, onOpenReport }) => {
   const stats = useMemo(() => ({
     total: ALL_REPORTS.length,
     favorites: getFavorites().length,
@@ -130,7 +131,7 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigate
             return (
               <button
                 key={r.id}
-                onClick={() => onNavigateSubPage?.('analysis_library')}
+                onClick={() => onOpenReport?.(r.id) ?? onNavigateSubPage?.('analysis_library')}
                 className="text-left p-3 rounded-lg border border-gray-200 hover:border-violet-300 hover:shadow-sm transition-all bg-gray-50/30"
               >
                 <div className="flex items-start gap-2.5">

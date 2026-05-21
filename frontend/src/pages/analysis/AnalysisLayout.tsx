@@ -20,6 +20,8 @@ import { ReportLibrary } from './ReportLibrary';
 import { FavoritesView } from './FavoritesView';
 import { RecentView } from './RecentView';
 import { SavedViewsView } from './SavedViewsView';
+import { ReportViewer } from './ReportViewer';
+import { pushRecent } from '../../services/analysis/report-prefs.service';
 
 type AnalysisPage = 'analysis' | 'analysis_library' | 'analysis_favorites' | 'analysis_recent' | 'analysis_saved';
 
@@ -38,7 +40,15 @@ export interface AnalysisLayoutProps {
 
 export const AnalysisLayout: React.FC<AnalysisLayoutProps> = ({ activePage, onNavigateSubPage }) => {
   const [search, setSearch] = useState('');
+  const [openReportId, setOpenReportId] = useState<string | null>(null);
   const cfg = TITLES[activePage] ?? TITLES.analysis;
+
+  const openReport = (reportId: string) => {
+    pushRecent(reportId);
+    setOpenReportId(reportId);
+  };
+
+  const closeReport = () => setOpenReportId(null);
 
   // Recherche → toujours rediriger vers la bibliothèque pour afficher les résultats
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -47,6 +57,17 @@ export const AnalysisLayout: React.FC<AnalysisLayoutProps> = ({ activePage, onNa
       onNavigateSubPage?.('analysis_library');
     }
   };
+
+  // Si un rapport est ouvert, on remplace tout le contenu par le ReportViewer
+  if (openReportId) {
+    return (
+      <div className="flex-1 flex flex-col bg-[#F9FAFB] overflow-hidden">
+        <div className="flex-1 overflow-auto p-6">
+          <ReportViewer reportId={openReportId} onBack={closeReport} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-[#F9FAFB] overflow-hidden">
@@ -71,11 +92,11 @@ export const AnalysisLayout: React.FC<AnalysisLayoutProps> = ({ activePage, onNa
       </div>
 
       <div className="flex-1 overflow-auto px-6 pb-6">
-        {activePage === 'analysis' && <AnalysisDashboard onNavigateSubPage={onNavigateSubPage} />}
-        {activePage === 'analysis_library' && <ReportLibrary initialSearch={search} />}
-        {activePage === 'analysis_favorites' && <FavoritesView onNavigateLibrary={() => onNavigateSubPage?.('analysis_library')} />}
-        {activePage === 'analysis_recent' && <RecentView onNavigateLibrary={() => onNavigateSubPage?.('analysis_library')} />}
-        {activePage === 'analysis_saved' && <SavedViewsView onNavigateLibrary={() => onNavigateSubPage?.('analysis_library')} />}
+        {activePage === 'analysis' && <AnalysisDashboard onNavigateSubPage={onNavigateSubPage} onOpenReport={openReport} />}
+        {activePage === 'analysis_library' && <ReportLibrary initialSearch={search} onOpenReport={openReport} />}
+        {activePage === 'analysis_favorites' && <FavoritesView onNavigateLibrary={() => onNavigateSubPage?.('analysis_library')} onOpenReport={openReport} />}
+        {activePage === 'analysis_recent' && <RecentView onNavigateLibrary={() => onNavigateSubPage?.('analysis_library')} onOpenReport={openReport} />}
+        {activePage === 'analysis_saved' && <SavedViewsView onNavigateLibrary={() => onNavigateSubPage?.('analysis_library')} onOpenReport={openReport} />}
       </div>
     </div>
   );
