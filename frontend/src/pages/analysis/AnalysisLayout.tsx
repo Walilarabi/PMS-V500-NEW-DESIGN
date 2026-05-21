@@ -13,7 +13,7 @@
  */
 
 import React, { useState } from 'react';
-import { BarChart3, Search } from 'lucide-react';
+import { BarChart3, Search, Cloud, CloudOff, Loader2 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { AnalysisDashboard } from './AnalysisDashboard';
 import { ReportLibrary } from './ReportLibrary';
@@ -23,6 +23,7 @@ import { SavedViewsView } from './SavedViewsView';
 import { AlertsCenterView } from './AlertsCenterView';
 import { ReportViewer } from './ReportViewer';
 import { pushRecent } from '../../services/analysis/report-prefs.service';
+import { useAnalysisPrefsSync } from '../../hooks/analysis/useAnalysisPrefsSync';
 
 type AnalysisPage = 'analysis' | 'analysis_library' | 'analysis_favorites' | 'analysis_recent' | 'analysis_saved' | 'analysis_alerts';
 
@@ -44,6 +45,7 @@ export const AnalysisLayout: React.FC<AnalysisLayoutProps> = ({ activePage, onNa
   const [search, setSearch] = useState('');
   const [openReportId, setOpenReportId] = useState<string | null>(null);
   const cfg = TITLES[activePage] ?? TITLES.analysis;
+  const syncStatus = useAnalysisPrefsSync();
 
   const openReport = (reportId: string) => {
     pushRecent(reportId);
@@ -79,16 +81,19 @@ export const AnalysisLayout: React.FC<AnalysisLayoutProps> = ({ activePage, onNa
           title={cfg.title}
           subtitle={cfg.subtitle}
           actions={
-            <form onSubmit={handleSearchSubmit} className="relative w-72">
-              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Rechercher un rapport… (Cmd+K)"
-                className="w-full pl-8 pr-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:outline-none"
-              />
-            </form>
+            <div className="flex items-center gap-3">
+              <SyncBadge status={syncStatus} />
+              <form onSubmit={handleSearchSubmit} className="relative w-72">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Rechercher un rapport… (Cmd+K)"
+                  className="w-full pl-8 pr-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-violet-500 focus:outline-none"
+                />
+              </form>
+            </div>
           }
         />
       </div>
@@ -104,3 +109,28 @@ export const AnalysisLayout: React.FC<AnalysisLayoutProps> = ({ activePage, onNa
     </div>
   );
 };
+
+function SyncBadge({ status }: { status: { state: 'idle' | 'syncing' | 'synced' | 'offline'; lastSyncAt: string | null } }) {
+  if (status.state === 'idle' || status.state === 'syncing') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Sync…
+      </span>
+    );
+  }
+  if (status.state === 'synced') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded" title={`Synchronisé à ${status.lastSyncAt ? new Date(status.lastSyncAt).toLocaleTimeString('fr-FR') : ''}`}>
+        <Cloud className="w-3 h-3" />
+        Sync OK
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded" title="Hors ligne : favoris/vues locaux uniquement">
+      <CloudOff className="w-3 h-3" />
+      Offline
+    </span>
+  );
+}
