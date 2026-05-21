@@ -26,6 +26,7 @@ const COLOR_MAP: Record<string, { text: string; iconBg: string; border: string }
   purple:   { text: 'text-purple-700',   iconBg: 'bg-purple-100',   border: 'border-purple-200' },
   slate:    { text: 'text-slate-700',    iconBg: 'bg-slate-200',    border: 'border-slate-200' },
   pink:     { text: 'text-pink-700',     iconBg: 'bg-pink-100',     border: 'border-pink-200' },
+  teal:     { text: 'text-teal-700',     iconBg: 'bg-teal-100',     border: 'border-teal-200' },
 };
 
 export interface ReportLibraryProps {
@@ -142,18 +143,23 @@ export const ReportLibrary: React.FC<ReportLibraryProps> = ({ initialSearch = ''
                       <Icon className={cn('w-4 h-4', colors.text)} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                        <span className="text-[9px] font-bold text-gray-400 tabular-nums">#{r.id}</span>
                         <span className={cn('text-[10px] font-bold uppercase tracking-wide', colors.text)}>
-                          {cat?.label}
+                          {cat?.shortLabel ?? cat?.label}
                         </span>
-                        {r.comparisons && r.comparisons.length > 0 && (
-                          <span className="text-[9px] text-gray-400 font-medium">
-                            · vs {r.comparisons.join(' · vs ')}
-                          </span>
-                        )}
+                        {r.flags?.fiscalLock && <span title="Verrouillé après clôture" className="text-[10px]">🔒</span>}
+                        {r.flags?.realtime && <span title="Temps réel" className="text-[10px]">⏱️</span>}
+                        {r.flags?.chart && <span title="Avec graphique" className="text-[10px]">📊</span>}
+                        {r.flags?.table && <span title="Avec tableau" className="text-[10px]">📄</span>}
                       </div>
                       <div className="text-sm font-bold text-gray-900 truncate">{r.title}</div>
                       <div className="text-[11px] text-gray-500 mt-1 line-clamp-2">{r.description}</div>
+                      {r.comparisons && r.comparisons.length > 0 && (
+                        <div className="text-[9px] text-gray-400 font-medium mt-1">
+                          Comparaisons : {r.comparisons.join(' · ')}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </button>

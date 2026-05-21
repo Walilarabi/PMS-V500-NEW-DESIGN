@@ -8,8 +8,8 @@
  */
 
 import React, { useMemo } from 'react';
-import { Star, Clock, FileText, BookOpen, ChevronRight, Sparkles } from 'lucide-react';
-import { ALL_REPORTS, REPORT_CATEGORIES, getReportsByCategory } from './reports/registry';
+import { Star, Clock, FileText, BookOpen, ChevronRight, Sparkles, Lock } from 'lucide-react';
+import { ALL_REPORTS, REPORT_CATEGORIES, getReportsByCategory, REPORT_STATS } from './reports/registry';
 import { getFavorites, getRecent, getSavedViews } from '../../services/analysis/report-prefs.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -25,6 +25,7 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
   purple:   { bg: 'bg-purple-50',   text: 'text-purple-700',   border: 'border-purple-200',   iconBg: 'bg-purple-100' },
   slate:    { bg: 'bg-slate-50',    text: 'text-slate-700',    border: 'border-slate-200',    iconBg: 'bg-slate-200' },
   pink:     { bg: 'bg-pink-50',     text: 'text-pink-700',     border: 'border-pink-200',     iconBg: 'bg-pink-100' },
+  teal:     { bg: 'bg-teal-50',     text: 'text-teal-700',     border: 'border-teal-200',     iconBg: 'bg-teal-100' },
 };
 
 export interface AnalysisDashboardProps {
@@ -93,9 +94,11 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigate
           </button>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {REPORT_CATEGORIES.map(cat => {
             const reports = getReportsByCategory(cat.id);
+            const fiscal = reports.filter(r => r.flags?.fiscalLock).length;
+            const charts = reports.filter(r => r.flags?.chart).length;
             const Icon = cat.icon;
             const colors = COLOR_MAP[cat.color] ?? COLOR_MAP.slate;
             return (
@@ -106,26 +109,50 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigate
                   'group text-left p-3 rounded-lg border transition-all hover:shadow-md',
                   colors.bg,
                   colors.border,
-                  'hover:border-opacity-100'
                 )}
               >
-                <div className={cn('w-8 h-8 rounded-md flex items-center justify-center mb-2', colors.iconBg)}>
-                  <Icon className={cn('w-4 h-4', colors.text)} />
+                <div className="flex items-start gap-2.5 mb-2">
+                  <div className={cn('w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0', colors.iconBg)}>
+                    <Icon className={cn('w-4 h-4', colors.text)} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className={cn('text-sm font-bold leading-tight', colors.text)}>{cat.shortLabel ?? cat.label}</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">{reports.length} rapport{reports.length > 1 ? 's' : ''}</div>
+                  </div>
                 </div>
-                <div className={cn('text-sm font-bold', colors.text)}>{cat.label}</div>
-                <div className="text-[10px] text-gray-500 mt-0.5">{reports.length} rapport{reports.length > 1 ? 's' : ''}</div>
+                <div className="text-[10px] text-gray-500 line-clamp-2 mb-2">{cat.description}</div>
+                <div className="flex items-center gap-2 text-[10px]">
+                  {charts > 0 && <span className="text-gray-500">📊 {charts}</span>}
+                  {fiscal > 0 && <span className="text-amber-700">🔒 {fiscal}</span>}
+                </div>
               </button>
             );
           })}
         </div>
       </div>
 
+      {/* Bandeau stats catalogue */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatBadge label="Total rapports" value={REPORT_STATS.total} icon="📁" />
+        <StatBadge label="Avec graphiques" value={REPORT_STATS.withChart} icon="📊" tone="emerald" />
+        <StatBadge label="Verrouillage fiscal" value={REPORT_STATS.fiscalLocked} icon="🔒" tone="amber" />
+        <StatBadge label="Temps réel" value={REPORT_STATS.realtime} icon="⏱️" tone="blue" />
+      </div>
+
       {/* Quick win — rapports suggérés */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-base font-bold text-gray-900 mb-1">Suggestions du moment</h3>
-        <p className="text-xs text-gray-500 mb-4">Rapports clés que votre équipe consulte le plus souvent</p>
+        <h3 className="text-base font-bold text-gray-900 mb-1">Rapports phares</h3>
+        <p className="text-xs text-gray-500 mb-4">Sélection clé pour démarrer · cliquez pour ouvrir</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {ALL_REPORTS.slice(0, 6).map(r => {
+          {[
+            getReportsByCategory('revenue_mgmt')[0],
+            getReportsByCategory('exploitation_fo')[4], // Planning du jour
+            getReportsByCategory('reservations')[2],    // Présents
+            getReportsByCategory('comptabilite')[0],
+            getReportsByCategory('statistiques')[0],    // Segmentation
+            getReportsByCategory('housekeeping')[0],
+          ].filter(Boolean).map(r => {
+            if (!r) return null;
             const Icon = r.icon;
             const catColors = COLOR_MAP[REPORT_CATEGORIES.find(c => c.id === r.category)?.color ?? 'slate'];
             return (
@@ -151,6 +178,28 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigate
     </div>
   );
 };
+
+function StatBadge({ label, value, icon, tone = 'default' }: {
+  label: string;
+  value: number;
+  icon: string;
+  tone?: 'default' | 'emerald' | 'amber' | 'blue';
+}) {
+  const color =
+    tone === 'emerald' ? 'border-emerald-200 bg-emerald-50/30' :
+    tone === 'amber' ? 'border-amber-200 bg-amber-50/30' :
+    tone === 'blue' ? 'border-blue-200 bg-blue-50/30' :
+    'border-gray-200 bg-white';
+  return (
+    <div className={cn('rounded-lg border p-3 flex items-center gap-3', color)}>
+      <div className="text-2xl">{icon}</div>
+      <div>
+        <div className="text-xl font-extrabold text-gray-900">{value}</div>
+        <div className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">{label}</div>
+      </div>
+    </div>
+  );
+}
 
 function ShortcutCard({
   icon, label, value, sub, onClick,

@@ -13,11 +13,13 @@ const COLOR_BG: Record<string, string> = {
   violet: 'bg-violet-100', blue: 'bg-blue-100', emerald: 'bg-emerald-100',
   amber: 'bg-amber-100', orange: 'bg-orange-100', cyan: 'bg-cyan-100',
   rose: 'bg-rose-100', purple: 'bg-purple-100', slate: 'bg-slate-200', pink: 'bg-pink-100',
+  teal: 'bg-teal-100',
 };
 const COLOR_TEXT: Record<string, string> = {
   violet: 'text-violet-700', blue: 'text-blue-700', emerald: 'text-emerald-700',
   amber: 'text-amber-700', orange: 'text-orange-700', cyan: 'text-cyan-700',
   rose: 'text-rose-700', purple: 'text-purple-700', slate: 'text-slate-700', pink: 'text-pink-700',
+  teal: 'text-teal-700',
 };
 
 export const SavedViewsView: React.FC<{ onNavigateLibrary: () => void; onOpenReport?: (id: string) => void }> = ({ onNavigateLibrary, onOpenReport }) => {

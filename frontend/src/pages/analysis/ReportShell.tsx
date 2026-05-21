@@ -55,6 +55,7 @@ const COLOR_MAP: Record<string, { text: string; iconBg: string }> = {
   purple: { text: 'text-purple-700', iconBg: 'bg-purple-100' },
   slate: { text: 'text-slate-700', iconBg: 'bg-slate-200' },
   pink: { text: 'text-pink-700', iconBg: 'bg-pink-100' },
+  teal: { text: 'text-teal-700', iconBg: 'bg-teal-100' },
 };
 
 export const ReportShell: React.FC<ReportShellProps> = ({
