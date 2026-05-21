@@ -9,7 +9,7 @@
  * Les renderers sont enregistrés dans REPORT_RENDERERS (vague 3+).
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { Construction } from 'lucide-react';
 import { getReportById, type ReportDefinition } from './reports/registry';
 import { ReportShell, type ReportFilters, type Granularity, type ComparisonMode } from './ReportShell';
@@ -17,6 +17,7 @@ import { useReportData } from '../../hooks/analysis/useReportData';
 import { REPORT_RENDERERS } from './reports/renderers';
 import { exportReportToPDF, exportReportToExcel } from '../../services/analysis/report-export.service';
 import { useConfigStore } from '../../store/configStore';
+import { ReportSkeleton } from '../../components/analysis/ReportSkeleton';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -112,13 +113,17 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ reportId, initialFil
     >
       {!Renderer ? (
         <UnimplementedReport reportId={reportId} title={report.title} source={query.data?.source} />
+      ) : query.isLoading ? (
+        <ReportSkeleton variant="full" />
       ) : (
-        <Renderer
-          data={query.data?.rows ?? []}
-          filters={filters}
-          isLoading={query.isLoading}
-          source={query.data?.source ?? 'mock'}
-        />
+        <Suspense fallback={<ReportSkeleton variant="compact" />}>
+          <Renderer
+            data={query.data?.rows ?? []}
+            filters={filters}
+            isLoading={query.isLoading}
+            source={query.data?.source ?? 'mock'}
+          />
+        </Suspense>
       )}
       {query.error && (
         <div className="mt-4 bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700">

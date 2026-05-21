@@ -13,6 +13,7 @@ import { ALL_REPORTS, REPORT_CATEGORIES, getReportsByCategory, REPORT_STATS } fr
 import { getFavorites, getRecent, getSavedViews } from '../../services/analysis/report-prefs.service';
 import { DailyBriefing } from './DailyBriefing';
 import { DirectionCockpit } from './cockpit/DirectionCockpit';
+import { usePrefetchKeyReports } from '../../hooks/analysis/usePrefetchReports';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -37,6 +38,9 @@ export interface AnalysisDashboardProps {
 
 export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigateSubPage, onOpenReport }) => {
   const [cockpitOpen, setCockpitOpen] = useState(false);
+
+  // Prefetch des 4 rapports phares en arrière-plan → ouverture instantanée
+  usePrefetchKeyReports();
 
   const stats = useMemo(() => ({
     total: ALL_REPORTS.length,
