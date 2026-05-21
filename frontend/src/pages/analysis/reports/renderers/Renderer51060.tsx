@@ -7,6 +7,8 @@ import { MapPin, Globe, BedDouble, Users } from 'lucide-react';
 import { KpiCard } from '../../../../components/analysis/KpiCard';
 import { DonutChart } from '../../../../components/analysis/DonutChart';
 import { DataTable } from '../../../../components/analysis/DataTable';
+import { InsightsPanel } from '../../../../components/analysis/insights/InsightsPanel';
+import { computeInsights51060 } from '../../../../components/analysis/insights/computers';
 import type { ReportRenderer } from '../renderers';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -47,8 +49,11 @@ export const Renderer51060: ReportRenderer = ({ data }) => {
     { accessorKey: 'part_pct', header: 'Part nuitées', cell: ({ getValue }) => `${Number(getValue() ?? 0).toFixed(1)}%` },
   ];
 
+  const insights = useMemo(() => computeInsights51060(rows), [rows]);
+
   return (
     <div className="space-y-4">
+      <InsightsPanel insights={insights} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard label="Pays distincts" value={stats.paysCount} icon={Globe} tone="violet" />
         <KpiCard label="Nuitées totales" value={stats.nights} icon={BedDouble} tone="blue" />

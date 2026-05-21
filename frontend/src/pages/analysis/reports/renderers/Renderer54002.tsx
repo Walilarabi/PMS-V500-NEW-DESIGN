@@ -9,6 +9,8 @@ import {
 import { BedDouble, DollarSign, BarChart3, Users } from 'lucide-react';
 import { KpiCard } from '../../../../components/analysis/KpiCard';
 import { DataTable } from '../../../../components/analysis/DataTable';
+import { InsightsPanel } from '../../../../components/analysis/insights/InsightsPanel';
+import { computeInsights54002 } from '../../../../components/analysis/insights/computers';
 import type { ReportRenderer } from '../renderers';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -50,8 +52,11 @@ export const Renderer54002: ReportRenderer = ({ data }) => {
     { accessorKey: 'adr', header: 'ADR', cell: ({ getValue }) => <span className="font-bold text-violet-700">{Math.round(Number(getValue() ?? 0))}€</span> },
   ];
 
+  const insights = useMemo(() => computeInsights54002(rows), [rows]);
+
   return (
     <div className="space-y-4">
+      <InsightsPanel insights={insights} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard label="CA Total" value={`${Math.round(stats.total / 1000)}K€`} icon={DollarSign} tone="emerald" />
         <KpiCard label="Nuitées" value={stats.nights} icon={BedDouble} tone="blue" />

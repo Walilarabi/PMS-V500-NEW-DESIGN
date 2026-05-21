@@ -9,6 +9,8 @@ import {
 import { TrendingUp, Calendar, Activity, Hash } from 'lucide-react';
 import { KpiCard } from '../../../../components/analysis/KpiCard';
 import { DataTable } from '../../../../components/analysis/DataTable';
+import { InsightsPanel } from '../../../../components/analysis/insights/InsightsPanel';
+import { computeInsights54004 } from '../../../../components/analysis/insights/computers';
 import type { ReportRenderer } from '../renderers';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -48,8 +50,11 @@ export const Renderer54004: ReportRenderer = ({ data }) => {
     { accessorKey: 'part_pct', header: 'Part', cell: ({ getValue }) => `${Number(getValue() ?? 0).toFixed(1)}%` },
   ];
 
+  const insights = useMemo(() => computeInsights54004(rows), [rows]);
+
   return (
     <div className="space-y-4">
+      <InsightsPanel insights={insights} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard label="Réservations" value={stats.total} icon={Hash} tone="violet" />
         <KpiCard label="CA total" value={`${Math.round(stats.ca / 1000)}K€`} icon={Activity} tone="emerald" />

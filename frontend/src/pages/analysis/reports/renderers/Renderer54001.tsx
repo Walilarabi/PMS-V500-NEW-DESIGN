@@ -7,6 +7,8 @@ import { TrendingUp, DollarSign, BedDouble, BarChart3 } from 'lucide-react';
 import { KpiCard } from '../../../../components/analysis/KpiCard';
 import { TrendChart } from '../../../../components/analysis/TrendChart';
 import { DataTable } from '../../../../components/analysis/DataTable';
+import { InsightsPanel } from '../../../../components/analysis/insights/InsightsPanel';
+import { computeInsights54001 } from '../../../../components/analysis/insights/computers';
 import type { ReportRenderer } from '../renderers';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -70,8 +72,11 @@ export const Renderer54001: ReportRenderer = ({ data, filters }) => {
     } satisfies ColumnDef<Row>] : []),
   ];
 
+  const insights = useMemo(() => computeInsights54001(rows), [rows]);
+
   return (
     <div className="space-y-4">
+      <InsightsPanel insights={insights} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard
           label="RevPAR moyen"

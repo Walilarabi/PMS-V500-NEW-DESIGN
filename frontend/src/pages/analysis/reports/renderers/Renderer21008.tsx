@@ -7,6 +7,8 @@ import { Calendar, Plane, Users, BedDouble } from 'lucide-react';
 import { KpiCard } from '../../../../components/analysis/KpiCard';
 import { TrendChart } from '../../../../components/analysis/TrendChart';
 import { DataTable } from '../../../../components/analysis/DataTable';
+import { InsightsPanel } from '../../../../components/analysis/insights/InsightsPanel';
+import { computeInsights21008 } from '../../../../components/analysis/insights/computers';
 import type { ReportRenderer } from '../renderers';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -46,8 +48,11 @@ export const Renderer21008: ReportRenderer = ({ data }) => {
     { accessorKey: 'occupation_pct', header: 'Occupation', cell: ({ getValue }) => `${Number(getValue() ?? 0).toFixed(1)}%` },
   ];
 
+  const insights = useMemo(() => computeInsights21008(rows), [rows]);
+
   return (
     <div className="space-y-4">
+      <InsightsPanel insights={insights} />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard label="Arrivées total" value={stats.arrivees} icon={Plane}    tone="emerald" />
         <KpiCard label="Départs total"  value={stats.departs}  icon={Plane}    tone="blue" />

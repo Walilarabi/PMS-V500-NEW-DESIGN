@@ -13,6 +13,9 @@ import { Renderer54001 } from './renderers/Renderer54001';
 import { Renderer54002 } from './renderers/Renderer54002';
 import { Renderer54004 } from './renderers/Renderer54004';
 import { Renderer51060 } from './renderers/Renderer51060';
+import { Renderer51010 } from './renderers/Renderer51010';
+import { Renderer41003 } from './renderers/Renderer41003';
+import { Renderer61001 } from './renderers/Renderer61001';
 
 export interface ReportRendererProps {
   data: Array<Record<string, unknown>>;
@@ -31,6 +34,9 @@ export const REPORT_RENDERERS: Record<string, ReportRenderer> = {
   '54002': Renderer54002,
   '54004': Renderer54004,
   '51060': Renderer51060,
+  '51010': Renderer51010,
+  '41003': Renderer41003,
+  '61001': Renderer61001,
 };
 
 export function registerRenderer(reportId: string, renderer: ReportRenderer) {
