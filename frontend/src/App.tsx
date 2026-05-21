@@ -19,6 +19,7 @@ import { DistributionAnalytics } from '@/src/pages/revenue/DistributionAnalytics
 import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
 import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
 import { FinanceView }      from '@/src/pages/FinanceView';
+import { FinanceLayout }    from '@/src/pages/finance/FinanceLayout';
 import { AnalysisLayout }   from '@/src/pages/analysis/AnalysisLayout';
 import { FlowboardView }    from '@/src/pages/FlowboardView';
 import { SettingsView }     from '@/src/pages/SettingsView';
@@ -109,17 +110,18 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'rev_yield':      return <YieldAndRules />;
 
     // ── FINANCE ───────────────────────────────────────────────────────────────
-    case 'facturation':        return <FacturationView />;
-    case 'proforma':           return <Placeholder title="Proforma / Devis" icon="📋" />;
-    case 'caisse':             return <Placeholder title="Petite caisse" icon="💰" />;
-    case 'impayes':            return <Placeholder title="Impayés / Débiteurs" icon="⚠️" />;
-    case 'cloture':            return <Placeholder title="Clôture & Audit" icon="🔐" />;
-    case 'fin_reconciliation': return <ReconciliationView />;
-    case 'tva2026':            return <Placeholder title="TVA 2026 & e-facture" icon="🧾" />;
-    case 'paiements_securises':return <Placeholder title="Paiements sécurisés" icon="🛡️" />;
-    case 'comptabilite':       return <Placeholder title="Comptabilité" icon="📒" />;
-    case 'cash_management':    return <Placeholder title="Cash Management" icon="💵" />;
-    case 'finance':            return <FinanceView activeTab="facturation" />;
+    case 'finance':
+    case 'facturation':
+    case 'proforma':
+    case 'caisse':
+    case 'impayes':
+    case 'cloture':
+    case 'fin_reconciliation':
+    case 'tva2026':
+    case 'paiements_securises':
+    case 'comptabilite':
+    case 'cash_management':
+      return <FinanceLayout activePage={page as any} />;
 
     // ── ANALYSE ───────────────────────────────────────────────────────────────
     case 'analysis':

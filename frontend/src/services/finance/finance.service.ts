@@ -1,0 +1,181 @@
+/**
+ * FLOWTYM — Service Finance
+ *
+ * Façade pour toutes les interactions Supabase du module Finance.
+ */
+
+import { supabase } from '../../lib/supabase';
+
+// ─── KPIs Dashboard ──────────────────────────────────────────────────────
+
+export interface FinanceDashboardKpis {
+  ca_month: number;
+  revpar: number;
+  encaissements_30d: number;
+  debiteurs_total: number;
+  tva_due: number;
+  last_closure: string | null;
+  nights_sold: number;
+  capacity: number;
+}
+
+export async function fetchFinanceKpis(): Promise<FinanceDashboardKpis | null> {
+  try {
+    const { data, error } = await (supabase.rpc as any)('finance_dashboard_kpis');
+    if (error) return null;
+    return data as FinanceDashboardKpis;
+  } catch {
+    return null;
+  }
+}
+
+// ─── TVA Snapshots ───────────────────────────────────────────────────────
+
+export interface TvaSnapshot {
+  id: string;
+  hotel_id: string;
+  period_year: number;
+  period_month: number;
+  period_start: string;
+  period_end: string;
+  encours_debut: number;
+  encours_fin: number;
+  ca_debits: number;
+  ca_taxable: number;
+  base_10: number;
+  tva_10: number;
+  base_55: number;
+  tva_55: number;
+  base_20: number;
+  tva_20: number;
+  base_21: number;
+  tva_21: number;
+  total_tva: number;
+  fiscal_stamp: string;
+  payload_hash: string;
+  locked: boolean;
+  created_at: string;
+}
+
+export async function listTvaSnapshots(): Promise<TvaSnapshot[]> {
+  const { data, error } = await supabase
+    .from('tva_snapshots')
+    .select('*')
+    .order('period_year', { ascending: false })
+    .order('period_month', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as TvaSnapshot[];
+}
+
+export async function getTvaSnapshot(year: number, month: number): Promise<TvaSnapshot | null> {
+  const { data, error } = await supabase
+    .from('tva_snapshots')
+    .select('*')
+    .eq('period_year', year)
+    .eq('period_month', month)
+    .maybeSingle();
+  if (error) return null;
+  return data as TvaSnapshot | null;
+}
+
+export async function generateTvaSnapshot(year: number, month: number): Promise<TvaSnapshot> {
+  const { data, error } = await (supabase.rpc as any)('generate_tva_snapshot', {
+    p_year: year, p_month: month,
+  });
+  if (error) throw error;
+  return data as TvaSnapshot;
+}
+
+// ─── Débiteurs ───────────────────────────────────────────────────────────
+
+export interface DebtorAged {
+  id: string;
+  hotel_id: string;
+  reservation_id: string | null;
+  guest_name: string;
+  guest_email: string | null;
+  guest_phone: string | null;
+  company_name: string | null;
+  reference: string | null;
+  amount_due: number;
+  amount_paid: number;
+  balance: number;
+  due_date: string;
+  days_overdue: number;
+  aging_bucket: 'paid' | 'current' | 'overdue_30' | 'overdue_60' | 'overdue_90' | 'overdue_90_plus';
+  status: 'open' | 'partial' | 'paid' | 'written_off' | 'disputed';
+  last_reminder_at: string | null;
+  reminder_count: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listDebtors(): Promise<DebtorAged[]> {
+  const { data, error } = await supabase
+    .from('debtors_aged')
+    .select('*')
+    .order('days_overdue', { ascending: false });
+  if (error) return [];
+  return (data ?? []) as DebtorAged[];
+}
+
+// ─── Closure ─────────────────────────────────────────────────────────────
+
+export interface ClosureWorkflow {
+  id: string;
+  hotel_id: string;
+  closure_date: string;
+  state: 'pending' | 'in_progress' | 'completed' | 'failed' | 'rolled_back';
+  step_current: number;
+  steps_done: any[];
+  steps_errors: Record<string, string>;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  initiated_by: string | null;
+  notes: string | null;
+}
+
+export async function listClosures(limit = 30): Promise<ClosureWorkflow[]> {
+  const { data, error } = await supabase
+    .from('closure_workflow')
+    .select('*')
+    .order('closure_date', { ascending: false })
+    .limit(limit);
+  if (error) return [];
+  return (data ?? []) as ClosureWorkflow[];
+}
+
+// ─── Proforma ────────────────────────────────────────────────────────────
+
+export interface ProformaQuote {
+  id: string;
+  hotel_id: string;
+  quote_number: string;
+  reservation_id: string | null;
+  guest_name: string;
+  guest_email: string | null;
+  company_name: string | null;
+  company_siret: string | null;
+  issue_date: string;
+  valid_until: string;
+  total_ht: number;
+  total_tva: number;
+  total_ttc: number;
+  lines: any[];
+  status: 'draft' | 'sent' | 'accepted' | 'expired' | 'converted' | 'cancelled';
+  converted_invoice_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function listProformas(): Promise<ProformaQuote[]> {
+  const { data, error } = await supabase
+    .from('proforma_quotes')
+    .select('*')
+    .order('issue_date', { ascending: false });
+  if (error) return [];
+  return (data ?? []) as ProformaQuote[];
+}
