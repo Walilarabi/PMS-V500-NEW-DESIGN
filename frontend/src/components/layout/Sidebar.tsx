@@ -10,7 +10,7 @@ import {
   PieChart, Activity, BookOpen, Database,
   ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
   Cpu, Bell, ShieldCheck, Upload, ClipboardList, HardDrive,
-  Hotel, Globe, Tag, Coffee, KeyRound, Star, FolderOpen, FileCode2, Send,
+  Hotel, Globe, Tag, Coffee, KeyRound, Star, FolderOpen, FileCode2, Send, Landmark,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -132,7 +132,8 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
         { id: 'impayes',           label: 'Impayés / Débiteurs',  icon: AlertTriangle },
         { id: 'fin_dunning',       label: 'Relances automatiques',icon: Send },
         { id: 'cloture',           label: 'Clôture journalière',  icon: Lock },
-        { id: 'fin_reconciliation',label: 'Rapprochement bancaire',icon: RefreshCw },
+        { id: 'fin_reconciliation',label: 'Rapprochement OTA',    icon: RefreshCw },
+        { id: 'fin_bank_reco',     label: 'Relevés bancaires CAMT',icon: Landmark },
         { id: 'fin_einvoice',      label: 'E-facture & PPF',      icon: FileCode2 },
         { id: 'tva2026',           label: 'TVA 2026 & e-facture', icon: Percent },
         { id: 'paiements_securises',label: 'Paiements sécurisés', icon: ShieldCheck },
@@ -244,7 +245,7 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   rev_promotions: 'revenue', rms: 'revenue', rms_history: 'revenue',
   finance: 'finance', facturation: 'finance', fin_folios: 'finance', proforma: 'finance',
   caisse: 'finance', impayes: 'finance', fin_dunning: 'finance', cloture: 'finance',
-  fin_reconciliation: 'finance', fin_einvoice: 'finance', tva2026: 'finance',
+  fin_reconciliation: 'finance', fin_bank_reco: 'finance', fin_einvoice: 'finance', tva2026: 'finance',
   paiements_securises: 'finance', comptabilite: 'finance', cash_management: 'finance',
   analysis: 'analysis', kpi: 'analysis', performance: 'analysis',
   forecast: 'analysis', rapports: 'analysis', rapports_exploitation: 'analysis',

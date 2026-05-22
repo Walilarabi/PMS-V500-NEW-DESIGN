@@ -61,6 +61,7 @@ export type PageId =
   | 'fin_dunning'
   | 'cloture'
   | 'fin_reconciliation'
+  | 'fin_bank_reco'
   | 'fin_einvoice'
   | 'tva2026'
   | 'paiements_securises'
