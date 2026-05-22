@@ -10,6 +10,7 @@
 
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { CompetitiveWatchLayout } from '../../components/rms/competitive-watch/CompetitiveWatchLayout';
 import { CompetitiveWatchHeader } from '../../components/rms/competitive-watch/CompetitiveWatchHeader';
 import { LighthouseFiltersBar } from '../../components/rms/competitive-watch/LighthouseFiltersBar';
@@ -32,6 +33,7 @@ export const CompetitiveWatchPage: React.FC = () => {
   const [period, setPeriod] = useState<ComparePeriodKey>('hier');
   const [marketDay, setMarketDay] = useState<string>(MARKET_SELECTED_DATE);
   const [comparisonDay, setComparisonDay] = useState<string>(COMPARISON_SELECTED_DATE);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const isMarket = view === 'market';
 
@@ -51,8 +53,28 @@ export const CompetitiveWatchPage: React.FC = () => {
       {/* Filtres Lighthouse */}
       <LighthouseFiltersBar />
 
-      {/* Sélecteur de vue */}
-      <CompetitiveTabs value={view} onChange={setView} />
+      {/* Sélecteur de vue + repli du volet droit */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <CompetitiveTabs value={view} onChange={setView} />
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed((c) => !c)}
+          aria-pressed={sidebarCollapsed}
+          className="h-9 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center gap-2 text-[12.5px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-violet-600 dark:hover:text-violet-300 transition-colors"
+        >
+          {sidebarCollapsed ? (
+            <>
+              <PanelRightOpen className="w-4 h-4" />
+              Afficher le volet
+            </>
+          ) : (
+            <>
+              <PanelRightClose className="w-4 h-4" />
+              Replier le volet
+            </>
+          )}
+        </button>
+      </div>
 
       {/* KPI marché */}
       <MarketKpiGrid />
@@ -68,13 +90,20 @@ export const CompetitiveWatchPage: React.FC = () => {
             transition={{ duration: 0.2 }}
             className="flex flex-col gap-4"
           >
-            <div className="flex flex-col lg:flex-row gap-4">
-              <div className="flex-1 min-w-0">
+            <div className="flex flex-col lg:flex-row gap-4 items-start">
+              <div className="flex-1 min-w-0 w-full">
                 <MarketMainChart selectedLabel={marketDay} onSelectDay={setMarketDay} />
               </div>
-              <div className="w-full lg:w-[340px] shrink-0">
-                <ComparisonSidebar variant="market" period={period} selectedLabel={marketDay} />
-              </div>
+              {!sidebarCollapsed && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                  className="w-full lg:w-[340px] shrink-0"
+                >
+                  <ComparisonSidebar variant="market" period={period} selectedLabel={marketDay} />
+                </motion.div>
+              )}
             </div>
             <DayDetailPanel variant="market" period={period} selectedLabel={marketDay} />
           </motion.div>
@@ -87,8 +116,8 @@ export const CompetitiveWatchPage: React.FC = () => {
             transition={{ duration: 0.2 }}
             className="flex flex-col gap-4"
           >
-            <div className="flex flex-col lg:flex-row gap-4">
-              <div className="flex-1 min-w-0">
+            <div className="flex flex-col lg:flex-row gap-4 items-start">
+              <div className="flex-1 min-w-0 w-full">
                 <DynamicComparisonChart
                   period={period}
                   onPeriodChange={setPeriod}
@@ -96,13 +125,20 @@ export const CompetitiveWatchPage: React.FC = () => {
                   onSelectDay={setComparisonDay}
                 />
               </div>
-              <div className="w-full lg:w-[340px] shrink-0">
-                <ComparisonSidebar
-                  variant="comparison"
-                  period={period}
-                  selectedLabel={comparisonDay}
-                />
-              </div>
+              {!sidebarCollapsed && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.25, ease: 'easeOut' }}
+                  className="w-full lg:w-[340px] shrink-0"
+                >
+                  <ComparisonSidebar
+                    variant="comparison"
+                    period={period}
+                    selectedLabel={comparisonDay}
+                  />
+                </motion.div>
+              )}
             </div>
 
             {/* Blocs bas de page */}
