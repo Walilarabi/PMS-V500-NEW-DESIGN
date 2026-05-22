@@ -17,6 +17,15 @@ import {
   getSatisfactionOverview,
   type GuestFlagInput,
 } from './risk.service';
+import {
+  listAutomations,
+  saveAutomation,
+  deleteAutomation,
+  toggleAutomation,
+  previewAutomation,
+  runAutomation,
+  getAutomationRuns,
+} from './automation.service';
 import { useGuests } from '@/src/domains/guests/hooks';
 
 // ─── Companies (Wave C3) ──────────────────────────────────────────────────────
@@ -130,5 +139,72 @@ export function useSatisfactionOverview() {
     queryKey: ['satisfaction-overview'],
     queryFn: getSatisfactionOverview,
     staleTime: 30_000,
+  });
+}
+
+// ─── Automation engine (Wave C7) ──────────────────────────────────────────────
+
+export function useAutomations() {
+  return useQuery({
+    queryKey: ['automations'],
+    queryFn: listAutomations,
+    staleTime: 20_000,
+  });
+}
+
+export function useSaveAutomation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: saveAutomation,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['automations'] }),
+  });
+}
+
+export function useDeleteAutomation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteAutomation,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['automations'] }),
+  });
+}
+
+export function useToggleAutomation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      toggleAutomation(id, enabled),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['automations'] }),
+  });
+}
+
+export function useRunAutomation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: runAutomation,
+    onSuccess: (_res, id) => {
+      qc.invalidateQueries({ queryKey: ['automations'] });
+      qc.invalidateQueries({ queryKey: ['automation-runs', id] });
+      qc.invalidateQueries({ queryKey: ['guests'] });
+    },
+  });
+}
+
+export function useAutomationPreview(
+  triggerType: string,
+  config: Record<string, unknown>,
+) {
+  return useQuery({
+    queryKey: ['automation-preview', triggerType, config],
+    queryFn: () => previewAutomation(triggerType, config),
+    staleTime: 10_000,
+  });
+}
+
+export function useAutomationRuns(id: string | null) {
+  return useQuery({
+    queryKey: ['automation-runs', id],
+    queryFn: () => getAutomationRuns(id as string),
+    enabled: !!id,
+    staleTime: 15_000,
   });
 }

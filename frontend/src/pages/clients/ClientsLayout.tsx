@@ -25,6 +25,7 @@ import { CompaniesView } from './CompaniesView';
 import { TiersView } from './TiersView';
 import { SegmentsView } from './SegmentsView';
 import { BlacklistView } from './BlacklistView';
+import { AutomationView } from './AutomationView';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -35,7 +36,8 @@ export type ClientsPage =
   | 'clients_merge'
   | 'clients_documents'
   | 'clients_blacklist'
-  | 'clients_tiers';
+  | 'clients_tiers'
+  | 'clients_automation';
 
 const PAGE_META: Record<ClientsPage, { title: string; subtitle: string }> = {
   clients:           { title: 'Fiches Clients',           subtitle: 'Base clients enrichie depuis les réservations' },
@@ -45,6 +47,7 @@ const PAGE_META: Record<ClientsPage, { title: string; subtitle: string }> = {
   clients_documents: { title: 'Documents & signatures',   subtitle: 'Pièces d\'identité et contrats' },
   clients_blacklist: { title: 'Blacklist / Watchlist',    subtitle: 'Clients signalés et historique incidents' },
   clients_tiers:     { title: 'Tiers / Prescripteurs',   subtitle: 'Partenaires, apporteurs d\'affaires' },
+  clients_automation:{ title: 'Automatisations CRM',     subtitle: 'Règles déclencheur → action sur la base clients' },
 };
 
 // Placeholder générique pour les pages non encore implémentées
@@ -106,6 +109,9 @@ export const ClientsLayout: React.FC<ClientsLayoutProps> = ({ activePage }) => {
 
       case 'clients_blacklist':
         return <BlacklistView />;
+
+      case 'clients_automation':
+        return <AutomationView />;
 
       case 'clients_tiers':
         return <TiersView />;

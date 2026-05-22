@@ -36,6 +36,7 @@ export type PageId =
   | 'clients_documents'
   | 'clients_blacklist'
   | 'clients_tiers'
+  | 'clients_automation'
   // ── 5. REVENUE ─────────────────────────────────────────────────────────────
   // Pilotage
   | 'revenue'              // Dashboard Revenue

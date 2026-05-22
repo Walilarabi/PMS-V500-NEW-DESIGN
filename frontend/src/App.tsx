@@ -99,6 +99,7 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'clients_documents':
     case 'clients_blacklist':
     case 'clients_tiers':
+    case 'clients_automation':
       return <ClientsLayout activePage={page as ClientsPage} />;
 
     // ── REVENUE ───────────────────────────────────────────────────────────────
