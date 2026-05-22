@@ -66,6 +66,7 @@ export type PageId =
   | 'tva2026'
   | 'paiements_securises'
   | 'comptabilite'
+  | 'fin_audit_chain'
   | 'cash_management'
   // ── 7. ANALYSE ─────────────────────────────────────────────────────────────
   | 'analysis'

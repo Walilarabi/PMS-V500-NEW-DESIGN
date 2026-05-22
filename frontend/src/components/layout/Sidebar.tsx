@@ -11,6 +11,7 @@ import {
   ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
   Cpu, Bell, ShieldCheck, Upload, ClipboardList, HardDrive,
   Hotel, Globe, Tag, Coffee, KeyRound, Star, FolderOpen, FileCode2, Send, Landmark,
+  Fingerprint,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -138,6 +139,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
         { id: 'tva2026',           label: 'TVA 2026 & e-facture', icon: Percent },
         { id: 'paiements_securises',label: 'Paiements sécurisés', icon: ShieldCheck },
         { id: 'comptabilite',      label: 'Comptabilité',         icon: BookOpen },
+        { id: 'fin_audit_chain',   label: 'Audit chaîné SHA-256', icon: Fingerprint },
         { id: 'cash_management',   label: 'Cash Management',      icon: Banknote },
       ],
     },
@@ -246,7 +248,8 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   finance: 'finance', facturation: 'finance', fin_folios: 'finance', proforma: 'finance',
   caisse: 'finance', impayes: 'finance', fin_dunning: 'finance', cloture: 'finance',
   fin_reconciliation: 'finance', fin_bank_reco: 'finance', fin_einvoice: 'finance', tva2026: 'finance',
-  paiements_securises: 'finance', comptabilite: 'finance', cash_management: 'finance',
+  paiements_securises: 'finance', comptabilite: 'finance',
+  fin_audit_chain: 'finance', cash_management: 'finance',
   analysis: 'analysis', kpi: 'analysis', performance: 'analysis',
   forecast: 'analysis', rapports: 'analysis', rapports_exploitation: 'analysis',
   rapports_reservations: 'analysis', rapports_backoffice: 'analysis',

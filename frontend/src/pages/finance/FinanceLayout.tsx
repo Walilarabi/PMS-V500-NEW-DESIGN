@@ -26,6 +26,7 @@ import { FoliosView } from './FoliosView';
 import { EInvoiceView } from './EInvoiceView';
 import { DunningView } from './DunningView';
 import { BankReconciliationView } from './BankReconciliationView';
+import { AuditChainView } from './AuditChainView';
 import { fetchFinanceKpis, type FinanceDashboardKpis } from '../../services/finance/finance.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -45,6 +46,7 @@ export type FinancePage =
   | 'tva2026'
   | 'paiements_securises'
   | 'comptabilite'
+  | 'fin_audit_chain'
   | 'cash_management';
 
 const PAGE_TITLES: Record<FinancePage, { title: string; subtitle: string }> = {
@@ -62,6 +64,7 @@ const PAGE_TITLES: Record<FinancePage, { title: string; subtitle: string }> = {
   tva2026:             { title: 'TVA 2026 & e-facture',       subtitle: 'Régime encaissements + PPF' },
   paiements_securises: { title: 'Paiements sécurisés',        subtitle: 'Pré-autorisations & 3DS' },
   comptabilite:        { title: 'Comptabilité',               subtitle: 'Journal des écritures et export FEC' },
+  fin_audit_chain:     { title: 'Journal d\'audit chaîné',     subtitle: 'Traçabilité infalsifiable scellée SHA-256' },
   cash_management:     { title: 'Cash Management',            subtitle: 'Trésorerie et flux financiers' },
 };
 
@@ -120,6 +123,7 @@ export const FinanceLayout: React.FC<FinanceLayoutProps> = ({ activePage }) => {
           />
         )}
         {activePage === 'comptabilite' && <AuditLogView />}
+        {activePage === 'fin_audit_chain' && <AuditChainView />}
         {activePage === 'cash_management' && (
           <PlaceholderModule
             icon={TrendingUp}

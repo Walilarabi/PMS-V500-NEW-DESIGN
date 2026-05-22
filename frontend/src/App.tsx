@@ -130,6 +130,7 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'tva2026':
     case 'paiements_securises':
     case 'comptabilite':
+    case 'fin_audit_chain':
     case 'cash_management':
       return <FinanceLayout activePage={page as any} />;
 
