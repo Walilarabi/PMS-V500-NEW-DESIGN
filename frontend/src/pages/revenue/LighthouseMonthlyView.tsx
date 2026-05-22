@@ -40,12 +40,21 @@ import { persistLighthouseImport, fetchActiveLighthouseImport } from '../../serv
 import { persistSalonEvents, fetchSalonEvents } from '../../services/salon-events.service';
 import { CompsetKpiBlock, CompsetBarChart } from './components/CompsetWidgets';
 import { PremiumCompsetChart } from './components/PremiumCompsetChart';
+import { ComparisonChart } from './components/ComparisonChart';
 import { MarketAnalysisCockpit } from './components/MarketAnalysisCockpit';
 import { LighthouseFileBanner } from './components/LighthouseFileBanner';
 import { PremiumDayDetailModal } from './components/PremiumDayDetailModal';
+import type { LighthouseImport } from '../../services/lighthouse-parser.service';
+import { findImportForDaysAgo } from '../../services/lighthouse-comparison.service';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
+
+type CompareLabel = 'Hier' | 'J-3' | 'J-7' | 'J-14' | 'J-30';
+
+const COMPARE_DAYS: Record<CompareLabel, number> = {
+  'Hier': 1, 'J-3': 3, 'J-7': 7, 'J-14': 14, 'J-30': 30,
+};
 
 // ─── Onglets ──────────────────────────────────────────────────────────────
 
@@ -138,6 +147,23 @@ export const LighthouseMonthlyView: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [compsetChartDate, setCompsetChartDate] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('cockpit');
+
+  // ─── Vue Marché : toggle Données du jour / Comparatif ─────────────────
+  const [marcheView, setMarcheView] = useState<'jour' | 'comparatif'>('jour');
+  const [compareLabel, setCompareLabel] = useState<CompareLabel>('Hier');
+  const [compareData, setCompareData] = useState<LighthouseImport | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+
+  const loadCompareData = useCallback(async (label: CompareLabel) => {
+    setCompareLoading(true);
+    setCompareData(null);
+    try {
+      const data = await findImportForDaysAgo(COMPARE_DAYS[label]);
+      setCompareData(data);
+    } finally {
+      setCompareLoading(false);
+    }
+  }, []);
 
   // ─── Upload Lighthouse ────────────────────────────────────────────────
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -427,14 +453,86 @@ export const LighthouseMonthlyView: React.FC = () => {
 
             {activeTab === 'marche' && (
               <div className="space-y-4">
+                {/* ─── Sélecteur de vue ────────────────────────────────── */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Toggle Données du jour / Comparatif */}
+                  <div className="bg-gray-100 rounded-xl p-1 flex items-center gap-0.5">
+                    <button
+                      onClick={() => setMarcheView('jour')}
+                      className={cn(
+                        'px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150',
+                        marcheView === 'jour'
+                          ? 'bg-white text-violet-700 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-800',
+                      )}
+                    >
+                      Données du jour
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMarcheView('comparatif');
+                        if (!compareData && !compareLoading) {
+                          loadCompareData(compareLabel);
+                        }
+                      }}
+                      className={cn(
+                        'px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150',
+                        marcheView === 'comparatif'
+                          ? 'bg-white text-violet-700 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-800',
+                      )}
+                    >
+                      Comparatif
+                    </button>
+                  </div>
+
+                  {/* Sous-onglets période (visible uniquement en mode Comparatif) */}
+                  {marcheView === 'comparatif' && (
+                    <div className="bg-gray-100 rounded-xl p-1 flex items-center gap-0.5">
+                      {(Object.keys(COMPARE_DAYS) as CompareLabel[]).map(label => (
+                        <button
+                          key={label}
+                          onClick={() => {
+                            setCompareLabel(label);
+                            loadCompareData(label);
+                          }}
+                          className={cn(
+                            'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150',
+                            compareLabel === label
+                              ? 'bg-white text-violet-700 shadow-sm'
+                              : 'text-gray-500 hover:text-gray-800',
+                          )}
+                        >
+                          vs {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ─── KPI strip ───────────────────────────────────────── */}
                 <CompsetKpiBlock monthData={monthData} ourHotelName={importData?.ourHotelName ?? ''} />
-                {importData && (
-                  <PremiumCompsetChart
-                    importData={importData}
-                    selectedMonth={selectedMonth}
-                    onDateClick={setSelectedDate}
-                  />
-                )}
+
+                {/* ─── Graphique actif ─────────────────────────────────── */}
+                {marcheView === 'jour'
+                  ? importData && (
+                    <PremiumCompsetChart
+                      importData={importData}
+                      selectedMonth={selectedMonth}
+                      onDateClick={setSelectedDate}
+                    />
+                  )
+                  : importData && (
+                    <ComparisonChart
+                      currentData={importData}
+                      compareData={compareData}
+                      compareLabel={compareLabel}
+                      selectedMonth={selectedMonth}
+                      isLoading={compareLoading}
+                      onDateClick={setSelectedDate}
+                    />
+                  )
+                }
               </div>
             )}
 
