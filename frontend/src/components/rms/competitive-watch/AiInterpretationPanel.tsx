@@ -34,6 +34,10 @@ export const AiInterpretationPanel: React.FC<AiInterpretationPanelProps> = ({
     const days = getComparisonData(period);
     const day = days.find((d) => d.label === selectedLabel) ?? days[0];
 
+    if (!day) {
+      return { interpretation: null, opportunity: null };
+    }
+
     const demandDelta = day.demandToday - day.demandPast;
     const medianDelta = day.medianToday - day.medianPast;
 
@@ -73,19 +77,26 @@ export const AiInterpretationPanel: React.FC<AiInterpretationPanelProps> = ({
         </h3>
       </div>
 
-      <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 flex-1">
-        {interpretation.segments.map((seg, i) => (
-          <span
-            key={i}
-            className={seg.bold ? 'font-bold text-slate-900 dark:text-slate-100' : undefined}
-          >
-            {seg.text}
-          </span>
-        ))}
-        <span aria-hidden> {interpretation.emoji}</span>
-      </p>
-
-      <SmartAlertPanel opportunity={opportunity} className="mt-3" />
+      {interpretation ? (
+        <>
+          <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300 flex-1">
+            {interpretation.segments.map((seg, i) => (
+              <span
+                key={i}
+                className={seg.bold ? 'font-bold text-slate-900 dark:text-slate-100' : undefined}
+              >
+                {seg.text}
+              </span>
+            ))}
+            <span aria-hidden> {interpretation.emoji}</span>
+          </p>
+          {opportunity && <SmartAlertPanel opportunity={opportunity} className="mt-3" />}
+        </>
+      ) : (
+        <p className="text-[12.5px] text-slate-400 dark:text-slate-500">
+          Aucune donnée à interpréter pour la période affichée.
+        </p>
+      )}
     </motion.div>
   );
 };

@@ -11,7 +11,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Info, ArrowUp } from 'lucide-react';
 import {
-  MARKET_MONTH, COMPSET_HOTELS, PAGE_META,
+  getVisibleMarketMonth, COMPSET_HOTELS, PAGE_META,
   getComparisonData, COMPARE_PERIODS,
 } from '../../../data/rms/mockCompetitiveWatchData';
 import type { ComparePeriodKey } from '../../../data/rms/mockCompetitiveWatchData';
@@ -45,8 +45,16 @@ const StatCell: React.FC<StatCellProps> = ({ label, value, valueColor, sub, info
   </div>
 );
 
+const EmptyDetail: React.FC = () => (
+  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_1px_3px_rgba(15,23,42,0.05)] p-8 text-center text-[13px] text-slate-400 dark:text-slate-500">
+    Aucune donnée à afficher pour la période sélectionnée.
+  </div>
+);
+
 const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) => {
-  const day = MARKET_MONTH.find((d) => d.label === selectedLabel) ?? MARKET_MONTH[15];
+  const visible = getVisibleMarketMonth();
+  const day = visible.find((d) => d.label === selectedLabel) ?? visible[0];
+  if (!day) return <EmptyDetail />;
   const gap = day.ourPrice - day.median;
   const gapPct = ((gap / day.median) * 100).toFixed(1);
   const demandColor = getDemandColor(day.demand);
@@ -131,6 +139,7 @@ const FocusDetail: React.FC<{ period: ComparePeriodKey; selectedLabel: string }>
   const periodMeta = COMPARE_PERIODS.find((p) => p.key === period) ?? COMPARE_PERIODS[0];
   const days = getComparisonData(period);
   const day = days.find((d) => d.label === selectedLabel) ?? days[0];
+  if (!day) return <EmptyDetail />;
 
   const demandDelta = day.demandToday - day.demandPast;
   const medianDelta = day.medianToday - day.medianPast;

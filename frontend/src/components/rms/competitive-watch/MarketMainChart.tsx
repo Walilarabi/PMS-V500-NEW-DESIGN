@@ -15,7 +15,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { Info, MoreVertical } from 'lucide-react';
-import { MARKET_MONTH } from '../../../data/rms/mockCompetitiveWatchData';
+import { getVisibleMarketMonth } from '../../../data/rms/mockCompetitiveWatchData';
 import { getDemandColor } from '../../../lib/rms/marketDemandRules';
 import { CHART_COLORS, DEMAND_BANDS } from '../../../lib/rms/chartColors';
 import { ChartLegend } from './ChartLegend';
@@ -43,7 +43,7 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
 
   const data = useMemo(
     () =>
-      MARKET_MONTH.map((d) => ({
+      getVisibleMarketMonth().map((d) => ({
         ...d,
         iqrRange: [d.q25, d.q75] as [number, number],
       })),

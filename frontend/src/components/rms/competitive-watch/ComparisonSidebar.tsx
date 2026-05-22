@@ -153,6 +153,19 @@ const ComparisonSynthesis: React.FC<{
   const days = getComparisonData(period);
   const day = days.find((d) => d.label === selectedLabel) ?? days[0];
 
+  if (!day) {
+    return (
+      <Card>
+        <h3 className="text-[15px] font-bold text-slate-900 dark:text-slate-50 mb-2">
+          Synthèse comparaison
+        </h3>
+        <p className="text-[12.5px] text-slate-400 dark:text-slate-500">
+          Aucune donnée à comparer pour la période affichée.
+        </p>
+      </Card>
+    );
+  }
+
   const demandDelta = day.demandToday - day.demandPast;
   const medianDelta = day.medianToday - day.medianPast;
   const quick = QUICK_COMPARISON.find((q) => q.key === period);

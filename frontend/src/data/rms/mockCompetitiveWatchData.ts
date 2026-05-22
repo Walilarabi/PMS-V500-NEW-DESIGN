@@ -8,6 +8,8 @@
  * Hôtel de référence : Folkestone Opéra · Compset : 10 concurrents.
  */
 
+import { isDateVisible } from '../../lib/rms/monthRange';
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type KpiTone = 'slate' | 'violet' | 'blue' | 'red' | 'green';
@@ -130,10 +132,22 @@ export const MARKET_MONTH: MarketDay[] = [
   { date: '2026-06-26', label: '26 juin', demand: 88, ourPrice: 331, median: 349, mean: 359, q25: 305, q75: 383 },
   { date: '2026-06-27', label: '27 juin', demand: 91, ourPrice: 334, median: 357, mean: 365, q25: 312, q75: 391 },
   { date: '2026-06-28', label: '28 juin', demand: 90, ourPrice: 333, median: 355, mean: 363, q25: 310, q75: 389 },
+  { date: '2026-06-29', label: '29 juin', demand: 89, ourPrice: 332, median: 354, mean: 364, q25: 311, q75: 388 },
+  { date: '2026-06-30', label: '30 juin', demand: 92, ourPrice: 335, median: 358, mean: 366, q25: 313, q75: 392 },
 ];
 
 /** Jour sélectionné par défaut dans la vue marché. */
 export const MARKET_SELECTED_DATE = '16 juin';
+
+/**
+ * Jours du mois marché réellement visibles selon la règle d'affichage :
+ *   - mois en cours → de aujourd'hui à la fin du mois
+ *   - mois futur    → mois civil complet (jamais tronqué)
+ *   - mois passé    → aucune date
+ */
+export function getVisibleMarketMonth(today: Date = new Date()): MarketDay[] {
+  return MARKET_MONTH.filter((d) => isDateVisible(d.date, today));
+}
 
 // ─── Vue comparaison — 10 jours (12 → 22 juin) ──────────────────────────────
 
@@ -187,32 +201,38 @@ function clampDemand(v: number): number {
 
 /**
  * Construit la série de comparaison fusionnée (aujourd'hui + passé)
- * pour la période demandée.
+ * pour la période demandée, filtrée selon la règle d'affichage des dates
+ * (aucune date passée dans le mois en cours).
  */
-export function getComparisonData(period: ComparePeriodKey): ComparisonDay[] {
-  return COMPARISON_TODAY.map((row, i) => {
-    let demandPast: number;
-    let medianPast: number;
+export function getComparisonData(
+  period: ComparePeriodKey,
+  today: Date = new Date(),
+): ComparisonDay[] {
+  return COMPARISON_TODAY
+    .map((row, i) => {
+      let demandPast: number;
+      let medianPast: number;
 
-    if (period === 'hier') {
-      demandPast = PAST_HIER[i].demand;
-      medianPast = PAST_HIER[i].median;
-    } else {
-      const off = PERIOD_OFFSET[period];
-      demandPast = clampDemand(row.demandToday - off.demand);
-      medianPast = Math.round(row.medianToday - off.median);
-    }
+      if (period === 'hier') {
+        demandPast = PAST_HIER[i].demand;
+        medianPast = PAST_HIER[i].median;
+      } else {
+        const off = PERIOD_OFFSET[period];
+        demandPast = clampDemand(row.demandToday - off.demand);
+        medianPast = Math.round(row.medianToday - off.median);
+      }
 
-    return {
-      date: row.date,
-      label: row.label,
-      demandToday: row.demandToday,
-      demandPast,
-      medianToday: row.medianToday,
-      medianPast,
-      ourPrice: row.ourPrice,
-    };
-  });
+      return {
+        date: row.date,
+        label: row.label,
+        demandToday: row.demandToday,
+        demandPast,
+        medianToday: row.medianToday,
+        medianPast,
+        ourPrice: row.ourPrice,
+      };
+    })
+    .filter((d) => isDateVisible(d.date, today));
 }
 
 /** Jour sélectionné par défaut dans la vue comparaison. */
