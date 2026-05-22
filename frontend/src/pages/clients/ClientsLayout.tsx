@@ -24,6 +24,7 @@ import { ClientsView } from '../ClientsView';
 import { CompaniesView } from './CompaniesView';
 import { TiersView } from './TiersView';
 import { SegmentsView } from './SegmentsView';
+import { BlacklistView } from './BlacklistView';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -104,13 +105,7 @@ export const ClientsLayout: React.FC<ClientsLayoutProps> = ({ activePage }) => {
         );
 
       case 'clients_blacklist':
-        return (
-          <ComingSoon
-            title="Blacklist / Watchlist"
-            subtitle="Gestion des clients signalés, historique des incidents et alertes à la réservation."
-            icon={Ban}
-          />
-        );
+        return <BlacklistView />;
 
       case 'clients_tiers':
         return <TiersView />;

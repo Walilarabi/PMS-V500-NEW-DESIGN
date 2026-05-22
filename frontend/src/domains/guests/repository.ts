@@ -61,6 +61,8 @@ export interface ListGuestsParams {
   country?: string;
   vipOnly?: boolean;
   blacklisted?: boolean;
+  /** Filter to specific risk_level values, e.g. ['medium','high','critical'] */
+  riskLevels?: string[];
 }
 
 export async function listGuests(
@@ -103,6 +105,10 @@ export async function listGuests(
 
   if (params.blacklisted !== undefined) {
     q = q.eq('blacklisted', params.blacklisted);
+  }
+
+  if (params.riskLevels?.length) {
+    q = q.in('risk_level', params.riskLevels);
   }
 
   const { data, error, count } = await q;

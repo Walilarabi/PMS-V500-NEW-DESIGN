@@ -10,6 +10,14 @@ import {
   recomputeLoyalty,
   getSegmentOverview,
 } from './loyalty.service';
+import {
+  flagGuest,
+  addIncident,
+  listIncidents,
+  getSatisfactionOverview,
+  type GuestFlagInput,
+} from './risk.service';
+import { useGuests } from '@/src/domains/guests/hooks';
 
 // ─── Companies (Wave C3) ──────────────────────────────────────────────────────
 
@@ -71,6 +79,56 @@ export function useSegmentOverview() {
   return useQuery({
     queryKey: ['segment-overview'],
     queryFn: getSegmentOverview,
+    staleTime: 30_000,
+  });
+}
+
+// ─── Risk & satisfaction (Wave C5) ────────────────────────────────────────────
+
+export function useBlacklistedGuests() {
+  return useGuests({ blacklisted: true, limit: 200 });
+}
+
+export function useRiskyGuests() {
+  return useGuests({ riskLevels: ['medium', 'high', 'critical'], limit: 200 });
+}
+
+export function useFlagGuest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: GuestFlagInput) => flagGuest(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['guests'] });
+      qc.invalidateQueries({ queryKey: ['segment-overview'] });
+    },
+  });
+}
+
+export function useAddIncident(guestId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { type: string; description: string; incident_date: string }) =>
+      addIncident({ guest_id: guestId, ...params }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['incidents', guestId] });
+      qc.invalidateQueries({ queryKey: ['guests'] });
+    },
+  });
+}
+
+export function useGuestIncidents(guestId: string | null) {
+  return useQuery({
+    queryKey: ['incidents', guestId],
+    queryFn: () => listIncidents(guestId as string),
+    enabled: !!guestId,
+    staleTime: 30_000,
+  });
+}
+
+export function useSatisfactionOverview() {
+  return useQuery({
+    queryKey: ['satisfaction-overview'],
+    queryFn: getSatisfactionOverview,
     staleTime: 30_000,
   });
 }
