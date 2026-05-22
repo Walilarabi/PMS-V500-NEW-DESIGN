@@ -122,6 +122,7 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'proforma':
     case 'caisse':
     case 'impayes':
+    case 'fin_dunning':
     case 'cloture':
     case 'fin_reconciliation':
     case 'fin_einvoice':

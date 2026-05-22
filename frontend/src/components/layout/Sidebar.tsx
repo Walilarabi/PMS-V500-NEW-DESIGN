@@ -10,7 +10,7 @@ import {
   PieChart, Activity, BookOpen, Database,
   ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
   Cpu, Bell, ShieldCheck, Upload, ClipboardList, HardDrive,
-  Hotel, Globe, Tag, Coffee, KeyRound, Star, FolderOpen, FileCode2,
+  Hotel, Globe, Tag, Coffee, KeyRound, Star, FolderOpen, FileCode2, Send,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -130,6 +130,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
         { id: 'proforma',          label: 'Proforma / Devis',     icon: Receipt },
         { id: 'caisse',            label: 'Caisse',               icon: Wallet },
         { id: 'impayes',           label: 'Impayés / Débiteurs',  icon: AlertTriangle },
+        { id: 'fin_dunning',       label: 'Relances automatiques',icon: Send },
         { id: 'cloture',           label: 'Clôture journalière',  icon: Lock },
         { id: 'fin_reconciliation',label: 'Rapprochement bancaire',icon: RefreshCw },
         { id: 'fin_einvoice',      label: 'E-facture & PPF',      icon: FileCode2 },
@@ -242,7 +243,7 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   rev_compset: 'revenue', rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
   rev_promotions: 'revenue', rms: 'revenue', rms_history: 'revenue',
   finance: 'finance', facturation: 'finance', fin_folios: 'finance', proforma: 'finance',
-  caisse: 'finance', impayes: 'finance', cloture: 'finance',
+  caisse: 'finance', impayes: 'finance', fin_dunning: 'finance', cloture: 'finance',
   fin_reconciliation: 'finance', fin_einvoice: 'finance', tva2026: 'finance',
   paiements_securises: 'finance', comptabilite: 'finance', cash_management: 'finance',
   analysis: 'analysis', kpi: 'analysis', performance: 'analysis',

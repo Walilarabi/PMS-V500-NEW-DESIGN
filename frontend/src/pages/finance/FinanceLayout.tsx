@@ -24,6 +24,7 @@ import { ProformaView } from './ProformaView';
 import { CashRegisterView } from './CashRegisterView';
 import { FoliosView } from './FoliosView';
 import { EInvoiceView } from './EInvoiceView';
+import { DunningView } from './DunningView';
 import { fetchFinanceKpis, type FinanceDashboardKpis } from '../../services/finance/finance.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -35,6 +36,7 @@ export type FinancePage =
   | 'proforma'
   | 'caisse'
   | 'impayes'
+  | 'fin_dunning'
   | 'cloture'
   | 'fin_reconciliation'
   | 'fin_einvoice'
@@ -50,6 +52,7 @@ const PAGE_TITLES: Record<FinancePage, { title: string; subtitle: string }> = {
   proforma:            { title: 'Proforma / Devis',           subtitle: 'Devis et propositions commerciales' },
   caisse:              { title: 'Caisse / Petite caisse',     subtitle: 'Comptage, mouvements espèces' },
   impayes:             { title: 'Impayés & Débiteurs',        subtitle: 'Balance âgée et workflow de relances' },
+  fin_dunning:         { title: 'Relances automatiques',      subtitle: 'Workflow de dunning en escalade J+7 / J+15 / J+30' },
   cloture:             { title: 'Clôture journalière',        subtitle: 'Workflow midi/midi en 8 étapes' },
   fin_reconciliation:  { title: 'Rapprochement bancaire',     subtitle: 'Matching paiements OTA & banque' },
   fin_einvoice:        { title: 'E-facture & PPF',            subtitle: 'UBL 2.1 + transmission Portail Public de Facturation' },
@@ -99,6 +102,7 @@ export const FinanceLayout: React.FC<FinanceLayoutProps> = ({ activePage }) => {
         {activePage === 'proforma' && <ProformaView />}
         {activePage === 'caisse' && <CashRegisterView />}
         {activePage === 'impayes' && <DebtorsView />}
+        {activePage === 'fin_dunning' && <DunningView />}
         {activePage === 'cloture' && <ClosureWorkflowView />}
         {activePage === 'fin_reconciliation' && <ReconciliationView />}
         {activePage === 'fin_einvoice' && <EInvoiceView />}

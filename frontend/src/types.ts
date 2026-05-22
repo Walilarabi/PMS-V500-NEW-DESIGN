@@ -58,6 +58,7 @@ export type PageId =
   | 'proforma'
   | 'caisse'
   | 'impayes'
+  | 'fin_dunning'
   | 'cloture'
   | 'fin_reconciliation'
   | 'fin_einvoice'
