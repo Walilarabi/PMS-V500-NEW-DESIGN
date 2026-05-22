@@ -28,7 +28,7 @@ const PAGE_TO_NAV: Record<string, string> = {
   groupes: 'reservations', res_payments: 'reservations',
   res_anomalies: 'reservations', res_relances: 'reservations',
   // Clients
-  clients: 'clients', clients_cardex: 'clients', clients_companies: 'clients',
+  clients: 'clients', clients_companies: 'clients',
   clients_segments: 'clients', clients_merge: 'clients',
   clients_documents: 'clients', clients_blacklist: 'clients', clients_tiers: 'clients',
   // Revenue

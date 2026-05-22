@@ -4,7 +4,7 @@ import {
   ShieldAlert, AlertCircle, GitMerge, History, Settings2,
   CalendarDays, CheckCircle2, Clock, HelpCircle, Users,
   Building2, Target, GitMerge as Merge, FileText, Ban,
-  UserCheck, TrendingUp, Grid, BarChart2, Share2,
+  TrendingUp, Grid, BarChart2, Share2,
   Layers, Zap, CreditCard, Receipt, Wallet,
   AlertTriangle, Lock, Banknote, Percent, Plug, Package,
   PieChart, Activity, BookOpen, Database,
@@ -83,8 +83,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
     {
       label: 'Clients',
       items: [
-        { id: 'clients',           label: 'Dashboard',            icon: LayoutDashboard },
-        { id: 'clients_cardex',    label: 'Particuliers (Cardex)',icon: UserCheck },
+        { id: 'clients',           label: 'Fiches Clients',       icon: LayoutDashboard },
         { id: 'clients_companies', label: 'Sociétés / Agences',  icon: Building2 },
         { id: 'clients_segments',  label: 'Segments marketing',  icon: Target },
         { id: 'clients_merge',     label: 'Fusion / Dédoublonnage',icon: Merge },
@@ -239,7 +238,7 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   reservations: 'reservations', res_confirmed: 'reservations', res_hold: 'reservations',
   res_pending: 'reservations', groupes: 'reservations', res_payments: 'reservations',
   res_anomalies: 'reservations', res_relances: 'reservations',
-  clients: 'clients', clients_cardex: 'clients', clients_companies: 'clients',
+  clients: 'clients', clients_companies: 'clients',
   clients_segments: 'clients', clients_merge: 'clients', clients_documents: 'clients',
   clients_blacklist: 'clients', clients_tiers: 'clients',
   revenue: 'revenue', rev_pricing: 'revenue', rev_channels: 'revenue',

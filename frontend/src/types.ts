@@ -30,7 +30,6 @@ export type PageId =
   | 'res_relances'
   // ── 4. CLIENTS ─────────────────────────────────────────────────────────────
   | 'clients'
-  | 'clients_cardex'
   | 'clients_companies'
   | 'clients_segments'
   | 'clients_merge'

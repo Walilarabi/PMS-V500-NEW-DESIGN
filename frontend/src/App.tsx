@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Bed, Wrench, Inbox, AlertTriangle, Lock, Settings, CheckCircle2, Clock,
-  Hourglass, Users, CreditCard, AlertOctagon, Send, User, Building2, Target,
-  GitMerge, FileText, Ban, Handshake, Construction,
+  Hourglass, Users, CreditCard, AlertOctagon, Send, Construction,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Topbar } from '@/src/components/layout/Topbar';
@@ -13,7 +12,8 @@ import { PageId } from '@/src/types';
 import { TodayView }        from '@/src/pages/TodayView';
 import { PlanningView }     from '@/src/pages/PlanningViewLive';
 import { ReservationsView } from '@/src/pages/ReservationsView';
-import { ClientsView }      from '@/src/pages/ClientsView';
+import { ClientsLayout }    from '@/src/pages/clients/ClientsLayout';
+import type { ClientsPage }  from '@/src/pages/clients/ClientsLayout';
 import { RevenueDashboard }    from '@/src/pages/revenue/RevenueDashboard';
 import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
 
@@ -91,15 +91,15 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'res_anomalies': return <Placeholder title="Anomalies financières" icon={AlertOctagon} />;
     case 'res_relances':  return <Placeholder title="Relances" icon={Send} />;
 
-    // ── CLIENTS ───────────────────────────────────────────────────────────────
-    case 'clients':           return <ClientsView />;
-    case 'clients_cardex':    return <Placeholder title="Particuliers (Cardex)" icon={User} />;
-    case 'clients_companies': return <Placeholder title="Sociétés / Agences" icon={Building2} />;
-    case 'clients_segments':  return <Placeholder title="Segments marketing" icon={Target} />;
-    case 'clients_merge':     return <Placeholder title="Fusion / Dédoublonnage" icon={GitMerge} />;
-    case 'clients_documents': return <Placeholder title="Documents & signatures" icon={FileText} />;
-    case 'clients_blacklist': return <Placeholder title="Blacklist / Watchlist" icon={Ban} />;
-    case 'clients_tiers':     return <Placeholder title="Tiers / Prescripteurs" icon={Handshake} />;
+    // ── CLIENTS (routé via ClientsLayout — Wave C1) ───────────────────────────
+    case 'clients':
+    case 'clients_companies':
+    case 'clients_segments':
+    case 'clients_merge':
+    case 'clients_documents':
+    case 'clients_blacklist':
+    case 'clients_tiers':
+      return <ClientsLayout activePage={page as ClientsPage} />;
 
     // ── REVENUE ───────────────────────────────────────────────────────────────
     case 'revenue':        return <RevenueDashboard />;
