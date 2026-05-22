@@ -33,7 +33,8 @@ import {
   Upload, 
   GripVertical, 
   ShieldCheck,
-  Utensils
+  Utensils,
+  Ban, LogIn, LogOut, Store, Ruler, Lock as LockIcon, CalendarCheck,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -531,16 +532,20 @@ export const Tarifs: React.FC = () => {
 
                    <div className="grid grid-cols-3 gap-4">
                       {[
-                        { icon: '⛔', l: 'CTA', d: 'Arrivée interdite' },
-                        { icon: '🚫', l: 'CTD', d: 'Départ interdit' },
-                        { icon: '🚷', l: 'Stop Sell', d: 'Vente fermée' },
-                        { icon: '📏', l: 'MinLOS', d: 'Séjour min. (nuits)', type: 'num' },
-                        { icon: '🔒', l: 'MaxLOS', d: 'Séjour max. (nuits)', type: 'num' },
-                        { icon: '📅', l: 'Free Sell', d: 'Dispo. forcée', type: 'bool' },
-                      ].map((r, i) => (
+                        { icon: LogIn, l: 'CTA', d: 'Arrivée interdite' },
+                        { icon: LogOut, l: 'CTD', d: 'Départ interdit' },
+                        { icon: Ban, l: 'Stop Sell', d: 'Vente fermée' },
+                        { icon: Ruler, l: 'MinLOS', d: 'Séjour min. (nuits)', type: 'num' },
+                        { icon: LockIcon, l: 'MaxLOS', d: 'Séjour max. (nuits)', type: 'num' },
+                        { icon: CalendarCheck, l: 'Free Sell', d: 'Dispo. forcée', type: 'bool' },
+                      ].map((r, i) => {
+                        const RIcon = r.icon;
+                        return (
                         <div key={i} className="bg-slate-50 border border-slate-100 rounded-3xl p-5 hover:bg-white hover:shadow-xl transition-all group flex flex-col justify-between">
                            <div>
-                              <div className="text-2xl mb-3 group-hover:scale-110 transition-transform origin-left">{r.icon}</div>
+                              <div className="mb-3 group-hover:scale-110 transition-transform origin-left">
+                                <RIcon className="w-6 h-6 text-slate-700" strokeWidth={1.75} />
+                              </div>
                               <div className="text-xs font-black text-slate-800 uppercase tracking-widest mb-1">{r.l}</div>
                               <div className="text-[10px] text-slate-400 font-bold leading-tight">{r.d}</div>
                            </div>
@@ -555,7 +560,8 @@ export const Tarifs: React.FC = () => {
                               )}
                            </div>
                         </div>
-                      ))}
+                        );
+                      })}
                    </div>
                 </div>
 
@@ -828,8 +834,8 @@ export const Tarifs: React.FC = () => {
                                <option value="2">2 nuits</option>
                                <option value="3">3 nuits</option>
                                <option value="5">5 nuits</option>
-                               <option value="true">✅ Fermé</option>
-                               <option value="false">✓ Ouvert</option>
+                               <option value="true">Fermé</option>
+                               <option value="false">Ouvert</option>
                             </select>
                          </div>
                          <div className="space-y-2">

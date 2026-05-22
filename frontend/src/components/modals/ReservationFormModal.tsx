@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { X, AlertTriangle, TrendingUp, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { X, AlertTriangle, TrendingUp, Clock, CheckCircle2, XCircle, Loader2, Search, Moon, Banknote } from 'lucide-react';
 import { CHANNELS } from '@/src/constants/channels';
 import { useRevenueEngine } from '@/src/hooks/useRevenueEngine';
 import type { ReservationStatus } from '@/src/contexts/ReservationContext';
@@ -699,8 +699,8 @@ const ReservationFormModal: React.FC<Props> = ({
                       <AlertTriangle size={16} color={confirmOverbooking ? '#D97706' : '#DC2626'} />
                       <span style={{ fontSize: 12, fontWeight: 700, color: confirmOverbooking ? '#92400E' : '#991B1B' }}>
                         {confirmOverbooking
-                          ? `⚠️ Overbooking confirmé — capacité dépassée (max autorisé: ${overbookingInfo.maxAllowed} chambres)`
-                          : `🚨 Chambre complète — Overbooking contrôlé possible (seuil ${overbookingInfo.maxAllowed} ch. max)`
+                          ? `Overbooking confirmé — capacité dépassée (max autorisé: ${overbookingInfo.maxAllowed} chambres)`
+                          : `Chambre complète — Overbooking contrôlé possible (seuil ${overbookingInfo.maxAllowed} ch. max)`
                         }
                       </span>
                     </div>
@@ -1183,16 +1183,18 @@ const ReservationFormModal: React.FC<Props> = ({
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {([
-                { rule: '0',           icon: '🔍', lbl: 'Vérification carte', val: '0€' },
-                { rule: 'first_night', icon: '🌙', lbl: '1ère nuitée',        val: calc.pn  > 0 ? fmtEur(calc.pn)  : '—' },
-                { rule: 'total',       icon: '💰', lbl: 'Total séjour',       val: calc.ttc > 0 ? fmtEur(calc.ttc) : '—' },
-              ] as const).map(({ rule, icon, lbl, val }) => {
+                { rule: '0',           icon: Search,    lbl: 'Vérification carte', val: '0€' },
+                { rule: 'first_night', icon: Moon,      lbl: '1ère nuitée',        val: calc.pn  > 0 ? fmtEur(calc.pn)  : '—' },
+                { rule: 'total',       icon: Banknote,  lbl: 'Total séjour',       val: calc.ttc > 0 ? fmtEur(calc.ttc) : '—' },
+              ] as const).map(({ rule, icon: PaIcon, lbl, val }) => {
                 const locked = isNanr && rule !== 'total';
                 const active = paRuleDraft === rule;
                 return (
                   <div key={rule} onClick={() => !locked && setPaRuleDraft(rule)}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, cursor: locked ? 'not-allowed' : 'pointer', border: `1.5px solid ${active ? '#8B5CF6' : '#E5E7EB'}`, background: active ? '#EDE9FE' : '#F9FAFB', opacity: locked ? .35 : 1, transition: 'all .15s' }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 9, background: active ? '#8B5CF6' : '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>{icon}</div>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, background: active ? '#8B5CF6' : '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <PaIcon size={15} strokeWidth={1.75} color={active ? '#FFFFFF' : '#8B5CF6'} />
+                    </div>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: active ? '#6D28D9' : '#374151', flex: 1 }}>{lbl}</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: active ? '#8B5CF6' : '#9CA3AF' }}>{val}</span>
                   </div>
