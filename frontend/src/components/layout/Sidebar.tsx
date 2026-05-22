@@ -87,7 +87,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
         { id: 'clients_companies', label: 'Sociétés / Agences',  icon: Building2 },
         { id: 'clients_segments',  label: 'Segments marketing',  icon: Target },
         { id: 'clients_merge',     label: 'Fusion / Dédoublonnage',icon: Merge },
-        { id: 'clients_documents', label: 'Documents & signatures',icon: FileText },
+        { id: 'clients_documents', label: 'RGPD & Consentements', icon: FileText },
         { id: 'clients_blacklist', label: 'Blacklist / Watchlist',icon: Ban },
         { id: 'clients_tiers',     label: 'Tiers / Prescripteurs',icon: Globe },
         { id: 'clients_automation',label: 'Automatisations',     icon: Zap },

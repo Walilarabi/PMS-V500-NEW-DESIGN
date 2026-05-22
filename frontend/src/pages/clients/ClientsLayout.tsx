@@ -26,6 +26,7 @@ import { TiersView } from './TiersView';
 import { SegmentsView } from './SegmentsView';
 import { BlacklistView } from './BlacklistView';
 import { AutomationView } from './AutomationView';
+import { GdprView } from './GdprView';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -44,7 +45,7 @@ const PAGE_META: Record<ClientsPage, { title: string; subtitle: string }> = {
   clients_companies: { title: 'Sociétés / Agences',       subtitle: 'Entreprises, agences et tour-opérateurs' },
   clients_segments:  { title: 'Segments marketing',       subtitle: 'Segmentation dynamique et ciblage' },
   clients_merge:     { title: 'Fusion / Dédoublonnage',   subtitle: 'Détection et fusion des doublons' },
-  clients_documents: { title: 'Documents & signatures',   subtitle: 'Pièces d\'identité et contrats' },
+  clients_documents: { title: 'RGPD & Documents',          subtitle: 'Consentements, demandes et anonymisation' },
   clients_blacklist: { title: 'Blacklist / Watchlist',    subtitle: 'Clients signalés et historique incidents' },
   clients_tiers:     { title: 'Tiers / Prescripteurs',   subtitle: 'Partenaires, apporteurs d\'affaires' },
   clients_automation:{ title: 'Automatisations CRM',     subtitle: 'Règles déclencheur → action sur la base clients' },
@@ -99,13 +100,7 @@ export const ClientsLayout: React.FC<ClientsLayoutProps> = ({ activePage }) => {
         );
 
       case 'clients_documents':
-        return (
-          <ComingSoon
-            title="Documents & signatures"
-            subtitle="Stockage sécurisé des pièces d'identité, passeports et contrats signés."
-            icon={FileText}
-          />
-        );
+        return <GdprView />;
 
       case 'clients_blacklist':
         return <BlacklistView />;

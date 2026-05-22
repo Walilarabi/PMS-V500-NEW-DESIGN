@@ -5,6 +5,18 @@ import {
   deleteCompany,
 } from './crm.service';
 import {
+  setGdprConsent,
+  getConsentOverview,
+  listGuestsConsent,
+  listGdprRequests,
+  createGdprRequest,
+  resolveGdprRequest,
+  exportGuestData,
+  eraseGuestData,
+  type GdprRequestStatus,
+  type GdprRequestType,
+} from './gdpr.service';
+import {
   listLoyaltyTiers,
   saveLoyaltyTier,
   recomputeLoyalty,
@@ -206,5 +218,106 @@ export function useAutomationRuns(id: string | null) {
     queryFn: () => getAutomationRuns(id as string),
     enabled: !!id,
     staleTime: 15_000,
+  });
+}
+
+// ─── GDPR (Wave C8) ───────────────────────────────────────────────────────────
+
+export function useGdprConsentOverview() {
+  return useQuery({
+    queryKey: ['gdpr-consent-overview'],
+    queryFn: getConsentOverview,
+    staleTime: 30_000,
+  });
+}
+
+export function useGuestsConsent(
+  filter: 'consented' | 'refused' | 'unknown' | null = null,
+) {
+  return useQuery({
+    queryKey: ['gdpr-guests-consent', filter],
+    queryFn: () => listGuestsConsent(filter),
+    staleTime: 30_000,
+  });
+}
+
+export function useSetGdprConsent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      guestId,
+      consent,
+      channel,
+      notes,
+    }: {
+      guestId: string;
+      consent: boolean;
+      channel?: string;
+      notes?: string;
+    }) => setGdprConsent(guestId, consent, channel, notes),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['gdpr-consent-overview'] });
+      qc.invalidateQueries({ queryKey: ['gdpr-guests-consent'] });
+      qc.invalidateQueries({ queryKey: ['guests'] });
+    },
+  });
+}
+
+export function useGdprRequests(status?: GdprRequestStatus) {
+  return useQuery({
+    queryKey: ['gdpr-requests', status ?? 'all'],
+    queryFn: () => listGdprRequests(status),
+    staleTime: 20_000,
+  });
+}
+
+export function useCreateGdprRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      guestId,
+      requestType,
+      notes,
+    }: {
+      guestId: string;
+      requestType: GdprRequestType;
+      notes?: string;
+    }) => createGdprRequest(guestId, requestType, notes),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['gdpr-requests'] }),
+  });
+}
+
+export function useResolveGdprRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      requestId,
+      status,
+      resolution,
+    }: {
+      requestId: string;
+      status: GdprRequestStatus;
+      resolution?: string;
+    }) => resolveGdprRequest(requestId, status, resolution),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['gdpr-requests'] }),
+  });
+}
+
+export function useGdprExport() {
+  return useMutation({
+    mutationFn: (guestId: string) => exportGuestData(guestId),
+  });
+}
+
+export function useGdprErase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ guestId, reason }: { guestId: string; reason?: string }) =>
+      eraseGuestData(guestId, reason),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['guests'] });
+      qc.invalidateQueries({ queryKey: ['gdpr-consent-overview'] });
+      qc.invalidateQueries({ queryKey: ['gdpr-guests-consent'] });
+    },
   });
 }
