@@ -19,7 +19,7 @@ import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
 
 // RMS ENTERPRISE ULTIMATE
 import { DecisionHistoryPage } from '@/src/pages/revenue/DecisionHistoryPage';
-import { LighthouseMonthlyView } from '@/src/pages/revenue/LighthouseMonthlyView';
+import { CompetitiveWatchPage } from '@/src/pages/rms/CompetitiveWatchPage';
 import { PromotionsCompact }   from '@/src/pages/revenue/PromotionsCompact';
 import { DistributionAnalytics } from '@/src/pages/revenue/DistributionAnalytics';
 import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
@@ -109,7 +109,7 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     // RMS ENTERPRISE ULTIMATE
     case 'rms':            return <RMSTableauPro />;
     case 'rms_history':    return <DecisionHistoryPage />;
-    case 'rev_compset':    return <LighthouseMonthlyView />;
+    case 'rev_compset':    return <CompetitiveWatchPage />;
     case 'rev_channels':   return <DistributionAnalytics />;
     case 'rev_promotions': return <PromotionsCompact />;
     case 'rev_rules':      return <YieldAndRules />;
