@@ -59,10 +59,8 @@ export function VeilleConcurrentielle() {
   const [isCompsetCollapsed, setIsCompsetCollapsed] = useState(false);
   const [selectedSegments, setSelectedSegments] = useState<string[]>([]);
 
-  // Navigation handler
+  // Navigation handler (App.tsx écoute l'event 'navigate')
   const handleNavigate = (page: string) => {
-    // TODO: implémenter avec context ou props de App.tsx
-    console.log('Navigate to:', page);
     window.dispatchEvent(new CustomEvent('navigate', { detail: { page } }));
   };
 
@@ -258,7 +256,37 @@ export function VeilleConcurrentielle() {
           </div>
         </div>
 
-        <button className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 transition-colors">
+        <button
+          onClick={() => {
+            const escape = (v: unknown) => {
+              const s = v === null || v === undefined ? '' : String(v);
+              return s.includes(',') || s.includes('"') || s.includes('\n')
+                ? `"${s.replace(/"/g, '""')}"`
+                : s;
+            };
+            const headers = ['Concurrent', 'Segment', 'Étoiles', ...dateColumns.map(c => c.date)];
+            const rows = filteredRows.map(row => [
+              row.competitor.name,
+              row.competitor.segment,
+              row.competitor.stars,
+              ...dateColumns.map(c => {
+                const entry = row.pricing.get(c.date);
+                return entry ? entry.price : '';
+              }),
+            ].map(escape).join(','));
+            const csv = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `veille_concurrentielle_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 transition-colors"
+        >
           <Download className="w-3.5 h-3.5" />
           Exporter
         </button>

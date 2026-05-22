@@ -20,6 +20,16 @@ import {
   Settings,
   BarChart3,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+} from 'recharts';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 
 const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
@@ -106,16 +116,94 @@ function generateChannelData(): ChannelData[] {
   ];
 }
 
+type PerfMetric = 'volume' | 'adr' | 'revpar';
+
+const CHANNEL_HEX: Record<string, string> = {
+  booking: '#3b82f6',
+  expedia: '#f59e0b',
+  direct: '#10b981',
+  airbnb: '#f43f5e',
+};
+
+function generatePerformance30j(channels: ChannelData[]) {
+  const today = new Date();
+  const data: Record<string, number | string>[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const day = d.getDay();
+    const weekendBoost = day === 5 || day === 6 ? 1.15 : day === 0 ? 0.95 : 1;
+    const row: Record<string, number | string> = {
+      date: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`,
+    };
+    channels.forEach((c) => {
+      const baseVol = c.volume / 30;
+      const noise = 0.85 + Math.random() * 0.3;
+      const vol = Math.max(0, Math.round(baseVol * weekendBoost * noise));
+      const adr = Math.round(c.adr * (0.95 + Math.random() * 0.1));
+      const revpar = Math.round(vol * adr * (1 - c.commission / 100));
+      row[`${c.id}_volume`] = vol;
+      row[`${c.id}_adr`] = adr;
+      row[`${c.id}_revpar`] = revpar;
+    });
+    data.push(row);
+  }
+  return data;
+}
+
 export function Channels() {
   const [autoAllocation, setAutoAllocation] = useState(true);
-  const channels = useMemo(() => generateChannelData(), []);
+  const [perfMetric, setPerfMetric] = useState<PerfMetric>('volume');
+  const [channels, setChannels] = useState<ChannelData[]>(() => generateChannelData());
+  const [dirtyRestrictions, setDirtyRestrictions] = useState<Set<string>>(new Set());
+  const [appliedFeedback, setAppliedFeedback] = useState<string | null>(null);
+  const perfData = useMemo(() => generatePerformance30j(channels), [channels]);
+
+  const metricLabel: Record<PerfMetric, string> = {
+    volume: 'Réservations',
+    adr: 'ADR (€)',
+    revpar: 'RevPAR (€)',
+  };
+
+  const updateChannel = (id: string, patch: Partial<ChannelData>) => {
+    setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    setDirtyRestrictions((prev) => new Set(prev).add(id));
+  };
+
+  const updateAllocation = (id: string, value: number) => {
+    setChannels((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, currentAllocation: Math.max(0, Math.min(c.allocationMax, value)) }
+          : c
+      )
+    );
+  };
+
+  const applyRestrictions = (id: string) => {
+    setDirtyRestrictions((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    const channel = channels.find((c) => c.id === id);
+    setAppliedFeedback(
+      channel ? `Restrictions appliquées pour ${channel.name}` : 'Restrictions appliquées'
+    );
+    setTimeout(() => setAppliedFeedback(null), 2500);
+  };
 
   const totalVolume = channels.reduce((sum, c) => sum + c.volume, 0);
   const avgADR = Math.round(channels.reduce((sum, c) => sum + c.adr * c.volume, 0) / totalVolume);
   const totalRevpar = channels.reduce((sum, c) => sum + c.revparContribution, 0);
 
   return (
-    <div className="flex flex-col h-screen w-full bg-gray-50 overflow-hidden">
+    <div className="flex flex-col h-screen w-full bg-gray-50 overflow-hidden relative">
+      {appliedFeedback && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-4 py-2 rounded-md shadow-lg text-sm font-semibold animate-pulse">
+          ✓ {appliedFeedback}
+        </div>
+      )}
       {/* HEADER */}
       <RevenueHeader
         icon={Globe}
@@ -247,6 +335,58 @@ export function Channels() {
             </div>
           </div>
 
+          {/* PERFORMANCE 30 JOURS */}
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-700">Performance canaux — 30 derniers jours</h3>
+              <div className="flex items-center gap-1 rounded-md border border-gray-200 p-0.5">
+                {(['volume', 'adr', 'revpar'] as PerfMetric[]).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setPerfMetric(m)}
+                    className={cn(
+                      'px-3 py-1 text-xs font-semibold rounded transition-colors',
+                      perfMetric === m
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    )}
+                  >
+                    {metricLabel[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4" style={{ height: 320 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={perfData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} interval={2} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{ fontSize: 12, borderRadius: 6 }}
+                    formatter={(value: number) =>
+                      perfMetric === 'volume' ? value : `${value.toLocaleString()}€`
+                    }
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  {channels.map((c) => (
+                    <Line
+                      key={c.id}
+                      type="monotone"
+                      dataKey={`${c.id}_${perfMetric}`}
+                      name={c.name}
+                      stroke={CHANNEL_HEX[c.id] ?? '#64748b'}
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
           {/* ALLOCATION INVENTAIRE */}
           <div className="bg-white rounded-lg border border-gray-200">
             <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
@@ -285,6 +425,7 @@ export function Channels() {
                       min="0"
                       max={channel.allocationMax}
                       value={channel.currentAllocation}
+                      onChange={(e) => updateAllocation(channel.id, Number(e.target.value))}
                       disabled={autoAllocation}
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                     />
@@ -331,6 +472,11 @@ export function Channels() {
                           min="1"
                           max="14"
                           value={channel.mlos}
+                          onChange={(e) =>
+                            updateChannel(channel.id, {
+                              mlos: Math.max(1, Math.min(14, Number(e.target.value) || 1)),
+                            })
+                          }
                           className="w-16 px-2 py-1 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                         />
                       </td>
@@ -338,6 +484,7 @@ export function Channels() {
                         <input
                           type="checkbox"
                           checked={channel.cta}
+                          onChange={(e) => updateChannel(channel.id, { cta: e.target.checked })}
                           className="w-4 h-4 accent-blue-600"
                         />
                       </td>
@@ -345,12 +492,22 @@ export function Channels() {
                         <input
                           type="checkbox"
                           checked={channel.ctd}
+                          onChange={(e) => updateChannel(channel.id, { ctd: e.target.checked })}
                           className="w-4 h-4 accent-blue-600"
                         />
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold">
-                          Appliquer
+                        <button
+                          onClick={() => applyRestrictions(channel.id)}
+                          disabled={!dirtyRestrictions.has(channel.id)}
+                          className={cn(
+                            'text-xs px-3 py-1 rounded font-semibold transition-colors',
+                            dirtyRestrictions.has(channel.id)
+                              ? 'bg-blue-600 text-white hover:bg-blue-700'
+                              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                          )}
+                        >
+                          {dirtyRestrictions.has(channel.id) ? 'Appliquer' : 'À jour'}
                         </button>
                       </td>
                     </tr>

@@ -24,6 +24,10 @@ import {
   ChevronDown,
   ChevronUp,
   Calendar,
+  Search,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 
@@ -84,6 +88,30 @@ function generateCompetitors(): CompetitorData[] {
   });
 }
 
+type AvailabilityLevel = 'Faible' | 'Moyenne' | 'Élevée';
+
+interface CompetitorAvailabilityRow {
+  competitorId: string;
+  competitorName: string;
+  days: { date: Date; level: AvailabilityLevel }[];
+}
+
+function generateCompetitorAvailability(
+  competitors: CompetitorData[]
+): CompetitorAvailabilityRow[] {
+  const levels: AvailabilityLevel[] = ['Faible', 'Moyenne', 'Élevée'];
+  const today = new Date();
+  return competitors.slice(0, 6).map((c) => ({
+    competitorId: c.id,
+    competitorName: c.name,
+    days: Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      return { date: d, level: levels[Math.floor(Math.random() * levels.length)] };
+    }),
+  }));
+}
+
 function generateHistoricalData(): HistoricalDataPoint[] {
   const data: HistoricalDataPoint[] = [];
   const baseOurPrice = 172;
@@ -105,12 +133,57 @@ function generateHistoricalData(): HistoricalDataPoint[] {
   return data;
 }
 
+type SortKey = 'name' | 'category' | 'platform' | 'theirPrice' | 'variation7d' | 'revparScore';
+type SortDir = 'asc' | 'desc';
+
 export function CompetitiveIntel() {
   const [showFilters, setShowFilters] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<string>('7days');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [platformFilter, setPlatformFilter] = useState<string>('all');
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const competitors = useMemo(() => generateCompetitors(), []);
   const historicalData = useMemo(() => generateHistoricalData(), []);
+  const competitorAvailability = useMemo(() => generateCompetitorAvailability(competitors), [competitors]);
+
+  const filteredSortedCompetitors = useMemo(() => {
+    let list = competitors;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((c) => c.name.toLowerCase().includes(q));
+    }
+    if (platformFilter !== 'all') {
+      list = list.filter((c) => c.platform === platformFilter);
+    }
+    if (sortKey) {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      list = [...list].sort((a, b) => {
+        const av = a[sortKey] as string | number;
+        const bv = b[sortKey] as string | number;
+        if (typeof av === 'string' && typeof bv === 'string') {
+          return av.localeCompare(bv) * dir;
+        }
+        return ((av as number) - (bv as number)) * dir;
+      });
+    }
+    return list;
+  }, [competitors, searchQuery, platformFilter, sortKey, sortDir]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const sortIcon = (key: SortKey) => {
+    if (sortKey !== key) return <ArrowUpDown className="w-3 h-3 opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />;
+  };
 
   // KPIs
   const kpis = useMemo(() => {
@@ -226,32 +299,88 @@ export function CompetitiveIntel() {
         <div className="p-6 space-y-6">
           {/* TABLEAU CONCURRENTS */}
           <div className="bg-white rounded-lg border border-gray-200">
-            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between flex-wrap gap-3">
               <h3 className="text-sm font-bold text-gray-700">
                 Comparaison tarifaire des concurrents — Nuit du 17 mai 2026
               </h3>
-              <button className="text-xs text-blue-600 hover:text-blue-700 font-semibold">
-                + Ajouter concurrent
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher un hôtel..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-7 pr-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none w-48"
+                  />
+                </div>
+                <select
+                  value={platformFilter}
+                  onChange={(e) => setPlatformFilter(e.target.value)}
+                  className="px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="all">Toutes plateformes</option>
+                  <option value="Booking.com">Booking.com</option>
+                  <option value="Expedia">Expedia</option>
+                  <option value="Direct">Direct</option>
+                  <option value="Airbnb">Airbnb</option>
+                </select>
+                <span className="text-xs text-gray-500">
+                  {filteredSortedCompetitors.length}/{competitors.length}
+                </span>
+                <button className="text-xs text-blue-600 hover:text-blue-700 font-semibold">
+                  + Ajouter
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Concurrent</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Catégorie</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Plateforme</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Leur prix</th>
+                    <th
+                      onClick={() => toggleSort('name')}
+                      className="px-4 py-3 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none"
+                    >
+                      <span className="inline-flex items-center gap-1">Concurrent {sortIcon('name')}</span>
+                    </th>
+                    <th
+                      onClick={() => toggleSort('category')}
+                      className="px-4 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none"
+                    >
+                      <span className="inline-flex items-center gap-1">Catégorie {sortIcon('category')}</span>
+                    </th>
+                    <th
+                      onClick={() => toggleSort('platform')}
+                      className="px-4 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none"
+                    >
+                      <span className="inline-flex items-center gap-1">Plateforme {sortIcon('platform')}</span>
+                    </th>
+                    <th
+                      onClick={() => toggleSort('theirPrice')}
+                      className="px-4 py-3 text-right font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none"
+                    >
+                      <span className="inline-flex items-center gap-1">Leur prix {sortIcon('theirPrice')}</span>
+                    </th>
                     <th className="px-4 py-3 text-right font-semibold text-gray-700">Notre prix</th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-700">Positionnement</th>
                     <th className="px-4 py-3 text-center font-semibold text-gray-700">Dispo estimée</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Variation 7j</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Score RevPar</th>
+                    <th
+                      onClick={() => toggleSort('variation7d')}
+                      className="px-4 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none"
+                    >
+                      <span className="inline-flex items-center gap-1">Variation 7j {sortIcon('variation7d')}</span>
+                    </th>
+                    <th
+                      onClick={() => toggleSort('revparScore')}
+                      className="px-4 py-3 text-center font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none"
+                    >
+                      <span className="inline-flex items-center gap-1">Score RevPar {sortIcon('revparScore')}</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {competitors.map((comp) => (
+                  {filteredSortedCompetitors.map((comp) => (
                     <tr key={comp.id} className="border-b border-gray-100 hover:bg-blue-50 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -431,6 +560,83 @@ export function CompetitiveIntel() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* DISPONIBILITÉ ESTIMÉE CONCURRENTS — 7 JOURS */}
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-700">
+                Disponibilité estimée des concurrents — 7 prochains jours
+              </h3>
+              <div className="flex items-center gap-3 text-[10px]">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-red-100 border border-red-300" />
+                  <span>Faible</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-amber-100 border border-amber-300" />
+                  <span>Moyenne</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 rounded bg-emerald-100 border border-emerald-300" />
+                  <span>Élevée</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-semibold text-gray-700 sticky left-0 bg-gray-50 z-10">
+                      Concurrent
+                    </th>
+                    {competitorAvailability[0]?.days.map((d, i) => (
+                      <th
+                        key={i}
+                        className="px-2 py-2 text-center font-semibold text-gray-700 min-w-[80px]"
+                      >
+                        <div className="text-[10px] uppercase text-gray-500">
+                          {d.date.toLocaleDateString('fr-FR', { weekday: 'short' })}
+                        </div>
+                        <div className="text-xs">
+                          {d.date.toLocaleDateString('fr-FR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                          })}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {competitorAvailability.map((row) => (
+                    <tr key={row.competitorId} className="border-b border-gray-100">
+                      <td className="px-4 py-2 font-semibold text-gray-900 sticky left-0 bg-white z-10">
+                        {row.competitorName}
+                      </td>
+                      {row.days.map((d, i) => (
+                        <td key={i} className="px-2 py-2 text-center">
+                          <div
+                            className={cn(
+                              'mx-auto inline-block px-2 py-1 rounded text-[10px] font-bold border',
+                              d.level === 'Faible' &&
+                                'bg-red-100 text-red-700 border-red-300',
+                              d.level === 'Moyenne' &&
+                                'bg-amber-100 text-amber-700 border-amber-300',
+                              d.level === 'Élevée' &&
+                                'bg-emerald-100 text-emerald-700 border-emerald-300'
+                            )}
+                          >
+                            {d.level}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 

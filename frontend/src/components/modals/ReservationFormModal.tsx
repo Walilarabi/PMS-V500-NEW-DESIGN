@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { X, AlertTriangle, TrendingUp, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { X, AlertTriangle, TrendingUp, Clock, CheckCircle2, XCircle, Loader2, Search, Moon, Banknote } from 'lucide-react';
 import { CHANNELS } from '@/src/constants/channels';
 import { useRevenueEngine } from '@/src/hooks/useRevenueEngine';
 import type { ReservationStatus } from '@/src/contexts/ReservationContext';
+import { getStayBreakdown } from '@/src/services/calendar-pricing.service';
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 
@@ -439,17 +440,44 @@ const ReservationFormModal: React.FC<Props> = ({
     setForm(f => ({ ...f, [k]: v }));
 
   // ── Calculs ──
+  // On essaie d'abord de récupérer les tarifs exacts depuis le Calendrier
+  // Tarifaire (nuit par nuit). Sinon fallback sur prix de base × multiplicateur.
   const calc = useMemo(() => {
     const cin = new Date(form.checkIn), cout = new Date(form.checkOut);
     const nights = Math.max(0, Math.round((cout.getTime() - cin.getTime()) / 86400000));
     const room = baseRooms.find(r => r.number === form.roomNumber);
     const plan = RATE_PLANS.find(p => p.id === form.ratePlanId);
-    const pn = (room?.price ?? 0) * (plan?.mult ?? 1);
-    const ht = pn * nights;
+    const fallbackPerNight = (room?.price ?? 0) * (plan?.mult ?? 1);
+
+    let calendarBreakdown: ReturnType<typeof getStayBreakdown> | null = null;
+    if (form.checkIn && form.checkOut && room && nights > 0) {
+      calendarBreakdown = getStayBreakdown({
+        checkIn: form.checkIn,
+        checkOut: form.checkOut,
+        roomQuery: room.type,
+        planQuery: plan?.name || form.ratePlanId,
+        fallbackPrice: fallbackPerNight,
+      });
+    }
+
+    const pn = fallbackPerNight; // prix de référence "1ère nuit" pour préauto
+    const ht = calendarBreakdown && calendarBreakdown.nights.length > 0
+      ? calendarBreakdown.total
+      : pn * nights;
     const tva = ht * (form.vatRate / 100);
     const tax = 2.5 * (form.adults + form.children) * nights;
     const ttc = ht + tva + tax;
-    return { nights, pn, ht, tva, tax, ttc };
+    return {
+      nights,
+      pn,
+      ht,
+      tva,
+      tax,
+      ttc,
+      breakdown: calendarBreakdown,
+      fromCalendar: !!calendarBreakdown && calendarBreakdown.allFromCalendar,
+      anyClosed: !!calendarBreakdown && calendarBreakdown.anyClosed,
+    };
   }, [form.checkIn, form.checkOut, form.roomNumber, form.adults, form.children, form.vatRate, form.ratePlanId, baseRooms]);
 
   // ── Préautorisation ──
@@ -671,8 +699,8 @@ const ReservationFormModal: React.FC<Props> = ({
                       <AlertTriangle size={16} color={confirmOverbooking ? '#D97706' : '#DC2626'} />
                       <span style={{ fontSize: 12, fontWeight: 700, color: confirmOverbooking ? '#92400E' : '#991B1B' }}>
                         {confirmOverbooking
-                          ? `⚠️ Overbooking confirmé — capacité dépassée (max autorisé: ${overbookingInfo.maxAllowed} chambres)`
-                          : `🚨 Chambre complète — Overbooking contrôlé possible (seuil ${overbookingInfo.maxAllowed} ch. max)`
+                          ? `Overbooking confirmé — capacité dépassée (max autorisé: ${overbookingInfo.maxAllowed} chambres)`
+                          : `Chambre complète — Overbooking contrôlé possible (seuil ${overbookingInfo.maxAllowed} ch. max)`
                         }
                       </span>
                     </div>
@@ -915,22 +943,45 @@ const ReservationFormModal: React.FC<Props> = ({
                     </div>
                   </div>
                   {calc.nights > 0 && calc.pn > 0 && (
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                      <thead><tr style={{ borderBottom: '1px solid #F3F4F6' }}>
-                        {['Date','Libellé','Montant'].map((h, i) => <th key={h} style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.5px', padding: '10px 16px 7px', textAlign: i === 2 ? 'right' : 'left' }}>{h}</th>)}
-                      </tr></thead>
-                      <tbody>
-                        {Array.from({ length: calc.nights }).map((_, i) => {
-                          const d = new Date(form.checkIn); d.setDate(d.getDate() + i);
-                          const room = baseRooms.find(r => r.number === form.roomNumber);
-                          return <tr key={i} style={{ borderBottom: '1px solid #F9FAFB' }}>
-                            <td style={{ fontSize: 12, color: '#6B7280', padding: '8px 16px' }}>{d.toLocaleDateString('fr-FR')}</td>
-                            <td style={{ fontSize: 12, fontStyle: 'italic', color: '#9CA3AF', padding: '8px 16px' }}>Nuitée — {room?.type ?? 'Chambre'}</td>
-                            <td style={{ fontSize: 12, fontWeight: 600, textAlign: 'right', padding: '8px 16px' }}>{fmtEur(calc.pn)}</td>
-                          </tr>;
-                        })}
-                      </tbody>
-                    </table>
+                    <>
+                      {(calc.fromCalendar || calc.anyClosed) && (
+                        <div style={{ padding: '6px 16px', display: 'flex', gap: 8, alignItems: 'center', background: calc.anyClosed ? '#FEF2F2' : '#ECFDF5', borderBottom: '1px solid #F3F4F6' }}>
+                          {calc.anyClosed ? (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#B91C1C' }}>
+                              ⚠ Au moins une nuit est fermée sur ce plan tarifaire
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#047857' }}>
+                              ✓ Tarifs récupérés depuis le Calendrier Tarifaire
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead><tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                          {['Date','Libellé','Montant'].map((h, i) => <th key={h} style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.5px', padding: '10px 16px 7px', textAlign: i === 2 ? 'right' : 'left' }}>{h}</th>)}
+                        </tr></thead>
+                        <tbody>
+                          {Array.from({ length: calc.nights }).map((_, i) => {
+                            const d = new Date(form.checkIn); d.setDate(d.getDate() + i);
+                            const room = baseRooms.find(r => r.number === form.roomNumber);
+                            const breakdownNight = calc.breakdown?.nights[i];
+                            const nightPrice = breakdownNight?.price ?? calc.pn;
+                            const fromCalendar = breakdownNight?.source === 'calendar';
+                            const isClosed = breakdownNight?.source === 'closed';
+                            return <tr key={i} style={{ borderBottom: '1px solid #F9FAFB' }}>
+                              <td style={{ fontSize: 12, color: '#6B7280', padding: '8px 16px' }}>{d.toLocaleDateString('fr-FR')}</td>
+                              <td style={{ fontSize: 12, fontStyle: 'italic', color: isClosed ? '#B91C1C' : '#9CA3AF', padding: '8px 16px' }}>
+                                Nuitée — {room?.type ?? 'Chambre'}
+                                {fromCalendar && <span style={{ marginLeft: 6, fontStyle: 'normal', fontSize: 9, fontWeight: 700, color: '#047857', background: '#D1FAE5', padding: '1px 5px', borderRadius: 3 }}>CAL</span>}
+                                {isClosed && <span style={{ marginLeft: 6, fontStyle: 'normal', fontSize: 9, fontWeight: 700, color: '#B91C1C', background: '#FEE2E2', padding: '1px 5px', borderRadius: 3 }}>FERMÉ</span>}
+                              </td>
+                              <td style={{ fontSize: 12, fontWeight: 600, textAlign: 'right', padding: '8px 16px', color: isClosed ? '#B91C1C' : undefined }}>{fmtEur(nightPrice)}</td>
+                            </tr>;
+                          })}
+                        </tbody>
+                      </table>
+                    </>
                   )}
                   <div style={{ padding: '10px 16px 0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #F3F4F6' }}>
@@ -1132,16 +1183,18 @@ const ReservationFormModal: React.FC<Props> = ({
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {([
-                { rule: '0',           icon: '🔍', lbl: 'Vérification carte', val: '0€' },
-                { rule: 'first_night', icon: '🌙', lbl: '1ère nuitée',        val: calc.pn  > 0 ? fmtEur(calc.pn)  : '—' },
-                { rule: 'total',       icon: '💰', lbl: 'Total séjour',       val: calc.ttc > 0 ? fmtEur(calc.ttc) : '—' },
-              ] as const).map(({ rule, icon, lbl, val }) => {
+                { rule: '0',           icon: Search,    lbl: 'Vérification carte', val: '0€' },
+                { rule: 'first_night', icon: Moon,      lbl: '1ère nuitée',        val: calc.pn  > 0 ? fmtEur(calc.pn)  : '—' },
+                { rule: 'total',       icon: Banknote,  lbl: 'Total séjour',       val: calc.ttc > 0 ? fmtEur(calc.ttc) : '—' },
+              ] as const).map(({ rule, icon: PaIcon, lbl, val }) => {
                 const locked = isNanr && rule !== 'total';
                 const active = paRuleDraft === rule;
                 return (
                   <div key={rule} onClick={() => !locked && setPaRuleDraft(rule)}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, cursor: locked ? 'not-allowed' : 'pointer', border: `1.5px solid ${active ? '#8B5CF6' : '#E5E7EB'}`, background: active ? '#EDE9FE' : '#F9FAFB', opacity: locked ? .35 : 1, transition: 'all .15s' }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 9, background: active ? '#8B5CF6' : '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>{icon}</div>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, background: active ? '#8B5CF6' : '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <PaIcon size={15} strokeWidth={1.75} color={active ? '#FFFFFF' : '#8B5CF6'} />
+                    </div>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: active ? '#6D28D9' : '#374151', flex: 1 }}>{lbl}</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: active ? '#8B5CF6' : '#9CA3AF' }}>{val}</span>
                   </div>

@@ -22,6 +22,8 @@ import {
   DollarSign,
   Users,
   Share2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 
@@ -86,9 +88,71 @@ function generatePromotions(): Promotion[] {
   ];
 }
 
+const CHANNEL_OPTIONS = ['Booking.com', 'Expedia', 'Site Direct', 'Airbnb'];
+const PROMO_COLORS = [
+  'bg-emerald-500',
+  'bg-blue-500',
+  'bg-amber-500',
+  'bg-purple-500',
+  'bg-rose-500',
+  'bg-teal-500',
+];
+
+interface PromoFormState {
+  name: string;
+  code: string;
+  type: Promotion['type'];
+  value: number;
+  startDate: string;
+  endDate: string;
+  channels: string[];
+}
+
+const defaultForm = (): PromoFormState => ({
+  name: '',
+  code: '',
+  type: 'percentage',
+  value: 10,
+  startDate: new Date().toISOString().slice(0, 10),
+  endDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+  channels: ['Site Direct'],
+});
+
+const PROMOS_STORAGE_KEY = 'flowtym_promotions';
+
+function loadPromos(): Promotion[] {
+  try {
+    const raw = localStorage.getItem(PROMOS_STORAGE_KEY);
+    if (!raw) return generatePromotions();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : generatePromotions();
+  } catch {
+    return generatePromotions();
+  }
+}
+
 export function Promotions() {
-  const [promotions, setPromotions] = useState<Promotion[]>(generatePromotions());
+  const [promotions, setPromotionsRaw] = useState<Promotion[]>(() => loadPromos());
+  const setPromotions: typeof setPromotionsRaw = (updater) => {
+    setPromotionsRaw((prev) => {
+      const next = typeof updater === 'function' ? (updater as (p: Promotion[]) => Promotion[])(prev) : updater;
+      try {
+        localStorage.setItem(PROMOS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // ignore quota
+      }
+      return next;
+    });
+  };
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<PromoFormState>(defaultForm());
+  const [formError, setFormError] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date();
+    d.setDate(1);
+    return d;
+  });
 
   const activePromos = promotions.filter((p) => p.active);
   const inactivePromos = promotions.filter((p) => !p.active);
@@ -106,6 +170,99 @@ export function Promotions() {
     }
   };
 
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(defaultForm());
+    setFormError(null);
+    setShowCreateModal(true);
+  };
+
+  const openEdit = (promo: Promotion) => {
+    setEditingId(promo.id);
+    setForm({
+      name: promo.name,
+      code: promo.code ?? '',
+      type: promo.type,
+      value: promo.value,
+      startDate: promo.startDate,
+      endDate: promo.endDate,
+      channels: [...promo.channels],
+    });
+    setFormError(null);
+    setShowCreateModal(true);
+  };
+
+  const submitCreate = () => {
+    if (!form.name.trim()) {
+      setFormError('Le nom de la campagne est requis');
+      return;
+    }
+    if (form.value <= 0) {
+      setFormError('La valeur doit être supérieure à zéro');
+      return;
+    }
+    if (new Date(form.endDate) < new Date(form.startDate)) {
+      setFormError('La date de fin doit être postérieure à la date de début');
+      return;
+    }
+    if (form.channels.length === 0) {
+      setFormError('Sélectionnez au moins un canal');
+      return;
+    }
+
+    if (editingId) {
+      setPromotions(
+        promotions.map((p) =>
+          p.id === editingId
+            ? {
+                ...p,
+                name: form.name.trim(),
+                type: form.type,
+                value: form.value,
+                code: form.code.trim() || null,
+                startDate: form.startDate,
+                endDate: form.endDate,
+                channels: form.channels,
+              }
+            : p
+        )
+      );
+    } else {
+      const newPromo: Promotion = {
+        id: `promo_${Date.now()}`,
+        name: form.name.trim(),
+        type: form.type,
+        value: form.value,
+        code: form.code.trim() || null,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        channels: form.channels,
+        bookingsGenerated: 0,
+        revenueGenerated: 0,
+        active: true,
+      };
+      setPromotions([newPromo, ...promotions]);
+    }
+    setShowCreateModal(false);
+    setEditingId(null);
+  };
+
+  const toggleFormChannel = (channel: string) => {
+    setForm((f) =>
+      f.channels.includes(channel)
+        ? { ...f, channels: f.channels.filter((c) => c !== channel) }
+        : { ...f, channels: [...f.channels, channel] }
+    );
+  };
+
+  const navigateMonth = (delta: number) => {
+    setCalendarMonth((m) => {
+      const next = new Date(m);
+      next.setMonth(next.getMonth() + delta);
+      return next;
+    });
+  };
+
   return (
     <div className="flex flex-col h-screen w-full bg-gray-50 overflow-hidden">
       {/* HEADER */}
@@ -117,7 +274,7 @@ export function Promotions() {
           {
             label: 'Nouvelle promo',
             icon: Plus,
-            onClick: () => setShowCreateModal(true),
+            onClick: openCreate,
           },
         ]}
       />
@@ -178,11 +335,25 @@ export function Promotions() {
                     promo={promo}
                     onToggle={() => togglePromo(promo.id)}
                     onDelete={() => deletePromo(promo.id)}
+                    onEdit={() => openEdit(promo)}
                   />
                 ))}
               </div>
             )}
           </div>
+
+          {/* CALENDRIER PROMOTIONNEL */}
+          <PromoCalendar
+            month={calendarMonth}
+            promotions={promotions}
+            onPrev={() => navigateMonth(-1)}
+            onNext={() => navigateMonth(1)}
+            onToday={() => {
+              const d = new Date();
+              d.setDate(1);
+              setCalendarMonth(d);
+            }}
+          />
 
           {/* CAMPAGNES INACTIVES */}
           {inactivePromos.length > 0 && (
@@ -198,6 +369,7 @@ export function Promotions() {
                     promo={promo}
                     onToggle={() => togglePromo(promo.id)}
                     onDelete={() => deletePromo(promo.id)}
+                    onEdit={() => openEdit(promo)}
                   />
                 ))}
               </div>
@@ -213,21 +385,23 @@ export function Promotions() {
           onClick={() => setShowCreateModal(false)}
         >
           <div
-            className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6"
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-lg font-bold text-gray-900 mb-4">
-              Créer une nouvelle promotion
+              {editingId ? 'Modifier la promotion' : 'Créer une nouvelle promotion'}
             </h2>
 
             <div className="space-y-4 mb-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Nom de la campagne
+                    Nom de la campagne *
                   </label>
                   <input
                     type="text"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
                     placeholder="Ex: Été 2026"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
@@ -239,8 +413,10 @@ export function Promotions() {
                   </label>
                   <input
                     type="text"
+                    value={form.code}
+                    onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
                     placeholder="Ex: SUMMER20"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -250,19 +426,28 @@ export function Promotions() {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
                     Type de réduction
                   </label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                    <option>Pourcentage (%)</option>
-                    <option>Montant fixe (€)</option>
-                    <option>Nuits gratuites</option>
+                  <select
+                    value={form.type}
+                    onChange={(e) =>
+                      setForm({ ...form, type: e.target.value as Promotion['type'] })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="percentage">Pourcentage (%)</option>
+                    <option value="fixed">Montant fixe (€)</option>
+                    <option value="free_nights">Nuits gratuites</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Valeur
+                    Valeur *
                   </label>
                   <input
                     type="number"
+                    min={1}
+                    value={form.value}
+                    onChange={(e) => setForm({ ...form, value: Number(e.target.value) })}
                     placeholder="20"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
@@ -272,24 +457,60 @@ export function Promotions() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Date début
+                    Date début *
                   </label>
                   <input
                     type="date"
+                    value={form.startDate}
+                    onChange={(e) => setForm({ ...form, startDate: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Date fin
+                    Date fin *
                   </label>
                   <input
                     type="date"
+                    value={form.endDate}
+                    onChange={(e) => setForm({ ...form, endDate: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
                 </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Canaux de diffusion *
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {CHANNEL_OPTIONS.map((channel) => {
+                    const selected = form.channels.includes(channel);
+                    return (
+                      <button
+                        key={channel}
+                        type="button"
+                        onClick={() => toggleFormChannel(channel)}
+                        className={cn(
+                          'px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors',
+                          selected
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-blue-500'
+                        )}
+                      >
+                        {channel}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {formError && (
+                <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                  {formError}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-3">
@@ -300,13 +521,10 @@ export function Promotions() {
                 Annuler
               </button>
               <button
-                onClick={() => {
-                  alert('Création de promotion en développement');
-                  setShowCreateModal(false);
-                }}
+                onClick={submitCreate}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
               >
-                Créer la promotion
+                {editingId ? 'Enregistrer' : 'Créer la promotion'}
               </button>
             </div>
           </div>
@@ -324,10 +542,12 @@ function PromoCard({
   promo,
   onToggle,
   onDelete,
+  onEdit,
 }: {
   promo: Promotion;
   onToggle: () => void;
   onDelete: () => void;
+  onEdit?: () => void;
 }) {
   const formatValue = () => {
     if (promo.type === 'percentage') return `-${promo.value}%`;
@@ -459,7 +679,9 @@ function PromoCard({
       {/* ACTIONS */}
       <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
         <button
-          className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs font-bold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 hover:shadow-md flex items-center justify-center gap-1.5"
+          onClick={onEdit}
+          disabled={!onEdit}
+          className="flex-1 px-3 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white text-xs font-bold rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-200 hover:shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Edit className="w-3.5 h-3.5" />
           Éditer
@@ -471,6 +693,153 @@ function PromoCard({
           <Trash2 className="w-3.5 h-3.5" />
           Supprimer
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PROMO CALENDAR (mois)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function PromoCalendar({
+  month,
+  promotions,
+  onPrev,
+  onNext,
+  onToday,
+}: {
+  month: Date;
+  promotions: Promotion[];
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+}) {
+  const year = month.getFullYear();
+  const monthIdx = month.getMonth();
+  const firstDay = new Date(year, monthIdx, 1);
+  const lastDay = new Date(year, monthIdx + 1, 0);
+  const daysInMonth = lastDay.getDate();
+  // Lundi = 0
+  const startWeekday = (firstDay.getDay() + 6) % 7;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const promoColor = (promoId: string) => {
+    const idx = promotions.findIndex((p) => p.id === promoId);
+    return PROMO_COLORS[idx % PROMO_COLORS.length];
+  };
+
+  const cells: ({ date: Date; promos: Promotion[] } | null)[] = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, monthIdx, d);
+    const active = promotions.filter((p) => {
+      const start = new Date(p.startDate);
+      const end = new Date(p.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return p.active && date >= start && date <= end;
+    });
+    cells.push({ date, promos: active });
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const weekDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200">
+      <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Calendar className="w-4 h-4 text-gray-500" />
+          <h3 className="text-sm font-bold text-gray-700">Calendrier promotionnel</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onPrev}
+            className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+            title="Mois précédent"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="px-3 py-1 text-sm font-bold text-gray-800 capitalize">
+            {month.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+          </span>
+          <button
+            onClick={onNext}
+            className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+            title="Mois suivant"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onToday}
+            className="ml-2 px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded"
+          >
+            Aujourd'hui
+          </button>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="grid grid-cols-7 gap-1 mb-1">
+          {weekDays.map((d) => (
+            <div
+              key={d}
+              className="text-[10px] font-bold text-gray-500 uppercase text-center py-1"
+            >
+              {d}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((cell, i) => {
+            if (!cell) {
+              return <div key={i} className="h-20 rounded bg-gray-50" />;
+            }
+            const isToday = cell.date.getTime() === today.getTime();
+            return (
+              <div
+                key={i}
+                className={cn(
+                  'h-20 rounded border p-1 flex flex-col gap-0.5 overflow-hidden',
+                  isToday
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 bg-white'
+                )}
+              >
+                <div
+                  className={cn(
+                    'text-[11px] font-bold',
+                    isToday ? 'text-blue-700' : 'text-gray-700'
+                  )}
+                >
+                  {cell.date.getDate()}
+                </div>
+                <div className="flex flex-col gap-0.5 overflow-hidden">
+                  {cell.promos.slice(0, 3).map((p) => (
+                    <div
+                      key={p.id}
+                      title={`${p.name}${p.code ? ` (${p.code})` : ''}`}
+                      className={cn(
+                        'text-[9px] text-white font-semibold truncate px-1 rounded',
+                        promoColor(p.id)
+                      )}
+                    >
+                      {p.name}
+                    </div>
+                  ))}
+                  {cell.promos.length > 3 && (
+                    <div className="text-[9px] font-bold text-gray-500">
+                      +{cell.promos.length - 3}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

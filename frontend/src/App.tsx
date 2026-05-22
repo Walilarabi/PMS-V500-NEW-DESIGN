@@ -1,4 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Bed, Wrench, Inbox, AlertTriangle, Lock, Settings, CheckCircle2, Clock,
+  Hourglass, Users, CreditCard, AlertOctagon, Send, Construction,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Topbar } from '@/src/components/layout/Topbar';
 import { Sidebar } from '@/src/components/layout/Sidebar';
 import { PageId } from '@/src/types';
@@ -7,34 +12,25 @@ import { PageId } from '@/src/types';
 import { TodayView }        from '@/src/pages/TodayView';
 import { PlanningView }     from '@/src/pages/PlanningViewLive';
 import { ReservationsView } from '@/src/pages/ReservationsView';
-import { ClientsView }      from '@/src/pages/ClientsView';
+import { ClientsLayout }    from '@/src/pages/clients/ClientsLayout';
+import type { ClientsPage }  from '@/src/pages/clients/ClientsLayout';
 import { RevenueDashboard }    from '@/src/pages/revenue/RevenueDashboard';
 import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
 
-// RMS ENTERPRISE ULTIMATE (6 pages complètes)
-import { RateManager }         from '@/src/pages/revenue/RateManager';
-import { DecisionHistory }     from '@/src/pages/revenue/DecisionHistory';
+// RMS ENTERPRISE ULTIMATE
 import { DecisionHistoryPage } from '@/src/pages/revenue/DecisionHistoryPage';
-import { CompetitiveIntel }    from '@/src/pages/revenue/CompetitiveIntel';
-import { LighthouseMonthlyView } from '@/src/pages/revenue/LighthouseMonthlyView';
-import { Channels }            from '@/src/pages/revenue/Channels';
-import { Promotions }          from '@/src/pages/revenue/Promotions';
+import { CompetitiveWatchPage } from '@/src/pages/rms/CompetitiveWatchPage';
 import { PromotionsCompact }   from '@/src/pages/revenue/PromotionsCompact';
 import { DistributionAnalytics } from '@/src/pages/revenue/DistributionAnalytics';
-// PricingRules already imported below
-
-// Anciennes versions (deprecated - à supprimer ultérieurement)
-import { ChannelsView }        from '@/src/pages/revenue/ChannelsView';
-import { MarketIntelligence }  from '@/src/pages/revenue/MarketIntelligence';
-import { PricingRules }        from '@/src/pages/revenue/PricingRules';
-import { YieldView }           from '@/src/pages/revenue/YieldView';
-import { YieldRules }          from '@/src/pages/revenue/YieldRules';
 import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
-import { PromotionsView }      from '@/src/pages/revenue/PromotionsView';
 import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
-import { VeilleConcurrentielle } from '@/src/pages/revenue/VeilleConcurrentielle';
+import { StrategiesPage }      from '@/src/pages/revenue/StrategiesPage';
+import { AutopilotPage }       from '@/src/pages/revenue/AutopilotPage';
+import { SimulationPage }      from '@/src/pages/revenue/SimulationPage';
+import { AlertsPage }          from '@/src/pages/revenue/AlertsPage';
 import { FinanceView }      from '@/src/pages/FinanceView';
-import { AnalysisView }     from '@/src/pages/AnalysisView';
+import { FinanceLayout }    from '@/src/pages/finance/FinanceLayout';
+import { AnalysisLayout }   from '@/src/pages/analysis/AnalysisLayout';
 import { FlowboardView }    from '@/src/pages/FlowboardView';
 import { SettingsView }     from '@/src/pages/SettingsView';
 import { FacturationView }  from '@/src/pages/finance/FacturationView';
@@ -53,11 +49,11 @@ import {
 import { useSupabaseSync } from '@/src/hooks/useSupabaseSync';
 import { DebugPanel } from '@/src/components/DebugPanel';
 
-// Placeholder universel
-const Placeholder = ({ title, icon }: { title: string; icon?: string }) => (
+// Placeholder universel — icône Lucide (épuré, minimaliste)
+const Placeholder = ({ title, icon: Icon = Construction }: { title: string; icon?: LucideIcon }) => (
   <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#F9FAFB]">
-    <div className="w-20 h-20 bg-[#8B5CF6]/8 rounded-3xl flex items-center justify-center mb-6">
-      <span className="text-4xl">{icon ?? '🏗️'}</span>
+    <div className="w-20 h-20 bg-[#8B5CF6]/10 rounded-3xl flex items-center justify-center mb-6">
+      <Icon className="w-9 h-9 text-[#8B5CF6]" strokeWidth={1.75} />
     </div>
     <h1 className="text-xl font-bold text-gray-900 mb-2">{title}</h1>
     <p className="text-sm text-gray-400 max-w-sm">
@@ -69,87 +65,131 @@ const Placeholder = ({ title, icon }: { title: string; icon?: string }) => (
   </div>
 );
 
-function renderPage(page: PageId): React.ReactNode {
+// Anciennes clés de page Revenue → nouvelles clés (redirections propres)
+const LEGACY_REVENUE_ALIASES: Record<string, PageId> = {
+  revenue: 'rev_dashboard',
+  rev_compset: 'rev_market',
+  rev_pricing: 'rev_calendar',
+  rms: 'rev_pricing_reco',
+  rms_history: 'rev_audit',
+  rev_channels: 'rev_distribution',
+  rev_rules: 'rev_automation',
+  rev_yield: 'rev_automation',
+};
+
+/** Normalise une clé de page : redirige proprement les anciennes routes Revenue. */
+function normalizePage(page: string): PageId {
+  return (LEGACY_REVENUE_ALIASES[page] ?? page) as PageId;
+}
+
+function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.ReactNode {
   switch (page) {
     // ── FLOWDAY ───────────────────────────────────────────────────────────────
     case 'flowboard':   return <FlowboardView />;
     case 'planning':    return <PlanningView />;
     case 'today':       return <TodayView />;
-    case 'housekeeping':return <Placeholder title="Housekeeping" icon="🛏️" />;
-    case 'maintenance': return <Placeholder title="Maintenance" icon="🔧" />;
+    case 'housekeeping':return <Placeholder title="Housekeeping" icon={Bed} />;
+    case 'maintenance': return <Placeholder title="Maintenance" icon={Wrench} />;
 
     // ── SAS ───────────────────────────────────────────────────────────────────
     case 'sas':
-    case 'sas_incoming':       return <Placeholder title="Réservations entrantes OTA" icon="📥" />;
+    case 'sas_incoming':       return <Placeholder title="Réservations entrantes OTA" icon={Inbox} />;
     case 'sas_rie':            return <RevenueIntegrityView />;
-    case 'sas_anomalies':      return <Placeholder title="Anomalies détectées" icon="⚠️" />;
-    case 'sas_quarantine':     return <Placeholder title="File quarantaine" icon="🔒" />;
+    case 'sas_anomalies':      return <Placeholder title="Anomalies détectées" icon={AlertTriangle} />;
+    case 'sas_quarantine':     return <Placeholder title="File quarantaine" icon={Lock} />;
     case 'sas_odms':           return <OdmsView />;
     case 'sas_reconciliation': return <ReconciliationView />;
     case 'sas_audit':          return <AuditLogView />;
-    case 'sas_partners':       return <Placeholder title="Config. partenaires OTA" icon="⚙️" />;
+    case 'sas_partners':       return <Placeholder title="Config. partenaires OTA" icon={Settings} />;
 
     // ── RÉSERVATIONS ──────────────────────────────────────────────────────────
     case 'reservations':  return <ReservationsView />;
-    case 'res_confirmed': return <Placeholder title="Réservations confirmées" icon="✅" />;
-    case 'res_hold':      return <Placeholder title="En option (Hold)" icon="⏸️" />;
-    case 'res_pending':   return <Placeholder title="Pending" icon="⏳" />;
-    case 'groupes':       return <Placeholder title="Groupes" icon="👥" />;
-    case 'res_payments':  return <Placeholder title="Suivi des paiements" icon="💳" />;
-    case 'res_anomalies': return <Placeholder title="Anomalies financières" icon="🚨" />;
-    case 'res_relances':  return <Placeholder title="Relances" icon="📨" />;
+    case 'res_confirmed': return <Placeholder title="Réservations confirmées" icon={CheckCircle2} />;
+    case 'res_hold':      return <Placeholder title="En option (Hold)" icon={Clock} />;
+    case 'res_pending':   return <Placeholder title="Pending" icon={Hourglass} />;
+    case 'groupes':       return <Placeholder title="Groupes" icon={Users} />;
+    case 'res_payments':  return <Placeholder title="Suivi des paiements" icon={CreditCard} />;
+    case 'res_anomalies': return <Placeholder title="Anomalies financières" icon={AlertOctagon} />;
+    case 'res_relances':  return <Placeholder title="Relances" icon={Send} />;
 
-    // ── CLIENTS ───────────────────────────────────────────────────────────────
-    case 'clients':           return <ClientsView />;
-    case 'clients_cardex':    return <Placeholder title="Particuliers (Cardex)" icon="👤" />;
-    case 'clients_companies': return <Placeholder title="Sociétés / Agences" icon="🏢" />;
-    case 'clients_segments':  return <Placeholder title="Segments marketing" icon="🎯" />;
-    case 'clients_merge':     return <Placeholder title="Fusion / Dédoublonnage" icon="🔀" />;
-    case 'clients_documents': return <Placeholder title="Documents & signatures" icon="📄" />;
-    case 'clients_blacklist': return <Placeholder title="Blacklist / Watchlist" icon="🚫" />;
-    case 'clients_tiers':     return <Placeholder title="Tiers / Prescripteurs" icon="🤝" />;
+    // ── CLIENTS (routé via ClientsLayout — Wave C1) ───────────────────────────
+    case 'clients':
+    case 'clients_companies':
+    case 'clients_segments':
+    case 'clients_merge':
+    case 'clients_documents':
+    case 'clients_blacklist':
+    case 'clients_tiers':
+    case 'clients_automation':
+      return <ClientsLayout activePage={page as ClientsPage} />;
 
-    // ── REVENUE ───────────────────────────────────────────────────────────────
-    case 'revenue':        return <RevenueDashboard />;
-    case 'rev_pricing':    return <PricingCalendar />;
-    
-    // RMS ENTERPRISE ULTIMATE
-    case 'rms':            return <RMSTableauPro />;
-    case 'rms_history':    return <DecisionHistoryPage />;
-    case 'rev_compset':    return <LighthouseMonthlyView />;
-    case 'rev_channels':   return <DistributionAnalytics />;
-    case 'rev_promotions': return <PromotionsCompact />;
-    case 'rev_rules':      return <YieldAndRules />;
-    // rev_yield redirige aussi vers la page fusionnée
-    case 'rev_yield':      return <YieldAndRules />;
+    // ── REVENUE / RMS ─────────────────────────────────────────────────────────
+    // Pilotage
+    case 'revenue':
+    case 'rev_dashboard':       return <RevenueDashboard />;
+    case 'rev_compset':
+    case 'rev_market':          return <CompetitiveWatchPage />;
+    case 'rms':
+    case 'rev_pricing_reco':    return <RMSTableauPro />;
+    case 'rev_pricing':
+    case 'rev_calendar':        return <PricingCalendar />;
+    // Automatisation
+    case 'rev_rules':
+    case 'rev_yield':
+    case 'rev_automation':      return <YieldAndRules />;
+    case 'rev_strategies':      return <StrategiesPage />;
+    case 'rev_autopilot':       return <AutopilotPage />;
+    case 'rev_simulation':      return <SimulationPage />;
+    case 'rev_alerts':          return <AlertsPage />;
+    // Distribution
+    case 'rev_channels':
+    case 'rev_distribution':    return <DistributionAnalytics />;
+    case 'rev_promotions':      return <PromotionsCompact />;
+    // Contrôle
+    case 'rms_history':
+    case 'rev_audit':           return <DecisionHistoryPage />;
 
     // ── FINANCE ───────────────────────────────────────────────────────────────
-    case 'facturation':        return <FacturationView />;
-    case 'proforma':           return <Placeholder title="Proforma / Devis" icon="📋" />;
-    case 'caisse':             return <Placeholder title="Petite caisse" icon="💰" />;
-    case 'impayes':            return <Placeholder title="Impayés / Débiteurs" icon="⚠️" />;
-    case 'cloture':            return <Placeholder title="Clôture & Audit" icon="🔐" />;
-    case 'fin_reconciliation': return <ReconciliationView />;
-    case 'tva2026':            return <Placeholder title="TVA 2026 & e-facture" icon="🧾" />;
-    case 'paiements_securises':return <Placeholder title="Paiements sécurisés" icon="🛡️" />;
-    case 'comptabilite':       return <Placeholder title="Comptabilité" icon="📒" />;
-    case 'cash_management':    return <Placeholder title="Cash Management" icon="💵" />;
-    case 'finance':            return <FinanceView activeTab="facturation" />;
+    case 'finance':
+    case 'facturation':
+    case 'fin_folios':
+    case 'proforma':
+    case 'caisse':
+    case 'impayes':
+    case 'fin_dunning':
+    case 'cloture':
+    case 'fin_reconciliation':
+    case 'fin_bank_reco':
+    case 'fin_einvoice':
+    case 'tva2026':
+    case 'paiements_securises':
+    case 'comptabilite':
+    case 'fin_audit_chain':
+    case 'cash_management':
+      return <FinanceLayout activePage={page as any} />;
 
     // ── ANALYSE ───────────────────────────────────────────────────────────────
     case 'analysis':
-    case 'kpi':                      return <AnalysisView />;
-    case 'performance':              return <Placeholder title="Performance" icon="🏆" />;
-    case 'forecast':                 return <Placeholder title="Prévisionnel" icon="🔭" />;
-    case 'rapports':                 return <Placeholder title="Rapports (93)" icon="📊" />;
-    case 'rapports_exploitation':    return <Placeholder title="Rapports Exploitation" icon="🏨" />;
-    case 'rapports_reservations':    return <Placeholder title="Rapports Réservations" icon="📅" />;
-    case 'rapports_backoffice':      return <Placeholder title="Rapports Back office" icon="🏦" />;
-    case 'rapports_comptabilite':    return <Placeholder title="Rapports Comptabilité" icon="📒" />;
-    case 'rapports_tva':             return <Placeholder title="Rapports TVA 2026" icon="🧾" />;
-    case 'rapports_stats':           return <Placeholder title="Statistiques" icon="📈" />;
-    case 'rapports_revenue':         return <Placeholder title="Rapports Revenue" icon="💹" />;
-    case 'rapports_housekeeping':    return <Placeholder title="Rapports Housekeeping" icon="🛏️" />;
+    case 'analysis_library':
+    case 'analysis_favorites':
+    case 'analysis_recent':
+    case 'analysis_saved':
+    case 'analysis_alerts':
+      return <AnalysisLayout activePage={page} onNavigateSubPage={(p) => setActivePage(p)} />;
+    // Legacy redirections (anciennes PageIds → nouvelle vue d'ensemble)
+    case 'kpi':
+    case 'performance':
+    case 'forecast':
+    case 'rapports':
+    case 'rapports_exploitation':
+    case 'rapports_reservations':
+    case 'rapports_backoffice':
+    case 'rapports_comptabilite':
+    case 'rapports_tva':
+    case 'rapports_stats':
+    case 'rapports_revenue':
+    case 'rapports_housekeeping':
+      return <AnalysisLayout activePage="analysis" onNavigateSubPage={(p) => setActivePage(p)} />;
 
     // ── PARAMÈTRES ────────────────────────────────────────────────────────────
     case 'settings':
@@ -202,18 +242,35 @@ export default function App() {
   useSasIncomingRealtime();
   useSupabaseSync();  // Synchronise les rooms et réservations depuis Supabase vers les stores locaux
 
+  // Navigation normalisée — redirige les anciennes routes Revenue vers les nouvelles
+  const navigate = useCallback((page: PageId) => {
+    setActivePage(normalizePage(page));
+  }, []);
+
+  // Écouteur global pour la navigation par CustomEvent (utilisé par les CTA des pages)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ page?: string }>).detail;
+      if (detail?.page) {
+        setActivePage(normalizePage(detail.page));
+      }
+    };
+    window.addEventListener('navigate', handler);
+    return () => window.removeEventListener('navigate', handler);
+  }, []);
+
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#F9FAFB]">
-      <Topbar activePage={activePage} setActivePage={setActivePage} />
+      <Topbar activePage={activePage} setActivePage={navigate} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activePage={activePage}
-          setActivePage={setActivePage}
+          setActivePage={navigate}
           isCollapsed={sidebarCollapsed}
           setIsCollapsed={setSidebarCollapsed}
         />
         <main className="flex-1 overflow-hidden flex flex-col">
-          {renderPage(activePage)}
+          {renderPage(activePage, navigate)}
         </main>
       </div>
       <DebugPanel />

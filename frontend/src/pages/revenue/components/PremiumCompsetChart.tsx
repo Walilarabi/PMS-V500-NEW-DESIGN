@@ -18,7 +18,7 @@ import {
   ComposedChart, Area, Line, Bar, Cell, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { Target, TrendingUp, TrendingDown } from 'lucide-react';
+import { Target, TrendingUp, TrendingDown, Sparkles } from 'lucide-react';
 import type { LighthouseImport } from '../../../services/lighthouse-parser.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -132,8 +132,9 @@ function PremiumTooltip({ active, payload, ourHotelName }: TooltipProps) {
       </div>
 
       {d.events && (
-        <div className="mt-2 pt-2 border-t border-gray-100 text-[10px] text-amber-700 bg-amber-50 rounded px-2 py-1">
-          🎉 {d.events}
+        <div className="mt-2 pt-2 border-t border-gray-100 text-[10px] text-amber-700 bg-amber-50 rounded px-2 py-1 flex items-center gap-1">
+          <Sparkles className="w-3 h-3" strokeWidth={1.75} />
+          {d.events}
         </div>
       )}
     </div>

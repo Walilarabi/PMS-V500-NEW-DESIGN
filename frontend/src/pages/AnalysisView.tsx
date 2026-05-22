@@ -129,10 +129,25 @@ const KpiCard = ({ title, value, sub, icon: Icon, color }: any) => (
 
 // ─── COMPOSANT PRINCIPAL ─────────────────────────────────────────────────────
 
-export const AnalysisView = () => {
-  const [selectedReportId, setSelectedReportId] = useState<string>('STA-01');
-  const [search, setSearch] = useState('');
-  const [expandedCats, setExpandedCats] = useState<string[]>(['STATISTIQUES', 'EXPLOITATION']);
+interface AnalysisViewProps {
+  defaultCategory?: 'EXPLOITATION' | 'STATISTIQUES' | 'FINANCIER' | 'CLIENTS' | 'DIRECTION' | 'PROPRIETAIRES';
+  defaultReportId?: string;
+  searchHint?: string;
+}
+
+export const AnalysisView: React.FC<AnalysisViewProps> = ({
+  defaultCategory,
+  defaultReportId,
+  searchHint,
+}) => {
+  const initialCats = defaultCategory
+    ? [defaultCategory]
+    : ['STATISTIQUES', 'EXPLOITATION'];
+  const initialReport = defaultReportId
+    ?? (defaultCategory ? ALL_REPORTS.find(r => r.cat === defaultCategory)?.id ?? 'STA-01' : 'STA-01');
+  const [selectedReportId, setSelectedReportId] = useState<string>(initialReport);
+  const [search, setSearch] = useState(searchHint ?? '');
+  const [expandedCats, setExpandedCats] = useState<string[]>(initialCats);
   const [period, setPeriod] = useState({ start: '2026-05-01', end: '2026-05-31' });
   const [granularity, setGranularity] = useState<'day' | 'month' | 'year'>('month');
   const [comparison, setComparison] = useState('N-1');
@@ -184,8 +199,18 @@ export const AnalysisView = () => {
 
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 scrollbar-hide">
           {categories.map(cat => {
-            const catReports = ALL_REPORTS.filter(r => r.cat === cat);
-            const isExpanded = expandedCats.includes(cat);
+            const q = search.trim().toLowerCase();
+            const catReports = ALL_REPORTS.filter(r => {
+              if (r.cat !== cat) return false;
+              if (!q) return true;
+              return (
+                r.title.toLowerCase().includes(q) ||
+                r.desc.toLowerCase().includes(q) ||
+                r.id.toLowerCase().includes(q)
+              );
+            });
+            if (catReports.length === 0 && q) return null;
+            const isExpanded = q ? true : expandedCats.includes(cat);
             return (
               <div key={cat} className="space-y-1">
                 <button 

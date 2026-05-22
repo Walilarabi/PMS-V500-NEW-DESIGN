@@ -4,13 +4,14 @@ import {
   ShieldAlert, AlertCircle, GitMerge, History, Settings2,
   CalendarDays, CheckCircle2, Clock, HelpCircle, Users,
   Building2, Target, GitMerge as Merge, FileText, Ban,
-  UserCheck, TrendingUp, Grid, BarChart2, Share2,
+  TrendingUp, Grid, BarChart2, Share2,
   Layers, Zap, CreditCard, Receipt, Wallet,
   AlertTriangle, Lock, Banknote, Percent, Plug, Package,
   PieChart, Activity, BookOpen, Database,
   ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
   Cpu, Bell, ShieldCheck, Upload, ClipboardList, HardDrive,
-  Hotel, Globe, Tag, Coffee, KeyRound, Star,
+  Hotel, Globe, Tag, Coffee, KeyRound, Star, FolderOpen, FileCode2, Send, Landmark,
+  Fingerprint, Plane,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -82,14 +83,14 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
     {
       label: 'Clients',
       items: [
-        { id: 'clients',           label: 'Dashboard',            icon: LayoutDashboard },
-        { id: 'clients_cardex',    label: 'Particuliers (Cardex)',icon: UserCheck },
+        { id: 'clients',           label: 'Fiches Clients',       icon: LayoutDashboard },
         { id: 'clients_companies', label: 'Sociétés / Agences',  icon: Building2 },
         { id: 'clients_segments',  label: 'Segments marketing',  icon: Target },
         { id: 'clients_merge',     label: 'Fusion / Dédoublonnage',icon: Merge },
-        { id: 'clients_documents', label: 'Documents & signatures',icon: FileText },
+        { id: 'clients_documents', label: 'RGPD & Consentements', icon: FileText },
         { id: 'clients_blacklist', label: 'Blacklist / Watchlist',icon: Ban },
         { id: 'clients_tiers',     label: 'Tiers / Prescripteurs',icon: Globe },
+        { id: 'clients_automation',label: 'Automatisations',     icon: Zap },
       ],
     },
   ],
@@ -98,24 +99,33 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
     {
       label: 'Pilotage',
       items: [
-        { id: 'revenue',      label: 'Dashboard',           icon: LayoutDashboard },
-        { id: 'rev_pricing',  label: 'Calendrier tarifaire',icon: CalendarDays },
-      ],
-    },
-    {
-      label: 'Distribution',
-      items: [
-        { id: 'rev_channels', label: 'Canaux & OTAs',       icon: Share2 },
-        { id: 'rev_compset',  label: 'Veille concurrentielle', icon: Target },
+        { id: 'rev_dashboard',    label: 'Dashboard',                 icon: LayoutDashboard },
+        { id: 'rev_market',       label: 'Marché & Concurrence',      icon: Globe },
+        { id: 'rev_pricing_reco', label: 'Pricing & Recommandations', icon: Sparkles },
+        { id: 'rev_calendar',     label: 'Calendrier tarifaire',      icon: CalendarDays },
       ],
     },
     {
       label: 'Automatisation',
       items: [
-        { id: 'rms',             label: 'Tableau RMS',            icon: Activity },
-        { id: 'rms_history',     label: 'Historique décisions',   icon: History },
-        { id: 'rev_rules',       label: 'Yield & Règles auto',    icon: Zap },
-        { id: 'rev_promotions',  label: 'Promotions',             icon: Tag },
+        { id: 'rev_automation', label: 'Automatisation', icon: Cpu },
+        { id: 'rev_strategies', label: 'Stratégies',     icon: Target },
+        { id: 'rev_autopilot',  label: 'Autopilote RMS', icon: Plane },
+        { id: 'rev_simulation', label: 'Simulation',     icon: Activity },
+        { id: 'rev_alerts',     label: 'Alertes',        icon: Bell, badge: '4' },
+      ],
+    },
+    {
+      label: 'Distribution',
+      items: [
+        { id: 'rev_distribution', label: 'Distribution & OTA', icon: Share2 },
+        { id: 'rev_promotions',   label: 'Promotions',         icon: Tag },
+      ],
+    },
+    {
+      label: 'Contrôle',
+      items: [
+        { id: 'rev_audit', label: 'Analyse & Audit', icon: ClipboardList },
       ],
     },
   ],
@@ -124,40 +134,36 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
     {
       label: 'Finance',
       items: [
-        { id: 'facturation',       label: 'Facturation',       icon: FileText },
-        { id: 'proforma',          label: 'Proforma / Devis',  icon: Receipt },
-        { id: 'caisse',            label: 'Petite caisse',     icon: Wallet },
-        { id: 'impayes',           label: 'Impayés / Débiteurs',icon: AlertTriangle },
-        { id: 'cloture',           label: 'Clôture & Audit',   icon: Lock },
-        { id: 'fin_reconciliation',label: 'Rapprochement bancaire',icon: RefreshCw },
-        { id: 'tva2026',           label: 'TVA 2026 & e-facture',icon: Percent },
-        { id: 'paiements_securises',label: 'Paiements sécurisés',icon: ShieldCheck },
-        { id: 'comptabilite',      label: 'Comptabilité',      icon: BookOpen },
-        { id: 'cash_management',   label: 'Cash Management',   icon: Banknote },
+        { id: 'finance',           label: "Vue d'ensemble",       icon: Wallet },
+        { id: 'facturation',       label: 'Facturation',          icon: FileText },
+        { id: 'fin_folios',        label: 'Multi-folios',         icon: FolderOpen },
+        { id: 'proforma',          label: 'Proforma / Devis',     icon: Receipt },
+        { id: 'caisse',            label: 'Caisse',               icon: Wallet },
+        { id: 'impayes',           label: 'Impayés / Débiteurs',  icon: AlertTriangle },
+        { id: 'fin_dunning',       label: 'Relances automatiques',icon: Send },
+        { id: 'cloture',           label: 'Clôture journalière',  icon: Lock },
+        { id: 'fin_reconciliation',label: 'Rapprochement OTA',    icon: RefreshCw },
+        { id: 'fin_bank_reco',     label: 'Relevés bancaires CAMT',icon: Landmark },
+        { id: 'fin_einvoice',      label: 'E-facture & PPF',      icon: FileCode2 },
+        { id: 'tva2026',           label: 'TVA 2026 & e-facture', icon: Percent },
+        { id: 'paiements_securises',label: 'Paiements sécurisés', icon: ShieldCheck },
+        { id: 'comptabilite',      label: 'Comptabilité',         icon: BookOpen },
+        { id: 'fin_audit_chain',   label: 'Audit chaîné SHA-256', icon: Fingerprint },
+        { id: 'cash_management',   label: 'Cash Management',      icon: Banknote },
       ],
     },
   ],
 
   analysis: [
     {
-      label: 'Analyse',
+      label: 'Analyse & Rapports',
       items: [
-        { id: 'kpi',         label: 'KPI',          icon: Activity },
-        { id: 'performance', label: 'Performance',  icon: BarChart2 },
-        { id: 'forecast',    label: 'Prévisionnel', icon: TrendingUp },
-      ],
-    },
-    {
-      label: 'Rapports (93)',
-      items: [
-        { id: 'rapports_exploitation', label: 'Exploitation',      icon: Bed },
-        { id: 'rapports_reservations', label: 'Réservations',      icon: Calendar },
-        { id: 'rapports_backoffice',   label: 'Back office',       icon: Building2 },
-        { id: 'rapports_comptabilite', label: 'Comptabilité',      icon: BookOpen },
-        { id: 'rapports_tva',          label: 'TVA 2026 & e-fact.', icon: Percent },
-        { id: 'rapports_stats',        label: 'Statistiques',      icon: PieChart },
-        { id: 'rapports_revenue',      label: 'Revenue Management',icon: TrendingUp },
-        { id: 'rapports_housekeeping', label: 'Housekeeping',      icon: Sparkles },
+        { id: 'analysis',           label: "Vue d'ensemble",     icon: LayoutDashboard },
+        { id: 'analysis_library',   label: 'Bibliothèque',       icon: BookOpen },
+        { id: 'analysis_favorites', label: 'Mes favoris',        icon: Star },
+        { id: 'analysis_recent',    label: 'Récents',            icon: Clock },
+        { id: 'analysis_saved',     label: 'Vues sauvegardées',  icon: FileText },
+        { id: 'analysis_alerts',    label: "Centre d'alertes",   icon: Activity },
       ],
     },
   ],
@@ -242,21 +248,30 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   reservations: 'reservations', res_confirmed: 'reservations', res_hold: 'reservations',
   res_pending: 'reservations', groupes: 'reservations', res_payments: 'reservations',
   res_anomalies: 'reservations', res_relances: 'reservations',
-  clients: 'clients', clients_cardex: 'clients', clients_companies: 'clients',
+  clients: 'clients', clients_companies: 'clients',
   clients_segments: 'clients', clients_merge: 'clients', clients_documents: 'clients',
-  clients_blacklist: 'clients', clients_tiers: 'clients',
+  clients_blacklist: 'clients', clients_tiers: 'clients', clients_automation: 'clients',
+  rev_dashboard: 'revenue', rev_market: 'revenue', rev_pricing_reco: 'revenue',
+  rev_calendar: 'revenue', rev_automation: 'revenue', rev_strategies: 'revenue',
+  rev_autopilot: 'revenue',
+  rev_simulation: 'revenue', rev_alerts: 'revenue', rev_distribution: 'revenue',
+  rev_promotions: 'revenue', rev_audit: 'revenue',
+  // Legacy
   revenue: 'revenue', rev_pricing: 'revenue', rev_channels: 'revenue',
-  rev_compset: 'revenue', rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
-  rev_promotions: 'revenue', rms: 'revenue', rms_history: 'revenue',
-  finance: 'finance', facturation: 'finance', proforma: 'finance',
-  caisse: 'finance', impayes: 'finance', cloture: 'finance',
-  fin_reconciliation: 'finance', tva2026: 'finance',
-  paiements_securises: 'finance', comptabilite: 'finance', cash_management: 'finance',
+  rev_compset: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
+  rms: 'revenue', rms_history: 'revenue',
+  finance: 'finance', facturation: 'finance', fin_folios: 'finance', proforma: 'finance',
+  caisse: 'finance', impayes: 'finance', fin_dunning: 'finance', cloture: 'finance',
+  fin_reconciliation: 'finance', fin_bank_reco: 'finance', fin_einvoice: 'finance', tva2026: 'finance',
+  paiements_securises: 'finance', comptabilite: 'finance',
+  fin_audit_chain: 'finance', cash_management: 'finance',
   analysis: 'analysis', kpi: 'analysis', performance: 'analysis',
   forecast: 'analysis', rapports: 'analysis', rapports_exploitation: 'analysis',
   rapports_reservations: 'analysis', rapports_backoffice: 'analysis',
   rapports_comptabilite: 'analysis', rapports_tva: 'analysis',
   rapports_stats: 'analysis', rapports_revenue: 'analysis', rapports_housekeeping: 'analysis',
+  analysis_library: 'analysis', analysis_favorites: 'analysis',
+  analysis_recent: 'analysis', analysis_saved: 'analysis', analysis_alerts: 'analysis',
   settings: 'settings', settings_hotel: 'settings', settings_multihotel: 'settings',
   settings_room_types: 'settings', settings_rooms: 'settings', settings_floors: 'settings',
   settings_room_status: 'settings', settings_preferences: 'settings',
@@ -322,7 +337,7 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
                     onClick={() => setActivePage(item.id)}
                     title={isCollapsed ? item.label : undefined}
                     className={cn(
-                      'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-[13px] font-semibold transition-all text-left',
+                      'relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-[13px] font-semibold transition-all text-left',
                       isActive
                         ? 'bg-[#8B5CF6]/8 text-[#8B5CF6]'
                         : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50',
@@ -332,8 +347,16 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
                     {!isCollapsed && (
                       <span className="truncate">{item.label}</span>
                     )}
-                    {!isCollapsed && isActive && (
+                    {!isCollapsed && item.badge && (
+                      <span className="ml-auto shrink-0 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
+                        {item.badge}
+                      </span>
+                    )}
+                    {!isCollapsed && isActive && !item.badge && (
                       <ChevronRight size={10} className="ml-auto shrink-0 text-[#8B5CF6]" />
+                    )}
+                    {isCollapsed && item.badge && (
+                      <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />
                     )}
                   </button>
                 );

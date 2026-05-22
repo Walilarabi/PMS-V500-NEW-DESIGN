@@ -1649,12 +1649,12 @@ const TabIncidents: React.FC<{ res: Reservation }> = ({ res }) => {
                 <div>
                   <label style={LABEL}>Catégorie</label>
                   <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} style={FIELD}>
-                    <option value="technique">🔧 Technique</option>
-                    <option value="proprete">🧹 Propreté</option>
-                    <option value="bruit">🔊 Bruit</option>
-                    <option value="service">💁 Service</option>
-                    <option value="securite">🔒 Sécurité</option>
-                    <option value="autre">📋 Autre</option>
+                    <option value="technique">Technique</option>
+                    <option value="proprete">Propreté</option>
+                    <option value="bruit">Bruit</option>
+                    <option value="service">Service</option>
+                    <option value="securite">Sécurité</option>
+                    <option value="autre">Autre</option>
                   </select>
                 </div>
                 <div>

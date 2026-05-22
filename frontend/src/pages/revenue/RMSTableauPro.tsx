@@ -40,10 +40,16 @@ import {
   Building2,
   Loader2,
   Settings2,
+  BarChart3,
+  Lightbulb,
   RefreshCw,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
+import { syncRMSDecision } from '../../services/rms-calendar-sync.service';
+import { AnalyseRMTable } from './components/AnalyseRMTable';
+import { RecommandationRMTable } from './components/RecommandationRMTable';
+import { RMSRecommendationModal } from './components/RMSRecommendationModal';
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useSalonsStore } from '../../store/salonsStore';
@@ -122,7 +128,7 @@ interface DayRMSData {
   selected: boolean;
 }
 
-type ViewMode = 'table' | 'kanban';
+type ViewMode = 'table' | 'kanban' | 'analyse' | 'recommandation';
 type ViewPeriod = '7days' | '15days' | '30days' | '60days' | '90days';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -300,7 +306,7 @@ export function RMSTableauPro() {
   };
 
   // ─── Store RMS Calendrier ───────────────────────────────────────────────
-  const { roomTypes, updatePrice, loadData } = useRateCalendarStore();
+  const { roomTypes, loadData } = useRateCalendarStore();
 
   useEffect(() => {
     if (roomTypes.length === 0) {
@@ -506,9 +512,15 @@ export function RMSTableauPro() {
         : d
     ));
 
-    if (referenceRoom && referencePlan) {
-      updatePrice(referenceRoom.roomTypeId, referencePlan.planId, date, pushedPrice);
-    }
+    // Sync unifiée : injecte dans le Calendrier + déclenche push Channel Manager + journalise
+    syncRMSDecision({
+      date,
+      finalPrice: pushedPrice,
+      status: 'Acceptée',
+      source: 'table',
+      roomTypeId: referenceRoom?.roomTypeId,
+      planId: referencePlan?.planId,
+    });
 
     recordRmsDecision({
       stayDate: date,
@@ -524,7 +536,7 @@ export function RMSTableauPro() {
       occupancyRate: row.occupancyRate,
       medianPrice: row.medianPrice,
     });
-  }, [rmsData, referenceRoom, referencePlan, updatePrice, rmsSettings]);
+  }, [rmsData, referenceRoom, referencePlan, rmsSettings]);
 
   const handleReject = useCallback(async (date: string) => {
     const row = rmsData.find(d => d.date === date);
@@ -535,6 +547,15 @@ export function RMSTableauPro() {
         ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Refusée' as ValidationStatus }
         : d
     ));
+
+    syncRMSDecision({
+      date,
+      finalPrice: row.currentPrice,
+      status: 'Refusée',
+      source: 'table',
+      roomTypeId: referenceRoom?.roomTypeId,
+      planId: referencePlan?.planId,
+    });
 
     recordRmsDecision({
       stayDate: date,
@@ -550,7 +571,7 @@ export function RMSTableauPro() {
       occupancyRate: row.occupancyRate,
       medianPrice: row.medianPrice,
     });
-  }, [rmsData, referenceRoom]);
+  }, [rmsData, referenceRoom, referencePlan]);
 
   const handleMaintain = useCallback(async (date: string) => {
     const row = rmsData.find(d => d.date === date);
@@ -561,6 +582,15 @@ export function RMSTableauPro() {
         ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Maintenue' as ValidationStatus }
         : d
     ));
+
+    syncRMSDecision({
+      date,
+      finalPrice: row.currentPrice,
+      status: 'Maintenue',
+      source: 'table',
+      roomTypeId: referenceRoom?.roomTypeId,
+      planId: referencePlan?.planId,
+    });
 
     recordRmsDecision({
       stayDate: date,
@@ -576,7 +606,7 @@ export function RMSTableauPro() {
       occupancyRate: row.occupancyRate,
       medianPrice: row.medianPrice,
     });
-  }, [rmsData, referenceRoom]);
+  }, [rmsData, referenceRoom, referencePlan]);
 
   const handleToggleSelect = useCallback((date: string) => {
     setRmsData((prev) =>
@@ -734,6 +764,26 @@ export function RMSTableauPro() {
               <Grid3x3 className="w-3.5 h-3.5" />
               Kanban
             </button>
+            <button
+              onClick={() => setViewMode('analyse')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold rounded flex items-center gap-1.5 transition-all duration-150',
+                viewMode === 'analyse' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              )}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Analyse RM
+            </button>
+            <button
+              onClick={() => setViewMode('recommandation')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold rounded flex items-center gap-1.5 transition-all duration-150',
+                viewMode === 'recommandation' ? 'bg-white text-violet-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              )}
+            >
+              <Lightbulb className="w-3.5 h-3.5" />
+              Recommandation RM
+            </button>
           </div>
         </div>
 
@@ -820,24 +870,45 @@ export function RMSTableauPro() {
 
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-auto">
-        {viewMode === 'table' ? (
+        {viewMode === 'table' && (
           <TableView data={rmsData} handlers={{
             handleAccept, handleReject, handleMaintain, handleToggleSelect,
             handleViewDetail: setDetailDate,
             handleAvailabilityChange,
             isAvailabilityOverridden,
           }} />
-        ) : (
+        )}
+        {viewMode === 'kanban' && (
           <KanbanView data={rmsData} handlers={{ handleAccept, handleReject, handleMaintain }} />
+        )}
+        {viewMode === 'analyse' && <AnalyseRMTable data={rmsData} />}
+        {viewMode === 'recommandation' && (
+          <RecommandationRMTable
+            data={rmsData}
+            handlers={{ handleAccept, handleReject, handleMaintain, handleViewDetail: setDetailDate }}
+          />
         )}
       </div>
 
-      {detailDate && (
-        <CompsetDetailModal
-          date={detailDate}
-          onClose={() => setDetailDate(null)}
-        />
-      )}
+      {detailDate && (() => {
+        const day = rmsData.find(d => d.date === detailDate);
+        if (!day) return null;
+        return (
+          <RMSRecommendationModal
+            date={detailDate}
+            rmsDay={day}
+            lighthouseDay={lighthouseImport?.days.find(d => d.date === detailDate) ?? null}
+            allDates={rmsData.map(d => d.date)}
+            totalCapacity={totalCapacity}
+            restrictions={undefined}
+            onClose={() => setDetailDate(null)}
+            onNavigate={(d) => setDetailDate(d)}
+            onAccept={(d) => { handleAccept(d); setDetailDate(null); }}
+            onReject={(d) => { handleReject(d); setDetailDate(null); }}
+            onMaintain={(d) => { handleMaintain(d); setDetailDate(null); }}
+          />
+        );
+      })()}
 
       {showSettingsModal && (
         <RmsSettingsModal
@@ -1289,8 +1360,8 @@ function CompsetDetailModal({ date, onClose }: { date: string; onClose: () => vo
           </div>
           {(dayData.events || dayData.holidays) && (
             <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-              {dayData.holidays && <div>📅 {dayData.holidays}</div>}
-              {dayData.events && <div>🎉 {dayData.events}</div>}
+              {dayData.holidays && <div className="flex items-center gap-1.5"><Calendar className="w-3 h-3" strokeWidth={1.75} />{dayData.holidays}</div>}
+              {dayData.events && <div className="flex items-center gap-1.5"><Sparkles className="w-3 h-3" strokeWidth={1.75} />{dayData.events}</div>}
             </div>
           )}
         </div>
@@ -1518,3 +1589,4 @@ function RmsSettingsModal({
     </div>
   );
 }
+

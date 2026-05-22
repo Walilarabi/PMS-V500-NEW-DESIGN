@@ -31,19 +31,30 @@ import {
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { useLighthouseStore } from '../../store/lighthouseStore';
+import { useExpediaStore } from '../../store/expediaStore';
 import { parseLighthouseExcel } from '../../services/lighthouse-parser.service';
+import { parseExpediaExcel } from '../../services/expedia-parser.service';
 import { useSalonsStore } from '../../store/salonsStore';
 import { parseSalonsExcel } from '../../services/salons-parser.service';
 import { persistLighthouseImport, fetchActiveLighthouseImport } from '../../services/lighthouse-persistence.service';
 import { persistSalonEvents, fetchSalonEvents } from '../../services/salon-events.service';
 import { CompsetKpiBlock, CompsetBarChart } from './components/CompsetWidgets';
 import { PremiumCompsetChart } from './components/PremiumCompsetChart';
+import { ComparisonChart } from './components/ComparisonChart';
 import { MarketAnalysisCockpit } from './components/MarketAnalysisCockpit';
 import { LighthouseFileBanner } from './components/LighthouseFileBanner';
 import { PremiumDayDetailModal } from './components/PremiumDayDetailModal';
+import type { LighthouseImport } from '../../services/lighthouse-parser.service';
+import { findImportForDaysAgo } from '../../services/lighthouse-comparison.service';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
+
+type CompareLabel = 'Hier' | 'J-3' | 'J-7' | 'J-14' | 'J-30';
+
+const COMPARE_DAYS: Record<CompareLabel, number> = {
+  'Hier': 1, 'J-3': 3, 'J-7': 7, 'J-14': 14, 'J-30': 30,
+};
 
 // ─── Onglets ──────────────────────────────────────────────────────────────
 
@@ -127,13 +138,32 @@ function EmptyState({ onUploadClick }: { onUploadClick: () => void }) {
 
 export const LighthouseMonthlyView: React.FC = () => {
   const { importData, hasData, setImportData, setUploadStatus, clearImport } = useLighthouseStore();
+  const expediaStore = useExpediaStore();
   const salonsStore = useSalonsStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const expediaInputRef = useRef<HTMLInputElement>(null);
   const salonsInputRef = useRef<HTMLInputElement>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [compsetChartDate, setCompsetChartDate] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('cockpit');
+
+  // ─── Vue Marché : toggle Données du jour / Comparatif ─────────────────
+  const [marcheView, setMarcheView] = useState<'jour' | 'comparatif'>('jour');
+  const [compareLabel, setCompareLabel] = useState<CompareLabel>('Hier');
+  const [compareData, setCompareData] = useState<LighthouseImport | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+
+  const loadCompareData = useCallback(async (label: CompareLabel) => {
+    setCompareLoading(true);
+    setCompareData(null);
+    try {
+      const data = await findImportForDaysAgo(COMPARE_DAYS[label]);
+      setCompareData(data);
+    } finally {
+      setCompareLoading(false);
+    }
+  }, []);
 
   // ─── Upload Lighthouse ────────────────────────────────────────────────
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -156,6 +186,22 @@ export const LighthouseMonthlyView: React.FC = () => {
       setUploadStatus('error', msg);
     }
   }, [setImportData, setUploadStatus]);
+
+  // ─── Upload Expedia ───────────────────────────────────────────────────
+  const handleExpediaFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    expediaStore.setUploadStatus('parsing');
+    try {
+      const result = await parseExpediaExcel(file);
+      expediaStore.setImportData(result);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+      expediaStore.setUploadStatus('error', msg);
+    }
+  }, [expediaStore]);
 
   // ─── Upload Salons ────────────────────────────────────────────────────
   const handleSalonsFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -244,6 +290,13 @@ export const LighthouseMonthlyView: React.FC = () => {
         className="hidden"
       />
       <input
+        ref={expediaInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={handleExpediaFileChange}
+        className="hidden"
+      />
+      <input
         ref={salonsInputRef}
         type="file"
         accept=".xlsx,.xls"
@@ -313,6 +366,21 @@ export const LighthouseMonthlyView: React.FC = () => {
                 >
                   <Upload className="w-4 h-4" />
                   Nouvel import Lighthouse
+                </button>
+                <button
+                  onClick={() => expediaInputRef.current?.click()}
+                  className={cn(
+                    'px-4 py-2 rounded-md flex items-center gap-2 text-sm font-medium border transition-colors',
+                    expediaStore.hasData()
+                      ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
+                      : 'bg-amber-500 border-amber-500 text-white hover:bg-amber-600'
+                  )}
+                  title="Importer le fichier Excel Expedia Revenue Management"
+                >
+                  <Upload className="w-4 h-4" />
+                  {expediaStore.hasData()
+                    ? `Expedia ✓ (${expediaStore.importData?.days.length ?? 0}j)`
+                    : 'Upload Expedia'}
                 </button>
               </div>
             </div>
@@ -385,14 +453,86 @@ export const LighthouseMonthlyView: React.FC = () => {
 
             {activeTab === 'marche' && (
               <div className="space-y-4">
+                {/* ─── Sélecteur de vue ────────────────────────────────── */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Toggle Données du jour / Comparatif */}
+                  <div className="bg-gray-100 rounded-xl p-1 flex items-center gap-0.5">
+                    <button
+                      onClick={() => setMarcheView('jour')}
+                      className={cn(
+                        'px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150',
+                        marcheView === 'jour'
+                          ? 'bg-white text-violet-700 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-800',
+                      )}
+                    >
+                      Données du jour
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMarcheView('comparatif');
+                        if (!compareData && !compareLoading) {
+                          loadCompareData(compareLabel);
+                        }
+                      }}
+                      className={cn(
+                        'px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150',
+                        marcheView === 'comparatif'
+                          ? 'bg-white text-violet-700 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-800',
+                      )}
+                    >
+                      Comparatif
+                    </button>
+                  </div>
+
+                  {/* Sous-onglets période (visible uniquement en mode Comparatif) */}
+                  {marcheView === 'comparatif' && (
+                    <div className="bg-gray-100 rounded-xl p-1 flex items-center gap-0.5">
+                      {(Object.keys(COMPARE_DAYS) as CompareLabel[]).map(label => (
+                        <button
+                          key={label}
+                          onClick={() => {
+                            setCompareLabel(label);
+                            loadCompareData(label);
+                          }}
+                          className={cn(
+                            'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-150',
+                            compareLabel === label
+                              ? 'bg-white text-violet-700 shadow-sm'
+                              : 'text-gray-500 hover:text-gray-800',
+                          )}
+                        >
+                          vs {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* ─── KPI strip ───────────────────────────────────────── */}
                 <CompsetKpiBlock monthData={monthData} ourHotelName={importData?.ourHotelName ?? ''} />
-                {importData && (
-                  <PremiumCompsetChart
-                    importData={importData}
-                    selectedMonth={selectedMonth}
-                    onDateClick={setSelectedDate}
-                  />
-                )}
+
+                {/* ─── Graphique actif ─────────────────────────────────── */}
+                {marcheView === 'jour'
+                  ? importData && (
+                    <PremiumCompsetChart
+                      importData={importData}
+                      selectedMonth={selectedMonth}
+                      onDateClick={setSelectedDate}
+                    />
+                  )
+                  : importData && (
+                    <ComparisonChart
+                      currentData={importData}
+                      compareData={compareData}
+                      compareLabel={compareLabel}
+                      selectedMonth={selectedMonth}
+                      isLoading={compareLoading}
+                      onDateClick={setSelectedDate}
+                    />
+                  )
+                }
               </div>
             )}
 
@@ -465,7 +605,13 @@ function CompetitorHeatmap({
   ourHotelName: string;
   onDateClick: (date: string) => void;
 }) {
+  const [competitorSearch, setCompetitorSearch] = useState('');
   if (days.length === 0 || competitorNames.length === 0) return null;
+
+  const q = competitorSearch.trim().toLowerCase();
+  const filteredCompetitors = q
+    ? competitorNames.filter((n) => n.toLowerCase().includes(q))
+    : competitorNames;
 
   const cellColor = (price: number | null, ourPrice: number, status: string) => {
     if (status === 'sold_out') return 'bg-gray-200 text-gray-500';
@@ -482,12 +628,24 @@ function CompetitorHeatmap({
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-4 flex-wrap">
         <h3 className="text-base font-semibold text-gray-900">Heatmap Tarifs Concurrents</h3>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-100" /> Nous moins chers</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-100" /> Nous plus chers</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-200" /> Épuisé</span>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            value={competitorSearch}
+            onChange={(e) => setCompetitorSearch(e.target.value)}
+            placeholder="Filtrer concurrent..."
+            className="px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none w-48"
+          />
+          <span className="text-xs text-gray-400 whitespace-nowrap">
+            {filteredCompetitors.length}/{competitorNames.length}
+          </span>
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-emerald-100" /> Nous moins chers</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-red-100" /> Nous plus chers</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded bg-gray-200" /> Épuisé</span>
+          </div>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -520,7 +678,7 @@ function CompetitorHeatmap({
                 </td>
               ))}
             </tr>
-            {competitorNames.map((name) => (
+            {filteredCompetitors.map((name) => (
               <tr key={name} className="hover:bg-gray-50">
                 <td className="px-2 py-2 text-gray-700 sticky left-0 bg-white hover:bg-gray-50">{name}</td>
                 {days.map(d => {
@@ -549,6 +707,8 @@ function CompetitorHeatmap({
   );
 }
 
+type DailySortKey = 'date' | 'ourPrice' | 'compsetMedian' | 'compsetMin' | 'compsetMax' | 'diff' | 'pressure';
+
 function DailyTable({
   days,
   onRowClick,
@@ -556,30 +716,58 @@ function DailyTable({
   days: import('../../services/lighthouse-parser.service').LighthouseDayData[];
   onRowClick: (date: string) => void;
 }) {
+  const [sortKey, setSortKey] = useState<DailySortKey>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
   if (days.length === 0) return null;
+
+  const toggleSort = (key: DailySortKey) => {
+    if (sortKey === key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+  };
+
+  const sortedDays = [...days].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    let av: number | string;
+    let bv: number | string;
+    switch (sortKey) {
+      case 'date': av = a.date; bv = b.date; break;
+      case 'ourPrice': av = a.ourPrice; bv = b.ourPrice; break;
+      case 'compsetMedian': av = a.compsetMedian; bv = b.compsetMedian; break;
+      case 'compsetMin': av = a.compsetMin ?? 0; bv = b.compsetMin ?? 0; break;
+      case 'compsetMax': av = a.compsetMax ?? 0; bv = b.compsetMax ?? 0; break;
+      case 'diff': av = a.ourPrice - a.compsetMedian; bv = b.ourPrice - b.compsetMedian; break;
+      case 'pressure': av = a.marketDemandPercent; bv = b.marketDemandPercent; break;
+    }
+    if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir;
+    return ((av as number) - (bv as number)) * dir;
+  });
+
+  const arrow = (k: DailySortKey) => sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-200">
         <h3 className="text-base font-semibold text-gray-900">Détail jour par jour</h3>
+        <p className="text-xs text-gray-500 mt-1">Cliquer sur un en-tête pour trier</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Notre prix</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Médiane</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Min compset</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Max compset</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Écart médiane</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Demande</th>
+              <th onClick={() => toggleSort('date')} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Date{arrow('date')}</th>
+              <th onClick={() => toggleSort('ourPrice')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Notre prix{arrow('ourPrice')}</th>
+              <th onClick={() => toggleSort('compsetMedian')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Médiane{arrow('compsetMedian')}</th>
+              <th onClick={() => toggleSort('compsetMin')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Min compset{arrow('compsetMin')}</th>
+              <th onClick={() => toggleSort('compsetMax')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Max compset{arrow('compsetMax')}</th>
+              <th onClick={() => toggleSort('diff')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Écart médiane{arrow('diff')}</th>
+              <th onClick={() => toggleSort('pressure')} className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none">Demande{arrow('pressure')}</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Rang</th>
               <th className="px-3 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">Détail</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {days.map((day) => {
+            {sortedDays.map((day) => {
               const diff = day.ourPrice - day.compsetMedian;
               const diffPct = day.compsetMedian > 0 ? ((diff / day.compsetMedian) * 100).toFixed(1) : '—';
               const pressure = day.marketDemandPercent;

@@ -1217,7 +1217,7 @@ export const PlanningView = () => {
                              opacityClass = 'opacity-50';
                            } else if (resStatus === 'noshow') {
                              barStyle = { backgroundColor: '#FEE2E2', borderColor: '#EF4444', color: '#991B1B' };
-                             statusIcon = '⚡';
+                             statusIcon = '!';
                            } else {
                              // Matching strict par nom de canal
                              const channelConfig = storeChannels.find(c => c.name.toUpperCase() === res.source.toUpperCase());
@@ -1246,7 +1246,7 @@ export const PlanningView = () => {
                                  boxShadow: 'none' 
                                };
                              }
-                             statusIcon = '✅';
+                             statusIcon = '✓';
                            }
 
                            if (isOB) {
@@ -1854,7 +1854,7 @@ export const PlanningView = () => {
           setIsModalOpen(false);
           setDragFormData(null);
           window.dispatchEvent(new CustomEvent('app-toast', {
-            detail: { message: `✅ Réservation créée — Ch. ${data.roomNumber} · ${data.checkIn} → ${data.checkOut}` }
+            detail: { message: `Réservation créée — Ch. ${data.roomNumber} · ${data.checkIn} → ${data.checkOut}` }
           }));
         }} 
       />

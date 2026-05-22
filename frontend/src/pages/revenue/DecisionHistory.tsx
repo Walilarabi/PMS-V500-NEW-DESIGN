@@ -116,7 +116,52 @@ export function DecisionHistory() {
   }, [allRecords]);
   
   const handleExport = () => {
-    alert('Export CSV en cours de développement');
+    const headers = [
+      'Date',
+      'Jour',
+      'Événement',
+      'Recommandation IA',
+      'Prix initial',
+      'Prix suggéré',
+      'Prix final',
+      'Décision',
+      'Stratégie',
+      'Horodatage',
+    ];
+
+    const escape = (val: string | number | null) => {
+      const s = val === null || val === undefined ? '' : String(val);
+      return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const rows = filteredRecords.map((r) =>
+      [
+        r.date,
+        r.dayName,
+        r.event ?? '',
+        r.recommendation,
+        r.initialPrice,
+        r.suggestedPrice,
+        r.finalPrice,
+        r.decision,
+        r.strategy,
+        r.timestamp,
+      ]
+        .map(escape)
+        .join(';')
+    );
+
+    const csv = '﻿' + [headers.join(';'), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `historique-decisions-${stamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
   
   return (

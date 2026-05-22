@@ -192,9 +192,9 @@ export const RevenueDetailsModal: React.FC<RevenueDetailsModalProps> = ({
                          </div>
                          <div className="space-y-4">
                             {[
-                              "⚠️ Forte demande détectée → augmenter les prix de +12%",
-                              "📊 Taux OTA élevé (67%) → activer offre directe",
-                              "🔄 Pickup en hausse → fermer les classes basses"
+                              "Forte demande détectée → augmenter les prix de +12%",
+                              "Taux OTA élevé (67%) → activer offre directe",
+                              "Pickup en hausse → fermer les classes basses"
                             ].map((rec, i) => (
                               <div key={i} className="p-4 rounded-xl bg-white/5 border border-white/10 flex items-center gap-4 transition-all hover:bg-white/10 cursor-pointer">
                                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />

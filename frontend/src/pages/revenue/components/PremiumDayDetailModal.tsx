@@ -174,12 +174,12 @@ export function PremiumDayDetailModal({
             )}
             {dayData.holidays && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-200 text-xs font-medium border border-amber-400/30">
-                📅 {dayData.holidays}
+                <Calendar className="w-3 h-3" strokeWidth={1.75} /> {dayData.holidays}
               </span>
             )}
             {dayData.events && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/20 text-purple-200 text-xs font-medium border border-purple-400/30">
-                🎉 {dayData.events}
+                <Sparkles className="w-3 h-3" strokeWidth={1.75} /> {dayData.events}
               </span>
             )}
           </div>

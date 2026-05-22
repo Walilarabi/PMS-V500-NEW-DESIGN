@@ -86,3 +86,7 @@ dist/
 
 # --- Vercel ---
 .vercel/
+
+# --- agent-skills hooks (caches locaux, non versionnés) ---
+.claude/sdd-cache/
+.claude/.simplify-ignore-cache/
