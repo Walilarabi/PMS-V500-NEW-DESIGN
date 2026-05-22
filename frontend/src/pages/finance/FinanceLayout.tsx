@@ -23,6 +23,7 @@ import { ClosureWorkflowView } from './ClosureWorkflowView';
 import { ProformaView } from './ProformaView';
 import { CashRegisterView } from './CashRegisterView';
 import { FoliosView } from './FoliosView';
+import { EInvoiceView } from './EInvoiceView';
 import { fetchFinanceKpis, type FinanceDashboardKpis } from '../../services/finance/finance.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -36,6 +37,7 @@ export type FinancePage =
   | 'impayes'
   | 'cloture'
   | 'fin_reconciliation'
+  | 'fin_einvoice'
   | 'tva2026'
   | 'paiements_securises'
   | 'comptabilite'
@@ -50,6 +52,7 @@ const PAGE_TITLES: Record<FinancePage, { title: string; subtitle: string }> = {
   impayes:             { title: 'Impayés & Débiteurs',        subtitle: 'Balance âgée et workflow de relances' },
   cloture:             { title: 'Clôture journalière',        subtitle: 'Workflow midi/midi en 8 étapes' },
   fin_reconciliation:  { title: 'Rapprochement bancaire',     subtitle: 'Matching paiements OTA & banque' },
+  fin_einvoice:        { title: 'E-facture & PPF',            subtitle: 'UBL 2.1 + transmission Portail Public de Facturation' },
   tva2026:             { title: 'TVA 2026 & e-facture',       subtitle: 'Régime encaissements + PPF' },
   paiements_securises: { title: 'Paiements sécurisés',        subtitle: 'Pré-autorisations & 3DS' },
   comptabilite:        { title: 'Comptabilité',               subtitle: 'Journal des écritures et export FEC' },
@@ -98,6 +101,7 @@ export const FinanceLayout: React.FC<FinanceLayoutProps> = ({ activePage }) => {
         {activePage === 'impayes' && <DebtorsView />}
         {activePage === 'cloture' && <ClosureWorkflowView />}
         {activePage === 'fin_reconciliation' && <ReconciliationView />}
+        {activePage === 'fin_einvoice' && <EInvoiceView />}
         {activePage === 'tva2026' && <TvaDeclarationView />}
         {activePage === 'paiements_securises' && (
           <PlaceholderModule

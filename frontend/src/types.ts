@@ -60,6 +60,7 @@ export type PageId =
   | 'impayes'
   | 'cloture'
   | 'fin_reconciliation'
+  | 'fin_einvoice'
   | 'tva2026'
   | 'paiements_securises'
   | 'comptabilite'
