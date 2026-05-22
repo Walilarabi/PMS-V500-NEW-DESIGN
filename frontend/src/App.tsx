@@ -25,6 +25,7 @@ import { DistributionAnalytics } from '@/src/pages/revenue/DistributionAnalytics
 import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
 import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
 import { StrategiesPage }      from '@/src/pages/revenue/StrategiesPage';
+import { AutopilotPage }       from '@/src/pages/revenue/AutopilotPage';
 import { SimulationPage }      from '@/src/pages/revenue/SimulationPage';
 import { AlertsPage }          from '@/src/pages/revenue/AlertsPage';
 import { FinanceView }      from '@/src/pages/FinanceView';
@@ -137,6 +138,7 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'rev_yield':
     case 'rev_automation':      return <YieldAndRules />;
     case 'rev_strategies':      return <StrategiesPage />;
+    case 'rev_autopilot':       return <AutopilotPage />;
     case 'rev_simulation':      return <SimulationPage />;
     case 'rev_alerts':          return <AlertsPage />;
     // Distribution

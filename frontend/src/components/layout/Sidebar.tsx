@@ -11,7 +11,7 @@ import {
   ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
   Cpu, Bell, ShieldCheck, Upload, ClipboardList, HardDrive,
   Hotel, Globe, Tag, Coffee, KeyRound, Star, FolderOpen, FileCode2, Send, Landmark,
-  Fingerprint,
+  Fingerprint, Plane,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -110,6 +110,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
       items: [
         { id: 'rev_automation', label: 'Automatisation', icon: Cpu },
         { id: 'rev_strategies', label: 'Stratégies',     icon: Target },
+        { id: 'rev_autopilot',  label: 'Autopilote RMS', icon: Plane },
         { id: 'rev_simulation', label: 'Simulation',     icon: Activity },
         { id: 'rev_alerts',     label: 'Alertes',        icon: Bell, badge: '4' },
       ],
@@ -252,6 +253,7 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   clients_blacklist: 'clients', clients_tiers: 'clients', clients_automation: 'clients',
   rev_dashboard: 'revenue', rev_market: 'revenue', rev_pricing_reco: 'revenue',
   rev_calendar: 'revenue', rev_automation: 'revenue', rev_strategies: 'revenue',
+  rev_autopilot: 'revenue',
   rev_simulation: 'revenue', rev_alerts: 'revenue', rev_distribution: 'revenue',
   rev_promotions: 'revenue', rev_audit: 'revenue',
   // Legacy

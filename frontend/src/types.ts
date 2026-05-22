@@ -46,6 +46,7 @@ export type PageId =
   // Automatisation
   | 'rev_automation'       // Automatisation — moteur de règles RMS
   | 'rev_strategies'       // Stratégies tarifaires
+  | 'rev_autopilot'        // Autopilote RMS
   | 'rev_simulation'       // Simulation RMS
   | 'rev_alerts'           // Alertes RMS
   // Distribution
