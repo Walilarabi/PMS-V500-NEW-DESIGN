@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Bed, Wrench, Inbox, AlertTriangle, Lock, Settings, CheckCircle2, Clock,
   Hourglass, Users, CreditCard, AlertOctagon, Send, Construction,
@@ -24,6 +24,9 @@ import { PromotionsCompact }   from '@/src/pages/revenue/PromotionsCompact';
 import { DistributionAnalytics } from '@/src/pages/revenue/DistributionAnalytics';
 import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
 import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
+import { StrategiesPage }      from '@/src/pages/revenue/StrategiesPage';
+import { SimulationPage }      from '@/src/pages/revenue/SimulationPage';
+import { AlertsPage }          from '@/src/pages/revenue/AlertsPage';
 import { FinanceView }      from '@/src/pages/FinanceView';
 import { FinanceLayout }    from '@/src/pages/finance/FinanceLayout';
 import { AnalysisLayout }   from '@/src/pages/analysis/AnalysisLayout';
@@ -60,6 +63,23 @@ const Placeholder = ({ title, icon: Icon = Construction }: { title: string; icon
     </div>
   </div>
 );
+
+// Anciennes clés de page Revenue → nouvelles clés (redirections propres)
+const LEGACY_REVENUE_ALIASES: Record<string, PageId> = {
+  revenue: 'rev_dashboard',
+  rev_compset: 'rev_market',
+  rev_pricing: 'rev_calendar',
+  rms: 'rev_pricing_reco',
+  rms_history: 'rev_audit',
+  rev_channels: 'rev_distribution',
+  rev_rules: 'rev_automation',
+  rev_yield: 'rev_automation',
+};
+
+/** Normalise une clé de page : redirige proprement les anciennes routes Revenue. */
+function normalizePage(page: string): PageId {
+  return (LEGACY_REVENUE_ALIASES[page] ?? page) as PageId;
+}
 
 function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.ReactNode {
   switch (page) {
@@ -102,19 +122,30 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'clients_automation':
       return <ClientsLayout activePage={page as ClientsPage} />;
 
-    // ── REVENUE ───────────────────────────────────────────────────────────────
-    case 'revenue':        return <RevenueDashboard />;
-    case 'rev_pricing':    return <PricingCalendar />;
-    
-    // RMS ENTERPRISE ULTIMATE
-    case 'rms':            return <RMSTableauPro />;
-    case 'rms_history':    return <DecisionHistoryPage />;
-    case 'rev_compset':    return <CompetitiveWatchPage />;
-    case 'rev_channels':   return <DistributionAnalytics />;
-    case 'rev_promotions': return <PromotionsCompact />;
-    case 'rev_rules':      return <YieldAndRules />;
-    // rev_yield redirige aussi vers la page fusionnée
-    case 'rev_yield':      return <YieldAndRules />;
+    // ── REVENUE / RMS ─────────────────────────────────────────────────────────
+    // Pilotage
+    case 'revenue':
+    case 'rev_dashboard':       return <RevenueDashboard />;
+    case 'rev_compset':
+    case 'rev_market':          return <CompetitiveWatchPage />;
+    case 'rms':
+    case 'rev_pricing_reco':    return <RMSTableauPro />;
+    case 'rev_pricing':
+    case 'rev_calendar':        return <PricingCalendar />;
+    // Automatisation
+    case 'rev_rules':
+    case 'rev_yield':
+    case 'rev_automation':      return <YieldAndRules />;
+    case 'rev_strategies':      return <StrategiesPage />;
+    case 'rev_simulation':      return <SimulationPage />;
+    case 'rev_alerts':          return <AlertsPage />;
+    // Distribution
+    case 'rev_channels':
+    case 'rev_distribution':    return <DistributionAnalytics />;
+    case 'rev_promotions':      return <PromotionsCompact />;
+    // Contrôle
+    case 'rms_history':
+    case 'rev_audit':           return <DecisionHistoryPage />;
 
     // ── FINANCE ───────────────────────────────────────────────────────────────
     case 'finance':
@@ -209,12 +240,17 @@ export default function App() {
   useSasIncomingRealtime();
   useSupabaseSync();  // Synchronise les rooms et réservations depuis Supabase vers les stores locaux
 
+  // Navigation normalisée — redirige les anciennes routes Revenue vers les nouvelles
+  const navigate = useCallback((page: PageId) => {
+    setActivePage(normalizePage(page));
+  }, []);
+
   // Écouteur global pour la navigation par CustomEvent (utilisé par les CTA des pages)
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ page?: string }>).detail;
       if (detail?.page) {
-        setActivePage(detail.page as PageId);
+        setActivePage(normalizePage(detail.page));
       }
     };
     window.addEventListener('navigate', handler);
@@ -223,16 +259,16 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col overflow-hidden bg-[#F9FAFB]">
-      <Topbar activePage={activePage} setActivePage={setActivePage} />
+      <Topbar activePage={activePage} setActivePage={navigate} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           activePage={activePage}
-          setActivePage={setActivePage}
+          setActivePage={navigate}
           isCollapsed={sidebarCollapsed}
           setIsCollapsed={setSidebarCollapsed}
         />
         <main className="flex-1 overflow-hidden flex flex-col">
-          {renderPage(activePage, setActivePage)}
+          {renderPage(activePage, navigate)}
         </main>
       </div>
       <DebugPanel />

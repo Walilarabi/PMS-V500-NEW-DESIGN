@@ -37,20 +37,31 @@ export type PageId =
   | 'clients_blacklist'
   | 'clients_tiers'
   | 'clients_automation'
-  // ── 5. REVENUE ─────────────────────────────────────────────────────────────
+  // ── 5. REVENUE / RMS ───────────────────────────────────────────────────────
   // Pilotage
-  | 'revenue'              // Dashboard Revenue
-  | 'rev_pricing'          // Calendrier tarifaire (grille de prix)
-  // Distribution
-  | 'rev_channels'         // Canaux & OTAs
-  | 'rev_market'           // Veille concurrentielle (deprecated)
-  | 'rev_compset'          // Veille Concurrentielle (nouvelle page dédiée)
+  | 'rev_dashboard'        // Dashboard RMS — cockpit décisionnel
+  | 'rev_market'           // Marché & Concurrence
+  | 'rev_pricing_reco'     // Pricing & Recommandations
+  | 'rev_calendar'         // Calendrier tarifaire
   // Automatisation
-  | 'rev_rules'            // Règles tarifaires (auto-pricing)
-  | 'rev_yield'            // Yield management
+  | 'rev_automation'       // Automatisation — moteur de règles RMS
+  | 'rev_strategies'       // Stratégies tarifaires
+  | 'rev_simulation'       // Simulation RMS
+  | 'rev_alerts'           // Alertes RMS
+  // Distribution
+  | 'rev_distribution'     // Distribution & OTA
   | 'rev_promotions'       // Promotions
-  | 'rms'                  // RMS Tableau Pro (Enterprise)
-  | 'rms_history'          // Historique horodaté des décisions RMS
+  // Contrôle
+  | 'rev_audit'            // Analyse & Audit
+  // Legacy — redirigées via normalizePage()
+  | 'revenue'
+  | 'rev_pricing'
+  | 'rev_channels'
+  | 'rev_compset'
+  | 'rev_rules'
+  | 'rev_yield'
+  | 'rms'
+  | 'rms_history'
   // ── 6. FINANCE ─────────────────────────────────────────────────────────────
   | 'finance'
   | 'facturation'

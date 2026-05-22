@@ -99,24 +99,32 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
     {
       label: 'Pilotage',
       items: [
-        { id: 'revenue',      label: 'Dashboard',           icon: LayoutDashboard },
-        { id: 'rev_pricing',  label: 'Calendrier tarifaire',icon: CalendarDays },
-      ],
-    },
-    {
-      label: 'Distribution',
-      items: [
-        { id: 'rev_channels', label: 'Canaux & OTAs',       icon: Share2 },
-        { id: 'rev_compset',  label: 'Veille concurrentielle', icon: Target },
+        { id: 'rev_dashboard',    label: 'Dashboard',                 icon: LayoutDashboard },
+        { id: 'rev_market',       label: 'Marché & Concurrence',      icon: Globe },
+        { id: 'rev_pricing_reco', label: 'Pricing & Recommandations', icon: Sparkles },
+        { id: 'rev_calendar',     label: 'Calendrier tarifaire',      icon: CalendarDays },
       ],
     },
     {
       label: 'Automatisation',
       items: [
-        { id: 'rms',             label: 'Tableau RMS',            icon: Activity },
-        { id: 'rms_history',     label: 'Historique décisions',   icon: History },
-        { id: 'rev_rules',       label: 'Yield & Règles auto',    icon: Zap },
-        { id: 'rev_promotions',  label: 'Promotions',             icon: Tag },
+        { id: 'rev_automation', label: 'Automatisation', icon: Cpu },
+        { id: 'rev_strategies', label: 'Stratégies',     icon: Target },
+        { id: 'rev_simulation', label: 'Simulation',     icon: Activity },
+        { id: 'rev_alerts',     label: 'Alertes',        icon: Bell, badge: '4' },
+      ],
+    },
+    {
+      label: 'Distribution',
+      items: [
+        { id: 'rev_distribution', label: 'Distribution & OTA', icon: Share2 },
+        { id: 'rev_promotions',   label: 'Promotions',         icon: Tag },
+      ],
+    },
+    {
+      label: 'Contrôle',
+      items: [
+        { id: 'rev_audit', label: 'Analyse & Audit', icon: ClipboardList },
       ],
     },
   ],
@@ -242,9 +250,14 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   clients: 'clients', clients_companies: 'clients',
   clients_segments: 'clients', clients_merge: 'clients', clients_documents: 'clients',
   clients_blacklist: 'clients', clients_tiers: 'clients', clients_automation: 'clients',
+  rev_dashboard: 'revenue', rev_market: 'revenue', rev_pricing_reco: 'revenue',
+  rev_calendar: 'revenue', rev_automation: 'revenue', rev_strategies: 'revenue',
+  rev_simulation: 'revenue', rev_alerts: 'revenue', rev_distribution: 'revenue',
+  rev_promotions: 'revenue', rev_audit: 'revenue',
+  // Legacy
   revenue: 'revenue', rev_pricing: 'revenue', rev_channels: 'revenue',
-  rev_compset: 'revenue', rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
-  rev_promotions: 'revenue', rms: 'revenue', rms_history: 'revenue',
+  rev_compset: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
+  rms: 'revenue', rms_history: 'revenue',
   finance: 'finance', facturation: 'finance', fin_folios: 'finance', proforma: 'finance',
   caisse: 'finance', impayes: 'finance', fin_dunning: 'finance', cloture: 'finance',
   fin_reconciliation: 'finance', fin_bank_reco: 'finance', fin_einvoice: 'finance', tva2026: 'finance',
@@ -322,7 +335,7 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
                     onClick={() => setActivePage(item.id)}
                     title={isCollapsed ? item.label : undefined}
                     className={cn(
-                      'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-[13px] font-semibold transition-all text-left',
+                      'relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-[13px] font-semibold transition-all text-left',
                       isActive
                         ? 'bg-[#8B5CF6]/8 text-[#8B5CF6]'
                         : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50',
@@ -332,8 +345,16 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
                     {!isCollapsed && (
                       <span className="truncate">{item.label}</span>
                     )}
-                    {!isCollapsed && isActive && (
+                    {!isCollapsed && item.badge && (
+                      <span className="ml-auto shrink-0 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold">
+                        {item.badge}
+                      </span>
+                    )}
+                    {!isCollapsed && isActive && !item.badge && (
                       <ChevronRight size={10} className="ml-auto shrink-0 text-[#8B5CF6]" />
+                    )}
+                    {isCollapsed && item.badge && (
+                      <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />
                     )}
                   </button>
                 );

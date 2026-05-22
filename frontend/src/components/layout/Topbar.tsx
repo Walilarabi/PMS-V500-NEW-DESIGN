@@ -31,10 +31,15 @@ const PAGE_TO_NAV: Record<string, string> = {
   clients: 'clients', clients_companies: 'clients',
   clients_segments: 'clients', clients_merge: 'clients',
   clients_documents: 'clients', clients_blacklist: 'clients', clients_tiers: 'clients',
-  // Revenue
+  // Revenue / RMS
+  rev_dashboard: 'revenue', rev_market: 'revenue', rev_pricing_reco: 'revenue',
+  rev_calendar: 'revenue', rev_automation: 'revenue', rev_strategies: 'revenue',
+  rev_simulation: 'revenue', rev_alerts: 'revenue', rev_distribution: 'revenue',
+  rev_promotions: 'revenue', rev_audit: 'revenue',
+  // Revenue — legacy
   revenue: 'revenue', rev_pricing: 'revenue', rev_channels: 'revenue',
-  rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
-  rev_promotions: 'revenue',
+  rev_compset: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
+  rms: 'revenue', rms_history: 'revenue',
   // Finance
   finance: 'finance', facturation: 'finance', proforma: 'finance',
   caisse: 'finance', impayes: 'finance', cloture: 'finance',
@@ -52,7 +57,7 @@ const NAV_ITEMS = [
   { id: 'sas',         label: 'SAS',            icon: Shield,     defaultPage: 'sas_incoming' as PageId, hasBadge: true },
   { id: 'reservations', label: 'Réservations',  icon: Calendar,   defaultPage: 'reservations' as PageId },
   { id: 'clients',      label: 'Clients',       icon: Users,      defaultPage: 'clients' as PageId },
-  { id: 'revenue',      label: 'Revenue',       icon: TrendingUp, defaultPage: 'revenue' as PageId },
+  { id: 'revenue',      label: 'Revenue',       icon: TrendingUp, defaultPage: 'rev_dashboard' as PageId },
   { id: 'finance',      label: 'Finance',       icon: CreditCard, defaultPage: 'facturation' as PageId },
   { id: 'analysis',     label: 'Analyse',       icon: BarChart2,  defaultPage: 'analysis' as PageId },
   { id: 'settings',     label: 'Paramètres',    icon: Settings,   defaultPage: 'settings' as PageId },
