@@ -23,6 +23,7 @@ import type { LucideIcon } from 'lucide-react';
 import { ClientsView } from '../ClientsView';
 import { CompaniesView } from './CompaniesView';
 import { TiersView } from './TiersView';
+import { SegmentsView } from './SegmentsView';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -82,13 +83,7 @@ export const ClientsLayout: React.FC<ClientsLayoutProps> = ({ activePage }) => {
         return <CompaniesView />;
 
       case 'clients_segments':
-        return (
-          <ComingSoon
-            title="Segments marketing"
-            subtitle="Segmentation dynamique basée sur les comportements, le CA, la fréquence et le profil voyage."
-            icon={Target}
-          />
-        );
+        return <SegmentsView />;
 
       case 'clients_merge':
         return (
@@ -145,10 +140,11 @@ export const ClientsLayout: React.FC<ClientsLayoutProps> = ({ activePage }) => {
         <div className="hidden lg:flex items-center gap-1">
           {(
             [
-              ['clients',           'Clients',    Users],
-              ['clients_companies', 'Sociétés',   Building2],
+              ['clients',           'Clients',       Users],
+              ['clients_companies', 'Sociétés',      Building2],
+              ['clients_segments',  'Segments',      Target],
               ['clients_tiers',     'Prescripteurs', Handshake],
-              ['clients_blacklist', 'Blacklist',  Ban],
+              ['clients_blacklist', 'Blacklist',     Ban],
             ] as [ClientsPage, string, LucideIcon][]
           ).map(([page, label, Icon]) => (
             <button
