@@ -6,7 +6,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import {
-  AlertTriangle, Mail, Phone, FileText, Loader2, Send, TrendingDown,
+  AlertTriangle, Mail, Phone, FileText, Loader2, Send, TrendingDown, CheckCircle2,
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
@@ -232,8 +232,10 @@ function KpiBox({ label, value, icon: Icon, tone }: { label: string; value: stri
 function EmptyState() {
   return (
     <div className="bg-white rounded-lg border-2 border-dashed border-emerald-300 p-12 text-center">
-      <span className="text-5xl">🎉</span>
-      <h3 className="text-base font-bold text-emerald-800 mt-3">Aucun impayé !</h3>
+      <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 flex items-center justify-center">
+        <CheckCircle2 className="w-8 h-8 text-emerald-600" strokeWidth={1.75} />
+      </div>
+      <h3 className="text-base font-bold text-emerald-800 mt-3">Aucun impayé</h3>
       <p className="text-sm text-gray-600 mt-1">Tous les comptes débiteurs sont à jour.</p>
     </div>
   );

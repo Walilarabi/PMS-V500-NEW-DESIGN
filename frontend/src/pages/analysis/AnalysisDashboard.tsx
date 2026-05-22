@@ -8,7 +8,8 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { Star, Clock, FileText, BookOpen, ChevronRight, Sparkles, Lock, Tv } from 'lucide-react';
+import { Star, Clock, FileText, BookOpen, ChevronRight, Sparkles, Lock, Tv, FolderOpen, BarChart3, Timer } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { ALL_REPORTS, REPORT_CATEGORIES, getReportsByCategory, REPORT_STATS } from './reports/registry';
 import { getFavorites, getRecent, getSavedViews } from '../../services/analysis/report-prefs.service';
 import { DailyBriefing } from './DailyBriefing';
@@ -145,9 +146,9 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigate
                   </div>
                 </div>
                 <div className="text-[10px] text-gray-500 line-clamp-2 mb-2">{cat.description}</div>
-                <div className="flex items-center gap-2 text-[10px]">
-                  {charts > 0 && <span className="text-gray-500">📊 {charts}</span>}
-                  {fiscal > 0 && <span className="text-amber-700">🔒 {fiscal}</span>}
+                <div className="flex items-center gap-3 text-[10px]">
+                  {charts > 0 && <span className="text-gray-500 inline-flex items-center gap-1"><BarChart3 className="w-3 h-3" strokeWidth={1.75} />{charts}</span>}
+                  {fiscal > 0 && <span className="text-amber-700 inline-flex items-center gap-1"><Lock className="w-3 h-3" strokeWidth={1.75} />{fiscal}</span>}
                 </div>
               </button>
             );
@@ -157,10 +158,10 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigate
 
       {/* Bandeau stats catalogue */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatBadge label="Total rapports" value={REPORT_STATS.total} icon="📁" />
-        <StatBadge label="Avec graphiques" value={REPORT_STATS.withChart} icon="📊" tone="emerald" />
-        <StatBadge label="Verrouillage fiscal" value={REPORT_STATS.fiscalLocked} icon="🔒" tone="amber" />
-        <StatBadge label="Temps réel" value={REPORT_STATS.realtime} icon="⏱️" tone="blue" />
+        <StatBadge label="Total rapports" value={REPORT_STATS.total} icon={FolderOpen} />
+        <StatBadge label="Avec graphiques" value={REPORT_STATS.withChart} icon={BarChart3} tone="emerald" />
+        <StatBadge label="Verrouillage fiscal" value={REPORT_STATS.fiscalLocked} icon={Lock} tone="amber" />
+        <StatBadge label="Temps réel" value={REPORT_STATS.realtime} icon={Timer} tone="blue" />
       </div>
 
       {/* Quick win — rapports suggérés */}
@@ -203,20 +204,22 @@ export const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ onNavigate
   );
 };
 
-function StatBadge({ label, value, icon, tone = 'default' }: {
+function StatBadge({ label, value, icon: Icon, tone = 'default' }: {
   label: string;
   value: number;
-  icon: string;
+  icon: LucideIcon;
   tone?: 'default' | 'emerald' | 'amber' | 'blue';
 }) {
-  const color =
-    tone === 'emerald' ? 'border-emerald-200 bg-emerald-50/30' :
-    tone === 'amber' ? 'border-amber-200 bg-amber-50/30' :
-    tone === 'blue' ? 'border-blue-200 bg-blue-50/30' :
-    'border-gray-200 bg-white';
+  const colorMap = {
+    default: { bg: 'border-gray-200 bg-white',            iconColor: 'text-gray-500' },
+    emerald: { bg: 'border-emerald-200 bg-emerald-50/30', iconColor: 'text-emerald-600' },
+    amber:   { bg: 'border-amber-200 bg-amber-50/30',     iconColor: 'text-amber-600' },
+    blue:    { bg: 'border-blue-200 bg-blue-50/30',       iconColor: 'text-blue-600' },
+  };
+  const c = colorMap[tone];
   return (
-    <div className={cn('rounded-lg border p-3 flex items-center gap-3', color)}>
-      <div className="text-2xl">{icon}</div>
+    <div className={cn('rounded-lg border p-3 flex items-center gap-3', c.bg)}>
+      <Icon className={cn('w-6 h-6', c.iconColor)} strokeWidth={1.75} />
       <div>
         <div className="text-xl font-extrabold text-gray-900">{value}</div>
         <div className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">{label}</div>

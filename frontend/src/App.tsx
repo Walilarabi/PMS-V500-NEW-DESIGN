@@ -1,4 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import {
+  Bed, Wrench, Inbox, AlertTriangle, Lock, Settings, CheckCircle2, Clock,
+  Hourglass, Users, CreditCard, AlertOctagon, Send, User, Building2, Target,
+  GitMerge, FileText, Ban, Handshake, Construction,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Topbar } from '@/src/components/layout/Topbar';
 import { Sidebar } from '@/src/components/layout/Sidebar';
 import { PageId } from '@/src/types';
@@ -39,11 +45,11 @@ import {
 import { useSupabaseSync } from '@/src/hooks/useSupabaseSync';
 import { DebugPanel } from '@/src/components/DebugPanel';
 
-// Placeholder universel
-const Placeholder = ({ title, icon }: { title: string; icon?: string }) => (
+// Placeholder universel — icône Lucide (épuré, minimaliste)
+const Placeholder = ({ title, icon: Icon = Construction }: { title: string; icon?: LucideIcon }) => (
   <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#F9FAFB]">
-    <div className="w-20 h-20 bg-[#8B5CF6]/8 rounded-3xl flex items-center justify-center mb-6">
-      <span className="text-4xl">{icon ?? '🏗️'}</span>
+    <div className="w-20 h-20 bg-[#8B5CF6]/10 rounded-3xl flex items-center justify-center mb-6">
+      <Icon className="w-9 h-9 text-[#8B5CF6]" strokeWidth={1.75} />
     </div>
     <h1 className="text-xl font-bold text-gray-900 mb-2">{title}</h1>
     <p className="text-sm text-gray-400 max-w-sm">
@@ -61,39 +67,39 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'flowboard':   return <FlowboardView />;
     case 'planning':    return <PlanningView />;
     case 'today':       return <TodayView />;
-    case 'housekeeping':return <Placeholder title="Housekeeping" icon="🛏️" />;
-    case 'maintenance': return <Placeholder title="Maintenance" icon="🔧" />;
+    case 'housekeeping':return <Placeholder title="Housekeeping" icon={Bed} />;
+    case 'maintenance': return <Placeholder title="Maintenance" icon={Wrench} />;
 
     // ── SAS ───────────────────────────────────────────────────────────────────
     case 'sas':
-    case 'sas_incoming':       return <Placeholder title="Réservations entrantes OTA" icon="📥" />;
+    case 'sas_incoming':       return <Placeholder title="Réservations entrantes OTA" icon={Inbox} />;
     case 'sas_rie':            return <RevenueIntegrityView />;
-    case 'sas_anomalies':      return <Placeholder title="Anomalies détectées" icon="⚠️" />;
-    case 'sas_quarantine':     return <Placeholder title="File quarantaine" icon="🔒" />;
+    case 'sas_anomalies':      return <Placeholder title="Anomalies détectées" icon={AlertTriangle} />;
+    case 'sas_quarantine':     return <Placeholder title="File quarantaine" icon={Lock} />;
     case 'sas_odms':           return <OdmsView />;
     case 'sas_reconciliation': return <ReconciliationView />;
     case 'sas_audit':          return <AuditLogView />;
-    case 'sas_partners':       return <Placeholder title="Config. partenaires OTA" icon="⚙️" />;
+    case 'sas_partners':       return <Placeholder title="Config. partenaires OTA" icon={Settings} />;
 
     // ── RÉSERVATIONS ──────────────────────────────────────────────────────────
     case 'reservations':  return <ReservationsView />;
-    case 'res_confirmed': return <Placeholder title="Réservations confirmées" icon="✅" />;
-    case 'res_hold':      return <Placeholder title="En option (Hold)" icon="⏸️" />;
-    case 'res_pending':   return <Placeholder title="Pending" icon="⏳" />;
-    case 'groupes':       return <Placeholder title="Groupes" icon="👥" />;
-    case 'res_payments':  return <Placeholder title="Suivi des paiements" icon="💳" />;
-    case 'res_anomalies': return <Placeholder title="Anomalies financières" icon="🚨" />;
-    case 'res_relances':  return <Placeholder title="Relances" icon="📨" />;
+    case 'res_confirmed': return <Placeholder title="Réservations confirmées" icon={CheckCircle2} />;
+    case 'res_hold':      return <Placeholder title="En option (Hold)" icon={Clock} />;
+    case 'res_pending':   return <Placeholder title="Pending" icon={Hourglass} />;
+    case 'groupes':       return <Placeholder title="Groupes" icon={Users} />;
+    case 'res_payments':  return <Placeholder title="Suivi des paiements" icon={CreditCard} />;
+    case 'res_anomalies': return <Placeholder title="Anomalies financières" icon={AlertOctagon} />;
+    case 'res_relances':  return <Placeholder title="Relances" icon={Send} />;
 
     // ── CLIENTS ───────────────────────────────────────────────────────────────
     case 'clients':           return <ClientsView />;
-    case 'clients_cardex':    return <Placeholder title="Particuliers (Cardex)" icon="👤" />;
-    case 'clients_companies': return <Placeholder title="Sociétés / Agences" icon="🏢" />;
-    case 'clients_segments':  return <Placeholder title="Segments marketing" icon="🎯" />;
-    case 'clients_merge':     return <Placeholder title="Fusion / Dédoublonnage" icon="🔀" />;
-    case 'clients_documents': return <Placeholder title="Documents & signatures" icon="📄" />;
-    case 'clients_blacklist': return <Placeholder title="Blacklist / Watchlist" icon="🚫" />;
-    case 'clients_tiers':     return <Placeholder title="Tiers / Prescripteurs" icon="🤝" />;
+    case 'clients_cardex':    return <Placeholder title="Particuliers (Cardex)" icon={User} />;
+    case 'clients_companies': return <Placeholder title="Sociétés / Agences" icon={Building2} />;
+    case 'clients_segments':  return <Placeholder title="Segments marketing" icon={Target} />;
+    case 'clients_merge':     return <Placeholder title="Fusion / Dédoublonnage" icon={GitMerge} />;
+    case 'clients_documents': return <Placeholder title="Documents & signatures" icon={FileText} />;
+    case 'clients_blacklist': return <Placeholder title="Blacklist / Watchlist" icon={Ban} />;
+    case 'clients_tiers':     return <Placeholder title="Tiers / Prescripteurs" icon={Handshake} />;
 
     // ── REVENUE ───────────────────────────────────────────────────────────────
     case 'revenue':        return <RevenueDashboard />;

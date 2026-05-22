@@ -10,8 +10,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   Wallet, TrendingUp, CreditCard, AlertTriangle, FileText, Percent,
-  Loader2, Lock,
+  Loader2, Lock, DollarSign, Receipt, Clock,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { FacturationView } from './FacturationView';
 import { ReconciliationView } from './ReconciliationView';
@@ -121,29 +122,30 @@ export const FinanceLayout: React.FC<FinanceLayoutProps> = ({ activePage }) => {
 function KpiStrip({ kpis, loading }: { kpis: FinanceDashboardKpis | null; loading: boolean }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-      <KpiSmall icon="💶" label="CA du mois" value={loading ? '…' : `${Math.round((kpis?.ca_month ?? 0) / 1000)}K€`} tone="emerald" loading={loading} />
-      <KpiSmall icon="📈" label="RevPAR mois" value={loading ? '…' : `${Math.round(kpis?.revpar ?? 0)}€`} tone="violet" loading={loading} />
-      <KpiSmall icon="💳" label="Encaissements 30j" value={loading ? '…' : `${Math.round((kpis?.encaissements_30d ?? 0) / 1000)}K€`} tone="blue" loading={loading} />
-      <KpiSmall icon="⏳" label="Débiteurs" value={loading ? '…' : `${Math.round((kpis?.debiteurs_total ?? 0) / 1000)}K€`} tone={kpis && kpis.debiteurs_total > 5000 ? 'red' : 'amber'} loading={loading} />
-      <KpiSmall icon="🧾" label="TVA à payer" value={loading ? '…' : `${Math.round((kpis?.tva_due ?? 0)).toLocaleString('fr-FR')}€`} tone="orange" loading={loading} />
-      <KpiSmall icon="🔒" label="Dern. clôture" value={loading ? '…' : (kpis?.last_closure ? new Date(kpis.last_closure).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '—')} tone="gray" loading={loading} />
+      <KpiSmall icon={DollarSign}  label="CA du mois" value={loading ? '…' : `${Math.round((kpis?.ca_month ?? 0) / 1000)}K€`} tone="emerald" loading={loading} />
+      <KpiSmall icon={TrendingUp}  label="RevPAR mois" value={loading ? '…' : `${Math.round(kpis?.revpar ?? 0)}€`} tone="violet" loading={loading} />
+      <KpiSmall icon={CreditCard}  label="Encaissements 30j" value={loading ? '…' : `${Math.round((kpis?.encaissements_30d ?? 0) / 1000)}K€`} tone="blue" loading={loading} />
+      <KpiSmall icon={Clock}       label="Débiteurs" value={loading ? '…' : `${Math.round((kpis?.debiteurs_total ?? 0) / 1000)}K€`} tone={kpis && kpis.debiteurs_total > 5000 ? 'red' : 'amber'} loading={loading} />
+      <KpiSmall icon={Receipt}     label="TVA à payer" value={loading ? '…' : `${Math.round((kpis?.tva_due ?? 0)).toLocaleString('fr-FR')}€`} tone="orange" loading={loading} />
+      <KpiSmall icon={Lock}        label="Dern. clôture" value={loading ? '…' : (kpis?.last_closure ? new Date(kpis.last_closure).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '—')} tone="gray" loading={loading} />
     </div>
   );
 }
 
-function KpiSmall({ icon, label, value, tone, loading }: { icon: string; label: string; value: string; tone: 'emerald' | 'violet' | 'blue' | 'amber' | 'orange' | 'red' | 'gray'; loading?: boolean }) {
-  const colorMap = {
-    emerald: 'border-emerald-200 bg-emerald-50/40',
-    violet:  'border-violet-200 bg-violet-50/40',
-    blue:    'border-blue-200 bg-blue-50/40',
-    amber:   'border-amber-200 bg-amber-50/40',
-    orange:  'border-orange-200 bg-orange-50/40',
-    red:     'border-red-200 bg-red-50/40',
-    gray:    'border-gray-200 bg-white',
+function KpiSmall({ icon: Icon, label, value, tone, loading }: { icon: LucideIcon; label: string; value: string; tone: 'emerald' | 'violet' | 'blue' | 'amber' | 'orange' | 'red' | 'gray'; loading?: boolean }) {
+  const colorMap: Record<string, { bg: string; iconColor: string }> = {
+    emerald: { bg: 'border-emerald-200 bg-emerald-50/40', iconColor: 'text-emerald-600' },
+    violet:  { bg: 'border-violet-200 bg-violet-50/40',   iconColor: 'text-violet-600' },
+    blue:    { bg: 'border-blue-200 bg-blue-50/40',       iconColor: 'text-blue-600' },
+    amber:   { bg: 'border-amber-200 bg-amber-50/40',     iconColor: 'text-amber-600' },
+    orange:  { bg: 'border-orange-200 bg-orange-50/40',   iconColor: 'text-orange-600' },
+    red:     { bg: 'border-red-200 bg-red-50/40',         iconColor: 'text-red-600' },
+    gray:    { bg: 'border-gray-200 bg-white',            iconColor: 'text-gray-500' },
   };
+  const c = colorMap[tone];
   return (
-    <div className={cn('rounded-lg border p-3 flex items-center gap-3', colorMap[tone])}>
-      <span className="text-2xl">{icon}</span>
+    <div className={cn('rounded-lg border p-3 flex items-center gap-3', c.bg)}>
+      <Icon className={cn('w-5 h-5', c.iconColor)} strokeWidth={1.75} />
       <div>
         <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">{label}</div>
         <div className={cn('text-lg font-extrabold tabular-nums text-gray-900', loading && 'animate-pulse text-gray-300')}>

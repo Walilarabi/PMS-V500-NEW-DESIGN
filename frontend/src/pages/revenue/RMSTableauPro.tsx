@@ -1360,8 +1360,8 @@ function CompsetDetailModal({ date, onClose }: { date: string; onClose: () => vo
           </div>
           {(dayData.events || dayData.holidays) && (
             <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-              {dayData.holidays && <div>📅 {dayData.holidays}</div>}
-              {dayData.events && <div>🎉 {dayData.events}</div>}
+              {dayData.holidays && <div className="flex items-center gap-1.5"><Calendar className="w-3 h-3" strokeWidth={1.75} />{dayData.holidays}</div>}
+              {dayData.events && <div className="flex items-center gap-1.5"><Sparkles className="w-3 h-3" strokeWidth={1.75} />{dayData.events}</div>}
             </div>
           )}
         </div>

@@ -6,7 +6,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Wallet, TrendingUp, TrendingDown, Plus, Loader2 } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, Plus, Loader2, ClipboardCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -70,7 +70,8 @@ export const CashRegisterView: React.FC = () => {
             Sortie
           </button>
           <button className="px-3 py-1.5 text-xs font-bold bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1.5">
-            📊 Comptage
+            <ClipboardCheck className="w-3 h-3" strokeWidth={1.75} />
+            Comptage
           </button>
         </div>
       </div>

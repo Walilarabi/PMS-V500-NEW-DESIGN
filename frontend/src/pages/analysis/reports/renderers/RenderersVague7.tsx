@@ -129,7 +129,7 @@ export const Renderer11006: ReportRenderer = ({ data }) => {
     { accessorKey: 'next_arrival', header: 'Prochaine arrivée', cell: ({ getValue }) => {
       const v = String(getValue() ?? '');
       const isToday = v === new Date().toISOString().slice(0, 10);
-      return <span className={isToday ? 'text-red-700 font-bold' : 'text-xs text-gray-600'}>{v === '—' ? '—' : fmtDate(v)}{isToday && ' ⚡ AUJ.'}</span>;
+      return <span className={isToday ? 'text-red-700 font-bold' : 'text-xs text-gray-600'}>{v === '—' ? '—' : fmtDate(v)}{isToday && <span className="ml-1 text-[9px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded uppercase">Auj.</span>}</span>;
     } },
     { accessorKey: 'guest_name', header: 'Client', cell: ({ getValue }) => <span className="font-semibold text-sm">{String(getValue() ?? '—')}</span> },
   ];

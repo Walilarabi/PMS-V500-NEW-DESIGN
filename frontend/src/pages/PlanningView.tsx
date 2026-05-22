@@ -26,7 +26,8 @@ import {
   AlertCircle,
   HelpCircle,
   Eye,
-  Settings2
+  Settings2,
+  AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
@@ -347,7 +348,7 @@ export const PlanningView = () => {
           }`}>
             {dragConflict ? (
               <div className="flex items-center gap-2">
-                <span>⚠️</span>
+                <AlertTriangle className="w-4 h-4" strokeWidth={1.75} />
                 <span>Conflit de réservation</span>
               </div>
             ) : (() => {

@@ -9,6 +9,7 @@ import React from 'react';
 import {
   Sparkles, TrendingUp, AlertCircle, Loader2, RefreshCw, BellRing,
   ChevronRight, Activity, BedDouble, DollarSign, ArrowRight,
+  AlertTriangle, CheckCircle2, Info,
 } from 'lucide-react';
 import { useDailyBriefing } from '../../hooks/analysis/useDailyBriefing';
 import { SEVERITY_STYLE } from '../../components/analysis/insights/types';
@@ -167,13 +168,22 @@ export const DailyBriefing: React.FC<{ onOpenAlerts?: () => void }> = ({ onOpenA
           </span>
         )}
         {data.byseverity.warning.length > 0 && (
-          <span className="text-amber-700">⚠ {data.byseverity.warning.length} attention</span>
+          <span className="text-amber-700 flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3" />
+            {data.byseverity.warning.length} attention
+          </span>
         )}
         {data.byseverity.positive.length > 0 && (
-          <span className="text-emerald-700">✓ {data.byseverity.positive.length} positif{data.byseverity.positive.length > 1 ? 's' : ''}</span>
+          <span className="text-emerald-700 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            {data.byseverity.positive.length} positif{data.byseverity.positive.length > 1 ? 's' : ''}
+          </span>
         )}
         {data.byseverity.info.length > 0 && (
-          <span className="text-blue-700">ℹ {data.byseverity.info.length} info</span>
+          <span className="text-blue-700 flex items-center gap-1">
+            <Info className="w-3 h-3" />
+            {data.byseverity.info.length} info
+          </span>
         )}
         <span className="ml-auto text-gray-400">
           Généré à {new Date(data.generatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}

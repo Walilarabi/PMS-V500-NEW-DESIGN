@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom';
 import {
   X, Play, Pause, ChevronLeft, ChevronRight, Maximize2, Minimize2,
   TrendingUp, BedDouble, DollarSign, Users, Plane, Activity,
-  AlertCircle, CheckCircle2, RefreshCw, Sparkles,
+  AlertCircle, AlertTriangle, CheckCircle2, RefreshCw, Sparkles,
 } from 'lucide-react';
 import { useDailyBriefing } from '../../../hooks/analysis/useDailyBriefing';
 import { SEVERITY_STYLE } from '../../../components/analysis/insights/types';
@@ -414,7 +414,10 @@ function SlideTopActions({ data }: { data: NonNullable<ReturnType<typeof useDail
             </span>
           )}
           {data.byseverity.warning.length > 0 && (
-            <span className="text-amber-400">⚠ {data.byseverity.warning.length} attention</span>
+            <span className="text-amber-400 flex items-center gap-1">
+              <AlertTriangle className="w-4 h-4" />
+              {data.byseverity.warning.length} attention
+            </span>
           )}
         </div>
       </div>

@@ -9,7 +9,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { Search, Star, ChevronRight } from 'lucide-react';
+import { Search, Star, ChevronRight, Lock, Timer, BarChart3, Table } from 'lucide-react';
 import { ALL_REPORTS, REPORT_CATEGORIES, ReportCategory, searchReports } from './reports/registry';
 import { getFavorites, toggleFavorite, pushRecent } from '../../services/analysis/report-prefs.service';
 
@@ -148,10 +148,10 @@ export const ReportLibrary: React.FC<ReportLibraryProps> = ({ initialSearch = ''
                         <span className={cn('text-[10px] font-bold uppercase tracking-wide', colors.text)}>
                           {cat?.shortLabel ?? cat?.label}
                         </span>
-                        {r.flags?.fiscalLock && <span title="Verrouillé après clôture" className="text-[10px]">🔒</span>}
-                        {r.flags?.realtime && <span title="Temps réel" className="text-[10px]">⏱️</span>}
-                        {r.flags?.chart && <span title="Avec graphique" className="text-[10px]">📊</span>}
-                        {r.flags?.table && <span title="Avec tableau" className="text-[10px]">📄</span>}
+                        {r.flags?.fiscalLock && <Lock className="w-3 h-3 text-amber-600" strokeWidth={1.75} aria-label="Verrouillé après clôture" />}
+                        {r.flags?.realtime && <Timer className="w-3 h-3 text-blue-600" strokeWidth={1.75} aria-label="Temps réel" />}
+                        {r.flags?.chart && <BarChart3 className="w-3 h-3 text-violet-600" strokeWidth={1.75} aria-label="Avec graphique" />}
+                        {r.flags?.table && <Table className="w-3 h-3 text-gray-500" strokeWidth={1.75} aria-label="Avec tableau" />}
                       </div>
                       <div className="text-sm font-bold text-gray-900 truncate">{r.title}</div>
                       <div className="text-[11px] text-gray-500 mt-1 line-clamp-2">{r.description}</div>

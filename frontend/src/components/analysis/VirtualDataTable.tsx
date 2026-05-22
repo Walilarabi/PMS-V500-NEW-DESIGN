@@ -7,6 +7,7 @@
  */
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
+import { Zap } from 'lucide-react';
 import { DataTable } from './DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -76,7 +77,10 @@ export function VirtualDataTable<TData>({
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <div className="px-3 py-1.5 bg-violet-50 border-b border-violet-200 text-[10px] font-bold uppercase tracking-wider text-violet-700 flex items-center justify-between">
-        <span>⚡ Virtualisation activée — {data.length.toLocaleString('fr-FR')} lignes</span>
+        <span className="inline-flex items-center gap-1">
+          <Zap className="w-3 h-3" strokeWidth={2} />
+          Virtualisation activée — {data.length.toLocaleString('fr-FR')} lignes
+        </span>
         <span className="text-violet-500">Affichage {startIdx + 1}-{startIdx + visibleRows.length}</span>
       </div>
       <div

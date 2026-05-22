@@ -14,7 +14,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   Percent, Lock, Unlock, Download, RefreshCw, AlertCircle, CheckCircle2,
-  Loader2, FileText,
+  Loader2, FileText, BarChart3,
 } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -207,7 +207,10 @@ export const TvaDeclarationView: React.FC = () => {
 
           {/* Graphique */}
           <div className="bg-white rounded-lg border border-gray-200 p-5">
-            <h3 className="text-sm font-bold text-gray-900 mb-3">📊 TVA collectée par taux</h3>
+            <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-violet-500" strokeWidth={1.75} />
+              TVA collectée par taux
+            </h3>
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
