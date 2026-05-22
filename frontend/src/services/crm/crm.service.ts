@@ -49,6 +49,7 @@ export interface GuestProfile360 {
     email:            string | null;
     phone:            string | null;
     whatsapp:         string | null;
+    photo_url:        string | null;
     country:          string | null;
     nationality:      string | null;
     language:         string | null;

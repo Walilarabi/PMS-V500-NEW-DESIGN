@@ -108,7 +108,9 @@ export async function listGuests(
   const { data, error, count } = await q;
   if (error) throw mapSupabaseError(error);
 
-  const rows = (data ?? []).map((row) => guestRowSchema.parse(row));
+  const rows = (data ?? []).map(
+    (row) => guestRowSchema.parse(row) as unknown as GuestRowDto,
+  );
   return { rows, total: count ?? rows.length };
 }
 
@@ -121,7 +123,7 @@ export async function findOrCreateGuest(input: FindOrCreateInput): Promise<Guest
       .ilike('email', input.email)
       .maybeSingle();
     if (error) throw mapSupabaseError(error);
-    if (data) return guestRowSchema.parse(data);
+    if (data) return guestRowSchema.parse(data) as unknown as GuestRowDto;
   }
   const { first, last } = splitName(input.fullName);
   const insertPayload: Record<string, unknown> = {
@@ -137,5 +139,5 @@ export async function findOrCreateGuest(input: FindOrCreateInput): Promise<Guest
   const builder = supabase.from('guests') as any;
   const { data, error } = await builder.insert(insertPayload).select('*').single();
   if (error) throw mapSupabaseError(error);
-  return guestRowSchema.parse(data);
+  return guestRowSchema.parse(data) as unknown as GuestRowDto;
 }

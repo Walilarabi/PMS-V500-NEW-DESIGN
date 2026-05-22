@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+/**
+ * Runtime validation schema for a guest row.
+ * The static type `GuestRowDto` is declared explicitly below — Zod v4's
+ * `z.infer` degrades nullable fields, so the contract is hand-written.
+ */
 export const guestRowSchema = z.object({
   // Core identity
   id:                 z.string().uuid(),
@@ -60,4 +65,48 @@ export const guestRowSchema = z.object({
   updated_at:         z.string().nullable(),
 });
 
-export type GuestRowDto = z.infer<typeof guestRowSchema>;
+/** Explicit guest contract — mirrors the DB row shape. */
+export interface GuestRowDto {
+  id:                 string;
+  hotel_id:           string | null;
+  legacy_id:          number;
+  first_name:         string | null;
+  last_name:          string;
+  email:              string | null;
+  phone:              string | null;
+  country:            string | null;
+  nationality:        string | null;
+  passport:           string | null;
+  date_of_birth:      string | null;
+  address:            string | null;
+  city:               string | null;
+  zip:                string | null;
+  language:           string | null;
+  segment:            string | null;
+  loyalty_level:      string | null;
+  total_spent:        number | null;
+  total_stays:        number | null;
+  id_verified:        boolean | null;
+  gdpr_consent:       boolean | null;
+  gdpr_date:          string | null;
+  blacklisted:        boolean | null;
+  notes:              string | null;
+  tags:               string[] | null;
+  gender:             string | null;
+  whatsapp:           string | null;
+  social_links:       Record<string, string> | null;
+  photo_url:          string | null;
+  profession:         string | null;
+  employer:           string | null;
+  job_title:          string | null;
+  visa:               string | null;
+  doc_expiry_date:    string | null;
+  languages:          string[] | null;
+  acquisition_source: string | null;
+  vip:                boolean;
+  risk_level:         string;
+  satisfaction_score: number | null;
+  ai_scores:          Record<string, unknown> | null;
+  created_at:         string | null;
+  updated_at:         string | null;
+}
