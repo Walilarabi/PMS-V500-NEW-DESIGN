@@ -27,6 +27,7 @@ import { EInvoiceView } from './EInvoiceView';
 import { DunningView } from './DunningView';
 import { BankReconciliationView } from './BankReconciliationView';
 import { AuditChainView } from './AuditChainView';
+import { CashManagementView } from './CashManagementView';
 import { fetchFinanceKpis, type FinanceDashboardKpis } from '../../services/finance/finance.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -65,7 +66,7 @@ const PAGE_TITLES: Record<FinancePage, { title: string; subtitle: string }> = {
   paiements_securises: { title: 'Paiements sécurisés',        subtitle: 'Pré-autorisations & 3DS' },
   comptabilite:        { title: 'Comptabilité',               subtitle: 'Journal des écritures et export FEC' },
   fin_audit_chain:     { title: 'Journal d\'audit chaîné',     subtitle: 'Traçabilité infalsifiable scellée SHA-256' },
-  cash_management:     { title: 'Cash Management',            subtitle: 'Trésorerie et flux financiers' },
+  cash_management:     { title: 'Cash Management',            subtitle: 'Trésorerie prévisionnelle, multi-devises et exports comptables' },
 };
 
 export interface FinanceLayoutProps {
@@ -124,14 +125,7 @@ export const FinanceLayout: React.FC<FinanceLayoutProps> = ({ activePage }) => {
         )}
         {activePage === 'comptabilite' && <AuditLogView />}
         {activePage === 'fin_audit_chain' && <AuditChainView />}
-        {activePage === 'cash_management' && (
-          <PlaceholderModule
-            icon={TrendingUp}
-            title="Cash Management"
-            description="Trésorerie temps réel et prévisionnel de cash-flow"
-            comingSoon={['Forecast 90 jours', 'Multi-comptes bancaires', 'Alerte solde bas', 'Optimisation rotation cash']}
-          />
-        )}
+        {activePage === 'cash_management' && <CashManagementView />}
       </div>
     </div>
   );
