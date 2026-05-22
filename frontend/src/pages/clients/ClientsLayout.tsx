@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ClientsView } from '../ClientsView';
+import { CompaniesView } from './CompaniesView';
+import { TiersView } from './TiersView';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -77,13 +79,7 @@ export const ClientsLayout: React.FC<ClientsLayoutProps> = ({ activePage }) => {
         return <ClientsView />;
 
       case 'clients_companies':
-        return (
-          <ComingSoon
-            title="Sociétés / Agences"
-            subtitle="Gestion des entreprises clientes, agences et tour-opérateurs avec contrats et tarifs négociés."
-            icon={Building2}
-          />
-        );
+        return <CompaniesView />;
 
       case 'clients_segments':
         return (
@@ -122,13 +118,7 @@ export const ClientsLayout: React.FC<ClientsLayoutProps> = ({ activePage }) => {
         );
 
       case 'clients_tiers':
-        return (
-          <ComingSoon
-            title="Tiers / Prescripteurs"
-            subtitle="Partenaires commerciaux, apporteurs d'affaires et prescripteurs avec suivi des commissions."
-            icon={Handshake}
-          />
-        );
+        return <TiersView />;
 
       default:
         return <ClientsView />;
@@ -155,10 +145,10 @@ export const ClientsLayout: React.FC<ClientsLayoutProps> = ({ activePage }) => {
         <div className="hidden lg:flex items-center gap-1">
           {(
             [
-              ['clients',           'Clients',   Users],
-              ['clients_companies', 'Sociétés',  Building2],
-              ['clients_segments',  'Segments',  Target],
-              ['clients_blacklist', 'Blacklist', Ban],
+              ['clients',           'Clients',    Users],
+              ['clients_companies', 'Sociétés',   Building2],
+              ['clients_tiers',     'Prescripteurs', Handshake],
+              ['clients_blacklist', 'Blacklist',  Ban],
             ] as [ClientsPage, string, LucideIcon][]
           ).map(([page, label, Icon]) => (
             <button

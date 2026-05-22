@@ -159,3 +159,10 @@ export async function saveCompany(
   if (error) throw error;
   return data as string;
 }
+
+export async function deleteCompany(companyId: string): Promise<void> {
+  const { error } = await (supabase.rpc as any)('crm_delete_company', {
+    p_id: companyId,
+  });
+  if (error) throw error;
+}
