@@ -118,6 +118,7 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     // ── FINANCE ───────────────────────────────────────────────────────────────
     case 'finance':
     case 'facturation':
+    case 'fin_folios':
     case 'proforma':
     case 'caisse':
     case 'impayes':

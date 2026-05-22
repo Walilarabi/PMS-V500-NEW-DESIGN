@@ -54,6 +54,7 @@ export type PageId =
   // ── 6. FINANCE ─────────────────────────────────────────────────────────────
   | 'finance'
   | 'facturation'
+  | 'fin_folios'
   | 'proforma'
   | 'caisse'
   | 'impayes'

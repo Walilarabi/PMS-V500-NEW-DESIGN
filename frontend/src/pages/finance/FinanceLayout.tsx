@@ -22,6 +22,7 @@ import { DebtorsView } from './DebtorsView';
 import { ClosureWorkflowView } from './ClosureWorkflowView';
 import { ProformaView } from './ProformaView';
 import { CashRegisterView } from './CashRegisterView';
+import { FoliosView } from './FoliosView';
 import { fetchFinanceKpis, type FinanceDashboardKpis } from '../../services/finance/finance.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -29,6 +30,7 @@ const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' 
 export type FinancePage =
   | 'finance'
   | 'facturation'
+  | 'fin_folios'
   | 'proforma'
   | 'caisse'
   | 'impayes'
@@ -42,6 +44,7 @@ export type FinancePage =
 const PAGE_TITLES: Record<FinancePage, { title: string; subtitle: string }> = {
   finance:             { title: 'Finance — Vue d\'ensemble',  subtitle: 'Dashboard financier et KPIs clés' },
   facturation:         { title: 'Facturation',                subtitle: 'Émission, suivi et statut des factures' },
+  fin_folios:          { title: 'Multi-folios',               subtitle: 'Répartition et transferts inter-folios' },
   proforma:            { title: 'Proforma / Devis',           subtitle: 'Devis et propositions commerciales' },
   caisse:              { title: 'Caisse / Petite caisse',     subtitle: 'Comptage, mouvements espèces' },
   impayes:             { title: 'Impayés & Débiteurs',        subtitle: 'Balance âgée et workflow de relances' },
@@ -89,6 +92,7 @@ export const FinanceLayout: React.FC<FinanceLayoutProps> = ({ activePage }) => {
       <div className="flex-1 overflow-auto px-6 pb-6">
         {activePage === 'finance' && <FinanceDashboard kpis={kpis} loading={loading} />}
         {activePage === 'facturation' && <FacturationView />}
+        {activePage === 'fin_folios' && <FoliosView />}
         {activePage === 'proforma' && <ProformaView />}
         {activePage === 'caisse' && <CashRegisterView />}
         {activePage === 'impayes' && <DebtorsView />}

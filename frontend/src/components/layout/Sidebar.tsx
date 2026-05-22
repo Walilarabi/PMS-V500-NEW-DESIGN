@@ -10,7 +10,7 @@ import {
   PieChart, Activity, BookOpen, Database,
   ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
   Cpu, Bell, ShieldCheck, Upload, ClipboardList, HardDrive,
-  Hotel, Globe, Tag, Coffee, KeyRound, Star,
+  Hotel, Globe, Tag, Coffee, KeyRound, Star, FolderOpen,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -126,6 +126,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
       items: [
         { id: 'finance',           label: "Vue d'ensemble",       icon: Wallet },
         { id: 'facturation',       label: 'Facturation',          icon: FileText },
+        { id: 'fin_folios',        label: 'Multi-folios',         icon: FolderOpen },
         { id: 'proforma',          label: 'Proforma / Devis',     icon: Receipt },
         { id: 'caisse',            label: 'Caisse',               icon: Wallet },
         { id: 'impayes',           label: 'Impayés / Débiteurs',  icon: AlertTriangle },
@@ -239,7 +240,7 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   revenue: 'revenue', rev_pricing: 'revenue', rev_channels: 'revenue',
   rev_compset: 'revenue', rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
   rev_promotions: 'revenue', rms: 'revenue', rms_history: 'revenue',
-  finance: 'finance', facturation: 'finance', proforma: 'finance',
+  finance: 'finance', facturation: 'finance', fin_folios: 'finance', proforma: 'finance',
   caisse: 'finance', impayes: 'finance', cloture: 'finance',
   fin_reconciliation: 'finance', tva2026: 'finance',
   paiements_securises: 'finance', comptabilite: 'finance', cash_management: 'finance',
