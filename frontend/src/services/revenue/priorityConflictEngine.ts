@@ -24,6 +24,7 @@ import type {
 } from '@/src/types/revenue/conflicts.types';
 import { tacticalRulesEngine } from './tacticalRulesEngine';
 import { rmsAuditLogger } from './rmsAuditLogger';
+import { emitRmsEvent } from '@/src/lib/rms/eventBus';
 
 const dayAgo = (n: number, h = 0) => new Date(Date.now() - n * 86_400_000 - h * 3_600_000).toISOString();
 
@@ -190,6 +191,7 @@ export const priorityConflictEngine = {
       context: 'Configuration',
       detail: `Nouvel ordre : ${orderedIds.join(' → ')}`,
     });
+    try { emitRmsEvent('priority:reordered', { orderedIds }); } catch {/* bus */}
     notify();
   },
 
@@ -218,6 +220,14 @@ export const priorityConflictEngine = {
         detail: c.iaJustification,
         impact: c.potentialImpact,
       });
+      try {
+        emitRmsEvent('conflict:resolved', {
+          conflictId: c.id,
+          winner: c.winner?.name,
+          suspended: c.suspended?.name,
+          auto: decision === 'apply_recommendation',
+        });
+      } catch {/* bus */}
     }
     notify();
   },

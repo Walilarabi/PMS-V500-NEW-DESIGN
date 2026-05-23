@@ -18,6 +18,7 @@ import type {
   GuardrailHierarchyLevel,
 } from '@/src/types/revenue/guardrails.types';
 import { rmsAuditLogger } from './rmsAuditLogger';
+import { emitRmsEvent } from '@/src/lib/rms/eventBus';
 
 const dayAgo = (n: number, h = 0) => new Date(Date.now() - n * 86_400_000 - h * 3_600_000).toISOString();
 
@@ -278,6 +279,35 @@ export const guardrailsEngine = {
 
   setStatus(id: GuardrailId, status: 'active' | 'paused') {
     store = store.map((g) => (g.id === id ? { ...g, status } : g));
+    rmsAuditLogger.log({
+      type: 'guardrail_adjust',
+      actor: String(id),
+      context: 'Configuration',
+      detail: `Statut → ${status}`,
+    });
+    notify();
+  },
+
+  upsert(g: Guardrail) {
+    const exists = store.some((x) => x.id === g.id);
+    store = exists ? store.map((x) => (x.id === g.id ? g : x)) : [...store, g];
+    rmsAuditLogger.log({
+      type: 'guardrail_adjust',
+      actor: g.name,
+      context: 'Configuration',
+      detail: exists ? 'Garde-fou mis à jour' : 'Garde-fou créé',
+    });
+    notify();
+  },
+
+  remove(id: GuardrailId | string) {
+    store = store.filter((g) => g.id !== id);
+    rmsAuditLogger.log({
+      type: 'guardrail_adjust',
+      actor: String(id),
+      context: 'Configuration',
+      detail: 'Garde-fou supprimé',
+    });
     notify();
   },
 
@@ -363,6 +393,23 @@ export const guardrailsEngine = {
         detail: t.reason,
         impact: proposal.price - finalPrice,
       });
+      try {
+        const payload = {
+          guardrailId: t.guardrail.id,
+          guardrailName: t.guardrail.name,
+          reason: t.reason,
+          impact: proposal.price - finalPrice,
+          context: proposal.context ?? proposal.source,
+        };
+        if (t.outcome === 'blocked') emitRmsEvent('guardrail:blocked', payload);
+        else if (t.outcome === 'adjusted') emitRmsEvent('guardrail:adjusted', payload);
+        else emitRmsEvent('guardrail:warned', {
+          guardrailId: t.guardrail.id,
+          guardrailName: t.guardrail.name,
+          reason: t.reason,
+          context: proposal.context ?? proposal.source,
+        });
+      } catch {/* bus indisponible */}
     }
 
     return { allowed, finalPrice, triggered };

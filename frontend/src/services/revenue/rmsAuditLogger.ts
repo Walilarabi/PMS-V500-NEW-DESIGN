@@ -3,6 +3,8 @@
  * Enregistre toutes les décisions, blocages, ajustements et conflits.
  */
 
+import { emitRmsEvent } from '@/src/lib/rms/eventBus';
+
 export type AuditEventType =
   | 'rule_triggered'
   | 'rule_adjusted'
@@ -44,6 +46,15 @@ export const rmsAuditLogger = {
     };
     store = [entry, ...store].slice(0, MAX_EVENTS);
     notify();
+    try {
+      emitRmsEvent('audit:logged', {
+        eventId: entry.id,
+        type: entry.type,
+        actor: entry.actor,
+      });
+    } catch {
+      // Bus indisponible (SSR / test) — on n'interrompt pas le journal
+    }
     return entry;
   },
 

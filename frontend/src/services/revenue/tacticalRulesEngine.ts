@@ -15,8 +15,10 @@ import type {
   TacticalRuleStatus,
   TacticalRulesKpis,
   MarketContext,
+  TacticalRuleCategory,
 } from '@/src/types/revenue/tacticalRules.types';
 import { rmsAuditLogger } from './rmsAuditLogger';
+import { emitRmsEvent, subscribeRmsEvent } from '@/src/lib/rms/eventBus';
 
 // ───────────────────────────────────────────────────────────── Seed catalogue
 const NOW = Date.now();
@@ -304,6 +306,22 @@ let store: TacticalRule[] = SEED.map((r) => ({ ...r }));
 const listeners = new Set<(rules: TacticalRule[]) => void>();
 const notify = () => listeners.forEach((l) => l(store));
 
+// Contexte marché courant — mis à jour par le bus, lu par evaluate()
+let currentContext: MarketContext = {
+  occupancy: 65,
+  pickup24h: 4,
+  pickupAverage: 3,
+  leadTimeDays: 8,
+  compsetMedianPrice: 145,
+  ourPrice: 150,
+  marketPressure: 'medium',
+  hasMajorEvent: false,
+  daysUntilStay: 7,
+  otaShare: 68,
+  cancellationRate: 8,
+  activeStrategy: 'balanced',
+};
+
 // ───────────────────────────────────────────────────────────────── Évaluation
 export interface RuleEvaluation {
   rule: TacticalRule;
@@ -378,6 +396,9 @@ export const tacticalRulesEngine = {
       context: 'Configuration',
       detail: `Statut → ${status}`,
     });
+    try {
+      emitRmsEvent('tactical-rule:toggled', { ruleId: id, status });
+    } catch {/* bus indisponible */}
     notify();
   },
 
@@ -450,4 +471,134 @@ export const tacticalRulesEngine = {
     listeners.add(listener);
     return () => listeners.delete(listener);
   },
+
+  getContext(): MarketContext { return currentContext; },
+
+  updateContext(patch: Partial<MarketContext>) {
+    currentContext = { ...currentContext, ...patch };
+    // Recalcul léger des KPI : on incrémente les compteurs des règles qui
+    // déclenchent dans le nouveau contexte.
+    const evals = this.evaluate(currentContext);
+    store = store.map((r) => {
+      const ev = evals.find((e) => e.rule.id === r.id);
+      if (ev?.fired) {
+        try {
+          emitRmsEvent('tactical-rule:triggered', {
+            ruleId: r.id,
+            ruleName: r.name,
+            matchedTriggers: ev.matchedTriggers,
+            revenueImpact: Math.round(r.revenueImpact30d / Math.max(1, r.triggersCount30d)),
+          });
+        } catch {/* bus indisponible */}
+      }
+      return r;
+    });
+    notify();
+  },
+
+  addRule(rule: Omit<TacticalRule, 'history' | 'triggersCount30d' | 'successCount' | 'adjustedCount' | 'blockedCount' | 'revenueImpact30d' | 'revparImpact30d'> & Partial<Pick<TacticalRule, 'revenueImpact30d' | 'revparImpact30d'>>) {
+    const newRule: TacticalRule = {
+      revenueImpact30d: 0,
+      revparImpact30d: 0,
+      triggersCount30d: 0,
+      successCount: 0,
+      adjustedCount: 0,
+      blockedCount: 0,
+      history: [],
+      ...rule,
+    };
+    store = [...store, newRule].sort((a, b) => a.priority - b.priority);
+    rmsAuditLogger.log({
+      type: 'rule_triggered',
+      actor: newRule.id,
+      context: 'Configuration',
+      detail: `Règle créée : ${newRule.name}`,
+    });
+    notify();
+  },
+
+  removeRule(id: TacticalRuleId | string) {
+    store = store.filter((r) => r.id !== id);
+    rmsAuditLogger.log({
+      type: 'rule_triggered',
+      actor: String(id),
+      context: 'Configuration',
+      detail: 'Règle supprimée',
+    });
+    notify();
+  },
+
+  duplicateRule(id: TacticalRuleId | string) {
+    const src = store.find((r) => r.id === id);
+    if (!src) return;
+    const copy: TacticalRule = {
+      ...src,
+      id: (`${src.id}_copy_${Date.now()}` as TacticalRuleId),
+      name: `${src.name} (copie)`,
+      status: 'simulation',
+      priority: store.length + 1,
+      triggersCount30d: 0,
+      successCount: 0,
+      adjustedCount: 0,
+      blockedCount: 0,
+      history: [],
+    };
+    store = [...store, copy];
+    rmsAuditLogger.log({
+      type: 'rule_triggered',
+      actor: copy.id,
+      context: 'Configuration',
+      detail: `Règle dupliquée depuis ${src.name}`,
+    });
+    notify();
+  },
 };
+
+// ────────────────────────────────────────────────── Connexions bus cross-module
+// market-data:imported → re-évaluation du contexte
+let busBootstrapped = false;
+function bootstrapBus() {
+  if (busBootstrapped) return;
+  busBootstrapped = true;
+  try {
+    subscribeRmsEvent('market-data:imported', ({ source, rows }) => {
+      // Lighthouse : ajuster pression marché et prix médian
+      if (source === 'lighthouse') {
+        tacticalRulesEngine.updateContext({
+          marketPressure: rows > 30 ? 'high' : rows > 15 ? 'medium' : 'low',
+        });
+      }
+      if (source === 'events') {
+        tacticalRulesEngine.updateContext({ hasMajorEvent: rows > 0 });
+      }
+      if (source === 'expedia') {
+        tacticalRulesEngine.updateContext({ otaShare: Math.min(95, 60 + rows / 4) });
+      }
+    });
+    subscribeRmsEvent('strategy:activated', ({ strategyId }) => {
+      const strategy: MarketContext['activeStrategy'] =
+        strategyId.includes('aggressive') ? 'aggressive'
+        : strategyId.includes('defensive') ? 'defensive'
+        : 'balanced';
+      tacticalRulesEngine.updateContext({ activeStrategy: strategy });
+    });
+    subscribeRmsEvent('promotion:status-changed', () => {
+      // Re-évaluer anti_cannibalization dans le contexte courant
+      const evals = tacticalRulesEngine.evaluate(currentContext);
+      const fired = evals.find((e) => e.rule.id === 'anti_cannibalization' && e.fired);
+      if (fired) {
+        emitRmsEvent('tactical-rule:triggered', {
+          ruleId: 'anti_cannibalization',
+          ruleName: fired.rule.name,
+          matchedTriggers: fired.matchedTriggers,
+          revenueImpact: Math.round(fired.rule.revenueImpact30d / 30),
+        });
+      }
+    });
+  } catch {
+    // pas de window (SSR/test)
+  }
+}
+bootstrapBus();
+
+export type { TacticalRuleCategory };

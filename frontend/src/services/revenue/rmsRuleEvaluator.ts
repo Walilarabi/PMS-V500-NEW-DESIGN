@@ -17,6 +17,7 @@ import { tacticalRulesEngine, type RuleEvaluation } from './tacticalRulesEngine'
 import { guardrailsEngine, type GuardrailVerdict } from './guardrailsEngine';
 import { priorityConflictEngine } from './priorityConflictEngine';
 import { rmsAuditLogger } from './rmsAuditLogger';
+import { emitRmsEvent } from '@/src/lib/rms/eventBus';
 
 export interface FinalRecommendation {
   basePrice: number;
@@ -124,7 +125,24 @@ export const rmsRuleEvaluator = {
         detail: `Prix poussé : ${finalPrice}€ (base ${basePrice}€)`,
         impact: finalPrice - basePrice,
       });
+      try {
+        emitRmsEvent('autopilot:pushed', {
+          date,
+          basePrice,
+          finalPrice,
+          appliedRules: applied.map((a) => a.ruleName),
+        });
+      } catch {/* bus */}
     }
+
+    try {
+      emitRmsEvent('recommendation:produced', {
+        date,
+        basePrice,
+        finalPrice,
+        needsHumanValidation: needsHuman,
+      });
+    } catch {/* bus */}
 
     const explanation = [
       `Base ${basePrice}€`,
@@ -154,6 +172,7 @@ export const rmsRuleEvaluator = {
       context: date,
       detail: 'Rollback déclenché manuellement',
     });
+    try { emitRmsEvent('autopilot:rollback', { date }); } catch {/* bus */}
   },
 
   hierarchy() { return priorityConflictEngine.hierarchy(); },

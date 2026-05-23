@@ -61,6 +61,82 @@ export interface RmsEventMap {
 
   /** Une stratégie tarifaire a été activée. */
   'strategy:activated': { strategyId: string };
+
+  /* ── RMS Enterprise ─────────────────────────────────────────────────── */
+
+  /** Une règle tactique a été déclenchée par le moteur d'évaluation. */
+  'tactical-rule:triggered': {
+    ruleId: string;
+    ruleName: string;
+    matchedTriggers: string[];
+    revenueImpact: number;
+    date?: string;
+  };
+  /** Une règle tactique a été activée/désactivée/mise en simulation. */
+  'tactical-rule:toggled': {
+    ruleId: string;
+    status: 'active' | 'paused' | 'simulation';
+  };
+  /** Un garde-fou a bloqué une proposition de prix. */
+  'guardrail:blocked': {
+    guardrailId: string;
+    guardrailName: string;
+    reason: string;
+    impact: number;
+    context: string;
+  };
+  /** Un garde-fou a ajusté une proposition de prix. */
+  'guardrail:adjusted': {
+    guardrailId: string;
+    guardrailName: string;
+    reason: string;
+    impact: number;
+    context: string;
+  };
+  /** Un garde-fou a émis un avertissement. */
+  'guardrail:warned': {
+    guardrailId: string;
+    guardrailName: string;
+    reason: string;
+    context: string;
+  };
+  /** Un conflit de règles a été détecté. */
+  'conflict:detected': {
+    conflictId: string;
+    participants: string[];
+    riskLevel: 'low' | 'medium' | 'high';
+  };
+  /** Un conflit a été résolu (auto ou manuel). */
+  'conflict:resolved': {
+    conflictId: string;
+    winner?: string;
+    suspended?: string;
+    auto: boolean;
+  };
+  /** Hiérarchie des priorités modifiée. */
+  'priority:reordered': { orderedIds: string[] };
+  /** Autopilote a poussé un prix au Channel Manager. */
+  'autopilot:pushed': {
+    date: string;
+    basePrice: number;
+    finalPrice: number;
+    appliedRules: string[];
+  };
+  /** Rollback d'une décision autopilote. */
+  'autopilot:rollback': { date: string };
+  /** Recommandation finale produite (autopilote off → validation humaine). */
+  'recommendation:produced': {
+    date: string;
+    basePrice: number;
+    finalPrice: number;
+    needsHumanValidation: boolean;
+  };
+  /** Une entrée a été ajoutée au journal d'audit RMS. */
+  'audit:logged': {
+    eventId: string;
+    type: string;
+    actor: string;
+  };
 }
 
 export type RmsEventType = keyof RmsEventMap;
