@@ -14,6 +14,7 @@ import {
   ArrowRight, Sparkles, Minus,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
+import { TacticalEngineWidget } from '@/src/components/revenue/automation/TacticalEngineWidget';
 
 interface Scenario {
   id: string;
@@ -246,6 +247,11 @@ export const SimulationPage: React.FC = () => {
               </p>
             </div>
           </motion.div>
+        </div>
+
+        {/* Moteur tactique : impact règles + garde-fous sur le scénario */}
+        <div className="mt-5">
+          <TacticalEngineWidget />
         </div>
       </div>
     </div>

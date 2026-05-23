@@ -16,6 +16,7 @@ import type {
 import { RuleKpiCard } from './RuleKpiCard';
 import { RuleTable } from './RuleTable';
 import { RuleDetailModal } from './RuleDetailModal';
+import { TacticalEngineWidget } from './TacticalEngineWidget';
 import { cn } from '@/src/lib/utils';
 
 const CATEGORY_FILTERS: { id: 'all' | TacticalRuleCategory; label: string }[] = [
@@ -154,6 +155,9 @@ export const AutomaticRulesTab: React.FC = () => {
 
       {/* Tableau */}
       <RuleTable rules={filtered} onOpenDetail={setSelected} />
+
+      {/* Moteur tactique (évaluation live + autopilote) */}
+      <TacticalEngineWidget />
 
       {/* Bandeau explicatif */}
       <div className="bg-violet-50/50 border border-violet-100 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">

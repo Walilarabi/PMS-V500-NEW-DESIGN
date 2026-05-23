@@ -17,6 +17,7 @@ import {
   type RiskLevel,
 } from '@/src/lib/rms/autoStrategyEngine';
 import type { StrategyId } from '@/src/lib/rms/strategies';
+import { emitRmsEvent } from '@/src/lib/rms/eventBus';
 import {
   INITIAL_SIGNALS,
   INITIAL_RECOMMENDATIONS,
@@ -261,7 +262,10 @@ export const useRmsAutomationStore = create<RmsAutomationState>((set, get) => ({
   recommendations: INITIAL_RECOMMENDATIONS,
   decisionLog: INITIAL_DECISION_LOG,
 
-  setActiveStrategy: (id) => set({ activeStrategyId: id, autoMode: false }),
+  setActiveStrategy: (id) => {
+    set({ activeStrategyId: id, autoMode: false });
+    try { emitRmsEvent('strategy:activated', { strategyId: id }); } catch {/* bus */}
+  },
 
   setAutoMode: (on) => {
     const { autoResult } = get();
