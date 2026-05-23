@@ -403,10 +403,33 @@ export function RMSTableauPro() {
     return referenceRoom.ratePlans.find(p => p.isReference) ?? referenceRoom.ratePlans[0] ?? null;
   }, [referenceRoom]);
 
+  /**
+   * Lit le prix du Calendrier tarifaire (chambre + plan de référence) pour
+   * une date donnée.
+   *
+   *   - Si la cellule existe → on retourne son prix (source de vérité).
+   *   - Si la date est hors de la fenêtre chargée par le Calendrier (ex.
+   *     RMS Tableau en vue 90 jours mais Calendrier sur 1 mois), on
+   *     interpole sur la cellule la plus proche existante du même plan.
+   *     C'est mieux qu'un fallback dur (280 €) qui faisait diverger
+   *     l'affichage RMS du Calendrier réel.
+   *   - Si le plan n'a aucune cellule (pas chargé), on retombe sur 0
+   *     (l'UI affichera « — » au lieu d'un faux 280 €).
+   */
   const getPriceFromCalendar = useCallback((date: string): number => {
-    if (!referenceRoom || !referencePlan) return 280;
-    const cell = referencePlan.prices.find(p => p.date === date);
-    return cell?.price ?? 280;
+    if (!referenceRoom || !referencePlan) return 0;
+    const cells = referencePlan.prices;
+    if (cells.length === 0) return 0;
+    const exact = cells.find((p) => p.date === date);
+    if (exact) return exact.price;
+    // interpolation : cellule dont la date est la plus proche
+    let bestDelta = Infinity;
+    let bestPrice = cells[0].price;
+    for (const c of cells) {
+      const delta = Math.abs(new Date(c.date).getTime() - new Date(date).getTime());
+      if (delta < bestDelta) { bestDelta = delta; bestPrice = c.price; }
+    }
+    return bestPrice;
   }, [referenceRoom, referencePlan]);
 
   // ─── Lighthouse ────────────────────────────────────────────────────────

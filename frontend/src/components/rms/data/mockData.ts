@@ -63,9 +63,31 @@ export const pricingRules: PricingRules = {
 
 // ─── Mock Generator ───
 
+/**
+ * Génère une fenêtre de dates large (120 jours) — utilisée pour seeder
+ * les prix de toutes les chambres × plans. La vue calendrier ne montre
+ * que `viewMode` jours, mais le store contient toujours plus de prix
+ * que ce qui est affiché : cela permet à d'autres modules (RMS Tableau
+ * Pro qui peut afficher jusqu'à 90 jours, recommandations longues
+ * échéances, autopilote) de lire les prix sans recevoir de fallback.
+ */
+const PRICE_WINDOW_DAYS = 120;
+
+function generateWideDates(startDate: Date): string[] {
+  const out: string[] = [];
+  const d = new Date(startDate);
+  for (let i = 0; i < PRICE_WINDOW_DAYS; i++) {
+    out.push(d.toISOString().split('T')[0]);
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
 export function generateMockData(startDate: Date, viewMode: ViewMode): RoomTypeData[] {
   const dateColumns = generateDateColumns(startDate, viewMode);
-  const dates = dateColumns.map(c => c.date);
+  // Les prix sont seedés sur une fenêtre large (120 j) et non pas sur
+  // les seuls `dateColumns` visibles — voir commentaire ci-dessus.
+  const dates = generateWideDates(startDate);
 
   const rooms: RoomTypeData[] = [
     {
