@@ -46,6 +46,27 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
   // Modale décision RM ouverte au clic
   const [modalDay, setModalDay] = useState<MarketDay | null>(null);
 
+  /**
+   * Ouverture de la modale au clic sur une date.
+   * Reçoit directement le payload du Bar (pas besoin de fouiller activePayload).
+   * Recharts passe la data du data point cliqué en 1er argument.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleDayClick = (datum: any) => {
+    if (!datum || !datum.label) return;
+    if (onSelectDay) onSelectDay(datum.label);
+    setModalDay({
+      label: datum.label,
+      date: datum.date,
+      demand: datum.demand,
+      ourPrice: datum.ourPrice,
+      median: datum.median,
+      mean: datum.mean,
+      q25: datum.q25,
+      q75: datum.q75,
+    });
+  };
+
   // Enrichissement contextuel des barres : delta J-1 / J-7, min/max, event
   const data = useMemo(
     () =>
@@ -132,22 +153,6 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
               data={data}
               margin={{ top: 24, right: 8, bottom: 8, left: 8 }}
               barCategoryGap="22%"
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              onClick={(e: any) => {
-                const payload = e?.activePayload?.[0]?.payload;
-                if (!payload) return;
-                if (onSelectDay) onSelectDay(payload.label);
-                setModalDay({
-                  label: payload.label,
-                  date: payload.date,
-                  demand: payload.demand,
-                  ourPrice: payload.ourPrice,
-                  median: payload.median,
-                  mean: payload.mean,
-                  q25: payload.q25,
-                  q75: payload.q75,
-                });
-              }}
             >
               <defs>
                 <linearGradient id="iqr-band" x1="0" y1="0" x2="0" y2="1">
@@ -188,11 +193,18 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
                 width={48}
               />
 
+              {/* Cursor désactivé : Recharts dessinait sinon un rectangle gris
+                  qui apparaissait comme un overlay sombre couvrant le graphique
+                  au survol/clic. La MarketHoverTooltip a son propre fond clair. */}
               <Tooltip
                 content={<MarketHoverTooltip />}
-                cursor={{ fill: 'rgba(148,163,184,0.10)' }}
+                cursor={false}
               />
 
+              {/* onClick directement sur Bar : Recharts passe la data du point
+                  cliqué en 1er argument (contrairement au onClick du ComposedChart
+                  qui dépend de activePayload, peu fiable). cursor: 'pointer' pour
+                  indiquer visuellement que les barres sont cliquables. */}
               <Bar
                 yAxisId="demand"
                 dataKey="demand"
@@ -201,6 +213,8 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
                 isAnimationActive
                 animationDuration={650}
                 opacity={mode === 'demand' ? 1 : 0.92}
+                onClick={handleDayClick}
+                style={{ cursor: 'pointer' }}
               >
                 {data.map((d) => (
                   <Cell key={d.date} fill={getDemandColor(d.demand)} />
@@ -225,7 +239,7 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
                 strokeWidth={2.5}
                 strokeOpacity={mode === 'demand' ? 0.35 : 1}
                 dot={{ r: 3, fill: '#fff', stroke: CHART_COLORS.median, strokeWidth: 2 }}
-                activeDot={{ r: 5 }}
+                activeDot={{ r: 5, onClick: (_: unknown, p: any) => handleDayClick(p?.payload) }}
                 isAnimationActive
                 animationDuration={750}
               />
@@ -237,7 +251,7 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
                 strokeWidth={2.5}
                 strokeOpacity={mode === 'demand' ? 0.35 : 1}
                 dot={{ r: 3, fill: '#fff', stroke: CHART_COLORS.ourHotel, strokeWidth: 2 }}
-                activeDot={{ r: 5 }}
+                activeDot={{ r: 5, onClick: (_: unknown, p: any) => handleDayClick(p?.payload) }}
                 isAnimationActive
                 animationDuration={750}
               />
