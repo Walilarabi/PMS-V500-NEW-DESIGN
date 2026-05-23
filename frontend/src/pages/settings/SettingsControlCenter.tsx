@@ -23,7 +23,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import { useSettingsDiagnostic } from '@/src/hooks/settings/useSettingsDiagnostic';
-import { exportConfigJSON, exportConfigExcel } from '@/src/services/settings/settingsExportService';
+import { exportConfigJSON, exportConfigExcel, exportConfigPDF } from '@/src/services/settings/settingsExportService';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import type { ModuleStatus } from '@/src/types/settings/diagnostic';
 import type { PageId } from '@/src/types';
@@ -60,9 +60,10 @@ export const SettingsControlCenter: React.FC = () => {
     return visible.map((w) => w.id);
   }, [layout]);
 
-  function handleExport(kind: 'json' | 'excel') {
+  function handleExport(kind: 'json' | 'excel' | 'pdf') {
     if (kind === 'json') exportConfigJSON(report);
-    else exportConfigExcel(report);
+    else if (kind === 'excel') exportConfigExcel(report);
+    else exportConfigPDF(report);
     logAudit({ action: 'config_exported', detail: `Format ${kind.toUpperCase()}` });
     setExportMenu(false);
   }
@@ -97,7 +98,14 @@ export const SettingsControlCenter: React.FC = () => {
               {exportMenu && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setExportMenu(false)} />
-                  <div className="absolute right-0 top-full mt-1 w-56 z-20 bg-white rounded-xl ring-1 ring-slate-200 shadow-lg py-1 text-[13px]">
+                  <div className="absolute right-0 top-full mt-1 w-60 z-20 bg-white rounded-xl ring-1 ring-slate-200 shadow-lg py-1 text-[13px]">
+                    <button onClick={() => handleExport('pdf')} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
+                      <FileDown className="w-4 h-4 text-rose-600" />
+                      <div>
+                        <div className="font-medium text-slate-900">PDF exécutif</div>
+                        <div className="text-[11px] text-slate-400">Réunion direction · A4 paysage</div>
+                      </div>
+                    </button>
                     <button onClick={() => handleExport('excel')} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
                       <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
                       <div>

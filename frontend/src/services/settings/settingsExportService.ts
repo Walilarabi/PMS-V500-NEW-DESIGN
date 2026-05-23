@@ -11,6 +11,8 @@
  */
 
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { DiagnosticReport } from '@/src/types/settings/diagnostic';
 import {
   MODULE_LABEL,
@@ -109,6 +111,135 @@ export function exportConfigExcel(report: DiagnosticReport) {
   XLSX.utils.book_append_sheet(wb, wsLogs, 'Logs');
 
   XLSX.writeFile(wb, `flowtym_control_center_${stamp()}.xlsx`);
+}
+
+/**
+ * Export PDF — rapport exécutif premium pour réunion de direction.
+ * Bandeau Flowtym, date, hôtel, scores en cartes, top alertes critiques,
+ * statut des modules, progression configuration. Mise en page A4 paysage
+ * pour 1-2 pages selon le volume.
+ */
+export function exportConfigPDF(report: DiagnosticReport) {
+  const cfg = useConfigStore.getState();
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  // Bandeau header violet
+  doc.setFillColor(124, 58, 237);
+  doc.rect(0, 0, pageWidth, 72, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('Flowtym — Control Center', 32, 32);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Rapport de diagnostic PMS · ${cfg.hotel.name || 'Établissement'}`, 32, 50);
+
+  doc.setFontSize(9);
+  doc.text(`Exporté le ${new Date(report.generatedAt).toLocaleString('fr-FR')}`, pageWidth - 32, 28, { align: 'right' });
+  doc.text(`Santé système : ${TIER_LABEL[report.overallTier]} (${report.scores.system_health.value}/100)`, pageWidth - 32, 44, { align: 'right' });
+  doc.text(`${report.alerts.length} alerte(s) ouverte(s)`, pageWidth - 32, 58, { align: 'right' });
+
+  let y = 95;
+  doc.setTextColor(15, 23, 42);
+
+  // Bloc 5 cartes scores
+  const scores = [
+    { id: 'system_health', label: 'Santé système' },
+    { id: 'configuration', label: 'Configuration' },
+    { id: 'compliance', label: 'Conformité' },
+    { id: 'security', label: 'Sécurité' },
+    { id: 'distribution', label: 'Distribution' },
+    { id: 'revenue', label: 'Revenue' },
+  ] as const;
+  const tileW = (pageWidth - 64 - (scores.length - 1) * 8) / scores.length;
+  scores.forEach((s, i) => {
+    const sc = report.scores[s.id];
+    const x = 32 + i * (tileW + 8);
+    doc.setFillColor(245, 243, 255);
+    doc.setDrawColor(221, 214, 254);
+    doc.roundedRect(x, y, tileW, 56, 6, 6, 'FD');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(s.label, x + 10, y + 16);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(76, 29, 149);
+    doc.text(`${sc.value}/100`, x + 10, y + 38);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(TIER_LABEL[sc.tier], x + 10, y + 50);
+  });
+  y += 75;
+
+  // Modules
+  autoTable(doc, {
+    startY: y,
+    head: [['Module', 'Statut', 'Problèmes détectés']],
+    body: report.modules.map((m) => [m.name, STATUS_LABEL[m.status], m.issues.join(' · ') || 'Aucun']),
+    theme: 'grid',
+    styles: { fontSize: 9, cellPadding: 5, lineColor: [226, 232, 240], lineWidth: 0.4 },
+    headStyles: { fillColor: [109, 40, 217], textColor: 255, fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [249, 250, 251] },
+    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'center', cellWidth: 110 } },
+    margin: { left: 32, right: 32 },
+  });
+  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 18;
+
+  // Alertes (top 8)
+  const topAlerts = report.alerts.slice(0, 8);
+  if (topAlerts.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [['Sévérité', 'Module', 'Alerte', 'Action recommandée']],
+      body: topAlerts.map((a) => [
+        SEVERITY_LABEL[a.severity],
+        MODULE_LABEL[a.module],
+        a.title,
+        `${a.action.label} → ${a.action.target}`,
+      ]),
+      theme: 'grid',
+      styles: { fontSize: 8.5, cellPadding: 4, lineColor: [226, 232, 240], lineWidth: 0.4 },
+      headStyles: { fillColor: [109, 40, 217], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 60, fontStyle: 'bold' },
+        1: { cellWidth: 110 },
+        3: { textColor: [124, 58, 237], cellWidth: 130 },
+      },
+      didParseCell: (data) => {
+        if (data.section !== 'body' || data.column.index !== 0) return;
+        const sev = topAlerts[data.row.index]?.severity;
+        const colors: Record<string, [number, number, number]> = {
+          critical: [254, 205, 211],
+          high: [254, 215, 170],
+          medium: [253, 230, 138],
+          low: [186, 230, 253],
+          info: [226, 232, 240],
+        };
+        if (sev && colors[sev]) data.cell.styles.fillColor = colors[sev];
+      },
+      margin: { left: 32, right: 32 },
+    });
+  }
+
+  // Footer pagination
+  const pageCount = (doc as unknown as { internal: { getNumberOfPages(): number } }).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      `Flowtym RMS · Control Center · Page ${i} / ${pageCount}`,
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 14,
+      { align: 'center' },
+    );
+  }
+
+  doc.save(`flowtym_control_center_${stamp()}.pdf`);
 }
 
 function stamp() {

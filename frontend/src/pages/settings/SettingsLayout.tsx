@@ -36,6 +36,52 @@ import {
 } from './settingsNavigation';
 import { SettingsControlCenter } from './SettingsControlCenter';
 import { SettingsModule } from '@/src/domains/settings/SettingsModule';
+import { SettingsPlaceholder } from './pages/SettingsPlaceholder';
+import { HotelInfoPage } from './pages/HotelInfoPage';
+import { LocalTaxesPage } from './pages/LocalTaxesPage';
+
+/**
+ * PageIds couvertes par le catalogue SettingsModule legacy.
+ * Les autres sous-pages (Branding, Langues, Fuseaux, etc.) ne sont pas
+ * encore dans le catalogue ; on les route vers SettingsPlaceholder qui
+ * affiche un état "Phase 2" propre avec liens vers les pages connexes.
+ */
+const LEGACY_CATALOG_PAGES: ReadonlySet<PageId> = new Set<PageId>([
+  'settings_multihotel',
+  'settings_room_types',
+  'settings_rooms',
+  'settings_floors',
+  'settings_room_status',
+  'settings_preferences',
+  'settings_products',
+  'settings_rate_plans',
+  'settings_conditions',
+  'settings_seasons',
+  'settings_age_categories',
+  'settings_invoice',
+  'settings_numbering',
+  'settings_payment_modes',
+  'settings_accounting',
+  'settings_debtors',
+  'settings_fiscal',
+  'settings_hk_status',
+  'settings_hk_checklists',
+  'settings_hk_staff',
+  'settings_hk_distribution',
+  'settings_maintenance',
+  'settings_lost_found',
+  'settings_breakfast',
+  'settings_pms_sync',
+  'settings_api',
+  'settings_connectors',
+  'settings_users',
+  'settings_automations',
+  'settings_notifications',
+  'settings_rgpd',
+  'settings_import_export',
+  'settings_audit',
+  'settings_backups',
+]);
 
 interface SettingsLayoutProps {
   activePage: PageId;
@@ -67,7 +113,7 @@ export const SettingsLayout: React.FC<SettingsLayoutProps> = ({ activePage, onNa
           onNavigate={onNavigate}
         />
         <main className="flex-1 overflow-hidden flex flex-col">
-          <SettingsContent activePage={activePage} />
+          <SettingsContent activePage={activePage} onNavigate={onNavigate} />
         </main>
       </div>
     </div>
@@ -163,7 +209,21 @@ const SettingsSideNav: React.FC<{
 
 // ─── Content router ────────────────────────────────────────────────────────
 
-const SettingsContent: React.FC<{ activePage: PageId }> = ({ activePage }) => {
+/**
+ * Aiguille la PageId vers le bon composant :
+ *   • 'settings' (Vue générale)         → SettingsControlCenter (cockpit vivant)
+ *   • 'settings_hotel'                  → HotelInfoPage (éditeur réel)
+ *   • 'settings_taxes_local'            → LocalTaxesPage (éditeur réel)
+ *   • Pages legacy du catalogue         → SettingsModule
+ *   • Toutes les autres (Phase 2)       → SettingsPlaceholder
+ */
+const SettingsContent: React.FC<{
+  activePage: PageId;
+  onNavigate: (page: PageId) => void;
+}> = ({ activePage, onNavigate }) => {
   if (activePage === 'settings') return <SettingsControlCenter />;
-  return <SettingsModule activePage={activePage} />;
+  if (activePage === 'settings_hotel') return <HotelInfoPage onNavigate={onNavigate} />;
+  if (activePage === 'settings_taxes_local') return <LocalTaxesPage />;
+  if (LEGACY_CATALOG_PAGES.has(activePage)) return <SettingsModule activePage={activePage} />;
+  return <SettingsPlaceholder activePage={activePage} onNavigate={onNavigate} />;
 };
