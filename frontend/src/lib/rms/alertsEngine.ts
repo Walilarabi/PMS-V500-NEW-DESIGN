@@ -14,6 +14,7 @@
 import type { LighthouseImport } from '../../services/lighthouse-parser.service';
 import type { ExpediaImport } from '../../services/expedia-parser.service';
 import type { SalonEvent } from '../../services/salons-parser.service';
+import type { Promotion } from '../../store/promotionsStore';
 
 export type AlertKind =
   | 'opportunity'
@@ -46,7 +47,7 @@ export interface RmAlert {
   generatedAt: string;
 }
 
-export type AlertSource = 'lighthouse' | 'expedia' | 'events' | 'calendar';
+export type AlertSource = 'lighthouse' | 'expedia' | 'events' | 'calendar' | 'promotions';
 
 export interface AlertMetric {
   label: string;
@@ -72,6 +73,8 @@ export interface AlertEngineInput {
   lighthouse?: LighthouseImport | null;
   expedia?: ExpediaImport | null;
   events?: SalonEvent[];
+  /** Liste de promotions (toutes statuts confondus). */
+  promotions?: Promotion[];
   /** Données calendrier minimales nécessaires au calcul d'occupation. */
   calendar?: {
     days: Array<{
@@ -431,6 +434,101 @@ function detectCalendarAlerts(
   return out;
 }
 
+function detectPromotionAlerts(promotions: Promotion[], ref: string): RmAlert[] {
+  const out: RmAlert[] = [];
+  // Horizon court terme : 7 jours
+  const soon = new Date(ref);
+  soon.setDate(soon.getDate() + 7);
+  const soonISO = soon.toISOString().slice(0, 10);
+
+  for (const p of promotions) {
+    // 1) Promotion HIGH priority en draft / paused / scheduled → à activer
+    if (
+      (p.status === 'draft' || p.status === 'paused' || p.status === 'scheduled') &&
+      p.alert?.priority === 'high'
+    ) {
+      const sig = `promo-toactivate-${p.id}`;
+      out.push({
+        id: buildAlertId('opportunity', p.startDate, sig),
+        kind: 'opportunity',
+        severity: 'warning',
+        title: `Promotion à activer — ${p.name}`,
+        message: `Le moteur RMS recommande l'activation de "${p.name}" (priorité haute). ${p.alert.why}`,
+        dateRange: { start: p.startDate, end: p.endDate },
+        source: ['promotions'],
+        metrics: [
+          { label: 'Type', value: p.typeLabel },
+          { label: 'Réduction', value: p.discount },
+          { label: 'Canaux', value: p.channels.join(' + ') },
+        ],
+        suggestedAction: {
+          type: 'open-promotions',
+          label: 'Ouvrir la promotion',
+        },
+        confidence: 75,
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
+    // 2) Promotion active qui expire dans < 7 jours (et non permanente)
+    if (
+      p.status === 'active' &&
+      !p.permanent &&
+      p.endDate >= ref &&
+      p.endDate <= soonISO
+    ) {
+      const sig = `promo-expiring-${p.id}-${p.endDate}`;
+      out.push({
+        id: buildAlertId('risk', p.endDate, sig),
+        kind: 'risk',
+        severity: 'info',
+        title: `Promotion bientôt terminée — ${p.name}`,
+        message: `La promotion "${p.name}" prend fin le ${formatDateFR(p.endDate)}. Décider de prolonger, dupliquer ou laisser expirer.`,
+        dateRange: { start: ref, end: p.endDate },
+        source: ['promotions'],
+        metrics: [
+          { label: 'Réservations', value: `${p.bookings}` },
+          { label: 'Revenu', value: `${Math.round(p.revenue)}€` },
+          { label: 'ROI', value: p.roi > 0 ? `${p.roi.toFixed(1)}x` : '—' },
+        ],
+        suggestedAction: {
+          type: 'open-promotions',
+          label: 'Prolonger ou archiver',
+        },
+        confidence: 70,
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
+    // 3) Promotion active avec sous-performance ROI (< 2x sur > 20 réservations)
+    if (p.status === 'active' && p.bookings >= 20 && p.roi > 0 && p.roi < 2) {
+      const sig = `promo-lowroi-${p.id}-${p.roi.toFixed(1)}`;
+      out.push({
+        id: buildAlertId('underpricing', p.startDate, sig),
+        kind: 'underpricing',
+        severity: 'warning',
+        title: `Sous-performance — ${p.name}`,
+        message: `La promotion "${p.name}" affiche un ROI de ${p.roi.toFixed(1)}x sur ${p.bookings} réservations. Réviser la cible, la réduction ou les canaux de diffusion.`,
+        dateRange: { start: p.startDate, end: p.endDate },
+        source: ['promotions'],
+        metrics: [
+          { label: 'ROI', value: `${p.roi.toFixed(1)}x` },
+          { label: 'Conversion', value: `${p.conversion.toFixed(1)}%` },
+          { label: 'Performance', value: `${p.performance}/100` },
+        ],
+        suggestedAction: {
+          type: 'open-promotions',
+          label: 'Analyser la promotion',
+        },
+        confidence: 72,
+        generatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  return out;
+}
+
 // ─── ENTRY POINT ─────────────────────────────────────────────────────────────
 
 const KIND_PRIORITY: Record<AlertKind, number> = {
@@ -461,6 +559,8 @@ export function computeAlerts(input: AlertEngineInput): RmAlert[] {
   if (input.events?.length) all.push(...detectEventAlerts(input.events, ref));
   if (input.calendar?.days?.length)
     all.push(...detectCalendarAlerts(input.calendar, ref));
+  if (input.promotions?.length)
+    all.push(...detectPromotionAlerts(input.promotions, ref));
 
   // Dédupe par id (si plusieurs sources convergent par hasard)
   const seen = new Set<string>();

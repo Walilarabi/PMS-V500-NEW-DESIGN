@@ -43,6 +43,7 @@ import {
 import { useLighthouseStore } from '@/src/store/lighthouseStore';
 import { useExpediaStore } from '@/src/store/expediaStore';
 import { useSalonsStore } from '@/src/store/salonsStore';
+import { usePromotionsStore } from '@/src/store/promotionsStore';
 import { useAlertActionsStore, type AlertStatus } from '@/src/store/alertActionsStore';
 
 // ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
@@ -105,6 +106,7 @@ export const AlertsPage: React.FC = () => {
   const lighthouse = useLighthouseStore((s) => s.importData);
   const expedia = useExpediaStore((s) => s.importData);
   const events = useSalonsStore((s) => s.importData?.events ?? []);
+  const promotions = usePromotionsStore((s) => s.promotions);
 
   // Actions utilisateur persistées
   const statusMap = useAlertActionsStore((s) => s.status);
@@ -116,8 +118,8 @@ export const AlertsPage: React.FC = () => {
 
   // Calcul du fil d'alertes en temps réel
   const allAlerts = useMemo(
-    () => computeAlerts({ lighthouse, expedia, events }),
-    [lighthouse, expedia, events]
+    () => computeAlerts({ lighthouse, expedia, events, promotions }),
+    [lighthouse, expedia, events, promotions]
   );
 
   // Filtrage : kind + statut courant

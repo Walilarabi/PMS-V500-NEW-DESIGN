@@ -59,6 +59,10 @@ import {
   exportDistributionPDF,
   type DistributionExportInput,
 } from '@/src/services/revenueExport.service';
+import {
+  usePromotionsStore,
+  selectActivePromotionsByChannel,
+} from '@/src/store/promotionsStore';
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* TYPES                                                                      */
@@ -351,6 +355,10 @@ export function DistributionAnalytics() {
 
   const channelData = CHANNELS;
 
+  // Cross-module : promotions actives par canal, lu en temps réel depuis le
+  // store. Mis à jour automatiquement à chaque toggle/edit côté Promotions.
+  const activePromosByChannel = usePromotionsStore(selectActivePromotionsByChannel);
+
   const sorted = useMemo(() => {
     const arr = [...channelData];
     arr.sort((a, b) => {
@@ -611,7 +619,12 @@ export function DistributionAnalytics() {
           {/* TOP 3 channels */}
           <div className="grid gap-3 sm:grid-cols-3 lg:col-span-8">
             {top3.map((c, i) => (
-              <TopChannelCard key={c.id} channel={c} rank={i + 1} />
+              <TopChannelCard
+                key={c.id}
+                channel={c}
+                rank={i + 1}
+                activePromosCount={activePromosByChannel[c.name] ?? 0}
+              />
             ))}
           </div>
         </div>
@@ -758,7 +771,11 @@ const Th: React.FC<React.PropsWithChildren<{ className?: string }>> = ({ childre
 /* TOP CHANNEL CARDS                                                          */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-const TopChannelCard: React.FC<{ channel: Channel; rank: number }> = ({ channel, rank }) => {
+const TopChannelCard: React.FC<{
+  channel: Channel;
+  rank: number;
+  activePromosCount?: number;
+}> = ({ channel, rank, activePromosCount = 0 }) => {
   const data = channel.trend.map((v, i) => ({ i, v }));
   const positive = channel.trendDelta >= 0;
   const gradientId = `topchan-${channel.id}`;
@@ -792,9 +809,20 @@ const TopChannelCard: React.FC<{ channel: Channel; rank: number }> = ({ channel,
             <div className="text-[11px] text-slate-500">Commission {channel.commissionRate}%</div>
           </div>
         </div>
-        <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
-          #{rank}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {activePromosCount > 0 && (
+            <span
+              title={`${activePromosCount} promotion(s) active(s) sur ${channel.name}`}
+              className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200"
+            >
+              <Sparkles className="h-3 w-3" />
+              {activePromosCount} promo
+            </span>
+          )}
+          <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700">
+            #{rank}
+          </span>
+        </div>
       </div>
 
       <div className="relative mt-3 flex items-baseline gap-2">
