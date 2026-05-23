@@ -15,14 +15,15 @@
  *   │  Filtres rapides + tableau / calendrier  │  (moteur multi-src)  │
  *   └──────────────────────────────────────────┴──────────────────────┘
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Activity, AlertCircle, Calendar, CalendarDays, Euro, Filter, LineChart,
+  Activity, AlertCircle, Calendar, CalendarDays, Euro, FileDown, FileSpreadsheet, Filter, LineChart,
   List, Plus, Search, Sparkles, Upload, X,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
 import { useEventsStore } from '@/src/store/eventsStore';
+import { useConfigStore } from '@/src/store/configStore';
 import type { EventCategory, EventImpactLevel, RMSMarketEvent } from '@/src/types/events';
 import { CATEGORY_LABELS, IMPACT_LABELS } from '@/src/types/events';
 import { EventsList } from './events/EventsList';
@@ -31,12 +32,20 @@ import { EventDetailPanel } from './events/EventDetailPanel';
 import { EventSearchPanel } from './events/EventSearchPanel';
 import { EventImportModal } from './events/EventImportModal';
 import { EventEditorModal } from './events/EventEditorModal';
+import { EventValidationModal } from './events/EventValidationModal';
 import { KpiTile } from './events/components/KpiTile';
+import { exportEventsToExcel, exportEventsToPDF } from '@/src/services/event-export.service';
 
 type ViewMode = 'list' | 'calendar';
 
 export const EventsView: React.FC = () => {
-  const { filters, setFilters, resetFilters, getKpis } = useEventsStore();
+  const {
+    filters, setFilters, resetFilters, getKpis, getFilteredEvents,
+    pendingValidation, clearPendingValidation,
+  } = useEventsStore();
+  const hotelName = useConfigStore((s) => s.hotel.name);
+  const hotelCity = useConfigStore((s) => s.hotel.city);
+
   const [view, setView] = useState<ViewMode>('calendar');
   const [showFilters, setShowFilters] = useState(false);
   const [searchOpen, setSearchOpen] = useState(true);
@@ -44,8 +53,34 @@ export const EventsView: React.FC = () => {
   const [selected, setSelected] = useState<RMSMarketEvent | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [editor, setEditor] = useState<{ open: boolean; initial?: RMSMarketEvent | null; defaultDate?: string }>({ open: false });
+  const [validationOpen, setValidationOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const kpis = useMemo(() => getKpis(), [getKpis]);
+
+  // Ouvre automatiquement la modale de validation dès que la recherche
+  // remonte des candidats — utilisateur garde le contrôle.
+  useEffect(() => {
+    if (pendingValidation.length > 0) setValidationOpen(true);
+  }, [pendingValidation.length]);
+
+  function handleExport(kind: 'excel' | 'pdf') {
+    const events = getFilteredEvents();
+    const ctx = {
+      hotelName,
+      city: hotelCity,
+      fileBaseName: `flowtym_evenements_${(hotelCity || 'paris').toLowerCase()}`,
+      kpis: {
+        upcoming: kpis.upcoming,
+        critical: kpis.critical,
+        influencedAdrPct: kpis.influencedAdrPct,
+        influencedRevparPct: kpis.influencedRevparPct,
+      },
+    };
+    if (kind === 'excel') exportEventsToExcel(events, ctx);
+    else exportEventsToPDF(events, ctx);
+    setExportMenuOpen(false);
+  }
 
   const QUICK_FILTERS: { key: EventImpactLevel | 'all'; label: string }[] = [
     { key: 'all', label: 'Tous' },
@@ -67,7 +102,43 @@ export const EventsView: React.FC = () => {
             className="mb-0"
             actions={null}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative">
+            <div className="relative">
+              <button
+                onClick={() => setExportMenuOpen((v) => !v)}
+                className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                Exporter
+              </button>
+              {exportMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setExportMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 w-56 z-20 bg-white rounded-xl ring-1 ring-slate-200 shadow-lg py-1 text-[13px]">
+                    <button
+                      onClick={() => handleExport('excel')}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <div>
+                        <div className="font-medium text-slate-900">Exporter en Excel</div>
+                        <div className="text-[11px] text-slate-400">Couleurs d'impact + filtres</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => handleExport('pdf')}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2"
+                    >
+                      <FileDown className="w-4 h-4 text-rose-600" />
+                      <div>
+                        <div className="font-medium text-slate-900">Exporter en PDF</div>
+                        <div className="text-[11px] text-slate-400">Document premium pour réunion RM</div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             <button
               onClick={() => setImportOpen(true)}
               className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
@@ -229,6 +300,14 @@ export const EventsView: React.FC = () => {
         initial={editor.initial}
         defaultDate={editor.defaultDate}
         onClose={() => setEditor({ open: false })}
+      />
+      <EventValidationModal
+        open={validationOpen && pendingValidation.length > 0}
+        candidates={pendingValidation}
+        onClose={() => {
+          setValidationOpen(false);
+          clearPendingValidation();
+        }}
       />
     </div>
   );

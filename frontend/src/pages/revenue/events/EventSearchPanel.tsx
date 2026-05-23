@@ -329,11 +329,16 @@ function SyncReport({ report }: { report: SyncLogEntry }) {
       <div className="grid grid-cols-2 gap-1.5 px-3 py-3 text-[12px]">
         <Stat label="Sources scannées" value={report.sourcesQueried} />
         <Stat label="Événements trouvés" value={totalEvents} />
-        <Stat label="Nouveaux ajoutés" value={report.added} tone="positive" />
-        <Stat label="Mis à jour" value={report.updated} />
+        <Stat label="À valider" value={report.pending} tone="positive" />
+        <Stat label="Déjà connus" value={Math.max(0, totalEvents - report.pending)} />
         <Stat label="Doublons fusionnés" value={report.duplicates} />
         <Stat label="Erreurs" value={report.errors} tone={report.errors > 0 ? 'warn' : undefined} />
       </div>
+      {report.pending > 0 && (
+        <div className="px-3 py-2 border-t border-emerald-100 bg-emerald-100/40 text-[11.5px] text-emerald-800 font-medium">
+          La fenêtre de validation s'ouvre automatiquement — accepte ou refuse chaque événement pour qu'il alimente le RMS.
+        </div>
+      )}
       <button
         onClick={() => setExpanded((v) => !v)}
         className="w-full px-3 py-1.5 text-[11.5px] font-medium text-emerald-700 hover:bg-emerald-100/40 border-t border-emerald-100"

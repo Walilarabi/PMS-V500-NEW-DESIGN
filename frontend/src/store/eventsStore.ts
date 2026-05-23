@@ -36,6 +36,8 @@ export interface SyncLogEntry {
   at: string;
   city: string;
   sourcesQueried: number;
+  /** Événements en attente de validation utilisateur (post-recherche). */
+  pending: number;
   added: number;
   updated: number;
   duplicates: number;
@@ -45,6 +47,23 @@ export interface SyncLogEntry {
   perSource?: { sourceId: string; sourceName: string; events: number; status: 'ok' | 'error'; message?: string }[];
   /** Liste des erreurs détaillées (sourceId + message) */
   errorDetails?: { sourceId: string; message: string }[];
+}
+
+/**
+ * Trace d'un événement refusé par l'utilisateur dans la modale de validation.
+ * Alimente l'historique de décisions et permet au moteur IA d'ajuster ses
+ * futures détections (apprentissage métier).
+ */
+export interface RefusedEventEntry {
+  id: string;            // id de l'événement original
+  name: string;
+  city: string;
+  startDate: string;
+  endDate: string;
+  primarySource: string;
+  reason: 'irrelevant' | 'duplicate' | 'impact_overestimated' | 'wrong_location' | 'cancelled' | 'false_positive' | 'other';
+  comment?: string;
+  refusedAt: string;
 }
 
 export interface EventFilters {
@@ -74,6 +93,9 @@ interface EventsStore {
   sources: EventSource[];
   filters: EventFilters;
   syncLogs: SyncLogEntry[];
+  refusedEvents: RefusedEventEntry[];
+  /** Événements détectés en attente de validation utilisateur (modale). */
+  pendingValidation: RMSMarketEvent[];
   autoSync: boolean;
   lastSearchAt?: string;
 
@@ -86,6 +108,11 @@ interface EventsStore {
   attachHotels: (id: string, hotelIds: string[]) => void;
   bulkUpsert: (events: RMSMarketEvent[]) => { added: number; updated: number; duplicates: number };
   applySearchResult: (r: EventSearchResult) => SyncLogEntry;
+  /** Ouvre la modale de validation avec les candidats. */
+  setPendingValidation: (events: RMSMarketEvent[]) => void;
+  clearPendingValidation: () => void;
+  /** Trace les refus utilisateurs — feedback IA. */
+  addRefusedEvents: (events: RMSMarketEvent[], opts: { reason: RefusedEventEntry['reason']; comment?: string }) => void;
 
   // sources
   toggleSource: (id: string, active: boolean) => void;
@@ -119,6 +146,8 @@ export const useEventsStore = create<EventsStore>()(
       sources: EVENT_SOURCE_LIBRARY,
       filters: DEFAULT_FILTERS,
       syncLogs: [],
+      refusedEvents: [],
+      pendingValidation: [],
       autoSync: true,
 
       addEvent: (ev) =>
@@ -236,7 +265,12 @@ export const useEventsStore = create<EventsStore>()(
 
       applySearchResult: (r) => {
         const start = Date.now();
-        const stats = get().bulkUpsert(r.events);
+        // Pas d'upsert automatique : on filtre les événements déjà connus et déjà
+        // refusés, le reste passe en validation utilisateur (modale dédiée).
+        const state = get();
+        const knownIds = new Set(state.events.map((e) => e.id));
+        const refusedIds = new Set(state.refusedEvents.map((e) => e.id));
+        const candidates = r.events.filter((e) => !knownIds.has(e.id) && !refusedIds.has(e.id));
         const extended = r as EventSearchResult & {
           perSource?: SyncLogEntry['perSource'];
         };
@@ -244,9 +278,10 @@ export const useEventsStore = create<EventsStore>()(
           at: now(),
           city: r.query.city,
           sourcesQueried: r.sourcesQueried,
-          added: stats.added,
-          updated: stats.updated,
-          duplicates: r.duplicatesMerged + stats.duplicates,
+          pending: candidates.length,
+          added: 0,
+          updated: 0,
+          duplicates: r.duplicatesMerged,
           errors: r.errors.length,
           durationMs: Date.now() - start,
           perSource: extended.perSource,
@@ -255,9 +290,33 @@ export const useEventsStore = create<EventsStore>()(
         set((s) => ({
           syncLogs: [entry, ...s.syncLogs].slice(0, 30),
           lastSearchAt: entry.at,
+          pendingValidation: candidates,
         }));
         return entry;
       },
+
+      setPendingValidation: (events) => set({ pendingValidation: events }),
+      clearPendingValidation: () => set({ pendingValidation: [] }),
+
+      addRefusedEvents: (events, opts) =>
+        set((s) => {
+          const refusedAt = now();
+          const entries: RefusedEventEntry[] = events.map((e) => ({
+            id: e.id,
+            name: e.name,
+            city: e.city,
+            startDate: e.startDate,
+            endDate: e.endDate,
+            primarySource: e.primarySource,
+            reason: opts.reason,
+            comment: opts.comment,
+            refusedAt,
+          }));
+          return {
+            refusedEvents: [...entries, ...s.refusedEvents].slice(0, 200),
+            pendingValidation: s.pendingValidation.filter((e) => !events.some((x) => x.id === e.id)),
+          };
+        }),
 
       toggleSource: (id, active) =>
         set((s) => ({
@@ -336,12 +395,13 @@ export const useEventsStore = create<EventsStore>()(
     }),
     {
       name: 'flowtym_events_module',
-      version: 2, // bump → migration : nouveau seed Paris 42 sources / 52 événements
+      version: 3, // ajout refusedEvents + pending — workflow de validation
       partialize: (s) => ({
         events: s.events,
         sources: s.sources,
         autoSync: s.autoSync,
         syncLogs: s.syncLogs,
+        refusedEvents: s.refusedEvents,
       }),
     },
   ),

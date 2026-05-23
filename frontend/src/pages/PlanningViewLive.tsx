@@ -42,6 +42,8 @@ import ReservationFormModal, { ReservationFormData } from '@/src/components/moda
 import { RevenueKPIChart } from '@/src/components/configuration/RevenueKPIChart';
 import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
 import { useConfigStore, HotelEvent } from '@/src/store/configStore';
+import { useEventsStore } from '@/src/store/eventsStore';
+import { aggregateEventsForDate, eventCellTone, impactLevelLabel } from '@/src/services/events-bridge.service';
 import { useRealtimeKPI } from '@/src/hooks/useRealtimeKPI';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 import { ChannelColorModal } from '@/src/components/modals/ChannelColorModal';
@@ -93,6 +95,7 @@ const getRoomCode = (type: string, category: string): string => {
 export const PlanningView = () => {
   const { addReservation, updateReservation, reservations: contextReservations } = useReservations();
   const { rooms: storeRooms, events: storeEvents, channels: storeChannels } = useConfigStore();
+  const rmsEvents = useEventsStore((s) => s.events);
   
   // Calcul KPI temps réel automatique
   const kpiData = useRealtimeKPI(contextReservations, storeRooms.length, {
@@ -1035,18 +1038,52 @@ export const PlanningView = () => {
                        </div>
                      ))}
                   </div>
+                  {/* Ligne Événements — agrège configStore.events + useEventsStore */}
                   <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
                      {days.map(d => {
-                       const highestImpact = d.events.length > 0 ? d.events.reduce((acc, curr) => {
-                         const weights = { 'low': 1, 'medium': 2, 'high': 3, 'critical': 4 };
-                         return weights[curr.impact as keyof typeof weights] > weights[acc.impact as keyof typeof weights] ? curr : acc;
-                       }, d.events[0]) : null;
-                       const impactColor = (highestImpact?.impact === 'high' || highestImpact?.impact === 'critical') ? 'bg-rose-300 text-white shadow-rose-50' : 
-                                         highestImpact?.impact === 'medium' ? 'bg-orange-300 text-white shadow-orange-50' : 
-                                         'bg-emerald-300 text-white shadow-emerald-50';
+                       const agg = aggregateEventsForDate(rmsEvents, d.dateStr);
+                       const total = agg.count + d.events.length;
+                       const tone = eventCellTone(agg.level);
+                       const hasEvents = total > 0;
                        return (
-                         <div key={`ev-${d.id}`} onClick={() => { setSelectedEventDate(d.dateStr); setIsEventModalOpen(true); }} onMouseEnter={(e) => { if (d.events.length > 0) { setHoveredEvents(d.events); setTooltipPos({ x: e.clientX, y: e.clientY + 20 }); } }} onMouseLeave={() => setHoveredEvents(null)} className={cn("h-10 border-r border-b border-gray-50 flex items-center justify-center transition-colors cursor-pointer hover:bg-indigo-50/50 shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
-                            {d.events.length > 0 && <Badge className={cn("text-[10px] font-black h-6 w-6 flex items-center justify-center rounded-full p-0 border-none shadow-sm", impactColor)}>{d.events.length}</Badge>}
+                         <div
+                           key={`ev-${d.id}`}
+                           onClick={() => { setSelectedEventDate(d.dateStr); setIsEventModalOpen(true); }}
+                           onMouseEnter={(e) => {
+                             if (hasEvents) {
+                               // hoveredEvents reste sur HotelEvent[] pour compat
+                               // mais on enrichit avec les RMSMarketEvent agrégés.
+                               const fromRms: HotelEvent[] = agg.events.map((x) => ({
+                                 id: x.id,
+                                 name: x.name,
+                                 startDate: x.startDate,
+                                 endDate: x.endDate,
+                                 impact: (x.impact.level === 'very_low' ? 'low' : x.impact.level) as HotelEvent['impact'],
+                                 source: x.primarySource,
+                                 location: x.venue || x.zone,
+                                 description: `Pression ${agg.pressure}% · ADR +${x.impact.adr}% · TO +${x.impact.occupancy}% · Reco prix +${x.influencePrice}%`,
+                               }));
+                               setHoveredEvents([...fromRms, ...d.events]);
+                               setTooltipPos({ x: e.clientX, y: e.clientY + 20 });
+                             }
+                           }}
+                           onMouseLeave={() => setHoveredEvents(null)}
+                           className={cn(
+                             'h-10 border-r border-b border-gray-50 flex items-center justify-center transition-colors cursor-pointer hover:bg-indigo-50/50 shrink-0',
+                             d.isWeekend && 'bg-gray-50/10',
+                           )}
+                           style={{ width: `${colWidth}%` }}
+                           title={hasEvents ? `${total} événement(s) — ${impactLevelLabel(agg.level)}` : undefined}
+                         >
+                            {hasEvents && (
+                              <span className={cn(
+                                'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ring-1 ring-inset text-[10px] font-semibold tabular-nums',
+                                tone.bg, tone.text, tone.ring,
+                              )}>
+                                <span className={cn('w-1.5 h-1.5 rounded-full', tone.dot)} />
+                                {total}
+                              </span>
+                            )}
                          </div>
                        );
                      })}

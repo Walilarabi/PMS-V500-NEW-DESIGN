@@ -53,6 +53,9 @@ import { RMSRecommendationModal } from './components/RMSRecommendationModal';
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useSalonsStore } from '../../store/salonsStore';
+import { useEventsStore } from '../../store/eventsStore';
+import { eventsActiveOn } from '../../services/events-bridge.service';
+import { IMPACT_LABELS as RMS_IMPACT_LABELS } from '../../types/events';
 import type { SalonEvent } from '../../services/salons-parser.service';
 import { useOperationalData } from '../../hooks/useOperationalData';
 import { recordRmsDecision } from '../../services/rms-decisions.service';
@@ -97,7 +100,9 @@ interface RMSEventRow {
   location?: string | null;
   impact?: string | null;
   link?: string | null;
-  source: 'salons_excel' | 'lighthouse' | 'planning_manual';
+  source: 'salons_excel' | 'lighthouse' | 'planning_manual' | 'rms_events';
+  /** Lien vers l'événement RMS source si applicable (clic → panneau détail). */
+  rmsEventId?: string;
 }
 
 interface DayRMSData {
@@ -433,6 +438,10 @@ export function RMSTableauPro() {
     return salonsImport.events.filter(e => date >= e.startDate && date <= e.endDate);
   }, [salonsImport]);
 
+  // ─── Événements module RMS (nouveau store) ─────────────────────────────
+  const rmsEventsAll = useEventsStore((s) => s.events);
+  const getRmsEvents = useCallback((date: string) => eventsActiveOn(rmsEventsAll, date), [rmsEventsAll]);
+
   // Override manuel d'inventaire
   const [inventoryOverrides, setInventoryOverrides] = useState<Map<string, number>>(new Map());
 
@@ -459,6 +468,7 @@ export function RMSTableauPro() {
       const lhData = getLighthouseData(row.date);
       const opData = operationalByDate.get(row.date);
       const salonEvents = getSalonEvents(row.date);
+      const rmsModuleEvents = getRmsEvents(row.date);
       const inventoryOverride = inventoryOverrides.get(row.date);
 
       // ── Disponibilité ──
@@ -484,25 +494,47 @@ export function RMSTableauPro() {
       const maxPrice = lhData?.compsetMax ?? 0;
       const marketPressure = lhData?.marketDemandPercent ?? 0;
 
-      // ── Événements unifiés (Palier A point 5) ──
-      // Source 1 : salons importés (priorité, avec tous les détails)
-      // Source 2 : événements Lighthouse (fallback)
+      // ── Événements unifiés ─────────────────────────────────────────
+      // Source 1 : module Événements RMS (le plus riche — priorité)
+      // Source 2 : salons importés (legacy Excel)
+      // Source 3 : événements Lighthouse (fallback)
       const events: RMSEventRow[] = [];
+      const seenNames = new Set<string>();
 
-      // Ajouter d'abord les salons (les plus riches)
+      // Module Événements (RMSMarketEvent → RMSEventRow)
+      for (const ev of rmsModuleEvents) {
+        const key = ev.name.toLowerCase();
+        if (seenNames.has(key)) continue;
+        seenNames.add(key);
+        events.push({
+          name: ev.name,
+          startDate: ev.startDate,
+          endDate: ev.endDate,
+          location: ev.venue || ev.zone || null,
+          impact: RMS_IMPACT_LABELS[ev.impact.level],
+          link: null,
+          source: 'rms_events',
+          rmsEventId: ev.id,
+        });
+      }
+
+      // Salons Excel (complète si pas déjà couvert)
       for (const se of salonEvents) {
+        const key = se.name.toLowerCase();
+        if (seenNames.has(key)) continue;
+        seenNames.add(key);
         events.push({
           name: se.name,
           startDate: se.startDate,
           endDate: se.endDate,
           location: se.location ?? null,
           impact: se.impact ?? null,
-          link: null,  // pas encore extrait par le parser
+          link: null,
           source: 'salons_excel',
         });
       }
 
-      // Compléter avec les events Lighthouse si rien dans les salons pour cette date
+      // Compléter avec les events Lighthouse si rien dans les autres pour cette date
       if (events.length === 0 && lhData?.events) {
         events.push({
           name: lhData.events,
@@ -574,6 +606,7 @@ export function RMSTableauPro() {
     operationalByDate,
     totalCapacity,
     getSalonEvents,
+    getRmsEvents,
     inventoryOverrides,
     startDate,
     viewPeriod,

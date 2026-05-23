@@ -48,6 +48,7 @@ import {
   useSasIncomingRealtime,
 } from '@/src/hooks/useRealtimeChannels';
 import { useSupabaseSync } from '@/src/hooks/useSupabaseSync';
+import { useCentralPricingSync } from '@/src/hooks/useCentralPricingSync';
 import { DebugPanel } from '@/src/components/DebugPanel';
 
 // Placeholder universel — icône Lucide (épuré, minimaliste)
@@ -243,6 +244,7 @@ export default function App() {
   useRevenueAnomaliesRealtime();
   useSasIncomingRealtime();
   useSupabaseSync();  // Synchronise les rooms et réservations depuis Supabase vers les stores locaux
+  useCentralPricingSync();  // Propage les décisions du Central Pricing Engine → Calendrier tarifaire (chambre/plan de référence)
 
   // Navigation normalisée — redirige les anciennes routes Revenue vers les nouvelles
   const navigate = useCallback((page: PageId) => {
