@@ -59,6 +59,7 @@ export const rmsRuleEvaluator = {
     const suppressed: FinalRecommendation['suppressedRules'] = [];
 
     let directionLock: 'up' | 'down' | null = null;
+    let winningRule: { id: string; name: string; priority: number } | null = null;
 
     // Seules les actions qui touchent au prix doivent peser sur la
     // proposition tarifaire. Les autres (min_stay, ota_limit, cta, block)
@@ -86,9 +87,26 @@ export const rmsRuleEvaluator = {
           context: date,
           detail: `Suspendue : direction ${direction} ≠ ${directionLock}`,
         });
+        // Enregistre le conflit runtime dans le moteur de priorités
+        if (winningRule) {
+          priorityConflictEngine.recordRuntimeConflict({
+            winner: { ...winningRule, intent: directionLock === 'up' ? 'Hausse prix' : 'Baisse prix' },
+            suspended: {
+              id: ev.rule.id,
+              name: ev.rule.name,
+              priority: ev.rule.priority,
+              intent: direction === 'up' ? 'Hausse prix' : 'Baisse prix',
+            },
+            impact: Math.round(ev.rule.revenueImpact30d / 30),
+            date,
+          });
+        }
         continue;
       }
-      if (direction && !directionLock) directionLock = direction;
+      if (direction && !directionLock) {
+        directionLock = direction;
+        winningRule = { id: ev.rule.id, name: ev.rule.name, priority: ev.rule.priority };
+      }
 
       proposedPrice = proposedPrice * (1 + dominantMagnitude);
       applied.push({

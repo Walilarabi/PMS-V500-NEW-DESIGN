@@ -22,6 +22,8 @@ import type {
   ResolutionLogEntry,
   PrioritySimulation,
 } from '@/src/types/revenue/conflicts.types';
+import type { TacticalRuleId } from '@/src/types/revenue/tacticalRules.types';
+import type { GuardrailId } from '@/src/types/revenue/guardrails.types';
 import { tacticalRulesEngine } from './tacticalRulesEngine';
 import { rmsAuditLogger } from './rmsAuditLogger';
 import { emitRmsEvent } from '@/src/lib/rms/eventBus';
@@ -269,6 +271,62 @@ export const priorityConflictEngine = {
   subscribe(listener: () => void): () => void {
     listeners.add(listener);
     return () => listeners.delete(listener);
+  },
+
+  /**
+   * Enregistre un conflit détecté au runtime (par `rmsRuleEvaluator` quand
+   * deux règles fired veulent aller dans des directions opposées). Si un
+   * conflit identique (mêmes participants) existe déjà, il est mis à jour
+   * plutôt que dupliqué.
+   */
+  recordRuntimeConflict(input: {
+    winner: { id: string; name: string; priority: number; intent: string };
+    suspended: { id: string; name: string; priority: number; intent: string };
+    impact: number;
+    date: string;
+  }) {
+    const signature = `${input.winner.id}__vs__${input.suspended.id}`;
+    const existing = conflicts.find((c) => c.id === signature);
+    if (existing) {
+      // Met à jour le timestamp + impact agrégé
+      conflicts = conflicts.map((c) =>
+        c.id === signature
+          ? {
+              ...c,
+              detectedAt: new Date().toISOString(),
+              potentialImpact: c.potentialImpact + input.impact,
+            }
+          : c,
+      );
+    } else {
+      const newConflict: Conflict = {
+        id: signature,
+        type: 'objective_opposition',
+        detectedAt: new Date().toISOString(),
+        participants: [
+          { kind: 'rule', id: input.winner.id as TacticalRuleId | GuardrailId, name: input.winner.name, priority: input.winner.priority, intent: input.winner.intent },
+          { kind: 'rule', id: input.suspended.id as TacticalRuleId | GuardrailId, name: input.suspended.name, priority: input.suspended.priority, intent: input.suspended.intent },
+        ],
+        potentialImpact: input.impact,
+        potentialImpactLabel: 'RevPAR potentiel',
+        riskLevel: Math.abs(input.impact) > 800 ? 'high' : Math.abs(input.impact) > 300 ? 'medium' : 'low',
+        resolution: 'priority_wins',
+        winner: { kind: 'rule', id: input.winner.id as TacticalRuleId | GuardrailId, name: input.winner.name, priority: input.winner.priority, intent: input.winner.intent },
+        suspended: { kind: 'rule', id: input.suspended.id as TacticalRuleId | GuardrailId, name: input.suspended.name, priority: input.suspended.priority, intent: input.suspended.intent },
+        iaJustification: `Direction opposée — priorité ${input.winner.priority} l'emporte sur priorité ${input.suspended.priority}.`,
+        recommendedAction: `Conserver ${input.winner.name} prioritaire`,
+        status: 'resolved',
+      };
+      conflicts = [newConflict, ...conflicts].slice(0, 50);
+      try {
+        emitRmsEvent('conflict:detected', {
+          conflictId: newConflict.id,
+          participants: [input.winner.name, input.suspended.name],
+          riskLevel: newConflict.riskLevel,
+        });
+      } catch {/* bus */}
+    }
+    notify();
   },
 
   /** Hydrate depuis Supabase. Garde le seed si vide ou indisponible. */
