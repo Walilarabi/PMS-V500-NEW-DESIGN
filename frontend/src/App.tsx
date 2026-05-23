@@ -16,6 +16,7 @@ import { ClientsLayout }    from '@/src/pages/clients/ClientsLayout';
 import type { ClientsPage }  from '@/src/pages/clients/ClientsLayout';
 import { RevenueDashboard }    from '@/src/pages/revenue/RevenueDashboard';
 import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
+import { EventsView }          from '@/src/pages/revenue/EventsView';
 
 // RMS ENTERPRISE ULTIMATE
 import { DecisionHistoryPage } from '@/src/pages/revenue/DecisionHistoryPage';
@@ -133,6 +134,7 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'rev_pricing_reco':    return <RMSTableauPro />;
     case 'rev_pricing':
     case 'rev_calendar':        return <PricingCalendar />;
+    case 'rev_events':          return <EventsView />;
     // Automatisation
     case 'rev_rules':
     case 'rev_yield':

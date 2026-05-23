@@ -103,6 +103,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
         { id: 'rev_market',       label: 'Marché & Concurrence',      icon: Globe },
         { id: 'rev_pricing_reco', label: 'Pricing & Recommandations', icon: Sparkles },
         { id: 'rev_calendar',     label: 'Calendrier tarifaire',      icon: CalendarDays },
+        { id: 'rev_events',       label: 'Événements',                icon: Calendar },
       ],
     },
     {
@@ -252,7 +253,7 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   clients_segments: 'clients', clients_merge: 'clients', clients_documents: 'clients',
   clients_blacklist: 'clients', clients_tiers: 'clients', clients_automation: 'clients',
   rev_dashboard: 'revenue', rev_market: 'revenue', rev_pricing_reco: 'revenue',
-  rev_calendar: 'revenue', rev_automation: 'revenue', rev_strategies: 'revenue',
+  rev_calendar: 'revenue', rev_events: 'revenue', rev_automation: 'revenue', rev_strategies: 'revenue',
   rev_autopilot: 'revenue',
   rev_simulation: 'revenue', rev_alerts: 'revenue', rev_distribution: 'revenue',
   rev_promotions: 'revenue', rev_audit: 'revenue',

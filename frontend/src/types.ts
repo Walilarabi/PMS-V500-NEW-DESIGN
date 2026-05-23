@@ -43,6 +43,7 @@ export type PageId =
   | 'rev_market'           // Marché & Concurrence
   | 'rev_pricing_reco'     // Pricing & Recommandations
   | 'rev_calendar'         // Calendrier tarifaire
+  | 'rev_events'           // Événements — centre intelligent (premium)
   // Automatisation
   | 'rev_automation'       // Automatisation — moteur de règles RMS
   | 'rev_strategies'       // Stratégies tarifaires
