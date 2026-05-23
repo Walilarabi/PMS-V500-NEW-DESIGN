@@ -41,6 +41,7 @@ export type PageId =
   // Pilotage
   | 'revenue'              // Dashboard Revenue
   | 'rev_pricing'          // Calendrier tarifaire (grille de prix)
+  | 'rev_events'           // Événements — centre intelligent (premium)
   // Distribution
   | 'rev_channels'         // Canaux & OTAs
   | 'rev_market'           // Veille concurrentielle (deprecated)

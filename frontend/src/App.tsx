@@ -10,6 +10,7 @@ import { ReservationsView } from '@/src/pages/ReservationsView';
 import { ClientsView }      from '@/src/pages/ClientsView';
 import { RevenueDashboard }    from '@/src/pages/revenue/RevenueDashboard';
 import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
+import { EventsView }          from '@/src/pages/revenue/EventsView';
 
 // RMS ENTERPRISE ULTIMATE (6 pages complètes)
 import { RateManager }         from '@/src/pages/revenue/RateManager';
@@ -112,6 +113,7 @@ function renderPage(page: PageId): React.ReactNode {
     // ── REVENUE ───────────────────────────────────────────────────────────────
     case 'revenue':        return <RevenueDashboard />;
     case 'rev_pricing':    return <PricingCalendar />;
+    case 'rev_events':     return <EventsView />;
     
     // RMS ENTERPRISE ULTIMATE
     case 'rms':            return <RMSTableauPro />;

@@ -100,6 +100,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
       items: [
         { id: 'revenue',      label: 'Dashboard',           icon: LayoutDashboard },
         { id: 'rev_pricing',  label: 'Calendrier tarifaire',icon: CalendarDays },
+        { id: 'rev_events',   label: 'Événements',          icon: Calendar },
       ],
     },
     {
@@ -245,7 +246,7 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   clients: 'clients', clients_cardex: 'clients', clients_companies: 'clients',
   clients_segments: 'clients', clients_merge: 'clients', clients_documents: 'clients',
   clients_blacklist: 'clients', clients_tiers: 'clients',
-  revenue: 'revenue', rev_pricing: 'revenue', rev_channels: 'revenue',
+  revenue: 'revenue', rev_pricing: 'revenue', rev_events: 'revenue', rev_channels: 'revenue',
   rev_compset: 'revenue', rev_market: 'revenue', rev_rules: 'revenue', rev_yield: 'revenue',
   rev_promotions: 'revenue', rms: 'revenue', rms_history: 'revenue',
   finance: 'finance', facturation: 'finance', proforma: 'finance',
