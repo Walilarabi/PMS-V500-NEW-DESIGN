@@ -16,7 +16,13 @@
  * Pour chaque source : nom officiel, URL, type, catégorie, fiabilité.
  */
 
-import type { EventSource, RMSMarketEvent, EventCategory } from '../types/events';
+import type { EventSource, RMSMarketEvent, EventCategory, EventImpactLevel } from '../types/events';
+import {
+  MEGA_ARTIST_REGISTRY,
+  buildConcertImpact,
+  concertPriceInfluence,
+  matchArtist,
+} from './megaArtistRegistry';
 
 // ─── PARIS — 42 sources de référence ──────────────────────────────────────
 
@@ -498,6 +504,239 @@ export const EVENT_SOURCE_LIBRARY: EventSource[] = [
     priority: 'recommended',
     notes: 'Office du Tourisme officiel — événements festifs, fériés, fêtes de fin d\'année.',
   }),
+
+  // ─── Mega Entertainment & Concert Impact Engine ────────────────────────
+  // Stades & Arenas Île-de-France / Lyon / Marseille / Nice
+  baseParisSource({
+    id: 'src_stade_de_france_agenda',
+    name: 'Stade de France — Agenda',
+    type: 'mega_concert',
+    url: 'https://www.stadefrance.com/fr/agenda',
+    method: 'ical',
+    syncFrequency: 'daily',
+    reliabilityScore: 99,
+    apiAvailable: true,
+    priority: 'recommended',
+    notes: 'Agenda officiel — concerts internationaux à très fort impact (80 000 places).',
+  }),
+  baseParisSource({
+    id: 'src_parc_des_princes',
+    name: 'Parc des Princes',
+    type: 'mega_concert',
+    url: 'https://www.leparcdesprinces.fr/',
+    method: 'scraping',
+    syncFrequency: 'weekly',
+    reliabilityScore: 92,
+    apiAvailable: false,
+    priority: 'recommended',
+  }),
+  baseParisSource({
+    id: 'src_accor_arena_agenda',
+    name: 'Accor Arena (Bercy) — Agenda',
+    type: 'mega_concert',
+    url: 'https://www.accorarena.com/fr/agenda',
+    method: 'scraping',
+    syncFrequency: 'daily',
+    reliabilityScore: 95,
+    apiAvailable: false,
+    priority: 'recommended',
+  }),
+  baseParisSource({
+    id: 'src_paris_la_defense_arena',
+    name: 'Paris La Défense Arena',
+    type: 'mega_concert',
+    url: 'https://www.parislad.com/',
+    method: 'scraping',
+    syncFrequency: 'daily',
+    reliabilityScore: 94,
+    apiAvailable: false,
+    priority: 'recommended',
+    notes: '40 000 places — accueille les méga tournées (Taylor Swift, Coldplay…).',
+  }),
+  baseParisSource({
+    id: 'src_arena_grand_paris',
+    name: 'Adidas Arena (Arena Grand Paris)',
+    type: 'mega_concert',
+    url: 'https://adidasarena.paris/',
+    method: 'scraping',
+    syncFrequency: 'weekly',
+    reliabilityScore: 90,
+    apiAvailable: false,
+    priority: 'standard',
+  }),
+  baseParisSource({
+    id: 'src_groupama_stadium',
+    name: 'Groupama Stadium (Lyon)',
+    type: 'mega_concert',
+    url: 'https://www.groupama-stadium.com/',
+    method: 'scraping',
+    syncFrequency: 'weekly',
+    reliabilityScore: 92,
+    apiAvailable: false,
+    priority: 'standard',
+  }),
+  baseParisSource({
+    id: 'src_orange_velodrome',
+    name: 'Orange Vélodrome (Marseille)',
+    type: 'mega_concert',
+    url: 'https://www.orangevelodrome.com/',
+    method: 'scraping',
+    syncFrequency: 'weekly',
+    reliabilityScore: 92,
+    apiAvailable: false,
+    priority: 'standard',
+  }),
+  baseParisSource({
+    id: 'src_allianz_riviera',
+    name: 'Allianz Riviera (Nice)',
+    type: 'mega_concert',
+    url: 'https://allianz-riviera.fr/',
+    method: 'scraping',
+    syncFrequency: 'weekly',
+    reliabilityScore: 90,
+    apiAvailable: false,
+    priority: 'standard',
+  }),
+  baseParisSource({
+    id: 'src_ldlc_arena',
+    name: 'LDLC Arena (Lyon)',
+    type: 'mega_concert',
+    url: 'https://ldlc-arena.com/',
+    method: 'scraping',
+    syncFrequency: 'weekly',
+    reliabilityScore: 88,
+    apiAvailable: false,
+    priority: 'standard',
+  }),
+
+  // ─── Billetteries & Agrégateurs ───────────────────────────────────────
+  baseParisSource({
+    id: 'src_ticketmaster',
+    name: 'Ticketmaster',
+    type: 'mega_concert',
+    url: 'https://www.ticketmaster.fr/',
+    method: 'api',
+    syncFrequency: '6h',
+    reliabilityScore: 97,
+    apiAvailable: true,
+    priority: 'recommended',
+    notes: 'API officielle — discovery + détails capacité, lead time, sold-out.',
+  }),
+  baseParisSource({
+    id: 'src_fnac_spectacles',
+    name: 'Fnac Spectacles',
+    type: 'mega_concert',
+    url: 'https://www.fnacspectacles.com/',
+    method: 'scraping',
+    syncFrequency: 'daily',
+    reliabilityScore: 92,
+    apiAvailable: false,
+    priority: 'recommended',
+  }),
+  baseParisSource({
+    id: 'src_see_tickets',
+    name: 'See Tickets',
+    type: 'mega_concert',
+    url: 'https://www.seetickets.com/',
+    method: 'scraping',
+    syncFrequency: 'daily',
+    reliabilityScore: 88,
+    apiAvailable: false,
+    priority: 'standard',
+  }),
+  baseParisSource({
+    id: 'src_live_nation',
+    name: 'Live Nation France',
+    type: 'mega_concert',
+    url: 'https://www.livenation.fr/',
+    method: 'scraping',
+    syncFrequency: 'daily',
+    reliabilityScore: 96,
+    apiAvailable: false,
+    priority: 'recommended',
+  }),
+  baseParisSource({
+    id: 'src_gdp_productions',
+    name: 'GDP — Gérard Drouot Productions',
+    type: 'mega_concert',
+    url: 'https://gdp.fr/',
+    method: 'scraping',
+    syncFrequency: 'weekly',
+    reliabilityScore: 89,
+    apiAvailable: false,
+    priority: 'standard',
+  }),
+  baseParisSource({
+    id: 'src_aeg_presents',
+    name: 'AEG Presents',
+    type: 'mega_concert',
+    url: 'https://www.aegpresents.com/',
+    method: 'api',
+    syncFrequency: 'daily',
+    reliabilityScore: 95,
+    apiAvailable: true,
+    priority: 'standard',
+  }),
+
+  // ─── Sources artistes (APIs tournées) ─────────────────────────────────
+  baseParisSource({
+    id: 'src_songkick',
+    name: 'Songkick',
+    type: 'mega_concert',
+    url: 'https://www.songkick.com/',
+    method: 'api',
+    syncFrequency: '6h',
+    reliabilityScore: 94,
+    apiAvailable: true,
+    priority: 'recommended',
+    notes: 'API tournées + recherche utilisateurs (signal demande très en amont).',
+  }),
+  baseParisSource({
+    id: 'src_bandsintown',
+    name: 'Bandsintown',
+    type: 'mega_concert',
+    url: 'https://www.bandsintown.com/',
+    method: 'api',
+    syncFrequency: '6h',
+    reliabilityScore: 93,
+    apiAvailable: true,
+    priority: 'recommended',
+  }),
+  baseParisSource({
+    id: 'src_resident_advisor',
+    name: 'Resident Advisor',
+    type: 'electro_concert',
+    url: 'https://ra.co/',
+    method: 'scraping',
+    syncFrequency: 'daily',
+    reliabilityScore: 91,
+    apiAvailable: false,
+    priority: 'standard',
+    notes: 'Référence Electro / DJ — clubs, festivals, after-parties.',
+  }),
+  baseParisSource({
+    id: 'src_pollstar',
+    name: 'Pollstar',
+    type: 'mega_concert',
+    url: 'https://www.pollstar.com/',
+    method: 'api',
+    syncFrequency: 'weekly',
+    reliabilityScore: 96,
+    apiAvailable: true,
+    priority: 'standard',
+    notes: 'Référence chiffres d\'affaires tournées (boxoffice US/world).',
+  }),
+  baseParisSource({
+    id: 'src_billboard_touring',
+    name: 'Billboard Touring',
+    type: 'mega_concert',
+    url: 'https://www.billboard.com/c/business/touring/',
+    method: 'rss',
+    syncFrequency: 'weekly',
+    reliabilityScore: 90,
+    apiAvailable: false,
+    priority: 'standard',
+  }),
 ];
 
 // ─── Mapping lieu abrégé → zone normalisée ────────────────────────────────
@@ -517,6 +756,14 @@ const VENUE_NORMALIZATION: Record<string, { zone: string; venue: string }> = {
   'porte d\'auteuil': { zone: 'Paris 16e', venue: 'Stade Roland-Garros' },
   'paris / st-denis': { zone: 'Paris / Saint-Denis', venue: 'La Défense Arena & Aquatic Centre' },
   'paris entier': { zone: 'Paris', venue: 'Toute la ville' },
+  'parc des princes': { zone: 'Paris 16e', venue: 'Parc des Princes' },
+  'accor arena': { zone: 'Paris 12e — Bercy', venue: 'Accor Arena' },
+  'paris la défense arena': { zone: 'Nanterre — La Défense', venue: 'Paris La Défense Arena' },
+  'adidas arena': { zone: 'Porte de la Chapelle', venue: 'Adidas Arena' },
+  'groupama stadium': { zone: 'Décines-Charpieu (Lyon)', venue: 'Groupama Stadium' },
+  'orange vélodrome': { zone: 'Marseille', venue: 'Orange Vélodrome' },
+  'allianz riviera': { zone: 'Nice', venue: 'Allianz Riviera' },
+  'ldlc arena': { zone: 'Décines-Charpieu (Lyon)', venue: 'LDLC Arena' },
 };
 
 export function normalizeVenue(raw: string): { zone: string; venue: string } {
@@ -678,7 +925,7 @@ function impactCoefficients(level: 'low' | 'medium' | 'high' | 'critical') {
   }
 }
 
-export const SEED_PARIS_EVENTS: RMSMarketEvent[] = RAW_PARIS_2026.map((r) => {
+const SEED_PARIS_SALONS: RMSMarketEvent[] = RAW_PARIS_2026.map((r) => {
   const sourceId = resolveSourceId(r.sourceRaw) ?? 'src_paris_je_taime';
   const source = EVENT_SOURCE_LIBRARY.find((s) => s.id === sourceId)!;
   const venue = normalizeVenue(r.venueRaw);
@@ -710,3 +957,141 @@ export const SEED_PARIS_EVENTS: RMSMarketEvent[] = RAW_PARIS_2026.map((r) => {
     updatedAt: '2026-05-15T08:00:00Z',
   };
 });
+
+// ─── MEGA CONCERTS — Stade de France 2026 (source: Live Nation / Stade de France) ──
+
+interface RawConcert {
+  artist: string;
+  dates: string[];   // ISO YYYY-MM-DD
+  venueRaw: string;
+  /** Override d'impact si le moteur d'artistes n'a pas le bon tier (rare). */
+  forceLevel?: EventImpactLevel;
+  sourceId: string;
+  withArtists?: string[];
+}
+
+const RAW_PARIS_CONCERTS: RawConcert[] = [
+  {
+    artist: 'Fally Ipupa',
+    dates: ['2026-05-02', '2026-05-03'],
+    venueRaw: 'stade de france',
+    sourceId: 'src_stade_de_france_agenda',
+  },
+  {
+    artist: 'Jul',
+    dates: ['2026-05-16', '2026-05-17'],
+    venueRaw: 'stade de france',
+    sourceId: 'src_stade_de_france_agenda',
+  },
+  {
+    artist: 'Aya Nakamura',
+    dates: ['2026-05-29', '2026-05-30', '2026-05-31'],
+    venueRaw: 'stade de france',
+    sourceId: 'src_stade_de_france_agenda',
+  },
+  {
+    artist: 'David Guetta',
+    dates: ['2026-06-11', '2026-06-12', '2026-06-13'],
+    venueRaw: 'stade de france',
+    sourceId: 'src_live_nation',
+  },
+  {
+    artist: 'Bruno Mars',
+    dates: ['2026-06-18', '2026-06-20', '2026-06-21'],
+    venueRaw: 'stade de france',
+    sourceId: 'src_live_nation',
+  },
+  {
+    artist: 'System of a Down',
+    dates: ['2026-07-02', '2026-07-04'],
+    venueRaw: 'stade de france',
+    sourceId: 'src_live_nation',
+    withArtists: ['Queens of the Stone Age', 'Acid Bath'],
+  },
+  {
+    artist: 'The Weeknd',
+    dates: ['2026-07-08', '2026-07-10', '2026-07-11', '2026-07-12'],
+    venueRaw: 'stade de france',
+    sourceId: 'src_live_nation',
+  },
+  {
+    artist: 'BTS',
+    dates: ['2026-07-17', '2026-07-18'],
+    venueRaw: 'stade de france',
+    sourceId: 'src_aeg_presents',
+    forceLevel: 'hyper_compression',
+  },
+  {
+    artist: 'PLK',
+    dates: ['2026-09-04', '2026-09-05'],
+    venueRaw: 'accor arena',
+    sourceId: 'src_accor_arena_agenda',
+  },
+];
+
+/**
+ * Construit les événements concert à partir des configurations brutes.
+ * Chaque artiste est résolu dans MEGA_ARTIST_REGISTRY pour récupérer son
+ * tier/popularité ; le moteur calcule ensuite l'impact RMS attendu.
+ *
+ * Les dates non consécutives (ex. 18/06, 20/06, 21/06 — Bruno Mars) sont
+ * fusionnées en un seul événement multi-soirs avec startDate = min(dates)
+ * et endDate = max(dates), pour faciliter l'affichage calendrier.
+ */
+const SEED_PARIS_CONCERTS: RMSMarketEvent[] = RAW_PARIS_CONCERTS.map((rc) => {
+  const artist = matchArtist(rc.artist) ?? MEGA_ARTIST_REGISTRY[0];
+  const dateCount = rc.dates.length;
+  const venueCapacity = rc.venueRaw.toLowerCase().includes('stade de france') ? 1
+    : rc.venueRaw.toLowerCase().includes('arena') ? 0.55
+    : 0.4;
+  const impactCoefs = buildConcertImpact(artist, dateCount, venueCapacity);
+  const level: EventImpactLevel = rc.forceLevel
+    ?? (artist.tier === 'hyper_global'
+        ? 'hyper_compression'
+        : artist.tier === 'global'
+          ? 'critical'
+          : 'high');
+  const venue = normalizeVenue(rc.venueRaw);
+  const source = EVENT_SOURCE_LIBRARY.find((s) => s.id === rc.sourceId)!;
+
+  const start = rc.dates.slice().sort()[0];
+  const end = rc.dates.slice().sort().reverse()[0];
+  const suffix = rc.withArtists?.length ? ` (+${rc.withArtists.join(', ')})` : '';
+  const id = `evt_concert_${start}_${artist.id}`;
+
+  return {
+    id,
+    name: `${artist.name}${suffix}${dateCount > 1 ? ` — ${dateCount} dates` : ''}`,
+    category: artist.category,
+    status: 'active',
+    city: 'Paris',
+    country: 'FR',
+    zone: venue.zone,
+    venue: venue.venue,
+    startDate: start,
+    endDate: end,
+    impact: { ...impactCoefs, level },
+    influencePrice: concertPriceInfluence(artist, dateCount),
+    description: `${artist.name} — ${dateCount} date${dateCount > 1 ? 's' : ''} à ${venue.venue}.${
+      artist.tier === 'hyper_global' ? ' Phénomène mondial : déclenche le palier Hyper Compression et une stratégie pricing agressive.' :
+      artist.tier === 'global' ? ' Tournée internationale — fort impact ADR / TO attendu.' :
+      ''
+    }`,
+    sources: [rc.sourceId],
+    primarySource: source.name,
+    rmsSynced: true,
+    syncedAt: '2026-05-15T08:00:00Z',
+    history: [
+      { at: '2026-04-01T10:00:00Z', action: 'imported', source: source.name },
+      { at: '2026-05-15T08:00:00Z', action: 'synced', source: source.name },
+    ],
+    createdAt: '2026-04-01T10:00:00Z',
+    updatedAt: '2026-05-15T08:00:00Z',
+  };
+});
+
+/** Seed final = salons (52) + méga concerts (9) — bibliothèque Paris complète. */
+export const SEED_PARIS_EVENTS: RMSMarketEvent[] = [
+  ...SEED_PARIS_SALONS,
+  ...SEED_PARIS_CONCERTS,
+];

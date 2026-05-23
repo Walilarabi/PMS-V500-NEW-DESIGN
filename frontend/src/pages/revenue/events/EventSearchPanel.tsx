@@ -168,7 +168,7 @@ export const EventSearchPanel: React.FC<EventSearchPanelProps> = ({ open, onTogg
                 className="w-full px-3 py-2 text-[13px] rounded-lg ring-1 ring-slate-200 bg-white focus:ring-violet-500 outline-none"
               >
                 <option value="">Tous</option>
-                {(['low', 'medium', 'high', 'critical'] as EventImpactLevel[]).map((l) =>
+                {(['low', 'medium', 'high', 'critical', 'hyper_compression'] as EventImpactLevel[]).map((l) =>
                   <option key={l} value={l}>{IMPACT_LABELS[l]}</option>,
                 )}
               </select>

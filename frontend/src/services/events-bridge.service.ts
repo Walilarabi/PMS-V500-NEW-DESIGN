@@ -25,6 +25,7 @@ export interface AggregatedDayEvents {
 }
 
 const LEVEL_LABEL: Record<EventImpactLevel, string> = {
+  hyper_compression: 'Hyper Compression',
   critical: 'Impact Critique',
   high: 'Impact Fort',
   medium: 'Impact Moyen',
@@ -90,6 +91,8 @@ export function eventCellTone(level: EventImpactLevel): {
   dot: string;
 } {
   switch (level) {
+    case 'hyper_compression':
+      return { bg: 'bg-fuchsia-50', text: 'text-fuchsia-800', ring: 'ring-fuchsia-200', dot: 'bg-gradient-to-r from-fuchsia-500 to-rose-500' };
     case 'critical': return { bg: 'bg-rose-50',    text: 'text-rose-700',    ring: 'ring-rose-200',    dot: 'bg-rose-500' };
     case 'high':     return { bg: 'bg-orange-50',  text: 'text-orange-700',  ring: 'ring-orange-200',  dot: 'bg-orange-500' };
     case 'medium':   return { bg: 'bg-amber-50',   text: 'text-amber-700',   ring: 'ring-amber-200',   dot: 'bg-amber-400' };

@@ -398,7 +398,7 @@ export const useEventsStore = create<EventsStore>()(
     }),
     {
       name: 'flowtym_events_module',
-      version: 3, // ajout refusedEvents + pending — workflow de validation
+      version: 4, // ajout Mega Entertainment & Concert Impact Engine (concerts SDF/Bercy)
       partialize: (s) => ({
         events: s.events,
         sources: s.sources,

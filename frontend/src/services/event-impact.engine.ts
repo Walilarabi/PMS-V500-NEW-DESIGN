@@ -27,8 +27,12 @@ import { IMPACT_LEVEL_ORDER } from '../types/events';
 
 /**
  * Convertit un score 0-100 vers un niveau d'impact.
+ * Le palier hyper_compression (≥ 95) est réservé aux phénomènes globaux
+ * (BTS, Taylor Swift, Beyoncé, Coldplay…) — il déclenche automatiquement
+ * une stratégie agressive, une alerte RM et un recalcul des recommandations.
  */
 export function scoreToLevel(score: number): EventImpactLevel {
+  if (score >= 95) return 'hyper_compression';
   if (score >= 80) return 'critical';
   if (score >= 60) return 'high';
   if (score >= 35) return 'medium';

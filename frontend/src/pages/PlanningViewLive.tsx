@@ -1079,9 +1079,13 @@ export const PlanningView = () => {
                               <span className={cn(
                                 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full ring-1 ring-inset text-[10px] font-semibold tabular-nums',
                                 tone.bg, tone.text, tone.ring,
+                                agg.level === 'hyper_compression' && 'shadow-sm shadow-fuchsia-300/40',
                               )}>
                                 <span className={cn('w-1.5 h-1.5 rounded-full', tone.dot)} />
                                 {total}
+                                {agg.level === 'hyper_compression' && (
+                                  <span className="ml-0.5 text-[9px] uppercase tracking-wide">⚡</span>
+                                )}
                               </span>
                             )}
                          </div>

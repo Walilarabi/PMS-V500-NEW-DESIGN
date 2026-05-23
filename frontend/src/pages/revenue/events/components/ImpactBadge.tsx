@@ -14,6 +14,12 @@ import type { EventImpactLevel } from '@/src/types/events';
 import { IMPACT_LABELS } from '@/src/types/events';
 
 const STYLES: Record<EventImpactLevel, { dot: string; pill: string; text: string }> = {
+  hyper_compression: {
+    // dégradé violet → rose pour les phénomènes globaux (BTS, Swift, Beyoncé…)
+    dot: 'bg-gradient-to-r from-fuchsia-500 to-rose-500',
+    pill: 'bg-gradient-to-r from-fuchsia-50 to-rose-50 ring-1 ring-inset ring-fuchsia-200',
+    text: 'text-fuchsia-800',
+  },
   critical: {
     dot: 'bg-rose-500',
     pill: 'bg-rose-50 ring-1 ring-inset ring-rose-100',
@@ -63,6 +69,8 @@ export const ImpactBadge: React.FC<{ level: EventImpactLevel; size?: 'sm' | 'md'
 
 export const impactColor = (level: EventImpactLevel): { soft: string; ring: string; bar: string; text: string } => {
   switch (level) {
+    case 'hyper_compression':
+      return { soft: 'bg-fuchsia-50', ring: 'ring-fuchsia-200', bar: 'bg-gradient-to-r from-fuchsia-500 to-rose-500', text: 'text-fuchsia-800' };
     case 'critical':
       return { soft: 'bg-rose-50', ring: 'ring-rose-200', bar: 'bg-rose-500', text: 'text-rose-700' };
     case 'high':

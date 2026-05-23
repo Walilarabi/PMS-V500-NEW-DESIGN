@@ -386,7 +386,7 @@ function AdvancedFilters({ onClose, onReset }: { onClose: () => void; onReset: (
             className="w-full px-2 py-1.5 rounded-lg ring-1 ring-slate-200 text-[12px] bg-white"
           >
             <option value="">Tous</option>
-            {(['very_low', 'low', 'medium', 'high', 'critical'] as EventImpactLevel[]).map((l) =>
+            {(['very_low', 'low', 'medium', 'high', 'critical', 'hyper_compression'] as EventImpactLevel[]).map((l) =>
               <option key={l} value={l}>{IMPACT_LABELS[l]}</option>,
             )}
           </select>

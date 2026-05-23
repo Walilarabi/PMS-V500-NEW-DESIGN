@@ -18,7 +18,8 @@ export type EventImpactLevel =
   | 'low'
   | 'medium'
   | 'high'
-  | 'critical';
+  | 'critical'
+  | 'hyper_compression';
 
 export type EventCategory =
   | 'salon'
@@ -35,6 +36,14 @@ export type EventCategory =
   | 'political'
   | 'internal'
   | 'manual'
+  // ─── Mega Entertainment & Concert Impact ──────────────────────────────
+  | 'mega_concert'      // concerts internationaux à très fort impact
+  | 'pop_concert'       // pop internationale
+  | 'rap_concert'       // rap / hip-hop
+  | 'kpop_concert'      // K-Pop
+  | 'electro_concert'   // DJ / Electro
+  | 'metal_concert'     // hard rock / metal
+  | 'world_tour'        // tournée mondiale d'un artiste majeur
   | 'other';
 
 export type EventStatus = 'active' | 'planned' | 'archived' | 'cancelled';
@@ -171,6 +180,7 @@ export const IMPACT_LEVEL_ORDER: Record<EventImpactLevel, number> = {
   medium: 2,
   high: 3,
   critical: 4,
+  hyper_compression: 5,
 };
 
 export const CATEGORY_LABELS: Record<EventCategory, string> = {
@@ -188,6 +198,13 @@ export const CATEGORY_LABELS: Record<EventCategory, string> = {
   political: 'Politique',
   internal: 'Interne',
   manual: 'Manuel',
+  mega_concert: 'Méga concert',
+  pop_concert: 'Pop',
+  rap_concert: 'Rap / Hip-Hop',
+  kpop_concert: 'K-Pop',
+  electro_concert: 'Electro / DJ',
+  metal_concert: 'Metal / Hard Rock',
+  world_tour: 'Tournée mondiale',
   other: 'Autre',
 };
 
@@ -197,4 +214,5 @@ export const IMPACT_LABELS: Record<EventImpactLevel, string> = {
   medium: 'Moyen',
   high: 'Fort',
   critical: 'Critique',
+  hyper_compression: 'Hyper Compression',
 };

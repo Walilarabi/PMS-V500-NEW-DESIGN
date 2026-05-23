@@ -281,7 +281,7 @@ function PressureDot({ level, value }: { level: EventImpactLevel; value: number 
 function Legend() {
   return (
     <div className="hidden lg:flex items-center gap-3 text-[11px] text-slate-500">
-      {(['critical', 'high', 'medium', 'low', 'very_low'] as EventImpactLevel[]).map((l) => {
+      {(['hyper_compression', 'critical', 'high', 'medium', 'low', 'very_low'] as EventImpactLevel[]).map((l) => {
         const c = impactColor(l);
         return (
           <span key={l} className="inline-flex items-center gap-1.5">
