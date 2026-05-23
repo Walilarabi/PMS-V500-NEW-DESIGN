@@ -73,7 +73,7 @@ function buildDateColumns(start: Date, viewMode: ViewMode): DateColumn[] {
  * `get_user_hotel_id` ne répond pas (la page tombe sur les mocks).
  */
 async function getCurrentHotelId(): Promise<string | null> {
-  const timeoutMs = 5_000;
+  const timeoutMs = 2_000;
   try {
     const rpcPromise = (async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
+    "@supabase/supabase-js": "^2.43.0",
     "@tailwindcss/vite": "^4.1.14",
     "@tanstack/react-query": "^5.100.6",
     "@tanstack/react-table": "^8.21.3",
@@ -24,6 +25,7 @@
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "html2pdf.js": "^0.14.0",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
@@ -44,6 +46,7 @@
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "jsdom": "^29.1.1",
+    "puppeteer": "^25.0.4",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

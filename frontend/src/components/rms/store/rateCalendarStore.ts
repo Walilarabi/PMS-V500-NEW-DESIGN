@@ -6,6 +6,7 @@ import {
 } from "../types";
 import { pricingRules } from "../data/mockData";
 import { fetchCalendarDataFromSupabase as fetchCalendarData } from "../data/supabaseAdapter";
+import { fetchCalendarData as fetchCalendarDataMock } from "../data/mockData";
 import { PricingRulesEngine } from "../engines/PricingRulesEngine";
 import { CascadePricingEngine } from "../engines/CascadePricingEngine";
 import { supabase } from "@/src/lib/supabase";
@@ -187,10 +188,12 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       const { startDate, viewMode } = get();
       set({ isLoading: true, loadError: null });
 
-      // Timeout 15s : évite que la page « mouline dans le vide » si Supabase
+      // Timeout 3s : évite que la page « mouline dans le vide » si Supabase
       // / le RPC get_user_hotel_id ne répond jamais. On retombe sur les mocks
-      // et on signale l'erreur à l'utilisateur.
-      const timeoutMs = 15_000;
+      // ou on signale l'erreur à l'utilisateur. 3s est un compromis UX :
+      // suffisant pour un RPC sain (< 500ms typique), trop court pour qu'un
+      // utilisateur perçoive un mouline.
+      const timeoutMs = 3_000;
       const fetchWithTimeout = (): Promise<Awaited<ReturnType<typeof fetchCalendarData>>> =>
         new Promise((resolve, reject) => {
           const timer = setTimeout(
@@ -266,9 +269,23 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         const planNames = Array.from(new Set(roomTypes.flatMap(r => r.ratePlans.map(p => p.planName))));
         set({ roomTypes, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
       } catch (err) {
+        // En cas de timeout ou erreur Supabase, fallback immédiat sur le mock
+        // au lieu de bloquer l'utilisateur sur un fallback erreur. C'est ce
+        // qu'attend un utilisateur du PMS : voir DES données (mocks) plutôt
+        // qu'un message d'erreur opaque.
         const message = err instanceof Error ? err.message : 'Erreur inconnue lors du chargement';
-        console.error('[rateCalendarStore] loadData failed:', message);
-        set({ isLoading: false, loadError: message });
+        console.warn('[rateCalendarStore] loadData failed, falling back to mock:', message);
+        try {
+          const { roomTypes, dateColumns } = await fetchCalendarDataMock(startDate, viewMode);
+          const expandedRooms: Record<string, boolean> = {};
+          roomTypes.forEach((rt) => { expandedRooms[rt.roomTypeId] = true; });
+          const roomIds = roomTypes.map((r) => r.roomTypeId);
+          const planNames = Array.from(new Set(roomTypes.flatMap((r) => r.ratePlans.map((p) => p.planName))));
+          set({ roomTypes, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
+        } catch (mockErr) {
+          console.error('[rateCalendarStore] mock fallback failed:', mockErr);
+          set({ isLoading: false, loadError: message });
+        }
       }
     },
 

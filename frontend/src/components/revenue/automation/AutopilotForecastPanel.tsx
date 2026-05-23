@@ -117,6 +117,7 @@ export const AutopilotForecastPanel: React.FC<AutopilotForecastPanelProps> = ({
         basePrice,
         previousPrice,
         date,
+        silent: true, // ne pas inonder l'audit + bus avec 30 logs/évaluation
       });
 
       rows.push({

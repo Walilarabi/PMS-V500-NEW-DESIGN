@@ -106,7 +106,12 @@ export const AlertsPage: React.FC = () => {
   // Sources de données réelles
   const lighthouse = useLighthouseStore((s) => s.importData);
   const expedia = useExpediaStore((s) => s.importData);
-  const events = useSalonsStore((s) => s.importData?.events ?? []);
+  // Important : `?? []` retournerait un NOUVEL array à chaque render →
+  // Zustand voit un changement → useSyncExternalStore → React boucle infinie
+  // ("getSnapshot should be cached"). On sélectionne le champ brut puis on
+  // déduit le tableau dans useMemo (stable).
+  const salonsImport = useSalonsStore((s) => s.importData);
+  const events = useMemo(() => salonsImport?.events ?? [], [salonsImport]);
   const promotions = usePromotionsStore((s) => s.promotions);
 
   // Actions utilisateur persistées

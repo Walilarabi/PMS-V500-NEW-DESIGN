@@ -37,6 +37,12 @@ export interface EvaluationOptions {
   basePrice: number;
   previousPrice: number;
   date: string;
+  /**
+   * Mode "prévision" : désactive le journal d'audit et les émissions sur le
+   * bus. Utile quand on évalue en boucle pour générer un forecast (30 jours)
+   * où chaque log coûterait un appel Supabase qui pourrait échouer en cascade.
+   */
+  silent?: boolean;
 }
 
 export const rmsRuleEvaluator = {
@@ -44,7 +50,7 @@ export const rmsRuleEvaluator = {
    * Évalue la totalité du flux RMS et retourne la recommandation finale.
    */
   evaluate(opts: EvaluationOptions): FinalRecommendation {
-    const { context, basePrice, previousPrice, autopilot, date } = opts;
+    const { context, basePrice, previousPrice, autopilot, date, silent = false } = opts;
 
     // 1. Évalue toutes les règles tactiques
     const evaluations: RuleEvaluation[] = tacticalRulesEngine.evaluate(context);
@@ -81,14 +87,16 @@ export const rmsRuleEvaluator = {
           ruleName: ev.rule.name,
           reason: `Suspendue par règle de priorité supérieure (direction ${directionLock})`,
         });
-        rmsAuditLogger.log({
-          type: 'conflict_resolved',
-          actor: ev.rule.name,
-          context: date,
-          detail: `Suspendue : direction ${direction} ≠ ${directionLock}`,
-        });
+        if (!silent) {
+          rmsAuditLogger.log({
+            type: 'conflict_resolved',
+            actor: ev.rule.name,
+            context: date,
+            detail: `Suspendue : direction ${direction} ≠ ${directionLock}`,
+          });
+        }
         // Enregistre le conflit runtime dans le moteur de priorités
-        if (winningRule) {
+        if (winningRule && !silent) {
           priorityConflictEngine.recordRuntimeConflict({
             winner: { ...winningRule, intent: directionLock === 'up' ? 'Hausse prix' : 'Baisse prix' },
             suspended: {
@@ -115,13 +123,15 @@ export const rmsRuleEvaluator = {
         reason: ev.matchedTriggers.join(' • '),
         magnitude: dominantMagnitude,
       });
-      rmsAuditLogger.log({
-        type: 'rule_triggered',
-        actor: ev.rule.name,
-        context: date,
-        detail: ev.explanation,
-        impact: (proposedPrice - basePrice) * 0.8,
-      });
+      if (!silent) {
+        rmsAuditLogger.log({
+          type: 'rule_triggered',
+          actor: ev.rule.name,
+          context: date,
+          detail: ev.explanation,
+          impact: (proposedPrice - basePrice) * 0.8,
+        });
+      }
     }
 
     proposedPrice = Math.round(proposedPrice);
@@ -142,7 +152,7 @@ export const rmsRuleEvaluator = {
     const needsHuman = blockedByGuardrail || !autopilot;
     const pushed = autopilot && !blockedByGuardrail;
 
-    if (pushed) {
+    if (pushed && !silent) {
       rmsAuditLogger.log({
         type: 'autopilot_push',
         actor: 'Autopilote RMS',
@@ -167,7 +177,7 @@ export const rmsRuleEvaluator = {
       }).catch(() => {/* loggé par le service CM */});
     }
 
-    try {
+    if (!silent) try {
       emitRmsEvent('recommendation:produced', {
         date,
         basePrice,

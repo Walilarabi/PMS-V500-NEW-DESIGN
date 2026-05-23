@@ -30,10 +30,28 @@ async function getSupabase(): Promise<SupabaseLike | null> {
   return supabasePromise;
 }
 
+// ── Garde-fou anti-cascade ──────────────────────────────────────────────────
+// Si Supabase est inaccessible (pas d'auth, CORS, certificat invalide…) la
+// première résolution `hotelId === null` met un cache TTL 60s. Pendant ce
+// délai, toutes les fonctions de persistance court-circuitent et retournent
+// immédiatement sans tenter d'appel Supabase. Évite que la cascade de logs
+// d'audit (Autopilote × 30 jours × règles fired) ne génère des centaines de
+// requêtes échouées simultanées.
+const NO_AUTH_TTL_MS = 60_000;
+let noAuthUntil = 0;
+function markNoAuth() { noAuthUntil = Date.now() + NO_AUTH_TTL_MS; }
+function isNoAuthCached(): boolean { return Date.now() < noAuthUntil; }
+
 // ─── Hôtel + user résolution (identique à rms-decisions.service) ───────────
 async function resolveHotelAndUser(): Promise<{ hotelId: string | null; userId: string | null; supabase: SupabaseLike | null }> {
+  // Court-circuit si Supabase est connu indisponible (TTL 60s)
+  if (isNoAuthCached()) return { hotelId: null, userId: null, supabase: null };
+
   const supabase = await getSupabase();
-  if (!supabase) return { hotelId: null, userId: null, supabase: null };
+  if (!supabase) {
+    markNoAuth();
+    return { hotelId: null, userId: null, supabase: null };
+  }
   let hotelId: string | null = null;
   let userId: string | null = null;
   try {
@@ -44,6 +62,7 @@ async function resolveHotelAndUser(): Promise<{ hotelId: string | null; userId: 
     const { data } = await supabase.auth.getUser();
     if (data?.user) userId = data.user.id;
   } catch {/* ignore */}
+  if (!hotelId) markNoAuth();
   return { hotelId, userId, supabase };
 }
 
