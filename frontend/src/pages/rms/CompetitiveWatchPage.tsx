@@ -23,11 +23,13 @@ import { ComparisonSidebar } from '../../components/rms/competitive-watch/Compar
 import { AiInterpretationPanel } from '../../components/rms/competitive-watch/AiInterpretationPanel';
 import { QuickComparisonTable } from '../../components/rms/competitive-watch/QuickComparisonTable';
 import { DayDetailPanel } from '../../components/rms/competitive-watch/DayDetailPanel';
+import { DataSourceTraceBar } from '../../components/rms/competitive-watch/DataSourceTraceBar';
 import {
   MARKET_SELECTED_DATE, COMPARISON_SELECTED_DATE,
 } from '../../data/rms/mockCompetitiveWatchData';
 import type { ComparePeriodKey } from '../../data/rms/mockCompetitiveWatchData';
 import { useCompetitiveWatchData } from '../../lib/rms/useCompetitiveWatchData';
+import { useCompetitiveWatchPrefs } from '../../store/competitiveWatchPrefsStore';
 
 export const CompetitiveWatchPage: React.FC = () => {
   const [view, setView] = useState<CompetitiveView>('market');
@@ -37,6 +39,7 @@ export const CompetitiveWatchPage: React.FC = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const { meta } = useCompetitiveWatchData();
+  const shiftMonth = useCompetitiveWatchPrefs((s) => s.shiftMonth);
   const isMarket = view === 'market';
 
   return (
@@ -50,9 +53,14 @@ export const CompetitiveWatchPage: React.FC = () => {
         }
         dateLabel={isMarket ? meta.marketPeriodLabel : meta.comparisonDayLabel}
         lastUpdate={meta.lastUpdate}
+        onPrev={() => shiftMonth(-1)}
+        onNext={() => shiftMonth(1)}
       />
 
-      {/* Filtres Lighthouse */}
+      {/* Bandeau de traçabilité — source / période / dernier import / exclusions */}
+      <DataSourceTraceBar />
+
+      {/* Contrôles : période + nav + source + reset */}
       <LighthouseFiltersBar />
 
       {/* Sélecteur de vue + repli du volet droit */}
