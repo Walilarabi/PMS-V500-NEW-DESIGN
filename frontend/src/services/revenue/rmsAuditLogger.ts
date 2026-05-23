@@ -4,6 +4,7 @@
  */
 
 import { emitRmsEvent } from '@/src/lib/rms/eventBus';
+import { persistAuditEvent, loadAuditLog } from './rmsEnterprisePersistence.service';
 
 export type AuditEventType =
   | 'rule_triggered'
@@ -55,7 +56,24 @@ export const rmsAuditLogger = {
     } catch {
       // Bus indisponible (SSR / test) — on n'interrompt pas le journal
     }
+    // Persistance (append-only) — fire-and-forget
+    persistAuditEvent(entry).catch(() => {/* DB indisponible — journal local intact */});
     return entry;
+  },
+
+  /** Hydrate depuis Supabase (les N derniers événements). */
+  async hydrate(limit = 50): Promise<void> {
+    const rows = await loadAuditLog(limit);
+    if (rows && rows.length > 0) {
+      // Préserver tout ce qui a été loggé en mémoire après hydrate, en
+      // évitant les doublons par id.
+      const seen = new Set(store.map((e) => e.id));
+      const incoming = rows.filter((e) => !seen.has(e.id));
+      store = [...store, ...incoming]
+        .sort((a, b) => (a.timestamp > b.timestamp ? -1 : 1))
+        .slice(0, MAX_EVENTS);
+      notify();
+    }
   },
 
   all(): AuditEvent[] {

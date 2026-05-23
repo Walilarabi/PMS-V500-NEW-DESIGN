@@ -10,6 +10,13 @@
 globalThis.window = globalThis.window || new EventTarget();
 globalThis.document = globalThis.document || { createElement: () => ({}) };
 
+// Shim variables d'environnement Vite — supabase.ts throw si elles manquent.
+// On fournit des URL bidons : les requêtes vont échouer silencieusement
+// (resolveHotelAndUser retourne null hotelId), ce qui est exactement le
+// comportement attendu en environnement de test.
+process.env.VITE_SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://test.invalid';
+process.env.VITE_SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'test-anon-key';
+
 // Imports relatifs (alias @/ non disponible en Node sans bundler)
 import { tacticalRulesEngine } from '../frontend/src/services/revenue/tacticalRulesEngine';
 import { guardrailsEngine } from '../frontend/src/services/revenue/guardrailsEngine';

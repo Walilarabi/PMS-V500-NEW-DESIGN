@@ -25,6 +25,10 @@ import type {
 import { tacticalRulesEngine } from './tacticalRulesEngine';
 import { rmsAuditLogger } from './rmsAuditLogger';
 import { emitRmsEvent } from '@/src/lib/rms/eventBus';
+import {
+  loadPriorityHierarchy,
+  persistPriorityHierarchy,
+} from './rmsEnterprisePersistence.service';
 
 const dayAgo = (n: number, h = 0) => new Date(Date.now() - n * 86_400_000 - h * 3_600_000).toISOString();
 
@@ -192,6 +196,7 @@ export const priorityConflictEngine = {
       detail: `Nouvel ordre : ${orderedIds.join(' → ')}`,
     });
     try { emitRmsEvent('priority:reordered', { orderedIds }); } catch {/* bus */}
+    persistPriorityHierarchy(hierarchy);
     notify();
   },
 
@@ -264,6 +269,15 @@ export const priorityConflictEngine = {
   subscribe(listener: () => void): () => void {
     listeners.add(listener);
     return () => listeners.delete(listener);
+  },
+
+  /** Hydrate depuis Supabase. Garde le seed si vide ou indisponible. */
+  async hydrate(): Promise<void> {
+    const rows = await loadPriorityHierarchy();
+    if (rows && rows.length > 0) {
+      hierarchy = rows;
+      notify();
+    }
   },
 };
 

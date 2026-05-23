@@ -19,6 +19,11 @@ import type {
 } from '@/src/types/revenue/tacticalRules.types';
 import { rmsAuditLogger } from './rmsAuditLogger';
 import { emitRmsEvent, subscribeRmsEvent } from '@/src/lib/rms/eventBus';
+import {
+  loadTacticalRules,
+  persistTacticalRule,
+  deleteTacticalRule,
+} from './rmsEnterprisePersistence.service';
 
 // ───────────────────────────────────────────────────────────── Seed catalogue
 const NOW = Date.now();
@@ -399,6 +404,9 @@ export const tacticalRulesEngine = {
     try {
       emitRmsEvent('tactical-rule:toggled', { ruleId: id, status });
     } catch {/* bus indisponible */}
+    // Persistance (fire-and-forget — n'attend pas Supabase)
+    const r = store.find((x) => x.id === id);
+    if (r) persistTacticalRule(r);
     notify();
   },
 
@@ -514,6 +522,7 @@ export const tacticalRulesEngine = {
       context: 'Configuration',
       detail: `Règle créée : ${newRule.name}`,
     });
+    persistTacticalRule(newRule);
     notify();
   },
 
@@ -525,6 +534,7 @@ export const tacticalRulesEngine = {
       context: 'Configuration',
       detail: 'Règle supprimée',
     });
+    deleteTacticalRule(String(id));
     notify();
   },
 
@@ -550,7 +560,23 @@ export const tacticalRulesEngine = {
       context: 'Configuration',
       detail: `Règle dupliquée depuis ${src.name}`,
     });
+    persistTacticalRule(copy);
     notify();
+  },
+
+  /**
+   * Hydrate le store depuis Supabase si disponible. Si l'hydratation échoue
+   * (pas d'auth/hotel_id), garde le seed JS. Idempotent : peut être appelé
+   * plusieurs fois sans risque.
+   */
+  async hydrate(): Promise<void> {
+    const rows = await loadTacticalRules();
+    if (rows && rows.length > 0) {
+      // Préserver l'historique seed pour les règles connues (DB ne stocke pas l'historique)
+      const seedById = new Map(SEED.map((r) => [r.id, r]));
+      store = rows.map((r) => ({ ...r, history: seedById.get(r.id)?.history ?? [] }));
+      notify();
+    }
   },
 };
 

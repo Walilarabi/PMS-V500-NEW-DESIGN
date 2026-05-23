@@ -10,7 +10,7 @@
  * mais la structure visuelle reste identique (style Flowtym clair, accent
  * violet, cartes premium).
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Cpu, Shield, Plus, Settings2 } from 'lucide-react';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
 import { TacticalRulesTabs, type TacticalTab } from './TacticalRulesTabs';
@@ -20,12 +20,31 @@ import { PrioritiesConflictsTab } from './PrioritiesConflictsTab';
 import { GuardrailModal } from './GuardrailModal';
 import { NewRuleModal } from './NewRuleModal';
 import { ConfigurePrioritiesModal } from './ConfigurePrioritiesModal';
+import { tacticalRulesEngine } from '@/src/services/revenue/tacticalRulesEngine';
+import { guardrailsEngine } from '@/src/services/revenue/guardrailsEngine';
+import { priorityConflictEngine } from '@/src/services/revenue/priorityConflictEngine';
+import { rmsAuditLogger } from '@/src/services/revenue/rmsAuditLogger';
+
+// Hydratation depuis Supabase une seule fois par session (non bloquant)
+let hydrated = false;
+function hydrateOnce() {
+  if (hydrated) return;
+  hydrated = true;
+  Promise.allSettled([
+    tacticalRulesEngine.hydrate(),
+    guardrailsEngine.hydrate(),
+    priorityConflictEngine.hydrate(),
+    rmsAuditLogger.hydrate(50),
+  ]);
+}
 
 export const TacticalRulesPage: React.FC = () => {
   const [tab, setTab] = useState<TacticalTab>('rules');
   const [newGuardrailOpen, setNewGuardrailOpen] = useState(false);
   const [newRuleOpen, setNewRuleOpen] = useState(false);
   const [configurePrioritiesOpen, setConfigurePrioritiesOpen] = useState(false);
+
+  useEffect(() => { hydrateOnce(); }, []);
 
   const headerByTab = {
     rules: {

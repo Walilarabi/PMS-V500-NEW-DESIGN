@@ -19,6 +19,11 @@ import type {
 } from '@/src/types/revenue/guardrails.types';
 import { rmsAuditLogger } from './rmsAuditLogger';
 import { emitRmsEvent } from '@/src/lib/rms/eventBus';
+import {
+  loadGuardrails,
+  persistGuardrail,
+  deleteGuardrail,
+} from './rmsEnterprisePersistence.service';
 
 const dayAgo = (n: number, h = 0) => new Date(Date.now() - n * 86_400_000 - h * 3_600_000).toISOString();
 
@@ -285,6 +290,8 @@ export const guardrailsEngine = {
       context: 'Configuration',
       detail: `Statut → ${status}`,
     });
+    const g = store.find((x) => x.id === id);
+    if (g) persistGuardrail(g);
     notify();
   },
 
@@ -297,6 +304,7 @@ export const guardrailsEngine = {
       context: 'Configuration',
       detail: exists ? 'Garde-fou mis à jour' : 'Garde-fou créé',
     });
+    persistGuardrail(g);
     notify();
   },
 
@@ -308,7 +316,18 @@ export const guardrailsEngine = {
       context: 'Configuration',
       detail: 'Garde-fou supprimé',
     });
+    deleteGuardrail(String(id));
     notify();
+  },
+
+  /** Hydrate depuis Supabase (idempotent). */
+  async hydrate(): Promise<void> {
+    const rows = await loadGuardrails();
+    if (rows && rows.length > 0) {
+      const seedById = new Map(SEED.map((g) => [g.id, g]));
+      store = rows.map((g) => ({ ...g, history: seedById.get(g.id)?.history ?? [] }));
+      notify();
+    }
   },
 
   hierarchy(): GuardrailHierarchyLevel[] { return HIERARCHY; },
