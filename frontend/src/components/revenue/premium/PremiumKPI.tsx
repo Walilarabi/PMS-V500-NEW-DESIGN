@@ -4,7 +4,7 @@
  * Carte KPI ultra-moderne pour les modules Revenue (Promotions, Distribution, etc.).
  * Inclut sparkline, badge tendance, animation d'apparition douce, gradient subtil.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -118,7 +118,15 @@ export const PremiumKPI: React.FC<PremiumKPIProps> = ({
           ? 'text-rose-700 bg-rose-50'
           : 'text-slate-500 bg-slate-100';
 
-  const chartData = (sparkline ?? []).map((v, i) => ({ i, v }));
+  // ⚠️ useMemo OBLIGATOIRE — sinon `(sparkline ?? []).map(...)` crée un
+  // NOUVEAU tableau à chaque render → Recharts AreaChart entre en boucle
+  // infinie via son ChartDataContextProvider (useSyncExternalStore interne).
+  // C'est la cause du crash « Cannot assign to read only property '0' »
+  // observé sur Distribution & OTA.
+  const chartData = useMemo(
+    () => (sparkline ?? []).map((v, i) => ({ i, v })),
+    [sparkline],
+  );
   const gradientId = `kpi-grad-${label.replace(/\s/g, '')}-${index}`;
 
   return (
@@ -210,8 +218,7 @@ export const PremiumKPI: React.FC<PremiumKPIProps> = ({
                 stroke={palette.stroke}
                 strokeWidth={2}
                 fill={`url(#${gradientId})`}
-                isAnimationActive
-                animationDuration={700}
+                isAnimationActive={false}
               />
             </AreaChart>
           </ResponsiveContainer>

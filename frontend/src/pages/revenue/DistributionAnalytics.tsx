@@ -59,6 +59,7 @@ import {
   exportDistributionPDF,
   type DistributionExportInput,
 } from '@/src/services/revenueExport.service';
+import { useShallow } from 'zustand/react/shallow';
 import {
   usePromotionsStore,
   selectActivePromotionsByChannel,
@@ -355,6 +356,21 @@ const PERIOD_LABELS: Record<PeriodKey, string> = {
 
 export function DistributionAnalytics() {
   const [period, setPeriod] = useState<PeriodKey>('30d');
+
+  // ⚠️ Sparklines mémorisées une fois pour toutes — spark() utilise
+  // Math.random() donc retourne un NOUVEAU tableau à chaque appel. Sans
+  // useMemo, chaque render passait un nouvel array à PremiumKPI → Recharts
+  // ChartDataContextProvider entrait en boucle infinie (« Maximum update
+  // depth » + « Cannot assign to read only property »).
+  const sparks = useMemo(() => ({
+    revenue: spark(14, 850, 200),
+    net: spark(14, 730, 180),
+    commission: spark(14, 13, 2),
+    bookings: spark(14, 1600, 220),
+    adr: spark(14, 240, 22),
+    revpar: spark(14, 95, 12),
+  }), []);
+
   const [sortBy, setSortBy] = useState<
     'revenue' | 'netRevenue' | 'bookings' | 'commission' | 'score'
   >('revenue');
@@ -364,7 +380,11 @@ export function DistributionAnalytics() {
 
   // Cross-module : promotions actives par canal, lu en temps réel depuis le
   // store. Mis à jour automatiquement à chaque toggle/edit côté Promotions.
-  const activePromosByChannel = usePromotionsStore(selectActivePromotionsByChannel);
+  // ⚠️ useShallow OBLIGATOIRE : selectActivePromotionsByChannel retourne un
+  // NOUVEL OBJET {} à chaque appel. Sans comparaison shallow, Zustand voit un
+  // changement à chaque render → boucle infinie React #185 / « Maximum update
+  // depth ». C'était la cause racine du crash sur Distribution & OTA.
+  const activePromosByChannel = usePromotionsStore(useShallow(selectActivePromotionsByChannel));
 
   // Sources de données réelles (rateCalendar + Lighthouse) pour les totaux
   // globaux. La répartition par canal reste démonstrative car aucune donnée
@@ -585,7 +605,7 @@ export function DistributionAnalytics() {
             icon={DollarSign}
             tone="emerald"
             delta={4.2}
-            sparkline={spark(14, 850, 200)}
+            sparkline={sparks.revenue}
             deltaLabel="vs préc."
             index={0}
           />
@@ -596,7 +616,7 @@ export function DistributionAnalytics() {
             icon={Wallet}
             tone="violet"
             delta={2.8}
-            sparkline={spark(14, 730, 180)}
+            sparkline={sparks.net}
             deltaLabel="après commission"
             index={1}
           />
@@ -608,7 +628,7 @@ export function DistributionAnalytics() {
             tone="amber"
             delta={-0.4}
             invertDelta
-            sparkline={spark(14, 13, 2)}
+            sparkline={sparks.commission}
             deltaLabel={`${Math.round(totals.totalCommission / 1000)}K€ coût`}
             index={2}
           />
@@ -618,7 +638,7 @@ export function DistributionAnalytics() {
             icon={Users}
             tone="sky"
             delta={3.1}
-            sparkline={spark(14, 1600, 220)}
+            sparkline={sparks.bookings}
             deltaLabel="vs préc."
             index={3}
           />
@@ -629,7 +649,7 @@ export function DistributionAnalytics() {
             icon={Calendar}
             tone="indigo"
             delta={2.6}
-            sparkline={spark(14, 240, 22)}
+            sparkline={sparks.adr}
             deltaLabel="vs préc."
             index={4}
           />
@@ -640,7 +660,7 @@ export function DistributionAnalytics() {
             icon={Gauge}
             tone="emerald"
             delta={1.4}
-            sparkline={spark(14, 95, 12)}
+            sparkline={sparks.revpar}
             deltaLabel="vs préc."
             index={5}
           />
@@ -818,7 +838,11 @@ const TopChannelCard: React.FC<{
   rank: number;
   activePromosCount?: number;
 }> = ({ channel, rank, activePromosCount = 0 }) => {
-  const data = channel.trend.map((v, i) => ({ i, v }));
+  // useMemo obligatoire — cf. note dans ChannelRow.trendData
+  const data = useMemo(
+    () => channel.trend.map((v, i) => ({ i, v })),
+    [channel.trend],
+  );
   const positive = channel.trendDelta >= 0;
   const gradientId = `topchan-${channel.id}`;
   return (
@@ -903,6 +927,7 @@ const TopChannelCard: React.FC<{
               stroke={channel.color}
               strokeWidth={2}
               fill={`url(#${gradientId})`}
+              isAnimationActive={false}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -982,7 +1007,15 @@ const ChannelRow: React.FC<{
   channel: Channel;
   totals: { totalRevenue: number };
 }> = ({ channel, totals }) => {
-  const trendData = channel.trend.map((v, i) => ({ i, v }));
+  // ⚠️ IMPORTANT : useMemo OBLIGATOIRE — sinon `channel.trend.map(...)` crée
+  // un NOUVEAU tableau à chaque render. Recharts utilise useSyncExternalStore
+  // interne et son getSnapshot retourne le data array. Un nouvel array à
+  // chaque render → React voit un changement → re-render → boucle infinie
+  // qui fait crasher la page Distribution & OTA avec « Maximum update depth ».
+  const trendData = useMemo(
+    () => channel.trend.map((v, i) => ({ i, v })),
+    [channel.trend],
+  );
   const positive = channel.trendDelta >= 0;
   const commTone =
     channel.commissionRate === 0
@@ -1083,6 +1116,7 @@ const ChannelRow: React.FC<{
                   stroke={channel.color}
                   strokeWidth={1.8}
                   dot={false}
+                  isAnimationActive={false}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -1133,10 +1167,61 @@ const ScoreBar: React.FC<{ value: number }> = ({ value }) => {
 /* MIX DISTRIBUTION                                                           */
 /* ────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * Donut SVG natif — remplacement de Recharts PieChart.
+ * Recharts 3 + React 19 strict mode produit une boucle infinie sur le
+ * ChartDataContextProvider interne. Le donut SVG est immutable et stable.
+ */
+const DonutSvg: React.FC<{
+  data: { name: string; value: number; color: string }[];
+  total: number;
+  size: number;
+}> = ({ data, total, size }) => {
+  const r = size / 2;
+  const strokeWidth = 22;
+  const inner = r - strokeWidth / 2;
+  const circumference = 2 * Math.PI * inner;
+  let offset = 0;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={r} cy={r} r={inner} fill="none" stroke="#F1F5F9" strokeWidth={strokeWidth} />
+      {data.map((d, i) => {
+        const pct = total > 0 ? d.value / total : 0;
+        const dash = pct * circumference;
+        const gap = circumference - dash;
+        const dashArray = `${dash} ${gap}`;
+        const rotation = (offset / circumference) * 360 - 90;
+        offset += dash;
+        return (
+          <circle
+            key={`${d.name}-${i}`}
+            cx={r}
+            cy={r}
+            r={inner}
+            fill="none"
+            stroke={d.color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={dashArray}
+            transform={`rotate(${rotation} ${r} ${r})`}
+          />
+        );
+      })}
+    </svg>
+  );
+};
+
 const MixDistributionCard: React.FC<{
   data: { name: string; value: number; color: string }[];
 }> = ({ data }) => {
   const total = data.reduce((s, d) => s + d.value, 0);
+  // ⚠️ Clone profond pour Recharts 3 + React 19 StrictMode : Recharts mute
+  // les objets data en interne (ajout de `fill`, `cornerRadius`, etc.).
+  // En strict mode, le 2e render reçoit des objets frozen → boucle infinie.
+  // Le clone garantit que chaque render reçoit des objets mutables propres.
+  const chartData = useMemo(
+    () => data.map((d) => ({ ...d })),
+    [data],
+  );
   return (
     <div className="h-full rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
       <div className="mb-2 flex items-center gap-2">
@@ -1150,34 +1235,12 @@ const MixDistributionCard: React.FC<{
       </div>
 
       <div className="grid grid-cols-[1fr_1fr] items-center gap-4">
-        <div className="relative h-44">
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="value"
-                cx="50%"
-                cy="50%"
-                innerRadius={48}
-                outerRadius={78}
-                paddingAngle={2}
-                stroke="none"
-              >
-                {data.map((d, i) => (
-                  <Cell key={i} fill={d.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(v: number, _, p) => [`${formatK(v as number)}`, p?.payload?.name]}
-                contentStyle={{
-                  borderRadius: 12,
-                  border: '1px solid #E2E8F0',
-                  fontSize: 12,
-                  boxShadow: '0 8px 30px rgba(15,23,42,.08)',
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+        {/* Donut SVG natif au lieu de Recharts PieChart : Recharts 3 a un bug
+            de boucle infinie (Maximum update depth / React #185) en
+            combinaison avec React 19 strict mode. Le donut natif est plus
+            rapide, plus léger et 100% sous contrôle. */}
+        <div className="relative h-44 flex items-center justify-center">
+          <DonutSvg data={chartData} total={total} size={160} />
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-xl font-bold text-slate-900 tabular-nums">{formatK(total)}</span>
             <span className="text-[10px] uppercase tracking-wider text-slate-500">CA total</span>
@@ -1254,7 +1317,12 @@ const DependencyCard: React.FC<{
       </p>
 
       <div className="mt-4 space-y-2">
-        {data
+        {/* ⚠️ [...data] OBLIGATOIRE : data.sort() mute le tableau reçu en
+            prop, ce qui :
+            - throw « Cannot assign to read only property '0' » en strict mode
+            - ou trigger une boucle infinie de re-render via Recharts
+            qui partage le même array. Clone avant tout tri. */}
+        {[...data]
           .sort((a, b) => b.value - a.value)
           .slice(0, 5)
           .map((d) => {
