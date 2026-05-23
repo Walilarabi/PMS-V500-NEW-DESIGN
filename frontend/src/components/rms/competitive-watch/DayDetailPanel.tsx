@@ -7,14 +7,17 @@
  *   - 'comparison'  → « Focus » : mini-tableau Hier / Aujourd'hui / Écart
  */
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Info, ArrowUp } from 'lucide-react';
+import { Info, ArrowUp, Check, X as XIcon, Equal, Sparkles, AlertTriangle } from 'lucide-react';
 import type { ComparePeriodKey } from '../../../data/rms/mockCompetitiveWatchData';
 import { useCompetitiveWatchData } from '../../../lib/rms/useCompetitiveWatchData';
 import { getDemandColor } from '../../../lib/rms/marketDemandRules';
 import { DEMAND_BANDS } from '../../../lib/rms/chartColors';
 import { CompsetDistributionBar } from './CompsetDistributionBar';
+import { RejectionReasonModal } from './RejectionReasonModal';
+import { recommendationFeedback, type FeedbackEntry } from '../../../services/revenue/recommendationFeedback.service';
+import { cn } from '@/src/lib/utils';
 
 /* ── Variante marché ────────────────────────────────────────────────────── */
 
@@ -48,13 +51,104 @@ const EmptyDetail: React.FC = () => (
   </div>
 );
 
+/**
+ * Construit les prix des 10 hôtels du compset à partir des stats du jour.
+ * Pour le mock : interpole entre q25 et q75 avec un peu de bruit déterministe
+ * (basé sur l'index, donc stable d'un render à l'autre).
+ */
+function buildCompsetPrices(
+  hotels: string[],
+  q25: number,
+  q75: number,
+  median: number,
+): Array<{ name: string; price: number; status: 'available' | 'closed' }> {
+  if (hotels.length === 0) return [];
+  const range = q75 - q25;
+  return hotels.map((name, i) => {
+    // Position pseudo-aléatoire mais déterministe entre q25 et q75
+    const t = (Math.sin(i * 1.7) + 1) / 2; // 0..1
+    const noise = Math.cos(i * 2.3) * (range * 0.15);
+    const price = Math.max(50, Math.round(q25 + t * range + noise));
+    // 1 hôtel sur 10 « fermé » pour rappeler les exclusions
+    const status: 'available' | 'closed' = i === hotels.length - 1 && Math.abs(price - median) > range
+      ? 'closed'
+      : 'available';
+    return { name, price, status };
+  });
+}
+
 const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) => {
   const { visibleMarketMonth, compsetHotels, meta } = useCompetitiveWatchData();
   const day = visibleMarketMonth.find((d) => d.label === selectedLabel) ?? visibleMarketMonth[0];
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [lastFeedback, setLastFeedback] = useState<FeedbackEntry | null>(null);
+
+  // ─── Calculs métier (ordres, rang, recommandation) ─────────────────────────
+  const enrichedCompset = useMemo(() => {
+    if (!day) return [];
+    const prices = buildCompsetPrices(compsetHotels, day.q25, day.q75, day.median);
+    // On insère notre hôtel et on classe par prix décroissant (#1 = plus cher)
+    const all = [
+      ...prices,
+      { name: 'Folkestone Opéra (vous)', price: day.ourPrice, status: 'available' as const, isUs: true },
+    ];
+    all.sort((a, b) => b.price - a.price);
+    return all;
+  }, [day, compsetHotels]);
+
+  const ourRank = useMemo(() => {
+    const i = enrichedCompset.findIndex((h) => 'isUs' in h && h.isUs);
+    return i >= 0 ? i + 1 : null;
+  }, [enrichedCompset]);
+
   if (!day) return <EmptyDetail />;
   const gap = day.ourPrice - day.median;
   const gapPct = ((gap / day.median) * 100).toFixed(1);
   const demandColor = getDemandColor(day.demand);
+
+  // Recommandation : si on est sous la médiane et que la demande > 60%, recommander une hausse
+  const recommendedPrice = (() => {
+    if (day.demand >= 75 && day.ourPrice < day.median) return Math.round(day.median * 0.98);
+    if (day.demand <= 25 && day.ourPrice > day.median) return Math.round(day.median * 1.02);
+    return day.ourPrice;
+  })();
+  const recommendationDelta = recommendedPrice - day.ourPrice;
+
+  // Stratégie / pression / statut dérivés
+  const pressureLabel: 'Faible' | 'Modérée' | 'Forte' | 'Extrême' =
+    day.demand >= 85 ? 'Extrême' : day.demand >= 60 ? 'Forte' : day.demand >= 35 ? 'Modérée' : 'Faible';
+  const strategy = day.demand >= 70 ? 'Yield agressif' : day.demand <= 30 ? 'Défensive' : 'Équilibrée';
+
+  const handleAccept = () => {
+    const entry = recommendationFeedback.log({
+      date: day.date,
+      action: 'accept',
+      context: {
+        ourPrice: day.ourPrice,
+        recommendedPrice,
+        median: day.median,
+        rank: ourRank ?? undefined,
+        pressure: pressureLabel === 'Extrême' ? 'extreme' : pressureLabel === 'Forte' ? 'high' : pressureLabel === 'Modérée' ? 'medium' : 'low',
+        strategy,
+      },
+    });
+    setLastFeedback(entry);
+  };
+
+  const handleMaintain = () => {
+    const entry = recommendationFeedback.log({
+      date: day.date,
+      action: 'maintain',
+      context: {
+        ourPrice: day.ourPrice,
+        recommendedPrice: day.ourPrice,
+        median: day.median,
+        rank: ourRank ?? undefined,
+        strategy,
+      },
+    });
+    setLastFeedback(entry);
+  };
 
   return (
     <motion.div
@@ -106,23 +200,161 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
         </div>
       </div>
 
-      {/* Compset analysé */}
-      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-x-4 gap-y-2 flex-wrap">
-        <span className="text-[11.5px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
-          Compset analysé ({compsetHotels.length} hôtels)
-        </span>
-        {compsetHotels.map((hotel, i) => (
-          <span key={hotel} className="flex items-center gap-1.5">
-            <span
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: DEMAND_BANDS[i % DEMAND_BANDS.length].color }}
-            />
-            <span className="text-[11.5px] font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap">
-              {hotel}
-            </span>
+      {/* Compset trié — 10 hôtels + notre hôtel en gras + statut */}
+      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[11.5px] font-bold text-slate-600 dark:text-slate-300">
+            Compset analysé ({compsetHotels.length} hôtels) — tri par tarif décroissant
           </span>
-        ))}
+          {ourRank && (
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+              Votre rang : #{ourRank} / {enrichedCompset.length}
+            </span>
+          )}
+        </div>
+        <div className="rounded-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+          <table className="w-full text-[12px]">
+            <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="text-left px-3 py-1.5 font-semibold w-8">#</th>
+                <th className="text-left px-3 py-1.5 font-semibold">Hôtel</th>
+                <th className="text-right px-3 py-1.5 font-semibold">Tarif</th>
+                <th className="text-right px-3 py-1.5 font-semibold">Δ médiane</th>
+                <th className="text-center px-3 py-1.5 font-semibold">Statut</th>
+              </tr>
+            </thead>
+            <tbody>
+              {enrichedCompset.map((hotel, i) => {
+                const isUs = 'isUs' in hotel && hotel.isUs;
+                const delta = hotel.price - day.median;
+                return (
+                  <tr
+                    key={hotel.name}
+                    className={cn(
+                      'border-t border-slate-100 dark:border-slate-800',
+                      isUs ? 'bg-blue-50/40 dark:bg-blue-900/10' : '',
+                    )}
+                  >
+                    <td className="px-3 py-1.5 text-slate-500 tabular-nums">{i + 1}</td>
+                    <td className={cn('px-3 py-1.5 truncate', isUs ? 'font-bold text-blue-700' : 'text-slate-700')}>
+                      {hotel.name}
+                    </td>
+                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">
+                      {hotel.price}€
+                    </td>
+                    <td className={cn(
+                      'px-3 py-1.5 text-right tabular-nums',
+                      delta > 0 ? 'text-rose-600' : delta < 0 ? 'text-emerald-600' : 'text-slate-500',
+                    )}>
+                      {delta > 0 ? '+' : ''}{delta}€
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
+                      <span className={cn(
+                        'text-[10px] font-bold px-2 py-0.5 rounded-full',
+                        hotel.status === 'available'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-slate-100 text-slate-500',
+                      )}>
+                        {hotel.status === 'available' ? 'Ouvert' : 'Fermé'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      {/* Panneau d'actions : recommandation + Accepter / Refuser / Maintenir */}
+      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-xl bg-slate-50/70 dark:bg-slate-800/40 p-3.5">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+            <span className="text-[11px] uppercase tracking-wider font-bold text-slate-500">
+              Recommandation RMS
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-[22px] font-extrabold text-slate-900">{recommendedPrice}€</span>
+            {recommendationDelta !== 0 && (
+              <span className={cn(
+                'text-[12px] font-bold',
+                recommendationDelta > 0 ? 'text-emerald-600' : 'text-rose-600',
+              )}>
+                {recommendationDelta > 0 ? '+' : ''}{recommendationDelta}€
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-slate-500 grid grid-cols-2 gap-1">
+            <div><b>Stratégie :</b> {strategy}</div>
+            <div><b>Pression :</b> {pressureLabel}</div>
+            <div><b>Écart vs médiane :</b> {gap > 0 ? '+' : ''}{gap}€ ({gapPct}%)</div>
+            <div><b>Restrictions :</b> Aucune</div>
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-white border border-slate-200 p-3.5">
+          <div className="text-[11px] uppercase tracking-wider font-bold text-slate-500 mb-2">
+            Vos actions
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={handleAccept}
+              className="flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-emerald-500 text-white text-[11px] font-semibold hover:bg-emerald-600 shadow-sm"
+            >
+              <Check size={14} />
+              <span>Accepter</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRejectOpen(true)}
+              className="flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-rose-500 text-white text-[11px] font-semibold hover:bg-rose-600 shadow-sm"
+            >
+              <XIcon size={14} />
+              <span>Refuser</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleMaintain}
+              className="flex flex-col items-center justify-center gap-1 px-2 py-2 rounded-xl bg-slate-200 text-slate-700 text-[11px] font-semibold hover:bg-slate-300 shadow-sm"
+            >
+              <Equal size={14} />
+              <span>Maintenir</span>
+            </button>
+          </div>
+          {lastFeedback && (
+            <div className={cn(
+              'mt-2 text-[10.5px] font-medium px-2 py-1.5 rounded-lg',
+              lastFeedback.action === 'accept' ? 'bg-emerald-50 text-emerald-700'
+              : lastFeedback.action === 'reject' ? 'bg-rose-50 text-rose-700'
+              : 'bg-slate-100 text-slate-700',
+            )}>
+              <AlertTriangle size={10} className="inline mr-1" />
+              Décision enregistrée — {lastFeedback.action === 'accept' ? 'Acceptée'
+                : lastFeedback.action === 'reject' ? `Refusée (${lastFeedback.reasonLabel ?? '—'})`
+                : 'Maintenue'}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal raisons de refus */}
+      <RejectionReasonModal
+        open={rejectOpen}
+        onClose={() => setRejectOpen(false)}
+        date={day.date}
+        context={{
+          ourPrice: day.ourPrice,
+          recommendedPrice,
+          median: day.median,
+          rank: ourRank ?? undefined,
+          pressure: pressureLabel === 'Extrême' ? 'extreme' : pressureLabel === 'Forte' ? 'high' : pressureLabel === 'Modérée' ? 'medium' : 'low',
+          strategy,
+        }}
+        onLogged={(e) => setLastFeedback(e)}
+      />
     </motion.div>
   );
 };

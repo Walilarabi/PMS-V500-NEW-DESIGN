@@ -21,6 +21,7 @@ export function CalendarGrid() {
     roomTypes,
     channels,
     isLoading,
+    loadError,
     lastSaved,
     loadData,
     startDate,
@@ -362,9 +363,51 @@ export function CalendarGrid() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] bg-gray-50 rounded-2xl">
         <Loader2 className="w-10 h-10 animate-spin text-violet-500" />
-        <span className="ml-4 text-lg text-gray-600">Chargement du calendrier...</span>
+        <span className="mt-4 text-base text-gray-700 font-semibold">Chargement du calendrier…</span>
+        <span className="mt-1 text-[12px] text-gray-500">Récupération des tarifs et restrictions depuis Supabase</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] bg-rose-50/30 border border-rose-100 rounded-2xl p-8 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-rose-100 flex items-center justify-center mb-4">
+          <Info className="w-7 h-7 text-rose-600" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-900 mb-1">Impossible de charger le calendrier</h3>
+        <p className="text-[13px] text-gray-600 max-w-md mb-4">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => loadData()}
+          className="px-4 py-2 bg-violet-500 text-white text-sm font-semibold rounded-xl hover:bg-violet-600 shadow-sm"
+        >
+          Réessayer
+        </button>
+      </div>
+    );
+  }
+
+  if (roomTypes.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-8 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+          <Info className="w-7 h-7 text-gray-500" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-900 mb-1">Aucun type de chambre configuré</h3>
+        <p className="text-[13px] text-gray-600 max-w-md mb-4">
+          Le calendrier tarifaire affiche les chambres avec un <code className="px-1 bg-white border rounded">room_type_code</code> actif.
+          Configurez vos types de chambres dans <b>Paramètres → Types de chambres</b> pour démarrer.
+        </p>
+        <button
+          type="button"
+          onClick={() => loadData()}
+          className="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 shadow-sm"
+        >
+          Rafraîchir
+        </button>
       </div>
     );
   }

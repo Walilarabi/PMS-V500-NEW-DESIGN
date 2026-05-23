@@ -61,6 +61,7 @@ interface RateCalendarStore {
   channels: ChannelData[];
   pricingRules: PricingRules;
   isLoading: boolean;
+  loadError: string | null;
   isSaving: boolean;
   expandedRooms: Record<string, boolean>;
   editedCells: Set<string>;
@@ -156,6 +157,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
     channels: [],
     pricingRules: pricingRules,
     isLoading: false,
+    loadError: null,
     isSaving: false,
     expandedRooms: {},
     editedCells: new Set(),
@@ -183,9 +185,26 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
 
     loadData: async () => {
       const { startDate, viewMode } = get();
-      set({ isLoading: true });
+      set({ isLoading: true, loadError: null });
+
+      // Timeout 15s : évite que la page « mouline dans le vide » si Supabase
+      // / le RPC get_user_hotel_id ne répond jamais. On retombe sur les mocks
+      // et on signale l'erreur à l'utilisateur.
+      const timeoutMs = 15_000;
+      const fetchWithTimeout = (): Promise<Awaited<ReturnType<typeof fetchCalendarData>>> =>
+        new Promise((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error(`Chargement du calendrier > ${timeoutMs / 1000}s — délai dépassé`)),
+            timeoutMs,
+          );
+          fetchCalendarData(startDate, viewMode).then(
+            (v) => { clearTimeout(timer); resolve(v); },
+            (e) => { clearTimeout(timer); reject(e); },
+          );
+        });
+
       try {
-        let { roomTypes, dateColumns } = await fetchCalendarData(startDate, viewMode);
+        let { roomTypes, dateColumns } = await fetchWithTimeout();
 
         // ✅ Appliquer ordre sauvegardé utilisateur (rooms)
         const savedOrder = localStorage.getItem('flowtym_room_order');
@@ -245,8 +264,12 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         roomTypes.forEach((rt) => { expandedRooms[rt.roomTypeId] = true; });
         const roomIds = roomTypes.map(r => r.roomTypeId);
         const planNames = Array.from(new Set(roomTypes.flatMap(r => r.ratePlans.map(p => p.planName))));
-        set({ roomTypes, dateColumns, expandedRooms, isLoading: false, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
-      } catch { set({ isLoading: false }); }
+        set({ roomTypes, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Erreur inconnue lors du chargement';
+        console.error('[rateCalendarStore] loadData failed:', message);
+        set({ isLoading: false, loadError: message });
+      }
     },
 
     toggleRoom: (roomTypeId) => set((s) => ({ expandedRooms: { ...s.expandedRooms, [roomTypeId]: !s.expandedRooms[roomTypeId] } })),

@@ -224,16 +224,9 @@ export const DynamicComparisonChart: React.FC<DynamicComparisonChartProps> = ({
 
               <CartesianGrid stroke={CHART_COLORS.grid} vertical={false} />
 
-              {/* Surbrillance du jour sélectionné */}
-              <HighlightArea
-                x1={selectedLabel}
-                x2={selectedLabel}
-                yAxisId="demand"
-                fill="#3B82F6"
-                fillOpacity={0.09}
-                stroke="#93C5FD"
-                ifOverflow="extendDomain"
-              />
+              {/* Surbrillance retirée — créait un rectangle bleu parasite sur le
+                  jour par défaut (18 juin). Le hover Recharts reste actif sur
+                  toutes les dates de manière harmonisée. */}
 
               <XAxis
                 dataKey="label"

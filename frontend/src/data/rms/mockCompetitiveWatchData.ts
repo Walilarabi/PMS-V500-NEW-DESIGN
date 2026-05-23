@@ -204,6 +204,17 @@ function clampDemand(v: number): number {
  * pour la période demandée, filtrée selon la règle d'affichage des dates
  * (aucune date passée dans le mois en cours).
  */
+/**
+ * Garde-fou tarifaire : une médiane hôtelière ne peut jamais être ≤ 0.
+ * Plancher à 50€ (≈ tarif minimal réaliste sur le marché parisien) pour
+ * éviter des médianes aberrantes en cas d'offset trop grand côté mock.
+ */
+function clampMedianPrice(v: number): number {
+  if (!Number.isFinite(v) || v < 50) return 50;
+  if (v > 100_000) return 100_000;
+  return Math.round(v);
+}
+
 export function getComparisonData(
   period: ComparePeriodKey,
   today: Date = new Date(),
@@ -219,7 +230,7 @@ export function getComparisonData(
       } else {
         const off = PERIOD_OFFSET[period];
         demandPast = clampDemand(row.demandToday - off.demand);
-        medianPast = Math.round(row.medianToday - off.median);
+        medianPast = row.medianToday - off.median;
       }
 
       return {
@@ -227,9 +238,9 @@ export function getComparisonData(
         label: row.label,
         demandToday: row.demandToday,
         demandPast,
-        medianToday: row.medianToday,
-        medianPast,
-        ourPrice: row.ourPrice,
+        medianToday: clampMedianPrice(row.medianToday),
+        medianPast: clampMedianPrice(medianPast),
+        ourPrice: clampMedianPrice(row.ourPrice),
       };
     })
     .filter((d) => isDateVisible(d.date, today));

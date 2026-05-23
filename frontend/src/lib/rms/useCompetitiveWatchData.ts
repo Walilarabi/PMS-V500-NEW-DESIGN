@@ -238,11 +238,51 @@ function buildMixedDataset(
 /* MOCK FALLBACK                                                              */
 /* ───────────────────────────────────────────────────────────────────────── */
 
+/**
+ * Construit un dataset mock qui respecte la fenêtre temporelle demandée.
+ *
+ * Le mock de référence (MARKET_MONTH) couvre juin 2026 (30 jours). Pour les
+ * ranges 7/15/30/60/90 jours glissants, on génère des jours synthétiques en
+ * rebouclant sur le pool de référence et en ajustant la date pour rester dans
+ * la fenêtre. Les valeurs (ourPrice, médiane, écarts) sont préservées —
+ * seules les dates / labels sont décalés.
+ */
+function buildMockMarketDays(
+  windowStart: string,
+  windowEnd: string,
+): typeof MOCK_MARKET_MONTH {
+  const start = new Date(windowStart);
+  const end = new Date(windowEnd);
+  const days = Math.round((+end - +start) / 86_400_000) + 1;
+  if (days <= 0) return [];
+
+  const pool = MOCK_MARKET_MONTH;
+  if (pool.length === 0) return [];
+
+  const result: typeof MOCK_MARKET_MONTH = [];
+  for (let i = 0; i < days; i++) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
+    const iso = date.toISOString().slice(0, 10);
+    const template = pool[i % pool.length];
+    result.push({
+      ...template,
+      date: iso,
+      label: date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
+    });
+  }
+  return result;
+}
+
 function mockData(
   source: CompetitiveSource,
   range: CompetitiveRange,
   window: { start: string; end: string; label: string }
 ): CompetitiveWatchData {
+  // Génère un dataset respectant la fenêtre demandée (7/15/30/60/90/mois)
+  const days = buildMockMarketDays(window.start, window.end);
+  const visibleDays = days.length > 0 ? days : MOCK_MARKET_MONTH;
+
   return {
     isLive: false,
     source,
@@ -250,8 +290,8 @@ function mockData(
     window,
     meta: MOCK_PAGE_META,
     kpiCards: MOCK_KPI_CARDS,
-    marketMonth: MOCK_MARKET_MONTH,
-    visibleMarketMonth: mockGetVisibleMarketMonth(),
+    marketMonth: visibleDays,
+    visibleMarketMonth: visibleDays,
     getComparisonData: mockGetComparisonData,
     comparePeriods: MOCK_COMPARE_PERIODS,
     quickComparison: MOCK_QUICK_COMPARISON,
@@ -265,7 +305,7 @@ function mockData(
       expediaImportedAt: null,
       totalCompetitors: MOCK_COMPSET_HOTELS.length,
       keptCompetitors: MOCK_COMPSET_HOTELS.length,
-      keptDays: MOCK_MARKET_MONTH.length,
+      keptDays: visibleDays.length,
       excludedDays: 0,
       exclusionSummary: [],
       competitorScores: [],

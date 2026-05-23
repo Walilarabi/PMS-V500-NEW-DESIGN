@@ -66,13 +66,23 @@ function buildDateColumns(start: Date, viewMode: ViewMode): DateColumn[] {
   return cols;
 }
 
-/** Get the current user's hotel_id (null if not authenticated/resolvable). */
+/**
+ * Get the current user's hotel_id (null if not authenticated/resolvable).
+ *
+ * Garde-fou : timeout 5s pour ne pas bloquer le calendrier si le RPC
+ * `get_user_hotel_id` ne répond pas (la page tombe sur les mocks).
+ */
 async function getCurrentHotelId(): Promise<string | null> {
+  const timeoutMs = 5_000;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase.rpc as any)('get_user_hotel_id');
-    if (error || !data) return null;
-    return String(data);
+    const rpcPromise = (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.rpc as any)('get_user_hotel_id');
+      if (error || !data) return null;
+      return String(data);
+    })();
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+    return await Promise.race([rpcPromise, timeoutPromise]);
   } catch {
     return null;
   }

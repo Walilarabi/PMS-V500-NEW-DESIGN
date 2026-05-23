@@ -39,16 +39,27 @@ interface ComputedKpis {
   visibleDays: number;
 }
 
-/** Médiane d'un tableau numérique (ignore NaN/null). */
+/**
+ * Médiane d'un tableau numérique pour un usage tarifaire :
+ * - exclut NaN / null / undefined
+ * - exclut les valeurs ≤ 0 (un tarif négatif ou nul = fermé, non vendable)
+ * - exclut les valeurs aberrantes (> 100 000€ — hôtellerie réaliste)
+ * - retourne 0 si moins de 2 valeurs valides (médiane non significative)
+ */
 function median(values: number[]): number {
-  const xs = values.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
-  if (xs.length === 0) return 0;
+  const xs = values
+    .filter((v) => Number.isFinite(v) && v > 0 && v < 100_000)
+    .sort((a, b) => a - b);
+  if (xs.length < 2) return xs[0] ?? 0;
   const mid = Math.floor(xs.length / 2);
   return xs.length % 2 === 0 ? (xs[mid - 1] + xs[mid]) / 2 : xs[mid];
 }
 
+/**
+ * Moyenne tarifaire — même règles que median().
+ */
 function mean(values: number[]): number {
-  const xs = values.filter((v) => Number.isFinite(v));
+  const xs = values.filter((v) => Number.isFinite(v) && v > 0 && v < 100_000);
   return xs.length === 0 ? 0 : xs.reduce((s, v) => s + v, 0) / xs.length;
 }
 
