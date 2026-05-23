@@ -5,13 +5,15 @@
  * concurrents +chers / concurrents -chers / positionnement.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import {
   Tag, TrendingUp, Building2, TrendingDown, Gauge, Users, Award,
 } from 'lucide-react';
 import { KPI_CARDS } from '../../../data/rms/mockCompetitiveWatchData';
 import type { KpiDatum, KpiTone } from '../../../data/rms/mockCompetitiveWatchData';
+import { useLighthouseStore } from '../../../store/lighthouseStore';
+import { buildCompetitiveKpiCards } from '../../../lib/rms/lighthouseToCompetitiveWatch';
 
 const TONE: Record<KpiTone, { iconBg: string; iconColor: string; value: string }> = {
   slate: { iconBg: 'bg-slate-100 dark:bg-slate-700', iconColor: 'text-slate-500 dark:text-slate-300', value: 'text-slate-900 dark:text-slate-50' },
@@ -63,10 +65,20 @@ const KpiCard: React.FC<{ kpi: KpiDatum; index: number }> = ({ kpi, index }) => 
   );
 };
 
-export const MarketKpiGrid: React.FC = () => (
-  <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
-    {KPI_CARDS.map((kpi, i) => (
-      <KpiCard key={kpi.id} kpi={kpi} index={i} />
-    ))}
-  </div>
-);
+export const MarketKpiGrid: React.FC = () => {
+  // Bascule automatique : si un import Lighthouse est présent, on calcule les
+  // KPI sur les vraies données ; sinon, on retombe sur le mock.
+  const lighthouseData = useLighthouseStore((s) => s.importData);
+  const cards = useMemo(
+    () => (lighthouseData ? buildCompetitiveKpiCards(lighthouseData) : KPI_CARDS),
+    [lighthouseData]
+  );
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
+      {cards.map((kpi, i) => (
+        <KpiCard key={kpi.id} kpi={kpi} index={i} />
+      ))}
+    </div>
+  );
+};

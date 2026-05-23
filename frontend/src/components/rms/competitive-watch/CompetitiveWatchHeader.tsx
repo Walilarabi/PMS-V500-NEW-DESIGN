@@ -9,9 +9,10 @@ import React from 'react';
 import { motion } from 'motion/react';
 import {
   BarChart3, ChevronLeft, ChevronRight, ChevronDown,
-  Calendar, Download, RefreshCw,
+  Calendar, Download, RefreshCw, Database,
 } from 'lucide-react';
 import { ImportButton } from './import/ImportButton';
+import { useLighthouseStore } from '../../../store/lighthouseStore';
 
 export interface CompetitiveWatchHeaderProps {
   subtitle: string;
@@ -27,7 +28,9 @@ export const CompetitiveWatchHeader: React.FC<CompetitiveWatchHeaderProps> = ({
   lastUpdate,
   onPrev,
   onNext,
-}) => (
+}) => {
+  const lighthouseData = useLighthouseStore((s) => s.importData);
+  return (
   <motion.header
     initial={{ opacity: 0, y: -8 }}
     animate={{ opacity: 1, y: 0 }}
@@ -96,9 +99,19 @@ export const CompetitiveWatchHeader: React.FC<CompetitiveWatchHeaderProps> = ({
         Actualiser tarifs
       </button>
       <div className="flex items-center gap-2 pl-1">
-        <span className="text-[12.5px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
-          Mis à jour {lastUpdate}
-        </span>
+        {lighthouseData ? (
+          <span
+            title={`Fichier : ${lighthouseData.fileName} · Importé : ${new Date(lighthouseData.importedAt).toLocaleString('fr-FR')}`}
+            className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-200 dark:ring-emerald-800"
+          >
+            <Database className="w-3 h-3" />
+            Lighthouse · {lighthouseData.days.length} jours
+          </span>
+        ) : (
+          <span className="text-[12.5px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+            Mis à jour {lastUpdate}
+          </span>
+        )}
         <span className="relative flex w-2.5 h-2.5">
           <span className="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
           <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-emerald-500" />
@@ -106,4 +119,5 @@ export const CompetitiveWatchHeader: React.FC<CompetitiveWatchHeaderProps> = ({
       </div>
     </div>
   </motion.header>
-);
+  );
+};

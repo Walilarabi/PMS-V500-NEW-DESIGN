@@ -54,6 +54,11 @@ import {
 import { cn } from '@/src/lib/utils';
 import { PremiumHeader, type PeriodKey } from '@/src/components/revenue/premium/PremiumHeader';
 import { PremiumKPI } from '@/src/components/revenue/premium/PremiumKPI';
+import {
+  exportDistributionExcel,
+  exportDistributionPDF,
+  type DistributionExportInput,
+} from '@/src/services/revenueExport.service';
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* TYPES                                                                      */
@@ -325,6 +330,14 @@ const formatK = (n: number) =>
 const trendCellColor = (v: number) =>
   v > 0 ? 'text-emerald-600' : v < 0 ? 'text-rose-600' : 'text-slate-500';
 
+const PERIOD_LABELS: Record<PeriodKey, string> = {
+  '7d': '7 derniers jours',
+  '30d': '30 derniers jours',
+  '90d': '90 derniers jours',
+  ytd: 'Depuis le 1er janvier',
+  custom: 'Période personnalisée',
+};
+
 /* ────────────────────────────────────────────────────────────────────────── */
 /* MAIN PAGE                                                                  */
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -416,6 +429,33 @@ export function DistributionAnalytics() {
     };
   }, [channelData, totals]);
 
+  /* build export payload — shared by Excel + PDF handlers */
+  const buildExportInput = (): DistributionExportInput => ({
+    period: PERIOD_LABELS[period],
+    totals: {
+      revenue: totals.totalRevenue,
+      netRevenue: totals.totalNet,
+      commission: totals.totalCommission,
+      bookings: totals.totalBookings,
+      adr: totals.avgADR,
+      revpar: totals.avgRevPAR,
+    },
+    rows: sorted.map((c) => ({
+      canal: c.name,
+      bookings: c.bookings,
+      nights: c.roomNights,
+      adr: c.adr,
+      revenue: c.revenue,
+      commissionRate: c.commissionRate,
+      commissionCost: c.commissionCost,
+      netRevenue: c.netRevenue,
+      revpar: c.revpar,
+      conversion: c.conversion,
+      cancellation: c.cancellationRate,
+      score: c.performanceScore,
+    })),
+  });
+
   /* alerts */
   const alerts = useMemo(() => {
     const arr: { tone: 'warn' | 'critical' | 'info'; title: string; desc: string }[] = [];
@@ -457,9 +497,8 @@ export function DistributionAnalytics() {
           subtitle="Cockpit de pilotage multicanal — performance, commissions et rentabilité"
           period={period}
           onPeriodChange={setPeriod}
-          onExportExcel={() => undefined}
-          onExportPDF={() => undefined}
-          onFilters={() => undefined}
+          onExportExcel={() => exportDistributionExcel(buildExportInput())}
+          onExportPDF={() => exportDistributionPDF(buildExportInput())}
           rightSlot={
             <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-1 py-1 shadow-sm">
               <span className="px-2 text-[11px] font-semibold text-slate-500">Comparer :</span>

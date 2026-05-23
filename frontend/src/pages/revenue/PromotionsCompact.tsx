@@ -61,6 +61,19 @@ import {
 import { cn } from '@/src/lib/utils';
 import { PremiumHeader, type PeriodKey } from '@/src/components/revenue/premium/PremiumHeader';
 import { PremiumKPI } from '@/src/components/revenue/premium/PremiumKPI';
+import {
+  exportPromotionsExcel,
+  exportPromotionsPDF,
+  type PromotionsExportInput,
+} from '@/src/services/revenueExport.service';
+
+const PERIOD_LABELS: Record<PeriodKey, string> = {
+  '7d': '7 derniers jours',
+  '30d': '30 derniers jours',
+  '90d': '90 derniers jours',
+  ytd: 'Depuis le 1er janvier',
+  custom: 'Période personnalisée',
+};
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* TYPES                                                                      */
@@ -652,6 +665,33 @@ export function PromotionsCompact() {
     setSelectedPromo(null);
   };
 
+  /* build export payload — shared by Excel + PDF handlers */
+  const buildExportInput = (): PromotionsExportInput => ({
+    period: PERIOD_LABELS[period],
+    totals: {
+      active: activeCount,
+      total: promotions.length,
+      bookings: totalBookings,
+      revenue: totalRevenue,
+      avgDiscount,
+      roi: weightedRoi,
+    },
+    rows: filtered.map((p) => ({
+      status: STATUS_META[p.status].label,
+      name: p.name,
+      description: p.description,
+      type: p.typeLabel,
+      discount: p.discount,
+      channels: p.channels.join(', '),
+      startDate: p.startDate,
+      endDate: p.endDate,
+      bookings: p.bookings,
+      revenue: p.revenue,
+      roi: p.roi,
+      conversion: p.conversion,
+    })),
+  });
+
   return (
     <div className="flex flex-1 flex-col bg-gradient-to-b from-slate-50 to-white">
       <div className="space-y-6 px-6 py-5">
@@ -661,8 +701,8 @@ export function PromotionsCompact() {
           subtitle="Gestion des campagnes et alertes d'activation intelligentes"
           period={period}
           onPeriodChange={setPeriod}
-          onExportExcel={() => undefined}
-          onExportPDF={() => undefined}
+          onExportExcel={() => exportPromotionsExcel(buildExportInput())}
+          onExportPDF={() => exportPromotionsPDF(buildExportInput())}
           actions={[
             {
               label: 'Nouvelle promotion',
