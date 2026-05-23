@@ -6,7 +6,7 @@
  * moteur de priorités.
  */
 import React, { useEffect, useState } from 'react';
-import { X, ArrowUp, ArrowDown, Settings2 } from 'lucide-react';
+import { X, ArrowUp, ArrowDown, Settings2, GripVertical } from 'lucide-react';
 import { priorityConflictEngine } from '@/src/services/revenue/priorityConflictEngine';
 import type { PriorityLevel } from '@/src/types/revenue/conflicts.types';
 import { cn } from '@/src/lib/utils';
@@ -18,6 +18,8 @@ export interface ConfigurePrioritiesModalProps {
 
 export const ConfigurePrioritiesModal: React.FC<ConfigurePrioritiesModalProps> = ({ open, onClose }) => {
   const [list, setList] = useState<PriorityLevel[]>([]);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) setList(priorityConflictEngine.hierarchy());
@@ -31,6 +33,55 @@ export const ConfigurePrioritiesModal: React.FC<ConfigurePrioritiesModalProps> =
     const next = [...list];
     [next[idx], next[target]] = [next[target], next[idx]];
     setList(next.map((l, i) => ({ ...l, priority: i + 1 })));
+  };
+
+  /**
+   * Drag&drop HTML5 natif.
+   * Refus du drop sur le slot priorité 1 (garde-fou) — il est verrouillé.
+   * Refus du drop si la cible est elle-même un garde-fou (sécurité).
+   */
+  const handleDragStart = (e: React.DragEvent, id: string, kind: PriorityLevel['kind']) => {
+    if (kind === 'guardrail') {
+      e.preventDefault();
+      return;
+    }
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    // Firefox requires setData to start a drag
+    e.dataTransfer.setData('text/plain', id);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string, kind: PriorityLevel['kind']) => {
+    if (!draggedId || draggedId === id) return;
+    if (kind === 'guardrail') return; // ne pas dropper sur priorité 1
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setOverId(id);
+  };
+
+  const handleDragLeave = () => setOverId(null);
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId || draggedId === targetId) {
+      setDraggedId(null);
+      setOverId(null);
+      return;
+    }
+    const from = list.findIndex((l) => l.id === draggedId);
+    const to = list.findIndex((l) => l.id === targetId);
+    if (from < 0 || to < 0) return;
+    const next = [...list];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setList(next.map((l, i) => ({ ...l, priority: i + 1 })));
+    setDraggedId(null);
+    setOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setOverId(null);
   };
 
   const reset = () => setList(priorityConflictEngine.hierarchy());
@@ -65,47 +116,79 @@ export const ConfigurePrioritiesModal: React.FC<ConfigurePrioritiesModalProps> =
 
         <div className="flex-1 overflow-y-auto p-6">
           <ul className="space-y-2">
-            {list.map((l, idx) => (
-              <li
-                key={l.id}
-                className={cn(
-                  'flex items-center gap-3 p-3 rounded-xl border',
-                  l.kind === 'guardrail'
-                    ? 'bg-emerald-50/40 border-emerald-100'
-                    : 'bg-white border-[#F3F4F6]',
-                )}
-              >
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#A78BFA] text-white text-[11px] font-bold shrink-0">
-                  {idx + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-gray-900 truncate">{l.name}</div>
-                  <div className="text-[11px] text-gray-500">{l.category} · {l.objective}</div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => move(idx, -1)}
-                    disabled={idx === 0 || l.kind === 'guardrail'}
-                    className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                    aria-label="Monter"
-                  >
-                    <ArrowUp size={14} />
-                  </button>
-                  <button
-                    onClick={() => move(idx, 1)}
-                    disabled={idx === list.length - 1}
-                    className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                    aria-label="Descendre"
-                  >
-                    <ArrowDown size={14} />
-                  </button>
-                </div>
-              </li>
-            ))}
+            {list.map((l, idx) => {
+              const isLocked = l.kind === 'guardrail';
+              const isDragged = draggedId === l.id;
+              const isOver = overId === l.id;
+              return (
+                <li
+                  key={l.id}
+                  draggable={!isLocked}
+                  onDragStart={(e) => handleDragStart(e, l.id, l.kind)}
+                  onDragOver={(e) => handleDragOver(e, l.id, l.kind)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, l.id)}
+                  onDragEnd={handleDragEnd}
+                  className={cn(
+                    'flex items-center gap-3 p-3 rounded-xl border transition-all',
+                    isLocked
+                      ? 'bg-emerald-50/40 border-emerald-100 cursor-not-allowed'
+                      : 'bg-white border-[#F3F4F6] cursor-grab active:cursor-grabbing',
+                    isDragged && 'opacity-40',
+                    isOver && !isLocked && 'border-[#8B5CF6] bg-violet-50/40 shadow-md scale-[1.01]',
+                  )}
+                  aria-grabbed={isDragged}
+                >
+                  <GripVertical
+                    size={14}
+                    className={cn(
+                      'shrink-0',
+                      isLocked ? 'text-emerald-300' : 'text-gray-300 group-hover:text-gray-500',
+                    )}
+                  />
+                  <span className={cn(
+                    'inline-flex items-center justify-center w-7 h-7 rounded-full text-white text-[11px] font-bold shrink-0 bg-gradient-to-br',
+                    isLocked
+                      ? 'from-emerald-500 to-emerald-400'
+                      : 'from-[#8B5CF6] to-[#A78BFA]',
+                  )}>
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-gray-900 truncate">{l.name}</div>
+                    <div className="text-[11px] text-gray-500">{l.category} · {l.objective}</div>
+                  </div>
+                  {isLocked && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md shrink-0">
+                      Verrouillé
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => move(idx, -1)}
+                      disabled={idx === 0 || isLocked}
+                      className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Monter"
+                    >
+                      <ArrowUp size={14} />
+                    </button>
+                    <button
+                      onClick={() => move(idx, 1)}
+                      disabled={idx === list.length - 1 || isLocked}
+                      className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Descendre"
+                    >
+                      <ArrowDown size={14} />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
 
           <div className="mt-4 bg-violet-50/60 border border-violet-100 rounded-xl p-3 text-[12px] text-gray-700">
-            <b>Note :</b> les garde-fous RMS restent toujours en priorité 1 — ils ne peuvent pas être déplacés.
+            <b>Note :</b> glissez-déposez les règles pour les réordonner ou utilisez les flèches.
+            Les garde-fous RMS restent toujours en priorité 1 et ne peuvent pas être déplacés.
           </div>
         </div>
 
