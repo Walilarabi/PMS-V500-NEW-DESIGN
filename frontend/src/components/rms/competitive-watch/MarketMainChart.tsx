@@ -20,7 +20,7 @@ import { getDemandColor } from '../../../lib/rms/marketDemandRules';
 import { CHART_COLORS, DEMAND_BANDS } from '../../../lib/rms/chartColors';
 import { ChartLegend } from './ChartLegend';
 import { MarketHoverTooltip } from './MarketHoverTooltip';
-import { MarketDayFloatingPanel, type MarketDay } from './MarketDayFloatingPanel';
+import { MarketDayDecisionModal, type MarketDay } from './MarketDayDecisionModal';
 
 type MetricMode = 'price' | 'demand';
 
@@ -43,9 +43,8 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
   const [mode, setMode] = useState<MetricMode>('price');
   const { visibleMarketMonth, compsetHotels } = useCompetitiveWatchData();
 
-  // Panneau flottant ancré au clic
-  const [floatingDay, setFloatingDay] = useState<MarketDay | null>(null);
-  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  // Modale décision RM ouverte au clic
+  const [modalDay, setModalDay] = useState<MarketDay | null>(null);
 
   // Enrichissement contextuel des barres : delta J-1 / J-7, min/max, event
   const data = useMemo(
@@ -135,27 +134,19 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
               barCategoryGap="22%"
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               onClick={(e: any) => {
-                const lbl = e?.activePayload?.[0]?.payload?.label;
-                if (lbl && onSelectDay) onSelectDay(lbl);
-                // Ouvre le panneau flottant ancré sur la position du clic
                 const payload = e?.activePayload?.[0]?.payload;
-                if (payload) {
-                  // Coordonnées du clic dans le viewport (e.chartX/Y sont relatifs au chart)
-                  const nativeEvt = (e as { nativeEvent?: MouseEvent }).nativeEvent;
-                  const x = nativeEvt?.clientX ?? window.innerWidth / 2;
-                  const y = nativeEvt?.clientY ?? window.innerHeight / 2;
-                  setFloatingDay({
-                    label: payload.label,
-                    date: payload.date,
-                    demand: payload.demand,
-                    ourPrice: payload.ourPrice,
-                    median: payload.median,
-                    mean: payload.mean,
-                    q25: payload.q25,
-                    q75: payload.q75,
-                  });
-                  setAnchor({ x, y });
-                }
+                if (!payload) return;
+                if (onSelectDay) onSelectDay(payload.label);
+                setModalDay({
+                  label: payload.label,
+                  date: payload.date,
+                  demand: payload.demand,
+                  ourPrice: payload.ourPrice,
+                  median: payload.median,
+                  mean: payload.mean,
+                  q25: payload.q25,
+                  q75: payload.q75,
+                });
               }}
             >
               <defs>
@@ -276,12 +267,11 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
         </span>
       </div>
 
-      {/* Panneau flottant — analyse + actions au clic sur une date */}
-      <MarketDayFloatingPanel
-        day={floatingDay}
+      {/* Modale décision RM — compset complet + recommandation + actions */}
+      <MarketDayDecisionModal
+        day={modalDay}
         compsetHotels={compsetHotels}
-        anchor={anchor}
-        onClose={() => { setFloatingDay(null); setAnchor(null); }}
+        onClose={() => setModalDay(null)}
       />
     </motion.section>
   );
