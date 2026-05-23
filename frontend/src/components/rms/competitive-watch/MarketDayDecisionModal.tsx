@@ -87,7 +87,11 @@ function buildCompsetPrices(
 export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
   day, compsetHotels, onClose,
 }) => {
-  const [refusalMode, setRefusalMode] = useState(false);
+  // Mode formulaire : 'reject' (Refuser) ou 'maintain' (Maintenir).
+  // Les deux modes partagent le même formulaire (tarif manuel + 7 motifs +
+  // commentaire + impact estimé) afin que la décision « Maintenir » soit
+  // tout autant explicable et exploitable pour l'apprentissage IA.
+  const [formMode, setFormMode] = useState<'reject' | 'maintain' | null>(null);
   const [reasonCode, setReasonCode] = useState<ExtendedReasonCode | null>(null);
   const [manualPrice, setManualPrice] = useState<string>('');
   const [comment, setComment] = useState('');
@@ -96,7 +100,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
   // Reset state quand le jour change
   useEffect(() => {
     if (!day) return;
-    setRefusalMode(false);
+    setFormMode(null);
     setReasonCode(null);
     setManualPrice('');
     setComment('');
@@ -178,31 +182,35 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
     setLastFeedback(e);
     setTimeout(onClose, 700);
   };
-  const handleMaintain = () => {
-    const e = recommendationFeedback.log({
-      date: day.date, action: 'maintain', context: { ...ctx, recommendedPrice: day.ourPrice },
-    });
-    setLastFeedback(e);
-    setTimeout(onClose, 700);
-  };
   const handleRefuse = () => {
-    setRefusalMode(true);
-    setManualPrice(String(day.ourPrice)); // pré-remplit avec le tarif actuel
+    setFormMode('reject');
+    setManualPrice(String(day.ourPrice));
+  };
+  const handleMaintain = () => {
+    setFormMode('maintain');
+    // En mode maintien, on pré-remplit avec le tarif actuel — c'est ce que
+    // le RM veut garder. Il peut l'ajuster légèrement si besoin.
+    setManualPrice(String(day.ourPrice));
   };
 
-  const submitRefusal = () => {
-    if (!reasonCode) return;
+  const submitForm = () => {
+    if (!formMode || !reasonCode) return;
     const reasonMeta = REJECTION_REASONS_VEILLE.find((r) => r.code === reasonCode);
     const e = recommendationFeedback.log({
       date: day.date,
-      action: 'reject',
+      action: formMode,
       reasonCode: reasonMeta?.mapTo,
       reasonLabel: reasonMeta?.label,
       comment: [
         comment.trim(),
-        manualPrice ? `Tarif manuel : ${manualPrice}€` : '',
+        manualPrice ? `Tarif ${formMode === 'maintain' ? 'maintenu' : 'manuel'} : ${manualPrice}€` : '',
       ].filter(Boolean).join(' · '),
-      context: { ...ctx, recommendedPrice: manualPrice ? Number(manualPrice) : recommendedPrice },
+      context: {
+        ...ctx,
+        recommendedPrice: manualPrice
+          ? Number(manualPrice)
+          : (formMode === 'maintain' ? day.ourPrice : recommendedPrice),
+      },
     });
     setLastFeedback(e);
     setTimeout(onClose, 800);
@@ -253,7 +261,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
 
           {/* Body scrollable */}
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
-            {!refusalMode ? (
+            {!formMode ? (
               <>
                 {/* KPIs marché */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -414,15 +422,20 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
                 </section>
               </>
             ) : (
-              /* MODE REFUS — formulaire de justification */
+              /* MODE REFUS ou MAINTIEN — même formulaire de justification */
               <section>
                 <header className="flex items-start gap-3 mb-4">
-                  <div className="p-2 rounded-xl bg-rose-100 text-rose-700 shrink-0">
-                    <AlertTriangle size={14} />
+                  <div className={cn(
+                    'p-2 rounded-xl shrink-0',
+                    formMode === 'reject' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700',
+                  )}>
+                    {formMode === 'reject' ? <AlertTriangle size={14} /> : <Equal size={14} />}
                   </div>
                   <div>
                     <h4 className="text-[14px] font-bold text-slate-900">
-                      Pourquoi refusez-vous cette recommandation ?
+                      {formMode === 'reject'
+                        ? 'Pourquoi refusez-vous cette recommandation ?'
+                        : 'Pourquoi maintenez-vous le tarif actuel ?'}
                     </h4>
                     <p className="text-[11.5px] text-slate-500 mt-0.5">
                       Votre retour alimente l'apprentissage du moteur RMS et améliore les futures recommandations.
@@ -430,7 +443,11 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
                   </div>
                 </header>
 
-                <Field label="Tarif souhaité (saisie manuelle)">
+                <Field label={
+                  formMode === 'reject'
+                    ? 'Tarif souhaité (saisie manuelle)'
+                    : 'Tarif maintenu (modifiable)'
+                }>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
@@ -445,7 +462,10 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
                   </div>
                 </Field>
 
-                <Field label="Raison principale du refus" className="mt-3">
+                <Field
+                  label={formMode === 'reject' ? 'Raison principale du refus' : 'Raison du maintien'}
+                  className="mt-3"
+                >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     {REJECTION_REASONS_VEILLE.map((r) => (
                       <button
@@ -472,7 +492,11 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
                       rows={3}
-                      placeholder="Précisez votre contexte (événement, contrainte, stratégie…)"
+                      placeholder={
+                        formMode === 'reject'
+                          ? 'Précisez votre contexte (événement, contrainte, stratégie…)'
+                          : 'Pourquoi conservez-vous ce tarif ? (politique, fidélité, contrat…)'
+                      }
                       className="w-full pl-9 pr-3 py-2 text-[12.5px] border border-slate-200 rounded-xl bg-white resize-none focus:outline-none focus:ring-2 focus:ring-violet-400/40"
                     />
                   </div>
@@ -492,26 +516,28 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
             )}
           </div>
 
-          {/* Footer actions (mode refus seulement) */}
-          {refusalMode && (
+          {/* Footer actions (mode formulaire — refus ou maintien) */}
+          {formMode && (
             <div className="flex items-center justify-between gap-2 px-6 py-3 border-t border-slate-100 bg-slate-50/50">
               <button
-                onClick={() => setRefusalMode(false)}
+                onClick={() => setFormMode(null)}
                 className="px-4 py-2 text-[13px] font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50"
               >
                 ← Retour
               </button>
               <button
-                onClick={submitRefusal}
+                onClick={submitForm}
                 disabled={!reasonCode}
                 className={cn(
-                  'px-5 py-2 text-[13px] font-bold rounded-xl shadow-sm',
-                  reasonCode
-                    ? 'text-white bg-rose-500 hover:bg-rose-600'
-                    : 'text-slate-400 bg-slate-100 cursor-not-allowed',
+                  'px-5 py-2 text-[13px] font-bold rounded-xl shadow-sm transition-colors',
+                  !reasonCode
+                    ? 'text-slate-400 bg-slate-100 cursor-not-allowed'
+                    : formMode === 'reject'
+                      ? 'text-white bg-rose-500 hover:bg-rose-600'
+                      : 'text-white bg-slate-600 hover:bg-slate-700',
                 )}
               >
-                Enregistrer le refus
+                {formMode === 'reject' ? 'Enregistrer le refus' : 'Enregistrer le maintien'}
               </button>
             </div>
           )}
