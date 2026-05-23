@@ -84,6 +84,11 @@ function normalizePage(page: string): PageId {
   return (LEGACY_REVENUE_ALIASES[page] ?? page) as PageId;
 }
 
+/** Détermine si une PageId appartient au module Paramètres. */
+function isSettingsPage(page: PageId): boolean {
+  return typeof page === 'string' && page.startsWith('settings');
+}
+
 function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.ReactNode {
   switch (page) {
     // ── FLOWDAY ───────────────────────────────────────────────────────────────
@@ -231,7 +236,7 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'settings_import_export':
     case 'settings_audit':
     case 'settings_backups':
-    default:                         return <SettingsView activePage={page} />;
+    default:                         return <SettingsView activePage={page} onNavigate={setActivePage} />;
   }
 }
 
@@ -267,12 +272,19 @@ export default function App() {
     <div className="h-screen flex flex-col overflow-hidden bg-[#F9FAFB]">
       <Topbar activePage={activePage} setActivePage={navigate} />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          activePage={activePage}
-          setActivePage={navigate}
-          isCollapsed={sidebarCollapsed}
-          setIsCollapsed={setSidebarCollapsed}
-        />
+        {/*
+          Le module Paramètres remplace la sidebar globale par sa propre
+          chrome interne (top-tabs horizontaux + sub-nav vertical) afin
+          d'éviter deux navigations concurrentes (cf. brief Control Center).
+        */}
+        {!isSettingsPage(activePage) && (
+          <Sidebar
+            activePage={activePage}
+            setActivePage={navigate}
+            isCollapsed={sidebarCollapsed}
+            setIsCollapsed={setSidebarCollapsed}
+          />
+        )}
         <main className="flex-1 overflow-hidden flex flex-col">
           {renderPage(activePage, navigate)}
         </main>

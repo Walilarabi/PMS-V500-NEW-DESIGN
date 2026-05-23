@@ -69,7 +69,7 @@ export const SettingsControlCenter: React.FC = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
-      <div className="px-6 pt-6 pb-10 space-y-5 mx-auto max-w-[1400px]">
+      <div className="px-6 pt-6 pb-10 space-y-5">
         {/* ─── Header cockpit ─────────────────────────────────────────── */}
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">

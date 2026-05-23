@@ -1,18 +1,20 @@
 import React from 'react';
 import type { PageId } from '@/src/types';
-import { SettingsModule } from '@/src/domains/settings/SettingsModule';
-import { SettingsControlCenter } from '@/src/pages/settings/SettingsControlCenter';
+import { SettingsLayout } from '@/src/pages/settings/SettingsLayout';
 
 interface SettingsViewProps {
   activePage?: PageId;
+  onNavigate: (page: PageId) => void;
 }
 
 /**
- * Routeur du module Paramètres :
- *   - 'settings' (vue d'ensemble) → Control Center (cockpit vivant)
- *   - 'settings_xxx' (sous-pages) → SettingsModule legacy avec catalogue
+ * SettingsView — point d'entrée du module Paramètres.
+ *
+ * Délègue à SettingsLayout qui fournit toute la chrome interne :
+ *   • barre horizontale des 10 domaines ;
+ *   • sub-nav verticale contextuelle ;
+ *   • contenu (Control Center ou détail catalogue).
  */
-export const SettingsView: React.FC<SettingsViewProps> = ({ activePage = 'settings' }) => {
-  if (activePage === 'settings') return <SettingsControlCenter />;
-  return <SettingsModule activePage={activePage} />;
-};
+export const SettingsView: React.FC<SettingsViewProps> = ({ activePage = 'settings', onNavigate }) => (
+  <SettingsLayout activePage={activePage} onNavigate={onNavigate} />
+);

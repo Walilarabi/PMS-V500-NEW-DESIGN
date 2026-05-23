@@ -136,7 +136,35 @@ export type PageId =
   | 'settings_rgpd'
   | 'settings_import_export'
   | 'settings_audit'
-  | 'settings_backups';
+  | 'settings_backups'
+  // ─── Sous-pages additionnelles du module Paramètres (Phase 2) ────────────
+  | 'settings_branding'
+  | 'settings_languages'
+  | 'settings_timezone'
+  | 'settings_contact'
+  | 'settings_legal_docs'
+  | 'settings_photos'
+  | 'settings_classification'
+  | 'settings_taxes_local'
+  | 'settings_compliance'
+  | 'settings_cancellation'
+  | 'settings_guarantees'
+  | 'settings_no_show'
+  | 'settings_email_templates'
+  | 'settings_pos'
+  | 'settings_locks'
+  | 'settings_kiosk'
+  | 'settings_payment_integ'
+  | 'settings_lighthouse_integ'
+  | 'settings_expedia_integ'
+  | 'settings_booking_integ'
+  | 'settings_webhooks'
+  | 'settings_public_api'
+  | 'settings_ai_rules'
+  | 'settings_ai_strategies'
+  | 'settings_ota_mapping'
+  | 'settings_ota_parity'
+  | 'settings_distribution_logs';
 
 export interface Reservation {
   id: string;
