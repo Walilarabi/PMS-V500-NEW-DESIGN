@@ -3,7 +3,7 @@
  * Carte premium clair avec valeur, label, sparkline / accent et icône optionnelle.
  */
 import React from 'react';
-import { LineChart, Line, ResponsiveContainer } from 'recharts';
+import { LineChart, Line } from 'recharts';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 
@@ -55,18 +55,16 @@ export const RuleKpiCard: React.FC<RuleKpiCardProps> = ({
         </div>
         {data && data.length > 1 && (
           <div className="w-[100px] h-10 shrink-0 opacity-90">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data}>
-                <Line
-                  type="monotone"
-                  dataKey={TINY_DATA_KEY}
-                  stroke={trendColor}
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <LineChart data={data} width={100} height={40}>
+              <Line
+                type="monotone"
+                dataKey={TINY_DATA_KEY}
+                stroke={trendColor}
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
           </div>
         )}
       </div>

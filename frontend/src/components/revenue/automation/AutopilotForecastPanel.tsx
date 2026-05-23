@@ -88,11 +88,11 @@ export const AutopilotForecastPanel: React.FC<AutopilotForecastPanelProps> = ({
   daysAhead = 30,
   defaultBasePrice = 150,
 }) => {
-  // Re-render quand les engines bougent (toggle, hydrate, etc.)
+  // Re-render quand les engines bougent — snapshot stable via version().
   useSyncExternalStore(
     (cb) => tacticalRulesEngine.subscribe(cb),
-    () => tacticalRulesEngine.all(),
-    () => tacticalRulesEngine.all(),
+    () => tacticalRulesEngine.version(),
+    () => tacticalRulesEngine.version(),
   );
 
   const [autopilot, setAutopilot] = useState(false);

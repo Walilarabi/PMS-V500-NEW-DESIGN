@@ -32,16 +32,17 @@ export const TacticalEngineWidget: React.FC<TacticalEngineWidgetProps> = ({
   onResult,
   className,
 }) => {
-  // Contexte courant (réactif aux events)
-  const rules = useSyncExternalStore(
+  // Snapshot stable via version() — pas de boucle infinie même quand
+  // l'évaluation déclenche des notifications sur d'autres stores.
+  const rulesVersion = useSyncExternalStore(
     (cb) => tacticalRulesEngine.subscribe(cb),
-    () => tacticalRulesEngine.all(),
-    () => tacticalRulesEngine.all(),
+    () => tacticalRulesEngine.version(),
+    () => tacticalRulesEngine.version(),
   );
 
   const ctx = useMemo<MarketContext>(
     () => ({ ...tacticalRulesEngine.getContext(), ...contextOverride }),
-    [rules, contextOverride],
+    [rulesVersion, contextOverride],
   );
 
   const [autopilot, setAutopilot] = useState(false);
@@ -66,12 +67,15 @@ export const TacticalEngineWidget: React.FC<TacticalEngineWidgetProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoEvaluate, ctx, autopilot, basePrice, previousPrice]);
 
-  // Last audit entries (5)
-  const audit = useSyncExternalStore(
+  // Snapshot stable : version() est un primitif, pas un array fraîchement créé.
+  // On lit ensuite les 5 derniers événements directement (référence stable car
+  // le store interne est remplacé immutablement à chaque log).
+  useSyncExternalStore(
     (cb) => rmsAuditLogger.subscribe(cb),
-    () => rmsAuditLogger.all().slice(0, 5),
-    () => rmsAuditLogger.all().slice(0, 5),
+    () => rmsAuditLogger.version(),
+    () => rmsAuditLogger.version(),
   );
+  const audit = rmsAuditLogger.all().slice(0, 5);
 
   return (
     <section className={cn(

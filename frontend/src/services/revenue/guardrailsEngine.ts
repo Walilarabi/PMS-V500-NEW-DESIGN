@@ -254,8 +254,12 @@ const HIERARCHY: GuardrailHierarchyLevel[] = [
 ];
 
 let store: Guardrail[] = SEED.map((g) => ({ ...g }));
+let version = 0;
 const listeners = new Set<(g: Guardrail[]) => void>();
-const notify = () => listeners.forEach((l) => l(store));
+const notify = () => {
+  version++;
+  listeners.forEach((l) => l(store));
+};
 
 // ─────────────────────────────────────────────────────────── Évaluation publique
 export interface PriceProposal {
@@ -438,4 +442,7 @@ export const guardrailsEngine = {
     listeners.add(listener);
     return () => listeners.delete(listener);
   },
+
+  /** Compteur référentiellement stable pour useSyncExternalStore. */
+  version(): number { return version; },
 };

@@ -9,9 +9,7 @@ import {
   Plus, ShieldCheck, Shield, AlertCircle, Calendar, TrendingDown,
   Search, LayoutGrid, Info,
 } from 'lucide-react';
-import {
-  PieChart, Pie, Cell, ResponsiveContainer,
-} from 'recharts';
+import { PieChart, Pie, Cell } from 'recharts';
 import { guardrailsEngine } from '@/src/services/revenue/guardrailsEngine';
 import type { Guardrail, GuardrailCategory, GuardrailsKpis } from '@/src/types/revenue/guardrails.types';
 import { RuleKpiCard } from './RuleKpiCard';
@@ -29,11 +27,12 @@ const CATEGORY_FILTERS: { id: 'all' | GuardrailCategory; label: string }[] = [
 ];
 
 function useGuardrails(): Guardrail[] {
-  return useSyncExternalStore(
+  useSyncExternalStore(
     (cb) => guardrailsEngine.subscribe(cb),
-    () => guardrailsEngine.all(),
-    () => guardrailsEngine.all(),
+    () => guardrailsEngine.version(),
+    () => guardrailsEngine.version(),
   );
+  return guardrailsEngine.all();
 }
 
 function tinyTrend(seed: number, len = 14, base = 12): number[] {
@@ -193,24 +192,23 @@ export const GuardrailsTab: React.FC = () => {
           <h4 className="text-[15px] font-bold text-gray-900 mb-4">Couverture globale</h4>
           <div className="flex items-center gap-4">
             <div className="relative w-40 h-40 shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={coverageData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={70}
-                    paddingAngle={2}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {coverageData.map((d) => (
-                      <Cell key={d.name} fill={d.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
+              <PieChart width={160} height={160}>
+                <Pie
+                  data={coverageData}
+                  cx={80}
+                  cy={80}
+                  innerRadius={50}
+                  outerRadius={70}
+                  paddingAngle={2}
+                  dataKey="value"
+                  stroke="none"
+                  isAnimationActive={false}
+                >
+                  {coverageData.map((d) => (
+                    <Cell key={d.name} fill={d.color} />
+                  ))}
+                </Pie>
+              </PieChart>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <div className="text-2xl font-bold text-gray-900">{kpis.globalCoverage}%</div>
                 <div className="text-[11px] text-gray-500">des dates<br />couvertes</div>

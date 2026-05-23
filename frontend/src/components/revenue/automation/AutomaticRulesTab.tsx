@@ -29,11 +29,12 @@ const CATEGORY_FILTERS: { id: 'all' | TacticalRuleCategory; label: string }[] = 
 ];
 
 function useRules(): TacticalRule[] {
-  return useSyncExternalStore(
+  useSyncExternalStore(
     (cb) => tacticalRulesEngine.subscribe(cb),
-    () => tacticalRulesEngine.all(),
-    () => tacticalRulesEngine.all(),
+    () => tacticalRulesEngine.version(),
+    () => tacticalRulesEngine.version(),
   );
+  return tacticalRulesEngine.all();
 }
 
 function tinyTrend(seed: number, len = 12, base = 50): number[] {

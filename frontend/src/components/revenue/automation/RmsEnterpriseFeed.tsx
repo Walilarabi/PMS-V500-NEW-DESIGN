@@ -46,11 +46,13 @@ export interface RmsEnterpriseFeedProps {
 }
 
 export const RmsEnterpriseFeed: React.FC<RmsEnterpriseFeedProps> = ({ limit = 10, className }) => {
-  const events = useSyncExternalStore(
+  // Snapshot stable : version() (entier) au lieu d'une array — évite la boucle.
+  useSyncExternalStore(
     (cb) => rmsAuditLogger.subscribe(cb),
-    () => rmsAuditLogger.all(),
-    () => rmsAuditLogger.all(),
+    () => rmsAuditLogger.version(),
+    () => rmsAuditLogger.version(),
   );
+  const events = rmsAuditLogger.all();
 
   // Force re-render pour la "fraîcheur" des timestamps
   const [, setTick] = useState(0);

@@ -18,22 +18,22 @@ import { ConflictResolverPanel } from './ConflictResolverPanel';
 import { ConflictDetailModal } from './ConflictDetailModal';
 import { cn } from '@/src/lib/utils';
 
+/**
+ * useSyncExternalStore avec un snapshot référentiellement stable : on
+ * retourne `version()` (entier incrémenté à chaque notify()). React voit
+ * un primitif identique tant que l'état n'a pas changé → pas de boucle.
+ */
 function usePriorityState(): { hierarchy: PriorityLevel[]; conflicts: Conflict[]; log: ResolutionLogEntry[]; kpis: PrioritiesKpis } {
-  const snapshot = useSyncExternalStore(
+  useSyncExternalStore(
     (cb) => priorityConflictEngine.subscribe(cb),
-    () => ({
-      h: priorityConflictEngine.hierarchy(),
-      c: priorityConflictEngine.conflicts(),
-      l: priorityConflictEngine.resolutionLog(),
-    }),
-    () => ({
-      h: priorityConflictEngine.hierarchy(),
-      c: priorityConflictEngine.conflicts(),
-      l: priorityConflictEngine.resolutionLog(),
-    }),
+    () => priorityConflictEngine.version(),
+    () => priorityConflictEngine.version(),
   );
-  const kpis = useMemo(() => priorityConflictEngine.kpis(), [snapshot]);
-  return { hierarchy: snapshot.h, conflicts: snapshot.c, log: snapshot.l, kpis };
+  const hierarchy = priorityConflictEngine.hierarchy();
+  const conflicts = priorityConflictEngine.conflicts();
+  const log = priorityConflictEngine.resolutionLog();
+  const kpis = useMemo(() => priorityConflictEngine.kpis(), [hierarchy, conflicts, log]);
+  return { hierarchy, conflicts, log, kpis };
 }
 
 function tinyTrend(seed: number, len = 14, base = 50): number[] {

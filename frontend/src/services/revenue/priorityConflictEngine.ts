@@ -175,8 +175,12 @@ const SEED_LOG: ResolutionLogEntry[] = [
 let hierarchy: PriorityLevel[] = DEFAULT_HIERARCHY.map((l) => ({ ...l }));
 let conflicts: Conflict[] = SEED_CONFLICTS.map((c) => ({ ...c }));
 let resolutionLog: ResolutionLogEntry[] = SEED_LOG.map((l) => ({ ...l }));
+let version = 0;
 const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((l) => l());
+const notify = () => {
+  version++;
+  listeners.forEach((l) => l());
+};
 
 export const priorityConflictEngine = {
   hierarchy(): PriorityLevel[] { return hierarchy; },
@@ -272,6 +276,9 @@ export const priorityConflictEngine = {
     listeners.add(listener);
     return () => listeners.delete(listener);
   },
+
+  /** Compteur référentiellement stable pour useSyncExternalStore. */
+  version(): number { return version; },
 
   /**
    * Enregistre un conflit détecté au runtime (par `rmsRuleEvaluator` quand

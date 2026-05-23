@@ -32,9 +32,11 @@ export interface AuditEvent {
 
 const MAX_EVENTS = 500;
 let store: AuditEvent[] = [];
+let version = 0;
 const listeners = new Set<(events: AuditEvent[]) => void>();
 
 function notify() {
+  version++;
   listeners.forEach((l) => l(store));
 }
 
@@ -92,6 +94,9 @@ export const rmsAuditLogger = {
     listeners.add(listener);
     return () => listeners.delete(listener);
   },
+
+  /** Compteur référentiellement stable pour useSyncExternalStore. */
+  version(): number { return version; },
 
   seed(events: AuditEvent[]) {
     store = [...events, ...store].slice(0, MAX_EVENTS);

@@ -308,8 +308,12 @@ const SEED: TacticalRule[] = [
 ];
 
 let store: TacticalRule[] = SEED.map((r) => ({ ...r }));
+let version = 0;
 const listeners = new Set<(rules: TacticalRule[]) => void>();
-const notify = () => listeners.forEach((l) => l(store));
+const notify = () => {
+  version++;
+  listeners.forEach((l) => l(store));
+};
 
 // Contexte marché courant — mis à jour par le bus, lu par evaluate()
 let currentContext: MarketContext = {
@@ -479,6 +483,9 @@ export const tacticalRulesEngine = {
     listeners.add(listener);
     return () => listeners.delete(listener);
   },
+
+  /** Compteur référentiellement stable pour useSyncExternalStore. */
+  version(): number { return version; },
 
   getContext(): MarketContext { return currentContext; },
 
