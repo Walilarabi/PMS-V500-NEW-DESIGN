@@ -7,7 +7,7 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   Plus, ShieldCheck, Shield, AlertCircle, Calendar, TrendingDown,
-  Search, LayoutGrid, Info,
+  LayoutGrid, Info,
 } from 'lucide-react';
 import { PieChart, Pie, Cell } from 'recharts';
 import { guardrailsEngine } from '@/src/services/revenue/guardrailsEngine';
@@ -42,7 +42,6 @@ function tinyTrend(seed: number, len = 14, base = 12): number[] {
 export const GuardrailsTab: React.FC = () => {
   const guardrails = useGuardrails();
   const [filter, setFilter] = useState<'all' | GuardrailCategory>('all');
-  const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Guardrail | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [kpis, setKpis] = useState<GuardrailsKpis>(() => guardrailsEngine.kpis());
@@ -51,9 +50,7 @@ export const GuardrailsTab: React.FC = () => {
     setKpis(guardrailsEngine.kpis());
   }, [guardrails]);
 
-  const filtered = guardrails
-    .filter((g) => (filter === 'all' ? true : g.category === filter))
-    .filter((g) => (search ? g.name.toLowerCase().includes(search.toLowerCase()) : true));
+  const filtered = guardrails.filter((g) => (filter === 'all' ? true : g.category === filter));
 
   const allBlocks = useMemo(
     () =>
@@ -138,21 +135,10 @@ export const GuardrailsTab: React.FC = () => {
             );
           })}
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher…"
-              className="pl-8 pr-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30 w-[180px]"
-            />
-          </div>
-          <button className="flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-xl bg-white border border-[#E5E7EB] text-gray-600 hover:bg-gray-50">
-            <LayoutGrid size={14} />
-            Filtres
-          </button>
-        </div>
+        <button className="flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-xl bg-white border border-[#E5E7EB] text-gray-600 hover:bg-gray-50">
+          <LayoutGrid size={14} />
+          Filtres
+        </button>
       </div>
 
       {/* Tableau */}

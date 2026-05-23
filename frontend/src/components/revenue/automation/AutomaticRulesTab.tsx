@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import {
-  Plus, Power, TrendingUp, Sparkles, Shield, Brain, Info, Search, Columns3, Filter,
+  Plus, Power, TrendingUp, Sparkles, Shield, Brain, Info, Columns3, Filter,
 } from 'lucide-react';
 import { tacticalRulesEngine } from '@/src/services/revenue/tacticalRulesEngine';
 import type {
@@ -44,7 +44,6 @@ function tinyTrend(seed: number, len = 12, base = 50): number[] {
 export const AutomaticRulesTab: React.FC = () => {
   const rules = useRules();
   const [filter, setFilter] = useState<'all' | TacticalRuleCategory>('all');
-  const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<TacticalRule | null>(null);
   const [kpis, setKpis] = useState<TacticalRulesKpis>(() => tacticalRulesEngine.kpis());
 
@@ -52,9 +51,7 @@ export const AutomaticRulesTab: React.FC = () => {
     setKpis(tacticalRulesEngine.kpis());
   }, [rules]);
 
-  const filtered = rules
-    .filter((r) => (filter === 'all' ? true : r.category === filter))
-    .filter((r) => (search ? r.name.toLowerCase().includes(search.toLowerCase()) : true));
+  const filtered = rules.filter((r) => (filter === 'all' ? true : r.category === filter));
 
   return (
     <div className="space-y-6">
@@ -134,15 +131,6 @@ export const AutomaticRulesTab: React.FC = () => {
           })}
         </div>
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher…"
-              className="pl-8 pr-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30 w-[180px]"
-            />
-          </div>
           <button className="flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-xl bg-white border border-[#E5E7EB] text-gray-600 hover:bg-gray-50">
             <Columns3 size={14} />
             Colonnes

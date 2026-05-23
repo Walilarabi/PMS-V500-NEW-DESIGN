@@ -4,11 +4,14 @@
 import React, { useMemo, useState } from 'react';
 import {
   Shield, Zap, TrendingDown, Crosshair, Calendar, Clock, PieChart, AlertTriangle, Percent, Activity,
-  Edit2, MoreHorizontal, BarChart3,
+  Edit2, MoreHorizontal, BarChart3, Search,
 } from 'lucide-react';
 import type { TacticalRule, TacticalRuleCategory, TacticalRuleId } from '@/src/types/revenue/tacticalRules.types';
 import { tacticalRulesEngine } from '@/src/services/revenue/tacticalRulesEngine';
 import { cn } from '@/src/lib/utils';
+import { useDataTable } from './useDataTable';
+import { SortableHeader } from './SortableHeader';
+import { TablePagination } from './TablePagination';
 
 const CATEGORY_LABEL: Record<TacticalRuleCategory, string> = {
   demand: 'Demande',
@@ -60,7 +63,22 @@ export interface RuleTableProps {
 export const RuleTable: React.FC<RuleTableProps> = ({ rules, onOpenDetail }) => {
   const [openMenuId, setOpenMenuId] = useState<TacticalRuleId | null>(null);
 
-  const sorted = useMemo(() => [...rules].sort((a, b) => a.priority - b.priority), [rules]);
+  const table = useDataTable<TacticalRule>(rules, {
+    pageSize: 10,
+    searchFields: [
+      (r) => r.name,
+      (r) => r.description,
+      (r) => r.triggers.map((t) => t.label).join(' '),
+      (r) => r.actions.map((a) => a.label).join(' '),
+      (r) => r.category,
+    ],
+  });
+
+  // Tri par défaut : priorité ascendante
+  const visible = useMemo(() => {
+    if (table.sortKey) return table.visible;
+    return [...table.visible].sort((a, b) => a.priority - b.priority);
+  }, [table.visible, table.sortKey]);
 
   const handleToggle = (rule: TacticalRule) => {
     tacticalRulesEngine.setStatus(rule.id, rule.status === 'active' ? 'paused' : 'active');
@@ -68,24 +86,99 @@ export const RuleTable: React.FC<RuleTableProps> = ({ rules, onOpenDetail }) => 
 
   return (
     <div className="bg-white rounded-2xl border border-[#F3F4F6] shadow-[0_2px_8px_rgba(0,0,0,0.03)] overflow-hidden">
+      {/* Barre recherche locale au tableau */}
+      <div className="px-4 py-3 border-b border-[#F3F4F6] flex items-center gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={table.search}
+            onChange={(e) => table.setSearch(e.target.value)}
+            placeholder="Rechercher dans les règles (nom, déclencheur, action…)"
+            className="w-full pl-8 pr-3 py-1.5 text-[13px] border border-[#E5E7EB] rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30"
+          />
+        </div>
+        <span className="text-[11px] text-gray-500">
+          {table.totalRows} règle{table.totalRows > 1 ? 's' : ''}
+        </span>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead className="bg-[#FAFAFB] text-[11px] uppercase tracking-wider text-gray-500 border-b border-[#F3F4F6]">
             <tr>
-              <th className="px-4 py-3 text-left font-semibold">Priorité</th>
-              <th className="px-4 py-3 text-left font-semibold">Règle</th>
-              <th className="px-4 py-3 text-left font-semibold">Type</th>
+              <th className="px-4 py-3 text-left">
+                <SortableHeader
+                  label="Priorité"
+                  active={table.sortKey === 'priority'}
+                  dir={table.sortDir}
+                  onClick={() => table.toggleSort('priority', (r) => r.priority)}
+                />
+              </th>
+              <th className="px-4 py-3 text-left">
+                <SortableHeader
+                  label="Règle"
+                  active={table.sortKey === 'name'}
+                  dir={table.sortDir}
+                  onClick={() => table.toggleSort('name', (r) => r.name)}
+                />
+              </th>
+              <th className="px-4 py-3 text-left">
+                <SortableHeader
+                  label="Type"
+                  active={table.sortKey === 'category'}
+                  dir={table.sortDir}
+                  onClick={() => table.toggleSort('category', (r) => r.category)}
+                />
+              </th>
               <th className="px-4 py-3 text-left font-semibold">Déclencheurs principaux</th>
               <th className="px-4 py-3 text-left font-semibold">Actions principales</th>
-              <th className="px-4 py-3 text-right font-semibold">Impact (30j)</th>
-              <th className="px-4 py-3 text-center font-semibold">Fréq.</th>
-              <th className="px-4 py-3 text-left font-semibold">Confiance IA</th>
-              <th className="px-4 py-3 text-center font-semibold">Statut</th>
+              <th className="px-4 py-3 text-right">
+                <SortableHeader
+                  label="Impact (30j)"
+                  active={table.sortKey === 'impact'}
+                  dir={table.sortDir}
+                  align="right"
+                  onClick={() => table.toggleSort('impact', (r) => r.revenueImpact30d)}
+                />
+              </th>
+              <th className="px-4 py-3 text-center">
+                <SortableHeader
+                  label="Fréq."
+                  active={table.sortKey === 'freq'}
+                  dir={table.sortDir}
+                  align="center"
+                  onClick={() => table.toggleSort('freq', (r) => r.triggersCount30d)}
+                />
+              </th>
+              <th className="px-4 py-3 text-left">
+                <SortableHeader
+                  label="Confiance IA"
+                  active={table.sortKey === 'ia'}
+                  dir={table.sortDir}
+                  onClick={() => table.toggleSort('ia', (r) => r.iaConfidence)}
+                />
+              </th>
+              <th className="px-4 py-3 text-center">
+                <SortableHeader
+                  label="Statut"
+                  active={table.sortKey === 'status'}
+                  dir={table.sortDir}
+                  align="center"
+                  onClick={() => table.toggleSort('status', (r) => r.status)}
+                />
+              </th>
               <th className="px-4 py-3 text-right font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map((rule) => {
+            {visible.length === 0 && (
+              <tr>
+                <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
+                  Aucune règle ne correspond à la recherche
+                </td>
+              </tr>
+            )}
+            {visible.map((rule) => {
               const Icon = RULE_ICON[rule.id];
               const gradient = PRIORITY_GRADIENT[rule.priority] ?? 'from-gray-500 to-gray-400';
               const active = rule.status === 'active';
@@ -230,6 +323,15 @@ export const RuleTable: React.FC<RuleTableProps> = ({ rules, onOpenDetail }) => 
           </tbody>
         </table>
       </div>
+
+      <TablePagination
+        page={table.page}
+        totalPages={table.totalPages}
+        totalRows={table.totalRows}
+        pageSize={table.pageSize}
+        onPageChange={table.setPage}
+        onPageSizeChange={table.setPageSize}
+      />
     </div>
   );
 };
