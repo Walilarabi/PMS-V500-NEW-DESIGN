@@ -184,14 +184,41 @@ export const RuleTable: React.FC<RuleTableProps> = ({ rules, onOpenDetail }) => 
                         </button>
                         {openMenuId === rule.id && (
                           <div
-                            className="absolute right-0 top-8 z-10 w-48 bg-white border border-[#F3F4F6] rounded-xl shadow-lg py-1 text-left"
+                            className="absolute right-0 top-8 z-10 w-52 bg-white border border-[#F3F4F6] rounded-xl shadow-lg py-1 text-left"
                             onMouseLeave={() => setOpenMenuId(null)}
                           >
-                            <MenuItem onClick={() => { onOpenDetail(rule); setOpenMenuId(null); }}>Voir le détail</MenuItem>
-                            <MenuItem onClick={() => { tacticalRulesEngine.setStatus(rule.id, 'simulation'); setOpenMenuId(null); }}>Simuler avant activation</MenuItem>
-                            <MenuItem onClick={() => setOpenMenuId(null)}>Dupliquer</MenuItem>
-                            <MenuItem onClick={() => setOpenMenuId(null)}>Exporter historique</MenuItem>
-                            <MenuItem onClick={() => setOpenMenuId(null)} tone="danger">Supprimer</MenuItem>
+                            <MenuItem onClick={() => { onOpenDetail(rule); setOpenMenuId(null); }}>
+                              Voir le détail
+                            </MenuItem>
+                            <MenuItem onClick={() => {
+                              tacticalRulesEngine.setStatus(rule.id, 'simulation');
+                              setOpenMenuId(null);
+                            }}>
+                              Simuler avant activation
+                            </MenuItem>
+                            <MenuItem onClick={() => {
+                              tacticalRulesEngine.duplicateRule(rule.id);
+                              setOpenMenuId(null);
+                            }}>
+                              Dupliquer
+                            </MenuItem>
+                            <MenuItem onClick={() => {
+                              exportRuleHistory(rule);
+                              setOpenMenuId(null);
+                            }}>
+                              Exporter historique CSV
+                            </MenuItem>
+                            <MenuItem
+                              onClick={() => {
+                                if (window.confirm(`Supprimer la règle « ${rule.name} » ?`)) {
+                                  tacticalRulesEngine.removeRule(rule.id);
+                                }
+                                setOpenMenuId(null);
+                              }}
+                              tone="danger"
+                            >
+                              Supprimer
+                            </MenuItem>
                           </div>
                         )}
                       </div>
@@ -206,6 +233,22 @@ export const RuleTable: React.FC<RuleTableProps> = ({ rules, onOpenDetail }) => 
     </div>
   );
 };
+
+function exportRuleHistory(rule: TacticalRule) {
+  const lines = [
+    ['Date', 'Déclencheur', 'Action', 'Résultat', 'Impact (€)', 'Explication'].join(','),
+    ...rule.history.map((h) =>
+      [h.date, h.trigger, h.action, h.outcome, h.revenueImpact, `"${h.explanation.replace(/"/g, '""')}"`].join(','),
+    ),
+  ].join('\n');
+  const blob = new Blob([lines], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `historique_${rule.id}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const MenuItem: React.FC<{ onClick: () => void; children: React.ReactNode; tone?: 'danger' }> = ({ onClick, children, tone }) => (
   <button

@@ -18,10 +18,14 @@ import { AutomaticRulesTab } from './AutomaticRulesTab';
 import { GuardrailsTab } from './GuardrailsTab';
 import { PrioritiesConflictsTab } from './PrioritiesConflictsTab';
 import { GuardrailModal } from './GuardrailModal';
+import { NewRuleModal } from './NewRuleModal';
+import { ConfigurePrioritiesModal } from './ConfigurePrioritiesModal';
 
 export const TacticalRulesPage: React.FC = () => {
   const [tab, setTab] = useState<TacticalTab>('rules');
   const [newGuardrailOpen, setNewGuardrailOpen] = useState(false);
+  const [newRuleOpen, setNewRuleOpen] = useState(false);
+  const [configurePrioritiesOpen, setConfigurePrioritiesOpen] = useState(false);
 
   const headerByTab = {
     rules: {
@@ -29,7 +33,10 @@ export const TacticalRulesPage: React.FC = () => {
       title: 'Règles tactiques',
       subtitle: 'Règles automatiques complémentaires à la stratégie pour optimiser votre RevPAR',
       action: (
-        <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] text-white text-[13px] font-semibold hover:bg-[#7C3AED] shadow-sm shadow-[#8B5CF6]/20">
+        <button
+          onClick={() => setNewRuleOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] text-white text-[13px] font-semibold hover:bg-[#7C3AED] shadow-sm shadow-[#8B5CF6]/20"
+        >
           <Plus size={16} />
           Nouvelle règle
         </button>
@@ -54,7 +61,10 @@ export const TacticalRulesPage: React.FC = () => {
       title: 'Règles tactiques',
       subtitle: 'Gestion de la hiérarchie des priorités et résolution des conflits entre règles',
       action: (
-        <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-[#E5E7EB] text-gray-700 text-[13px] font-semibold hover:bg-gray-50 shadow-sm">
+        <button
+          onClick={() => setConfigurePrioritiesOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-[#E5E7EB] text-gray-700 text-[13px] font-semibold hover:bg-gray-50 shadow-sm"
+        >
           <Settings2 size={16} />
           Configurer les priorités
         </button>
@@ -85,6 +95,14 @@ export const TacticalRulesPage: React.FC = () => {
         guardrail={null}
         open={newGuardrailOpen}
         onClose={() => setNewGuardrailOpen(false)}
+      />
+      <NewRuleModal
+        open={newRuleOpen}
+        onClose={() => setNewRuleOpen(false)}
+      />
+      <ConfigurePrioritiesModal
+        open={configurePrioritiesOpen}
+        onClose={() => setConfigurePrioritiesOpen(false)}
       />
     </div>
   );
