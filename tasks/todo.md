@@ -53,7 +53,8 @@ Légende : [ ] à faire · [x] fait · [~] partiel · [!] bloqué
 - [x] #1 Persistance Supabase : migration 20260520_rms_enterprise.sql + service rmsEnterprisePersistence + hydrate dans 4 engines
 - [x] #2 AutopilotPage refondu : AutopilotForecastPanel = 30 jours via rmsRuleEvaluator + events Paris + push/rollback
 - [x] #3 Conflits dynamiques : priorityConflictEngine.recordRuntimeConflict + déduplication signature + emit conflict:detected
-- [x] #4 Tests Vitest : 48 tests / 7 fichiers passent (incluant Finance préexistants)
-- [ ] #5 Recherche/tri/pagination sur les tableaux (à faire)
-- [ ] #6 Drag&drop natif sur Configurer les priorités (à faire)
-- [ ] #7 i18n (à faire)
+- [x] #4 Tests Vitest : 48 tests / 7 fichiers (initial)
+- [x] #5 Recherche/tri/pagination via useDataTable + TablePagination + SortableHeader sur RuleTable et GuardrailTable
+- [x] #6 Drag&drop HTML5 dans ConfigurePrioritiesModal (garde-fous verrouillés)
+- [x] #7 i18n léger (fr/en) : useT hook, LocaleSwitcher, catalogues FR/EN structurés
+- **Final : 61 tests / 9 fichiers ✅**

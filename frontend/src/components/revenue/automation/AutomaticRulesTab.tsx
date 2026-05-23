@@ -18,14 +18,15 @@ import { RuleTable } from './RuleTable';
 import { RuleDetailModal } from './RuleDetailModal';
 import { TacticalEngineWidget } from './TacticalEngineWidget';
 import { cn } from '@/src/lib/utils';
+import { useT, type TKey } from '@/src/i18n';
 
-const CATEGORY_FILTERS: { id: 'all' | TacticalRuleCategory; label: string }[] = [
-  { id: 'all', label: 'Toutes les règles' },
-  { id: 'demand', label: 'Demande' },
-  { id: 'pricing', label: 'Tarification' },
-  { id: 'distribution', label: 'Distribution' },
-  { id: 'event', label: 'Événements' },
-  { id: 'protection', label: 'Protection' },
+const CATEGORY_FILTERS: { id: 'all' | TacticalRuleCategory; key: TKey }[] = [
+  { id: 'all', key: 'rules.categoryAll' },
+  { id: 'demand', key: 'rules.categoryDemand' },
+  { id: 'pricing', key: 'rules.categoryPricing' },
+  { id: 'distribution', key: 'rules.categoryDistribution' },
+  { id: 'event', key: 'rules.categoryEvent' },
+  { id: 'protection', key: 'rules.categoryProtection' },
 ];
 
 function useRules(): TacticalRule[] {
@@ -42,6 +43,7 @@ function tinyTrend(seed: number, len = 12, base = 50): number[] {
 }
 
 export const AutomaticRulesTab: React.FC = () => {
+  const t = useT();
   const rules = useRules();
   const [filter, setFilter] = useState<'all' | TacticalRuleCategory>('all');
   const [selected, setSelected] = useState<TacticalRule | null>(null);
@@ -58,50 +60,50 @@ export const AutomaticRulesTab: React.FC = () => {
       {/* KPI strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <RuleKpiCard
-          label="Règles actives"
+          label={t('rules.kpiActiveRules')}
           value={
             <span>
               {kpis.activeCount}
               <span className="text-gray-400 text-[18px] font-semibold"> / {kpis.totalCount}</span>
             </span>
           }
-          hint="Toutes les règles sont actives"
+          hint={t('rules.kpiAllActive')}
           icon={Power}
           iconColor="text-emerald-500"
         />
         <RuleKpiCard
-          label="Impact revenu (30j)"
+          label={t('rules.kpiRevenue30d')}
           value={`+${kpis.revenue30d.toLocaleString('fr-FR')}€`}
           hint={
-            <span className="text-emerald-600 font-medium">▲ +{kpis.revenueDelta}% vs sans règles</span>
+            <span className="text-emerald-600 font-medium">▲ +{kpis.revenueDelta}%</span>
           }
           trend={tinyTrend(1, 16, 45)}
           trendColor="#8B5CF6"
         />
         <RuleKpiCard
-          label="Actions automatiques (30j)"
+          label={t('rules.kpiAutomatedActions')}
           value={kpis.automatedActions30d}
           hint={
             <span>
-              <b className="text-emerald-600">{kpis.successfulActions}</b> réussies •{' '}
-              <b className="text-amber-600">{kpis.adjustedActions}</b> ajustées •{' '}
-              <b className="text-rose-600">{kpis.blockedActions}</b> bloquées
+              <b className="text-emerald-600">{kpis.successfulActions}</b> ·{' '}
+              <b className="text-amber-600">{kpis.adjustedActions}</b> ·{' '}
+              <b className="text-rose-600">{kpis.blockedActions}</b>
             </span>
           }
           trend={tinyTrend(3, 16, 60)}
           trendColor="#3B82F6"
         />
         <RuleKpiCard
-          label="Conflits détectés"
+          label={t('rules.kpiConflictsDetected')}
           value={kpis.conflictsDetected}
-          hint="Règles automatiquement"
+          hint={t('rules.kpiAutoResolved')}
           icon={Shield}
           iconColor="text-emerald-500"
         />
         <RuleKpiCard
-          label="IA — Confiance moyenne"
+          label={t('rules.kpiIaConfidence')}
           value={`${kpis.averageIaConfidence}%`}
-          hint={<span className="text-emerald-600 font-medium">Élevée</span>}
+          hint={<span className="text-emerald-600 font-medium">{t('rules.kpiHigh')}</span>}
           icon={Brain}
           iconColor="text-violet-500"
           trend={tinyTrend(5, 16, 70)}
@@ -125,7 +127,7 @@ export const AutomaticRulesTab: React.FC = () => {
                     : 'bg-white border border-[#E5E7EB] text-gray-600 hover:bg-gray-50',
                 )}
               >
-                {f.label}
+                {t(f.key)}
               </button>
             );
           })}
@@ -133,11 +135,11 @@ export const AutomaticRulesTab: React.FC = () => {
         <div className="flex items-center gap-2">
           <button className="flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-xl bg-white border border-[#E5E7EB] text-gray-600 hover:bg-gray-50">
             <Columns3 size={14} />
-            Colonnes
+            {t('common.columns')}
           </button>
           <button className="flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded-xl bg-white border border-[#E5E7EB] text-gray-600 hover:bg-gray-50">
             <Filter size={14} />
-            Filtres
+            {t('common.filters')}
           </button>
         </div>
       </div>
@@ -153,13 +155,11 @@ export const AutomaticRulesTab: React.FC = () => {
         <div className="flex items-start gap-3">
           <Info size={16} className="text-violet-600 mt-0.5 shrink-0" />
           <p className="text-[13px] text-gray-700 leading-relaxed">
-            Les règles sont appliquées par ordre de priorité (<b>1 = plus haute</b>). En cas de conflit,
-            la règle de priorité la plus élevée prévaut, sauf si une règle de niveau{' '}
-            <b>« Protection »</b> est activée.
+            {t('rules.explainPriority')}
           </p>
         </div>
         <a className="text-[13px] font-semibold text-[#8B5CF6] hover:underline whitespace-nowrap" href="#">
-          En savoir plus sur le moteur de règles ↗
+          {t('common.learnMore')} ↗
         </a>
       </div>
 

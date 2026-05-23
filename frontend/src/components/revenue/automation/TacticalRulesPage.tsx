@@ -24,6 +24,8 @@ import { tacticalRulesEngine } from '@/src/services/revenue/tacticalRulesEngine'
 import { guardrailsEngine } from '@/src/services/revenue/guardrailsEngine';
 import { priorityConflictEngine } from '@/src/services/revenue/priorityConflictEngine';
 import { rmsAuditLogger } from '@/src/services/revenue/rmsAuditLogger';
+import { useT } from '@/src/i18n';
+import { LocaleSwitcher } from '@/src/i18n/LocaleSwitcher';
 
 // Hydratation depuis Supabase une seule fois par session (non bloquant)
 let hydrated = false;
@@ -39,6 +41,7 @@ function hydrateOnce() {
 }
 
 export const TacticalRulesPage: React.FC = () => {
+  const t = useT();
   const [tab, setTab] = useState<TacticalTab>('rules');
   const [newGuardrailOpen, setNewGuardrailOpen] = useState(false);
   const [newRuleOpen, setNewRuleOpen] = useState(false);
@@ -49,44 +52,53 @@ export const TacticalRulesPage: React.FC = () => {
   const headerByTab = {
     rules: {
       icon: Cpu,
-      title: 'Règles tactiques',
-      subtitle: 'Règles automatiques complémentaires à la stratégie pour optimiser votre RevPAR',
+      title: t('rules.title'),
+      subtitle: t('rules.subtitleAutomatic'),
       action: (
-        <button
-          onClick={() => setNewRuleOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] text-white text-[13px] font-semibold hover:bg-[#7C3AED] shadow-sm shadow-[#8B5CF6]/20"
-        >
-          <Plus size={16} />
-          Nouvelle règle
-        </button>
+        <div className="flex items-center gap-2">
+          <LocaleSwitcher />
+          <button
+            onClick={() => setNewRuleOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] text-white text-[13px] font-semibold hover:bg-[#7C3AED] shadow-sm shadow-[#8B5CF6]/20"
+          >
+            <Plus size={16} />
+            {t('rules.newRule')}
+          </button>
+        </div>
       ),
     },
     guardrails: {
       icon: Shield,
-      title: 'Règles tactiques',
-      subtitle: 'Définissez les garde-fous qui protègent votre stratégie et sécurisent vos revenus',
+      title: t('rules.title'),
+      subtitle: t('rules.subtitleGuardrails'),
       action: (
-        <button
-          onClick={() => setNewGuardrailOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] text-white text-[13px] font-semibold hover:bg-[#7C3AED] shadow-sm shadow-[#8B5CF6]/20"
-        >
-          <Plus size={16} />
-          Nouveau garde-fou
-        </button>
+        <div className="flex items-center gap-2">
+          <LocaleSwitcher />
+          <button
+            onClick={() => setNewGuardrailOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#8B5CF6] text-white text-[13px] font-semibold hover:bg-[#7C3AED] shadow-sm shadow-[#8B5CF6]/20"
+          >
+            <Plus size={16} />
+            {t('rules.newGuardrail')}
+          </button>
+        </div>
       ),
     },
     priorities: {
       icon: Settings2,
-      title: 'Règles tactiques',
-      subtitle: 'Gestion de la hiérarchie des priorités et résolution des conflits entre règles',
+      title: t('rules.title'),
+      subtitle: t('rules.subtitlePriorities'),
       action: (
-        <button
-          onClick={() => setConfigurePrioritiesOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-[#E5E7EB] text-gray-700 text-[13px] font-semibold hover:bg-gray-50 shadow-sm"
-        >
-          <Settings2 size={16} />
-          Configurer les priorités
-        </button>
+        <div className="flex items-center gap-2">
+          <LocaleSwitcher />
+          <button
+            onClick={() => setConfigurePrioritiesOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-[#E5E7EB] text-gray-700 text-[13px] font-semibold hover:bg-gray-50 shadow-sm"
+          >
+            <Settings2 size={16} />
+            {t('rules.configurePriorities')}
+          </button>
+        </div>
       ),
     },
   } as const;
