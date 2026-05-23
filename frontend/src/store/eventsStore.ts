@@ -265,12 +265,15 @@ export const useEventsStore = create<EventsStore>()(
 
       applySearchResult: (r) => {
         const start = Date.now();
-        // Pas d'upsert automatique : on filtre les événements déjà connus et déjà
-        // refusés, le reste passe en validation utilisateur (modale dédiée).
+        // L'utilisateur garde le contrôle : on présente TOUS les événements
+        // détectés (sauf ceux explicitement refusés) dans la modale de
+        // validation. Les événements déjà intégrés seront simplement
+        // ré-affichés (badge "déjà intégré") et l'acceptation est idempotente.
         const state = get();
-        const knownIds = new Set(state.events.map((e) => e.id));
         const refusedIds = new Set(state.refusedEvents.map((e) => e.id));
-        const candidates = r.events.filter((e) => !knownIds.has(e.id) && !refusedIds.has(e.id));
+        const knownIds = new Set(state.events.map((e) => e.id));
+        const candidates = r.events.filter((e) => !refusedIds.has(e.id));
+        const newCount = candidates.filter((e) => !knownIds.has(e.id)).length;
         const extended = r as EventSearchResult & {
           perSource?: SyncLogEntry['perSource'];
         };
@@ -278,7 +281,7 @@ export const useEventsStore = create<EventsStore>()(
           at: now(),
           city: r.query.city,
           sourcesQueried: r.sourcesQueried,
-          pending: candidates.length,
+          pending: newCount,
           added: 0,
           updated: 0,
           duplicates: r.duplicatesMerged,

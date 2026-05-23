@@ -58,11 +58,17 @@ export const EventsView: React.FC = () => {
 
   const kpis = useMemo(() => getKpis(), [getKpis]);
 
-  // Ouvre automatiquement la modale de validation dès que la recherche
-  // remonte des candidats — utilisateur garde le contrôle.
+  const lastSearchAt = useEventsStore((s) => s.lastSearchAt);
+
+  // Ouvre la modale de validation après chaque recherche qui remonte des
+  // candidats — on s'abonne à lastSearchAt (et pas à la longueur du tableau)
+  // pour rouvrir la modale même si la recherche renvoie le même nombre
+  // d'événements qu'une recherche précédente.
   useEffect(() => {
-    if (pendingValidation.length > 0) setValidationOpen(true);
-  }, [pendingValidation.length]);
+    if (lastSearchAt && pendingValidation.length > 0) {
+      setValidationOpen(true);
+    }
+  }, [lastSearchAt, pendingValidation.length]);
 
   function handleExport(kind: 'excel' | 'pdf') {
     const events = getFilteredEvents();

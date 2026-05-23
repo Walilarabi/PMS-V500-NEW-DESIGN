@@ -59,8 +59,14 @@ interface EventValidationModalProps {
 export const EventValidationModal: React.FC<EventValidationModalProps> = ({
   open, candidates, onClose,
 }) => {
-  const { bulkUpsert, addRefusedEvents } = useEventsStore();
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(candidates.map((c) => c.id)));
+  const { bulkUpsert, addRefusedEvents, events: knownEvents } = useEventsStore();
+  const knownIds = useMemo(() => new Set(knownEvents.map((e) => e.id)), [knownEvents]);
+  // Par défaut, pré-cocher uniquement les NOUVEAUX événements ;
+  // les déjà-intégrés restent décochés (l'utilisateur peut les re-valider
+  // s'il le souhaite, mais ce n'est pas l'action attendue par défaut).
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(candidates.filter((c) => !knownIds.has(c.id)).map((c) => c.id)),
+  );
   const [query, setQuery] = useState('');
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [pendingRefusal, setPendingRefusal] = useState<{ ids: string[] } | null>(null);
@@ -69,12 +75,12 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
 
   React.useEffect(() => {
     if (open) {
-      setSelected(new Set(candidates.map((c) => c.id)));
+      setSelected(new Set(candidates.filter((c) => !knownIds.has(c.id)).map((c) => c.id)));
       setPendingRefusal(null);
       setPreviewId(null);
       setQuery('');
     }
-  }, [open, candidates]);
+  }, [open, candidates, knownIds]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -270,7 +276,19 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
                         <div className="text-[11px] text-slate-400 truncate max-w-[180px]">{e.venue || e.zone}</div>
                       </td>
                       <td className="px-3 py-2.5 text-slate-600 truncate max-w-[160px]">{e.primarySource}</td>
-                      <td className="px-3 py-2.5"><ImpactBadge level={e.impact.level} /></td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1.5">
+                          <ImpactBadge level={e.impact.level} />
+                          {knownIds.has(e.id) && (
+                            <span
+                              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200"
+                              title="Cet événement est déjà présent dans votre bibliothèque RMS."
+                            >
+                              Déjà intégré
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 py-2.5 text-right tabular-nums font-medium">{score}%</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 font-medium">+{e.impact.adr}%</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 font-medium">+{e.impact.occupancy}%</td>
@@ -312,7 +330,16 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
         <div className="px-6 py-3 border-t border-slate-100 bg-slate-50/40 flex items-center justify-between sticky bottom-0">
           <div className="text-[12px] text-slate-500">
             <strong className="text-slate-900">{selected.size}</strong> sélectionné{selected.size > 1 ? 's' : ''} ·
-            <span className="ml-1">{candidates.length} détectés au total</span>
+            <span className="ml-1">
+              {candidates.length} détectés
+              {(() => {
+                const fresh = candidates.filter((c) => !knownIds.has(c.id)).length;
+                const already = candidates.length - fresh;
+                if (already === 0) return ` (tous nouveaux)`;
+                if (fresh === 0) return ` (tous déjà intégrés)`;
+                return ` · ${fresh} nouveau${fresh > 1 ? 'x' : ''}, ${already} déjà intégré${already > 1 ? 's' : ''}`;
+              })()}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <button
