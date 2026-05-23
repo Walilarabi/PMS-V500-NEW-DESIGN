@@ -27,6 +27,7 @@ import {
   type RejectionReasonCode,
   type FeedbackEntry,
 } from '@/src/services/revenue/recommendationFeedback.service';
+import { centralPricingEngine } from '@/src/services/revenue/centralPricingEngine.service';
 
 export interface MarketDay {
   label: string;
@@ -177,7 +178,24 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
     strategy,
   };
 
+  /**
+   * Toutes les actions passent par le CENTRAL PRICING ENGINE — source de
+   * vérité unique. Le record est seedé si absent, puis muté via accept/
+   * reject/maintain. Les autres modules (RMS Tableau, Analyse RM,
+   * Recommandations RM, Calendrier) écoutent et reflètent la décision
+   * en temps réel via la version() du store.
+   */
+  const seedRecord = () => centralPricingEngine.getOrSeed(day.date, {
+    current: day.ourPrice,
+    suggested: recommendedPrice,
+    confidence: 85,
+    strategy,
+  });
+
   const handleAccept = () => {
+    seedRecord();
+    centralPricingEngine.accept(day.date, { source: 'veille' });
+    // Continue d'alimenter le feedback service pour l'apprentissage IA
     const e = recommendationFeedback.log({ date: day.date, action: 'accept', context: ctx });
     setLastFeedback(e);
     setTimeout(onClose, 700);
@@ -188,14 +206,31 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
   };
   const handleMaintain = () => {
     setFormMode('maintain');
-    // En mode maintien, on pré-remplit avec le tarif actuel — c'est ce que
-    // le RM veut garder. Il peut l'ajuster légèrement si besoin.
     setManualPrice(String(day.ourPrice));
   };
 
   const submitForm = () => {
     if (!formMode || !reasonCode) return;
     const reasonMeta = REJECTION_REASONS_VEILLE.find((r) => r.code === reasonCode);
+    const manual = manualPrice ? Number(manualPrice) : undefined;
+
+    seedRecord();
+    if (formMode === 'reject') {
+      centralPricingEngine.reject(day.date, {
+        source: 'veille',
+        manualPrice: manual,
+        reason: reasonMeta?.label,
+        comment: comment.trim() || undefined,
+      });
+    } else {
+      centralPricingEngine.maintain(day.date, {
+        source: 'veille',
+        reason: reasonMeta?.label,
+        comment: comment.trim() || undefined,
+      });
+    }
+
+    // Feedback IA (motifs, commentaires) — historique d'apprentissage
     const e = recommendationFeedback.log({
       date: day.date,
       action: formMode,
@@ -207,9 +242,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
       ].filter(Boolean).join(' · '),
       context: {
         ...ctx,
-        recommendedPrice: manualPrice
-          ? Number(manualPrice)
-          : (formMode === 'maintain' ? day.ourPrice : recommendedPrice),
+        recommendedPrice: manual ?? (formMode === 'maintain' ? day.ourPrice : recommendedPrice),
       },
     });
     setLastFeedback(e);

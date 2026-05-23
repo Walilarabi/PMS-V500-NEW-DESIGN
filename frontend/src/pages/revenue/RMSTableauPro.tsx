@@ -18,7 +18,7 @@
  *  - Tooltip enrichie sur la colonne Événement (Palier A point 5)
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useSyncExternalStore } from 'react';
 import {
   Calendar,
   TrendingUp,
@@ -64,6 +64,7 @@ import {
   type WeightingSeason,
   type WeightingStrategy,
 } from '../../services/revenue/sourceWeighting.service';
+import { centralPricingEngine } from '../../services/revenue/centralPricingEngine.service';
 import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 
@@ -346,6 +347,15 @@ export function RMSTableauPro() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [viewPeriod, setViewPeriod] = useState<ViewPeriod>('15days');
 
+  // Subscription au CENTRAL PRICING ENGINE — version() incrémentée à chaque
+  // accept/reject/maintain depuis n'importe quel module (Veille, Reco,
+  // Calendrier). Sert de signal d'invalidation du useEffect d'enrichissement.
+  const centralPricingEngineVersion = useSyncExternalStore(
+    (cb) => centralPricingEngine.subscribe(cb),
+    () => centralPricingEngine.version(),
+    () => centralPricingEngine.version(),
+  );
+
   // Date du jour = première colonne par défaut
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -522,6 +532,21 @@ export function RMSTableauPro() {
         channel: null,
       });
 
+      // Lecture du CENTRAL PRICING ENGINE — si une décision a déjà été prise
+      // ailleurs (Veille, Reco, Calendrier), on la rapatrie ici. Garantit
+      // qu'une recommandation acceptée dans un module apparaît partout.
+      const seeded = centralPricingEngine.getOrSeed(row.date, {
+        current: ourPrice,
+        suggested: reco.suggestedPrice,
+        confidence: reco.confidence,
+        strategy,
+      });
+      const validationStatusFromCentral: ValidationStatus | undefined =
+        seeded.status === 'accepted' ? 'Acceptée'
+        : seeded.status === 'rejected' ? 'Refusée'
+        : seeded.status === 'maintained' ? 'Maintenue'
+        : undefined;
+
       return {
         ...row,
         events, marketPressure,
@@ -532,7 +557,11 @@ export function RMSTableauPro() {
         recommendation: reco.recommendation,
         confidenceScore: reco.confidence,
         currentPrice: ourPrice,
-        suggestedPrice: reco.suggestedPrice,
+        // suggestedPrice du moteur, mais central peut avoir un override
+        suggestedPrice: seeded.suggestedPrice,
+        // Si une décision a été prise ailleurs, on récupère finalPrice + statut
+        finalPrice: seeded.finalPrice ?? row.finalPrice,
+        validationStatus: validationStatusFromCentral ?? row.validationStatus,
         weighting: reco.weighting,
         varVsYesterday: lhData?.varVsYesterday ?? null,
         varVs3Days: lhData?.varVs3Days ?? null,
@@ -548,6 +577,10 @@ export function RMSTableauPro() {
     inventoryOverrides,
     startDate,
     viewPeriod,
+    // version() du central pricing engine → réenrichit le tableau quand une
+    // décision est prise dans un autre module (Veille, Reco, Calendrier).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    centralPricingEngineVersion,
   ]);
 
  // Navigation dates
@@ -578,11 +611,24 @@ export function RMSTableauPro() {
     const row = rmsData.find(d => d.date === date);
     if (!row) return;
 
-    // CORRECTION LOGIQUE MÉTIER : Accepter = Final reprend le Suggéré tel quel.
-    // La pondération marché (NRF Lighthouse/Expedia) est DÉJÀ intégrée dans
-    // row.suggestedPrice via sourceWeighting au moment du calcul. Pas de
-    // double markup au push.
-    const pushedPrice = row.suggestedPrice;
+    // Source unique : passe par le CENTRAL PRICING ENGINE pour que la
+    // décision soit visible dans tous les modules (Veille, RMS Reco,
+    // Analyse, Calendrier). Pas de double markup — la pondération est
+    // déjà incluse dans row.suggestedPrice.
+    centralPricingEngine.getOrSeed(date, {
+      current: row.currentPrice,
+      suggested: row.suggestedPrice,
+      confidence: row.confidenceScore,
+      strategy: row.strategy,
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      planId: referencePlan?.planId ?? null,
+    });
+    const updated = centralPricingEngine.accept(date, {
+      source: 'rms-table',
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      planId: referencePlan?.planId ?? null,
+    });
+    const pushedPrice = updated?.finalPrice ?? row.suggestedPrice;
 
     setRmsData(prev => prev.map(d =>
       d.date === date
@@ -618,13 +664,27 @@ export function RMSTableauPro() {
 
   /**
    * Refuser : Final = tarif manuel saisi par l'utilisateur (fallback
-   * currentPrice si rien saisi). Logique métier corrigée — auparavant
-   * Final tombait toujours sur currentPrice, perdant l'intention du RM.
+   * currentPrice si rien saisi). Passe par CENTRAL PRICING ENGINE.
    */
   const handleReject = useCallback(async (date: string, manualPrice?: number) => {
     const row = rmsData.find(d => d.date === date);
     if (!row) return;
-    const finalPrice = manualPrice && manualPrice > 0 ? Math.round(manualPrice) : row.currentPrice;
+
+    centralPricingEngine.getOrSeed(date, {
+      current: row.currentPrice,
+      suggested: row.suggestedPrice,
+      confidence: row.confidenceScore,
+      strategy: row.strategy,
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      planId: referencePlan?.planId ?? null,
+    });
+    const updated = centralPricingEngine.reject(date, {
+      source: 'rms-table',
+      manualPrice,
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      planId: referencePlan?.planId ?? null,
+    });
+    const finalPrice = updated?.finalPrice ?? row.currentPrice;
 
     setRmsData(prev => prev.map(d =>
       d.date === date
@@ -660,6 +720,20 @@ export function RMSTableauPro() {
   const handleMaintain = useCallback(async (date: string) => {
     const row = rmsData.find(d => d.date === date);
     if (!row) return;
+
+    centralPricingEngine.getOrSeed(date, {
+      current: row.currentPrice,
+      suggested: row.suggestedPrice,
+      confidence: row.confidenceScore,
+      strategy: row.strategy,
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      planId: referencePlan?.planId ?? null,
+    });
+    centralPricingEngine.maintain(date, {
+      source: 'rms-table',
+      roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+      planId: referencePlan?.planId ?? null,
+    });
 
     setRmsData(prev => prev.map(d =>
       d.date === date
