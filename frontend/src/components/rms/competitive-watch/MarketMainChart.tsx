@@ -19,7 +19,8 @@ import { useCompetitiveWatchData } from '../../../lib/rms/useCompetitiveWatchDat
 import { getDemandColor } from '../../../lib/rms/marketDemandRules';
 import { CHART_COLORS, DEMAND_BANDS } from '../../../lib/rms/chartColors';
 import { ChartLegend } from './ChartLegend';
-import { CustomTooltip } from './CustomTooltip';
+import { MarketHoverTooltip } from './MarketHoverTooltip';
+import { MarketDayFloatingPanel, type MarketDay } from './MarketDayFloatingPanel';
 
 type MetricMode = 'price' | 'demand';
 
@@ -40,14 +41,27 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
   onSelectDay,
 }) => {
   const [mode, setMode] = useState<MetricMode>('price');
-  const { visibleMarketMonth } = useCompetitiveWatchData();
+  const { visibleMarketMonth, compsetHotels } = useCompetitiveWatchData();
 
+  // Panneau flottant ancré au clic
+  const [floatingDay, setFloatingDay] = useState<MarketDay | null>(null);
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+
+  // Enrichissement contextuel des barres : delta J-1 / J-7, min/max, event
   const data = useMemo(
     () =>
-      visibleMarketMonth.map((d) => ({
-        ...d,
-        iqrRange: [d.q25, d.q75] as [number, number],
-      })),
+      visibleMarketMonth.map((d, i, arr) => {
+        const prev1 = arr[i - 1];
+        const prev7 = arr[i - 7];
+        return {
+          ...d,
+          iqrRange: [d.q25, d.q75] as [number, number],
+          deltaD1: prev1 ? d.ourPrice - prev1.ourPrice : undefined,
+          deltaD7: prev7 ? d.ourPrice - prev7.ourPrice : undefined,
+          min: d.q25,
+          max: d.q75,
+        };
+      }),
     [visibleMarketMonth],
   );
 
@@ -123,6 +137,25 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
               onClick={(e: any) => {
                 const lbl = e?.activePayload?.[0]?.payload?.label;
                 if (lbl && onSelectDay) onSelectDay(lbl);
+                // Ouvre le panneau flottant ancré sur la position du clic
+                const payload = e?.activePayload?.[0]?.payload;
+                if (payload) {
+                  // Coordonnées du clic dans le viewport (e.chartX/Y sont relatifs au chart)
+                  const nativeEvt = (e as { nativeEvent?: MouseEvent }).nativeEvent;
+                  const x = nativeEvt?.clientX ?? window.innerWidth / 2;
+                  const y = nativeEvt?.clientY ?? window.innerHeight / 2;
+                  setFloatingDay({
+                    label: payload.label,
+                    date: payload.date,
+                    demand: payload.demand,
+                    ourPrice: payload.ourPrice,
+                    median: payload.median,
+                    mean: payload.mean,
+                    q25: payload.q25,
+                    q75: payload.q75,
+                  });
+                  setAnchor({ x, y });
+                }
               }}
             >
               <defs>
@@ -165,7 +198,7 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
               />
 
               <Tooltip
-                content={<CustomTooltip variant="market" />}
+                content={<MarketHoverTooltip />}
                 cursor={{ fill: 'rgba(148,163,184,0.10)' }}
               />
 
@@ -242,6 +275,14 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
           Jour sélectionné : <span className="font-semibold text-slate-600 dark:text-slate-300">{selectedLabel}</span>
         </span>
       </div>
+
+      {/* Panneau flottant — analyse + actions au clic sur une date */}
+      <MarketDayFloatingPanel
+        day={floatingDay}
+        compsetHotels={compsetHotels}
+        anchor={anchor}
+        onClose={() => { setFloatingDay(null); setAnchor(null); }}
+      />
     </motion.section>
   );
 };
