@@ -56,6 +56,8 @@ import { useSalonsStore } from '../../store/salonsStore';
 import type { SalonEvent } from '../../services/salons-parser.service';
 import { useOperationalData } from '../../hooks/useOperationalData';
 import { recordRmsDecision } from '../../services/rms-decisions.service';
+import { pricingPlanningSync } from '../../services/revenue/pricingPlanningSync.service';
+import { OverrideStatusBanner } from '../../components/revenue/OverrideStatusBanner';
 import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 
@@ -615,8 +617,10 @@ export function RMSTableauPro() {
   }, []);
 
   // ─── Override manuel de la disponibilité ───────────────────────────────
+  // Branche le service pricingPlanningSync : la valeur manuelle prime pendant
+  // 15 min, sync planning suspendue, badge affiché, action journalisée.
   const isAvailabilityOverridden = useCallback((date: string) => {
-    return inventoryOverrides.has(date);
+    return inventoryOverrides.has(date) || pricingPlanningSync.isOverrideActive(date);
   }, [inventoryOverrides]);
 
   const handleAvailabilityChange = useCallback((date: string, newValue: number) => {
@@ -628,11 +632,24 @@ export function RMSTableauPro() {
       return next;
     });
 
+    // Persistance + suspend sync 15 min + audit + emit événement
+    pricingPlanningSync.setOverride(date, newValue, 'Modification manuelle Pricing & Recommandations');
+
     if (referenceRoom) {
       const { updateInventory } = useRateCalendarStore.getState();
       updateInventory(referenceRoom.roomTypeId, date, newValue);
     }
   }, [referenceRoom]);
+
+  /** Réactive la sync auto pour une date donnée. */
+  const handleResumeSync = useCallback((date: string) => {
+    pricingPlanningSync.resumeSync(date);
+    setInventoryOverrides(prev => {
+      const next = new Map(prev);
+      next.delete(date);
+      return next;
+    });
+  }, []);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PROPAGATION
@@ -867,6 +884,11 @@ export function RMSTableauPro() {
           </button>
         </div>
       )}
+
+      {/* Bandeau override manuel disponibilité — affiché uniquement si actif */}
+      <div className="px-4 pt-2">
+        <OverrideStatusBanner />
+      </div>
 
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-auto">

@@ -26,14 +26,28 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import {
+  pricingPlanningSync,
+  computeOccupancyRate,
+  isRoomSellable,
+} from '../services/revenue/pricingPlanningSync.service';
+
+export type LeadTimeBucket = 'J-0/J-3' | 'J-4/J-7' | 'J-8/J-14' | 'J-15/J-30' | 'J+30';
 
 export interface OperationalMetrics {
-  occupancyRate: number;        // 0..100
-  availability: number;         // chambres restantes
-  leadTimeMajority: number;     // jours (médiane)
-  pickupRate: number;           // % variation 7j vs 7j-7j
-  roomsSold: number;            // brut
-  reservationsCount: number;    // nb résa couvrant cette date
+  occupancyRate: number;          // 0..100 (chambres vendues / chambres vendables)
+  sellableCapacity: number;       // capacité vendable (hors service / blocked exclus)
+  availability: number;           // chambres restantes (override-aware)
+  availabilityOverridden: boolean; // true si override manuel actif
+  leadTimeMajority: number;       // jours (médiane) — DEPRECATED, conservé pour compat
+  leadTimeBucket: LeadTimeBucket; // classe dominante (nouveau)
+  leadTimeDistribution: Record<LeadTimeBucket, number>; // nb résa par bucket
+  pickupRooms: number;            // pickup chambres (Δ chambres réservées 7j vs 7j-7j)
+  pickupRevenue: number;          // pickup revenu (€)
+  pickupNights: number;           // pickup nuitées
+  pickupRate: number;             // % variation 7j vs 7j-7j (DEPRECATED)
+  roomsSold: number;              // brut
+  reservationsCount: number;      // nb résa couvrant cette date
 }
 
 export interface UseOperationalDataResult {
@@ -52,6 +66,35 @@ interface ReservationRow {
   status: string | null;
   cancelled_at: string | null;
   no_show_at: string | null;
+  total_amount?: number | null; // pour pickup revenu
+}
+
+interface RoomRow {
+  id: string;
+  active: boolean;
+  status: string | null;
+}
+
+/** Classe de lead time métier (J-0/J-3, J-4/J-7, J-8/J-14, J-15/J-30, J+30). */
+function leadTimeBucket(days: number): LeadTimeBucket {
+  if (days <= 3) return 'J-0/J-3';
+  if (days <= 7) return 'J-4/J-7';
+  if (days <= 14) return 'J-8/J-14';
+  if (days <= 30) return 'J-15/J-30';
+  return 'J+30';
+}
+
+/** Retourne la classe avec le plus grand nombre de réservations. */
+function dominantBucket(distribution: Record<LeadTimeBucket, number>): LeadTimeBucket {
+  let best: LeadTimeBucket = 'J-0/J-3';
+  let bestCount = -1;
+  for (const k of Object.keys(distribution) as LeadTimeBucket[]) {
+    if (distribution[k] > bestCount) {
+      bestCount = distribution[k];
+      best = k;
+    }
+  }
+  return best;
 }
 
 // Statuts considérés "actifs" pour le comptage opérationnel
@@ -97,7 +140,8 @@ export function useOperationalData(
   refreshToken: number = 0,
 ): UseOperationalDataResult {
   const [reservations, setReservations] = useState<ReservationRow[]>([]);
-  const [totalCapacity, setTotalCapacity] = useState(0);
+  const [totalCapacity, setTotalCapacity] = useState(0);     // capacité brute (rooms actives)
+  const [sellableCapacity, setSellableCapacity] = useState(0); // hors service / blocked exclus
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -139,7 +183,7 @@ export function useOperationalData(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data: resData, error: resErr } = await (supabase as any)
           .from('reservations')
-          .select('id, check_in, check_out, created_at, status, cancelled_at, no_show_at')
+          .select('id, check_in, check_out, created_at, status, cancelled_at, no_show_at, total_amount')
           .eq('hotel_id', hotelId)
           .gte('check_out', lookbackISO)
           .lte('check_in', toDate)
@@ -152,22 +196,27 @@ export function useOperationalData(
           throw new Error(`Reservations fetch failed: ${resErr.message}`);
         }
 
-        // ── 3. Capacité totale (rooms actives) ───────────────────────────
+        // ── 3. Capacité totale + vendable (rooms actives, hors service / blocked exclus) ─
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { count: roomCount, error: roomErr } = await (supabase as any)
+        const { data: roomsData, error: roomErr } = await (supabase as any)
           .from('rooms')
-          .select('*', { count: 'exact', head: true })
+          .select('id, active, status')
           .eq('hotel_id', hotelId)
           .eq('active', true);
 
         if (roomErr) {
-          console.error('[useOperationalData] rooms count failed:', roomErr);
+          console.error('[useOperationalData] rooms fetch failed:', roomErr);
           throw new Error(`Rooms fetch failed: ${roomErr.message}`);
         }
 
+        const rooms = (roomsData ?? []) as RoomRow[];
+        const totalActive = rooms.length;
+        const sellable = rooms.reduce((n, r) => (isRoomSellable(r) ? n + 1 : n), 0);
+
         if (!cancelled) {
           setReservations((resData ?? []) as ReservationRow[]);
-          setTotalCapacity(roomCount ?? 0);
+          setTotalCapacity(totalActive);
+          setSellableCapacity(sellable);
           setLoading(false);
 
           // Logging utile en dev pour vérifier que les données arrivent
@@ -197,7 +246,7 @@ export function useOperationalData(
   // ── 4. Calcul des métriques par date ─────────────────────────────────
   const byDate = useMemo(() => {
     const result = new Map<string, OperationalMetrics>();
-    if (totalCapacity === 0) return result;
+    if (sellableCapacity === 0 && totalCapacity === 0) return result;
 
     const activeReservations = reservations.filter(isActiveReservation);
 
@@ -210,7 +259,10 @@ export function useOperationalData(
       }
     }
 
-    // Pour le pickup : créées récemment (≤ 7j) vs précédent (7..14j)
+    // Pour le pickup : segmenté par DATE DE SÉJOUR — on regarde les résa
+    // créées récemment (≤ 7j) qui couvrent cette nuit, vs résa créées 7-14j
+    // avant qui couvrent cette même nuit. Évite les confusions date_séjour
+    // vs date_création.
     const now = new Date();
     const cutoff7 = new Date(now); cutoff7.setDate(cutoff7.getDate() - 7);
     const cutoff14 = new Date(now); cutoff14.setDate(cutoff14.getDate() - 14);
@@ -225,40 +277,73 @@ export function useOperationalData(
 
       // ── Vendues / dispo / occupation ──
       const roomsSold = reservationsForDate.length;
-      const availability = Math.max(0, totalCapacity - roomsSold);
-      const occupancyRate = totalCapacity > 0
-        ? (roomsSold / totalCapacity) * 100
-        : 0;
+      const override = pricingPlanningSync.getOverride(dateISO);
+      const availabilityOverridden = override !== null;
+      const availability = availabilityOverridden
+        ? override!.availability
+        : Math.max(0, sellableCapacity - roomsSold);
 
-      // ── Lead time (médiane jours entre booking et check-in) ──
-      const leadTimes = reservationsForDate.map(r => {
+      // TO = vendues / capacité vendable (chambres hors service exclues)
+      const occupancyRate = computeOccupancyRate(
+        roomsSold,
+        sellableCapacity,
+        availabilityOverridden ? override!.availability : undefined,
+      );
+
+      // ── Lead time : distribution par bucket + classe dominante ──
+      const distribution: Record<LeadTimeBucket, number> = {
+        'J-0/J-3': 0, 'J-4/J-7': 0, 'J-8/J-14': 0, 'J-15/J-30': 0, 'J+30': 0,
+      };
+      const leadTimes = reservationsForDate.map((r) => {
         const created = new Date(r.created_at).getTime();
         const checkIn = new Date(r.check_in).getTime();
-        const days = (checkIn - created) / 86_400_000;
-        return Math.max(0, Math.round(days));
+        const days = Math.max(0, Math.round((checkIn - created) / 86_400_000));
+        distribution[leadTimeBucket(days)]++;
+        return days;
       });
       const leadTimeMajority = leadTimes.length > 0 ? Math.round(median(leadTimes)) : 0;
+      const leadTimeBucketDominant = leadTimes.length > 0
+        ? dominantBucket(distribution)
+        : 'J-0/J-3';
 
-      // ── Pickup : variation 7j vs 7-14j ──
-      const created7d = reservationsForDate.filter(r => {
+      // ── Pickup chambres : nb résa créées 7j vs 7-14j (couvrant cette date) ──
+      // On exclut les annulations via le filtre isActiveReservation déjà appliqué.
+      const created7d = reservationsForDate.filter((r) => {
         const c = new Date(r.created_at);
         return c >= cutoff7 && c <= now;
-      }).length;
-      const createdPrev7d = reservationsForDate.filter(r => {
+      });
+      const createdPrev7d = reservationsForDate.filter((r) => {
         const c = new Date(r.created_at);
         return c >= cutoff14 && c < cutoff7;
-      }).length;
+      });
+
+      const pickupRooms = created7d.length - createdPrev7d.length;
+      const sumRevenue = (rows: ReservationRow[]) =>
+        rows.reduce((s, r) => s + (Number(r.total_amount) || 0), 0);
+      const pickupRevenue = sumRevenue(created7d) - sumRevenue(createdPrev7d);
+      // Pickup nuitées = nb total de nuits ajoutées (chaque résa peut compter
+      // pour plusieurs nuits, mais ici on travaille par date donc 1 résa = 1 nuit)
+      const pickupNights = pickupRooms;
+
+      // Compat : pourcentage de variation (DEPRECATED)
       let pickupRate: number;
-      if (createdPrev7d === 0) {
-        pickupRate = created7d > 0 ? 100 : 0;
+      if (createdPrev7d.length === 0) {
+        pickupRate = created7d.length > 0 ? 100 : 0;
       } else {
-        pickupRate = ((created7d - createdPrev7d) / createdPrev7d) * 100;
+        pickupRate = ((created7d.length - createdPrev7d.length) / createdPrev7d.length) * 100;
       }
 
       result.set(dateISO, {
         occupancyRate,
+        sellableCapacity,
         availability,
+        availabilityOverridden,
         leadTimeMajority,
+        leadTimeBucket: leadTimeBucketDominant,
+        leadTimeDistribution: distribution,
+        pickupRooms,
+        pickupRevenue,
+        pickupNights,
         pickupRate,
         roomsSold,
         reservationsCount: reservationsForDate.length,
@@ -268,7 +353,9 @@ export function useOperationalData(
     }
 
     return result;
-  }, [reservations, totalCapacity, fromDate, toDate]);
+    // version() de pricingPlanningSync est inclus pour relire les overrides
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservations, totalCapacity, sellableCapacity, fromDate, toDate, pricingPlanningSync.version()]);
 
   return {
     byDate,
