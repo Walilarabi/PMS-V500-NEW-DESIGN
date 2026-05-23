@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { cn } from '@/src/lib/utils';
+import { RmsEnterpriseFeed } from '@/src/components/revenue/automation/RmsEnterpriseFeed';
 
 import {
   computeAlerts,
@@ -185,6 +186,11 @@ export const AlertsPage: React.FC = () => {
             </div>
           }
         />
+
+        {/* Flux moteur RMS Enterprise (règles tactiques + garde-fous + autopilote) */}
+        <div className="mb-5">
+          <RmsEnterpriseFeed limit={6} />
+        </div>
 
         {/* Synthèse */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">

@@ -8,6 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { History, CheckCircle2, XCircle, MinusCircle, AlertCircle, Loader2, Download, Search } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
+import { RmsEnterpriseFeed } from '@/src/components/revenue/automation/RmsEnterpriseFeed';
 import { fetchRmsDecisions, type RmsDecisionRecord } from '../../services/rms-decisions.service';
 import { subscribeRmsEvent } from '../../lib/rms/eventBus';
 
@@ -80,16 +81,17 @@ export const DecisionHistoryPage: React.FC = () => {
   }, [refresh]);
 
   // Invalidation temps réel : refetch dès qu'une décision est enregistrée ou
-  // rejetée ailleurs dans le Revenue (Tableau RMS, Autopilote, etc.).
+  // rejetée ailleurs dans le Revenue (Tableau RMS, Autopilote, moteur tactique).
   useEffect(() => {
-    const onAccepted = () => refresh();
-    const onRejected = () => refresh();
-    const unsubA = subscribeRmsEvent('rms-decision:accepted', onAccepted);
-    const unsubR = subscribeRmsEvent('rms-decision:rejected', onRejected);
-    return () => {
-      unsubA();
-      unsubR();
-    };
+    const onChange = () => refresh();
+    const unsubs = [
+      subscribeRmsEvent('rms-decision:accepted', onChange),
+      subscribeRmsEvent('rms-decision:rejected', onChange),
+      subscribeRmsEvent('autopilot:pushed', onChange),
+      subscribeRmsEvent('autopilot:rollback', onChange),
+      subscribeRmsEvent('tactical-rule:triggered', onChange),
+    ];
+    return () => unsubs.forEach((u) => u());
   }, [refresh]);
 
   const filtered = useMemo(() => {
@@ -187,6 +189,9 @@ export const DecisionHistoryPage: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-auto px-6 pb-6 space-y-5">
+
+        {/* Flux moteur RMS Enterprise (règles tactiques + autopilote + garde-fous) */}
+        <RmsEnterpriseFeed limit={5} />
 
         {/* Stats — cliquables pour pivoter le filtre */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

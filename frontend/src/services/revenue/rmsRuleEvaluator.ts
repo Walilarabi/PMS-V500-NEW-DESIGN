@@ -18,6 +18,7 @@ import { guardrailsEngine, type GuardrailVerdict } from './guardrailsEngine';
 import { priorityConflictEngine } from './priorityConflictEngine';
 import { rmsAuditLogger } from './rmsAuditLogger';
 import { emitRmsEvent } from '@/src/lib/rms/eventBus';
+import { pushToAllChannels } from '@/src/services/channel-manager.service';
 
 export interface FinalRecommendation {
   basePrice: number;
@@ -133,6 +134,13 @@ export const rmsRuleEvaluator = {
           appliedRules: applied.map((a) => a.ruleName),
         });
       } catch {/* bus */}
+      // Push effectif vers le Channel Manager (asynchrone, non bloquant)
+      pushToAllChannels({
+        date,
+        roomTypeId: 'STD',
+        planId: 'BAR',
+        price: finalPrice,
+      }).catch(() => {/* loggé par le service CM */});
     }
 
     try {
