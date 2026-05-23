@@ -58,6 +58,12 @@ import { useOperationalData } from '../../hooks/useOperationalData';
 import { recordRmsDecision } from '../../services/rms-decisions.service';
 import { pricingPlanningSync } from '../../services/revenue/pricingPlanningSync.service';
 import { OverrideStatusBanner } from '../../components/revenue/OverrideStatusBanner';
+import {
+  sourceWeighting,
+  seasonFromDate,
+  type WeightingSeason,
+  type WeightingStrategy,
+} from '../../services/revenue/sourceWeighting.service';
 import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 
@@ -122,6 +128,15 @@ interface DayRMSData {
   suggestedPrice: number;
   finalPrice: number | null;
 
+  /** Détail pondération marché appliquée (NRF compensation), pour UI + audit. */
+  weighting?: {
+    percent: number;
+    delta: number;
+    applied: boolean;
+    ruleId: string | null;
+    rawSuggested: number;  // suggéré AVANT pondération
+  };
+
   varVsYesterday?: number | null;
   varVs3Days?: number | null;
   varVs7Days?: number | null;
@@ -175,14 +190,25 @@ function calculateStrategy(data: Partial<DayRMSData>): Strategy {
   return 'Équilibrée';
 }
 
-function calculateRecommendation(data: Partial<DayRMSData>): {
+function calculateRecommendation(data: Partial<DayRMSData> & {
+  date?: string;
+  source?: 'lighthouse' | 'expedia' | 'mix' | 'direct';
+  roomTypeCode?: string | null;
+  channel?: string | null;
+}): {
   recommendation: Recommendation;
   suggestedPrice: number;
   confidence: number;
+  /** Détail pondération marché appliquée (NRF compensation). */
+  weighting: { percent: number; delta: number; applied: boolean; ruleId: string | null; rawSuggested: number };
 } {
   const {
     strategy = 'Équilibrée', currentPrice = 280, medianPrice = 300,
     occupancyRate = 50, marketPressure = 0, pickupRate = 0,
+    date,
+    source = 'lighthouse',
+    roomTypeCode = null,
+    channel = null,
   } = data;
 
   let recommendation: Recommendation = 'Maintenir';
@@ -234,10 +260,47 @@ function calculateRecommendation(data: Partial<DayRMSData>): {
     if (recommendation === 'Augmenter') priceAdjustment += 0.02;
   }
 
+  // ─── Calcul du prix suggéré ──────────────────────────────────────────────
+  // Ancienne formule : currentPrice * priceAdjustment → quand strat = Maintenir,
+  // priceAdjustment = 1 → suggestedPrice === currentPrice (bug métier).
+  //
+  // Nouvelle formule :
+  //   1. base = médiane marché si disponible et > 0, sinon currentPrice
+  //   2. base est PONDÉRÉE pour compenser les tarifs NRF Lighthouse/Expedia
+  //      (par défaut +5% paramétrable par source / canal / room / saison / stratégie)
+  //   3. on applique le multiplicateur de la stratégie
+  // → quand strat = Maintenir, suggestedPrice = base pondérée (≠ currentPrice
+  //   en général), ce qui rend la recommandation utile et différenciée.
+  const referencePrice = medianPrice > 0 ? medianPrice : currentPrice;
+  const season: WeightingSeason = date ? seasonFromDate(date) : 'mid';
+  const stratKey: WeightingStrategy =
+    strategy === 'Yield Max' || strategy === 'Haute demande' || strategy === 'Opportuniste'
+      ? 'aggressive'
+      : strategy === 'Défensive' || strategy === 'Last Minute' || strategy === 'Occupation faible'
+        ? 'defensive'
+        : 'balanced';
+
+  const weight = sourceWeighting.apply(referencePrice, {
+    source,
+    channel,
+    roomTypeCode,
+    season,
+    strategy: stratKey,
+  });
+  const weightedReference = weight.weightedPrice;
+  const rawSuggested = Math.round(weightedReference * priceAdjustment);
+
   return {
     recommendation,
-    suggestedPrice: Math.round(currentPrice * priceAdjustment),
+    suggestedPrice: rawSuggested,
     confidence: Math.min(100, confidence),
+    weighting: {
+      percent: weight.percent,
+      delta: weight.delta,
+      applied: weight.applied,
+      ruleId: weight.ruleId,
+      rawSuggested: Math.round(referencePrice * priceAdjustment), // sans pondération
+    },
   };
 }
 
@@ -448,7 +511,16 @@ export function RMSTableauPro() {
         currentPrice: ourPrice, medianPrice, minPrice, maxPrice,
       };
       const strategy = calculateStrategy(partial);
-      const reco = calculateRecommendation({ ...partial, strategy });
+      // La source par défaut est 'lighthouse' (= source principale de
+      // la médiane marché). Quand on aura un mix Expedia, on basculera.
+      const reco = calculateRecommendation({
+        ...partial,
+        strategy,
+        date: row.date,
+        source: lhData ? 'lighthouse' : 'direct',
+        roomTypeCode: null,
+        channel: null,
+      });
 
       return {
         ...row,
@@ -461,6 +533,7 @@ export function RMSTableauPro() {
         confidenceScore: reco.confidence,
         currentPrice: ourPrice,
         suggestedPrice: reco.suggestedPrice,
+        weighting: reco.weighting,
         varVsYesterday: lhData?.varVsYesterday ?? null,
         varVs3Days: lhData?.varVs3Days ?? null,
         varVs7Days: lhData?.varVs7Days ?? null,
@@ -505,8 +578,11 @@ export function RMSTableauPro() {
     const row = rmsData.find(d => d.date === date);
     if (!row) return;
 
-    const markup = rmsSettings?.pushMarkupPercent ?? 5;
-    const pushedPrice = applyMarkup(row.suggestedPrice, markup);
+    // CORRECTION LOGIQUE MÉTIER : Accepter = Final reprend le Suggéré tel quel.
+    // La pondération marché (NRF Lighthouse/Expedia) est DÉJÀ intégrée dans
+    // row.suggestedPrice via sourceWeighting au moment du calcul. Pas de
+    // double markup au push.
+    const pushedPrice = row.suggestedPrice;
 
     setRmsData(prev => prev.map(d =>
       d.date === date
@@ -540,19 +616,25 @@ export function RMSTableauPro() {
     });
   }, [rmsData, referenceRoom, referencePlan, rmsSettings]);
 
-  const handleReject = useCallback(async (date: string) => {
+  /**
+   * Refuser : Final = tarif manuel saisi par l'utilisateur (fallback
+   * currentPrice si rien saisi). Logique métier corrigée — auparavant
+   * Final tombait toujours sur currentPrice, perdant l'intention du RM.
+   */
+  const handleReject = useCallback(async (date: string, manualPrice?: number) => {
     const row = rmsData.find(d => d.date === date);
     if (!row) return;
+    const finalPrice = manualPrice && manualPrice > 0 ? Math.round(manualPrice) : row.currentPrice;
 
     setRmsData(prev => prev.map(d =>
       d.date === date
-        ? { ...d, finalPrice: d.currentPrice, validationStatus: 'Refusée' as ValidationStatus }
+        ? { ...d, finalPrice, validationStatus: 'Refusée' as ValidationStatus }
         : d
     ));
 
     syncRMSDecision({
       date,
-      finalPrice: row.currentPrice,
+      finalPrice,
       status: 'Refusée',
       source: 'table',
       roomTypeId: referenceRoom?.roomTypeId,
@@ -565,7 +647,7 @@ export function RMSTableauPro() {
       action: 'rejected',
       currentPrice: row.currentPrice,
       suggestedPrice: row.suggestedPrice,
-      finalPrice: row.currentPrice,
+      finalPrice,
       strategy: row.strategy,
       recommendation: row.recommendation,
       confidenceScore: row.confidenceScore,
@@ -1147,7 +1229,19 @@ function TableView({
                 </div>
               </td>
               <td className="px-3 py-2 border-r border-gray-200 text-right font-semibold">{row.currentPrice}€</td>
-              <td className="px-3 py-2 border-r border-gray-200 text-right font-bold text-violet-600">{row.suggestedPrice}€</td>
+              <td className="px-3 py-2 border-r border-gray-200 text-right">
+                <div className="flex items-center justify-end gap-1.5">
+                  <span className="font-bold text-violet-600">{row.suggestedPrice}€</span>
+                  {row.weighting?.applied && (
+                    <span
+                      className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 cursor-help"
+                      title={`Pondération marché : +${row.weighting.percent}% appliqué (NRF Lighthouse/Expedia). Tarif brut médiane : ${row.weighting.rawSuggested}€, pondéré : ${row.suggestedPrice}€`}
+                    >
+                      +{row.weighting.percent}%
+                    </span>
+                  )}
+                </div>
+              </td>
               <td className="px-3 py-2 border-r border-gray-200 text-right font-bold text-blue-700">
                 {row.finalPrice ? `${row.finalPrice}€` : '—'}
               </td>
