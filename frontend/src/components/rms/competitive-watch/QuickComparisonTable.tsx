@@ -8,8 +8,8 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
-import { QUICK_COMPARISON } from '../../../data/rms/mockCompetitiveWatchData';
 import type { ComparePeriodKey } from '../../../data/rms/mockCompetitiveWatchData';
+import { useCompetitiveWatchData } from '../../../lib/rms/useCompetitiveWatchData';
 
 interface DeltaCellProps {
   value: number;
@@ -36,7 +36,9 @@ export interface QuickComparisonTableProps {
 export const QuickComparisonTable: React.FC<QuickComparisonTableProps> = ({
   activePeriod,
   onSelectPeriod,
-}) => (
+}) => {
+  const { quickComparison: QUICK_COMPARISON } = useCompetitiveWatchData();
+  return (
   <motion.div
     initial={{ opacity: 0, y: 12 }}
     animate={{ opacity: 1, y: 0 }}
@@ -112,4 +114,5 @@ export const QuickComparisonTable: React.FC<QuickComparisonTableProps> = ({
       </table>
     </div>
   </motion.div>
-);
+  );
+};

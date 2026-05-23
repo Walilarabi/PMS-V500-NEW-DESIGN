@@ -8,10 +8,8 @@
 import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
-import {
-  getComparisonData, COMPARE_PERIODS, KPI_CARDS,
-} from '../../../data/rms/mockCompetitiveWatchData';
 import type { ComparePeriodKey } from '../../../data/rms/mockCompetitiveWatchData';
+import { useCompetitiveWatchData } from '../../../lib/rms/useCompetitiveWatchData';
 import { generateAiInterpretation } from '../../../lib/rms/aiInterpretationEngine';
 import { detectRmOpportunity } from '../../../lib/rms/rmAlertEngine';
 import { SmartAlertPanel } from './SmartAlertPanel';
@@ -29,20 +27,21 @@ export const AiInterpretationPanel: React.FC<AiInterpretationPanelProps> = ({
   period,
   selectedLabel,
 }) => {
+  const { comparePeriods, getComparisonData, kpiCards } = useCompetitiveWatchData();
   const { interpretation, opportunity } = useMemo(() => {
-    const periodMeta = COMPARE_PERIODS.find((p) => p.key === period) ?? COMPARE_PERIODS[0];
+    const periodMeta = comparePeriods.find((p) => p.key === period) ?? comparePeriods[0];
     const days = getComparisonData(period);
     const day = days.find((d) => d.label === selectedLabel) ?? days[0];
 
-    if (!day) {
+    if (!day || !periodMeta) {
       return { interpretation: null, opportunity: null };
     }
 
     const demandDelta = day.demandToday - day.demandPast;
     const medianDelta = day.medianToday - day.medianPast;
 
-    const ourPrice = euro(KPI_CARDS.find((k) => k.id === 'notre-tarif')?.value ?? '326');
-    const median = euro(KPI_CARDS.find((k) => k.id === 'tarif-median')?.value ?? '340');
+    const ourPrice = euro(kpiCards.find((k) => k.id === 'notre-tarif')?.value ?? '326');
+    const median = euro(kpiCards.find((k) => k.id === 'tarif-median')?.value ?? '340');
     const gap = ourPrice - median;
 
     return {
@@ -59,7 +58,7 @@ export const AiInterpretationPanel: React.FC<AiInterpretationPanelProps> = ({
         demandDelta,
       }),
     };
-  }, [period, selectedLabel]);
+  }, [period, selectedLabel, comparePeriods, getComparisonData, kpiCards]);
 
   return (
     <motion.div

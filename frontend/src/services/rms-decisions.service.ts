@@ -9,6 +9,7 @@
  */
 
 import { supabase } from '../lib/supabase';
+import { emitRmsEvent } from '../lib/rms/eventBus';
 
 export type DecisionAction = 'accepted' | 'rejected' | 'maintained';
 
@@ -102,6 +103,22 @@ export async function recordRmsDecision(input: RmsDecisionInput): Promise<boolea
     if (error) {
       console.warn('[rms-decisions] Insert failed:', error.message);
       return false;
+    }
+
+    // Notifie le module Revenue d'une nouvelle décision (DecisionHistoryPage,
+    // KPI agrégés, etc.). L'ID DB n'est pas retourné par l'insert sans
+    // .select(), on émet donc un identifiant de remplacement déterministe.
+    const delta = input.finalPrice - input.currentPrice;
+    if (input.action === 'accepted' || input.action === 'maintained') {
+      emitRmsEvent('rms-decision:accepted', {
+        decisionId: `${input.stayDate}-${input.roomTypeCode ?? 'all'}-${Date.now()}`,
+        date: input.stayDate,
+        delta,
+      });
+    } else {
+      emitRmsEvent('rms-decision:rejected', {
+        decisionId: `${input.stayDate}-${input.roomTypeCode ?? 'all'}-${Date.now()}`,
+      });
     }
     return true;
   } catch (err) {

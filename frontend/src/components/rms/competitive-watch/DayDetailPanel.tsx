@@ -10,11 +10,8 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Info, ArrowUp } from 'lucide-react';
-import {
-  getVisibleMarketMonth, COMPSET_HOTELS, PAGE_META,
-  getComparisonData, COMPARE_PERIODS,
-} from '../../../data/rms/mockCompetitiveWatchData';
 import type { ComparePeriodKey } from '../../../data/rms/mockCompetitiveWatchData';
+import { useCompetitiveWatchData } from '../../../lib/rms/useCompetitiveWatchData';
 import { getDemandColor } from '../../../lib/rms/marketDemandRules';
 import { DEMAND_BANDS } from '../../../lib/rms/chartColors';
 import { CompsetDistributionBar } from './CompsetDistributionBar';
@@ -52,8 +49,8 @@ const EmptyDetail: React.FC = () => (
 );
 
 const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) => {
-  const visible = getVisibleMarketMonth();
-  const day = visible.find((d) => d.label === selectedLabel) ?? visible[0];
+  const { visibleMarketMonth, compsetHotels, meta } = useCompetitiveWatchData();
+  const day = visibleMarketMonth.find((d) => d.label === selectedLabel) ?? visibleMarketMonth[0];
   if (!day) return <EmptyDetail />;
   const gap = day.ourPrice - day.median;
   const gapPct = ((gap / day.median) * 100).toFixed(1);
@@ -98,7 +95,7 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
           </div>
           <StatCell
             label="Positionnement"
-            value={`#${PAGE_META.rank} / ${PAGE_META.rankTotal}`}
+            value={`#${meta.rank} / ${meta.rankTotal}`}
             sub={<span className="text-slate-400">Bas de marché</span>}
           />
         </div>
@@ -112,9 +109,9 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
       {/* Compset analysé */}
       <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center gap-x-4 gap-y-2 flex-wrap">
         <span className="text-[11.5px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
-          Compset analysé ({COMPSET_HOTELS.length} hôtels)
+          Compset analysé ({compsetHotels.length} hôtels)
         </span>
-        {COMPSET_HOTELS.map((hotel, i) => (
+        {compsetHotels.map((hotel, i) => (
           <span key={hotel} className="flex items-center gap-1.5">
             <span
               className="w-2 h-2 rounded-full"
@@ -136,6 +133,7 @@ const FocusDetail: React.FC<{ period: ComparePeriodKey; selectedLabel: string }>
   period,
   selectedLabel,
 }) => {
+  const { comparePeriods: COMPARE_PERIODS, getComparisonData } = useCompetitiveWatchData();
   const periodMeta = COMPARE_PERIODS.find((p) => p.key === period) ?? COMPARE_PERIODS[0];
   const days = getComparisonData(period);
   const day = days.find((d) => d.label === selectedLabel) ?? days[0];

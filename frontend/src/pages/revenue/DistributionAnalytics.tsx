@@ -63,6 +63,13 @@ import {
   usePromotionsStore,
   selectActivePromotionsByChannel,
 } from '@/src/store/promotionsStore';
+import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
+import { useLighthouseStore } from '@/src/store/lighthouseStore';
+import {
+  computeRealTotals,
+  getDataSourceStatus,
+} from '@/src/lib/rms/distributionFromData';
+import { Database, Info } from 'lucide-react';
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* TYPES                                                                      */
@@ -359,6 +366,17 @@ export function DistributionAnalytics() {
   // store. Mis à jour automatiquement à chaque toggle/edit côté Promotions.
   const activePromosByChannel = usePromotionsStore(selectActivePromotionsByChannel);
 
+  // Sources de données réelles (rateCalendar + Lighthouse) pour les totaux
+  // globaux. La répartition par canal reste démonstrative car aucune donnée
+  // de réservation par canal n'est encore disponible dans le PMS.
+  const roomTypes = useRateCalendarStore((s) => s.roomTypes);
+  const lighthouseData = useLighthouseStore((s) => s.importData);
+  const dataStatus = useMemo(
+    () => getDataSourceStatus({ roomTypes, lighthouse: lighthouseData }),
+    [roomTypes, lighthouseData]
+  );
+  const realTotals = useMemo(() => computeRealTotals(roomTypes), [roomTypes]);
+
   const sorted = useMemo(() => {
     const arr = [...channelData];
     arr.sort((a, b) => {
@@ -378,24 +396,45 @@ export function DistributionAnalytics() {
     return arr;
   }, [channelData, sortBy]);
 
-  /* KPIs globaux */
+  /* KPIs globaux — bascule sur les totaux RÉELS quand rateCalendar a chargé */
   const totals = useMemo(() => {
-    const totalRevenue = channelData.reduce((s, c) => s + c.revenue, 0);
-    const totalNet = channelData.reduce((s, c) => s + c.netRevenue, 0);
-    const totalCommission = channelData.reduce((s, c) => s + c.commissionCost, 0);
-    const totalBookings = channelData.reduce((s, c) => s + c.bookings, 0);
-    const totalNights = channelData.reduce((s, c) => s + c.roomNights, 0);
-    const avgADR = Math.round(totalRevenue / Math.max(1, totalNights));
-    const avgRevPAR = Math.round(channelData.reduce((s, c) => s + c.revpar, 0) / channelData.length);
+    // Totaux démonstratifs (somme du mock CHANNELS) — toujours calculés pour
+    // garantir une UI cohérente même sans connexion DB.
+    const mockRevenue = channelData.reduce((s, c) => s + c.revenue, 0);
+    const mockNet = channelData.reduce((s, c) => s + c.netRevenue, 0);
+    const mockCommission = channelData.reduce((s, c) => s + c.commissionCost, 0);
+    const mockBookings = channelData.reduce((s, c) => s + c.bookings, 0);
+    const mockNights = channelData.reduce((s, c) => s + c.roomNights, 0);
+    const mockADR = Math.round(mockRevenue / Math.max(1, mockNights));
+    const mockRevPAR = Math.round(
+      channelData.reduce((s, c) => s + c.revpar, 0) / channelData.length
+    );
+
+    // Si rateCalendar contient des données réelles, on remplace les agrégats
+    // globaux par les valeurs calculées sur les ventes effectives.
+    const totalRevenue = realTotals?.totalRevenue ?? mockRevenue;
+    const totalBookings = realTotals?.totalBookings ?? mockBookings;
+    const totalNights = realTotals?.totalRoomNights ?? mockNights;
+    const avgADR = realTotals?.avgADR ?? mockADR;
+    const avgRevPAR = realTotals?.avgRevPAR ?? mockRevPAR;
+
+    // Commission moyenne pondérée — toujours dérivée du mix de canaux
+    // (faute de mieux), mais appliquée au revenu réel.
+    const mockCommissionPct = (mockCommission / Math.max(1, mockRevenue)) * 100;
+    const totalCommission = realTotals
+      ? Math.round((totalRevenue * mockCommissionPct) / 100)
+      : mockCommission;
+    const totalNet = totalRevenue - totalCommission;
+
     const avgConv = (
       channelData.reduce((s, c) => s + c.conversion, 0) / channelData.length
     ).toFixed(1);
     const avgCancel = (
       channelData.reduce((s, c) => s + c.cancellationRate, 0) / channelData.length
     ).toFixed(1);
-    const commissionPct = (totalCommission / totalRevenue) * 100;
+    const commissionPct = (totalCommission / Math.max(1, totalRevenue)) * 100;
     const direct = channelData.find((c) => c.id === 'direct');
-    const directShare = ((direct?.revenue ?? 0) / totalRevenue) * 100;
+    const directShare = ((direct?.revenue ?? 0) / Math.max(1, mockRevenue)) * 100;
     const otaShare = 100 - directShare;
     return {
       totalRevenue,
@@ -411,7 +450,7 @@ export function DistributionAnalytics() {
       directShare,
       otaShare,
     };
-  }, [channelData]);
+  }, [channelData, realTotals]);
 
   /* derived */
   const top3 = sorted.slice(0, 3);
@@ -533,6 +572,9 @@ export function DistributionAnalytics() {
             </div>
           }
         />
+
+        {/* Bannière source de données */}
+        <DataSourceBanner status={dataStatus} />
 
         {/* KPI ROW */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -1481,6 +1523,70 @@ const RecoCard: React.FC<{
         {cta}
         <ArrowUpRight className="h-3 w-3" />
       </button>
+    </motion.div>
+  );
+};
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* DATA SOURCE BANNER                                                         */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+const DataSourceBanner: React.FC<{
+  status: ReturnType<typeof getDataSourceStatus>;
+}> = ({ status }) => {
+  if (status.isLive) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-start gap-3 rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/30 p-3 shadow-sm"
+      >
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+          <Database className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-emerald-900">
+              Totaux globaux calculés sur ventes réelles
+            </p>
+            {status.periodLabel && (
+              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                {status.periodLabel}
+              </span>
+            )}
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+              {status.daysCovered} jour(s)
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-emerald-900/70">
+            CA, réservations, ADR et RevPAR proviennent du calendrier tarifaire.
+            La répartition par canal reste démonstrative jusqu'à l'intégration
+            d'un Channel Manager source.
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-start gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3"
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-200 text-slate-600">
+        <Info className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-slate-800">
+          Données de démonstration
+        </p>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Aucune donnée de réservation chargée. Les valeurs affichées proviennent
+          d'un jeu de démonstration. Une fois le calendrier tarifaire alimenté,
+          les KPIs globaux se calculeront sur les ventes réelles.
+        </p>
+      </div>
     </motion.div>
   );
 };

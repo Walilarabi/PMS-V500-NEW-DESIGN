@@ -6,8 +6,8 @@
  */
 
 import React from 'react';
-import { COMPSET_DISTRIBUTION } from '../../../data/rms/mockCompetitiveWatchData';
 import { DEMAND_BANDS } from '../../../lib/rms/chartColors';
+import { useCompetitiveWatchData } from '../../../lib/rms/useCompetitiveWatchData';
 
 export interface CompsetDistributionBarProps {
   className?: string;
@@ -15,7 +15,9 @@ export interface CompsetDistributionBarProps {
 
 export const CompsetDistributionBar: React.FC<CompsetDistributionBarProps> = ({
   className,
-}) => (
+}) => {
+  const { compsetDistribution: COMPSET_DISTRIBUTION } = useCompetitiveWatchData();
+  return (
   <div className={className}>
     <h4 className="text-[13px] font-bold text-slate-900 dark:text-slate-50 mb-2.5">
       Distribution tarifs compset
@@ -53,4 +55,5 @@ export const CompsetDistributionBar: React.FC<CompsetDistributionBarProps> = ({
       ))}
     </div>
   </div>
-);
+  );
+};

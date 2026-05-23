@@ -16,10 +16,8 @@ import {
   CartesianGrid, Tooltip, ReferenceArea, LabelList, ResponsiveContainer,
 } from 'recharts';
 import { MoreVertical } from 'lucide-react';
-import {
-  getComparisonData, COMPARE_PERIODS,
-} from '../../../data/rms/mockCompetitiveWatchData';
 import type { ComparePeriodKey } from '../../../data/rms/mockCompetitiveWatchData';
+import { useCompetitiveWatchData } from '../../../lib/rms/useCompetitiveWatchData';
 import { getDemandColor } from '../../../lib/rms/marketDemandRules';
 import { CHART_COLORS, DEMAND_BANDS } from '../../../lib/rms/chartColors';
 import { ChartLegend } from './ChartLegend';
@@ -106,6 +104,7 @@ export const DynamicComparisonChart: React.FC<DynamicComparisonChartProps> = ({
   onSelectDay,
 }) => {
   const [mode, setMode] = useState<MetricMode>('price');
+  const { comparePeriods: COMPARE_PERIODS, getComparisonData } = useCompetitiveWatchData();
 
   const periodMeta = COMPARE_PERIODS.find((p) => p.key === period) ?? COMPARE_PERIODS[0];
 
@@ -117,7 +116,7 @@ export const DynamicComparisonChart: React.FC<DynamicComparisonChartProps> = ({
         Math.max(d.medianToday, d.medianPast),
       ] as [number, number],
     }));
-  }, [period]);
+  }, [period, getComparisonData]);
 
   return (
     <motion.section

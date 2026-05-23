@@ -24,9 +24,10 @@ import { AiInterpretationPanel } from '../../components/rms/competitive-watch/Ai
 import { QuickComparisonTable } from '../../components/rms/competitive-watch/QuickComparisonTable';
 import { DayDetailPanel } from '../../components/rms/competitive-watch/DayDetailPanel';
 import {
-  PAGE_META, MARKET_SELECTED_DATE, COMPARISON_SELECTED_DATE,
+  MARKET_SELECTED_DATE, COMPARISON_SELECTED_DATE,
 } from '../../data/rms/mockCompetitiveWatchData';
 import type { ComparePeriodKey } from '../../data/rms/mockCompetitiveWatchData';
+import { useCompetitiveWatchData } from '../../lib/rms/useCompetitiveWatchData';
 
 export const CompetitiveWatchPage: React.FC = () => {
   const [view, setView] = useState<CompetitiveView>('market');
@@ -35,6 +36,7 @@ export const CompetitiveWatchPage: React.FC = () => {
   const [comparisonDay, setComparisonDay] = useState<string>(COMPARISON_SELECTED_DATE);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  const { meta } = useCompetitiveWatchData();
   const isMarket = view === 'market';
 
   return (
@@ -46,8 +48,8 @@ export const CompetitiveWatchPage: React.FC = () => {
             ? 'Analyse du marché & comparaison tarifaire'
             : 'Analyse & comparaison du marché'
         }
-        dateLabel={isMarket ? PAGE_META.marketPeriodLabel : PAGE_META.comparisonDayLabel}
-        lastUpdate={PAGE_META.lastUpdate}
+        dateLabel={isMarket ? meta.marketPeriodLabel : meta.comparisonDayLabel}
+        lastUpdate={meta.lastUpdate}
       />
 
       {/* Filtres Lighthouse */}

@@ -13,11 +13,8 @@ import {
   Calendar, ChevronDown, ArrowRight, TrendingUp, TrendingDown,
   Activity, LineChart, Target, Flame, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react';
-import {
-  COMPARE_PERIODS, MINI_COMPARISONS, QUICK_COMPARISON,
-  getComparisonData, PAGE_META,
-} from '../../../data/rms/mockCompetitiveWatchData';
 import type { ComparePeriodKey } from '../../../data/rms/mockCompetitiveWatchData';
+import { useCompetitiveWatchData } from '../../../lib/rms/useCompetitiveWatchData';
 import { getMarketMomentum } from '../../../lib/rms/comparisonCalculations';
 
 const Card: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -33,7 +30,9 @@ const Card: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 /* ── Variante marché ────────────────────────────────────────────────────── */
 
-const MarketSidebar: React.FC = () => (
+const MarketSidebar: React.FC = () => {
+  const { comparePeriods: COMPARE_PERIODS, miniComparisons: MINI_COMPARISONS } = useCompetitiveWatchData();
+  return (
   <Card>
     <div className="flex items-start justify-between gap-3 mb-3.5">
       <div>
@@ -124,7 +123,8 @@ const MarketSidebar: React.FC = () => (
       <ArrowRight className="w-3.5 h-3.5" />
     </button>
   </Card>
-);
+  );
+};
 
 /* ── Variante comparaison ───────────────────────────────────────────────── */
 
@@ -149,6 +149,12 @@ const ComparisonSynthesis: React.FC<{
   period: ComparePeriodKey;
   selectedLabel: string;
 }> = ({ period, selectedLabel }) => {
+  const {
+    comparePeriods: COMPARE_PERIODS,
+    quickComparison: QUICK_COMPARISON,
+    getComparisonData,
+    meta: PAGE_META,
+  } = useCompetitiveWatchData();
   const periodMeta = COMPARE_PERIODS.find((p) => p.key === period) ?? COMPARE_PERIODS[0];
   const days = getComparisonData(period);
   const day = days.find((d) => d.label === selectedLabel) ?? days[0];

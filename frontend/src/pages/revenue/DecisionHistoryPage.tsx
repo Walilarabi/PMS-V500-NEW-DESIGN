@@ -5,10 +5,11 @@
  * Affiche horodaté chaque action utilisateur sur les recommandations IA.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { History, CheckCircle2, XCircle, MinusCircle, AlertCircle, Loader2, Download, Search } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { fetchRmsDecisions, type RmsDecisionRecord } from '../../services/rms-decisions.service';
+import { subscribeRmsEvent } from '../../lib/rms/eventBus';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
@@ -51,7 +52,7 @@ export const DecisionHistoryPage: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>('created_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -72,6 +73,24 @@ export const DecisionHistoryPage: React.FC = () => {
 
     return () => { cancelled = true; };
   }, []);
+
+  // Premier chargement
+  useEffect(() => {
+    return refresh();
+  }, [refresh]);
+
+  // Invalidation temps réel : refetch dès qu'une décision est enregistrée ou
+  // rejetée ailleurs dans le Revenue (Tableau RMS, Autopilote, etc.).
+  useEffect(() => {
+    const onAccepted = () => refresh();
+    const onRejected = () => refresh();
+    const unsubA = subscribeRmsEvent('rms-decision:accepted', onAccepted);
+    const unsubR = subscribeRmsEvent('rms-decision:rejected', onRejected);
+    return () => {
+      unsubA();
+      unsubR();
+    };
+  }, [refresh]);
 
   const filtered = useMemo(() => {
     let list = decisions;
