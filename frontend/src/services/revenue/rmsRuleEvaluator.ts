@@ -60,8 +60,14 @@ export const rmsRuleEvaluator = {
 
     let directionLock: 'up' | 'down' | null = null;
 
+    // Seules les actions qui touchent au prix doivent peser sur la
+    // proposition tarifaire. Les autres (min_stay, ota_limit, cta, block)
+    // sont des actions opérationnelles, pas tarifaires.
+    const PRICE_ACTION_TYPES = new Set(['price_up', 'price_down', 'open_promo', 'close_promo']);
+
     for (const ev of fired) {
       const dominantMagnitude = ev.rule.actions
+        .filter((a) => PRICE_ACTION_TYPES.has(a.type))
         .map((a) => a.magnitude ?? 0)
         .reduce((s, x) => s + x, 0);
       const direction = dominantMagnitude > 0 ? 'up' : dominantMagnitude < 0 ? 'down' : null;
