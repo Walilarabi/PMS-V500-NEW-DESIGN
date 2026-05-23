@@ -11,6 +11,7 @@ import {
   BarChart3, ChevronLeft, ChevronRight, ChevronDown,
   Calendar, Download, RefreshCw,
 } from 'lucide-react';
+import { ImportButton } from './import/ImportButton';
 
 export interface CompetitiveWatchHeaderProps {
   subtitle: string;
@@ -33,7 +34,7 @@ export const CompetitiveWatchHeader: React.FC<CompetitiveWatchHeaderProps> = ({
     transition={{ duration: 0.3, ease: 'easeOut' }}
     className="flex items-center justify-between gap-4 flex-wrap"
   >
-    {/* Logo + titre */}
+    {/* Logo + titre + bouton Importer */}
     <div className="flex items-center gap-3 min-w-0">
       <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] flex items-center justify-center shadow-lg shadow-violet-500/25 shrink-0">
         <BarChart3 className="w-6 h-6 text-white" strokeWidth={2.4} />
@@ -46,6 +47,7 @@ export const CompetitiveWatchHeader: React.FC<CompetitiveWatchHeaderProps> = ({
           {subtitle}
         </p>
       </div>
+      <ImportButton className="ml-2 shrink-0" />
     </div>
 
     {/* Navigateur de date */}
