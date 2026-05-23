@@ -114,7 +114,7 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
       items: [
         { id: 'rms',             label: 'Tableau RMS',            icon: Activity },
         { id: 'rms_history',     label: 'Historique décisions',   icon: History },
-        { id: 'rev_rules',       label: 'Yield & Règles auto',    icon: Zap },
+        { id: 'rev_rules',       label: 'Règles tactiques',       icon: Zap },
         { id: 'rev_promotions',  label: 'Promotions',             icon: Tag },
       ],
     },
