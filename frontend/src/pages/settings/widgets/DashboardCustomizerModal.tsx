@@ -10,7 +10,7 @@ import { X, GripVertical, Eye, EyeOff, RotateCcw } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 
-export type WidgetId = 'kpis' | 'modules' | 'alerts' | 'checklist' | 'guided' | 'logs';
+export type WidgetId = 'kpis' | 'quickwins' | 'modules' | 'alerts' | 'trends' | 'checklist' | 'guided' | 'logs';
 
 export interface WidgetPref {
   id: WidgetId;
@@ -23,12 +23,14 @@ export interface WidgetPref {
 const STORAGE_KEY = 'flowtym.controlcenter.layout';
 
 const DEFAULT_LAYOUT: WidgetPref[] = [
-  { id: 'kpis',      label: 'Cartes KPI',                description: '5 KPIs de santé du PMS',                       visible: true, order: 0 },
-  { id: 'modules',   label: 'État des modules',           description: 'Tableau de statut des 8 modules clés',         visible: true, order: 1 },
-  { id: 'alerts',    label: 'Alertes & recommandations',  description: 'Actions actionnables triées par sévérité',     visible: true, order: 2 },
-  { id: 'checklist', label: 'Checklist de configuration', description: 'Progression par domaine',                      visible: true, order: 3 },
-  { id: 'guided',    label: 'Configuration guidée',       description: 'Parcours d\'installation en 8 étapes',        visible: true, order: 4 },
-  { id: 'logs',      label: 'Journaux système',           description: 'Flux temps réel des derniers événements',      visible: true, order: 5 },
+  { id: 'kpis',      label: 'Cartes KPI',                 description: '5 KPIs de santé du PMS',                       visible: true, order: 0 },
+  { id: 'quickwins', label: 'Quick Wins',                 description: 'Top 3 actions à plus fort impact',             visible: true, order: 1 },
+  { id: 'modules',   label: 'État des modules',           description: 'Tableau de statut des 8 modules clés',         visible: true, order: 2 },
+  { id: 'alerts',    label: 'Alertes & recommandations',  description: 'Actions actionnables triées par sévérité',     visible: true, order: 3 },
+  { id: 'trends',    label: 'Évolution des scores',       description: 'Sparklines historiques par dimension',         visible: true, order: 4 },
+  { id: 'checklist', label: 'Checklist de configuration', description: 'Progression par domaine',                      visible: true, order: 5 },
+  { id: 'guided',    label: 'Configuration guidée',       description: 'Parcours d\'installation en 8 étapes',         visible: true, order: 6 },
+  { id: 'logs',      label: 'Journaux système',           description: 'Flux temps réel des derniers événements',      visible: true, order: 7 },
 ];
 
 export function loadLayout(): WidgetPref[] {

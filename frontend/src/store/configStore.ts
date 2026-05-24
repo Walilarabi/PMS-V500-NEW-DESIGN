@@ -50,7 +50,7 @@ export interface HotelEvent {
   location?: string;
 }
 
-interface ChannelConfig {
+export interface ChannelConfig {
   id: string;
   name: string;
   color: string;

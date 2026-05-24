@@ -46,6 +46,7 @@ import { AuditPage } from './pages/AuditPage';
 import { BrandingPage } from './pages/BrandingPage';
 import { LanguagesPage } from './pages/LanguagesPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { ConnectorsPage } from './pages/ConnectorsPage';
 
 /**
  * PageIds couvertes par le catalogue SettingsModule legacy.
@@ -79,7 +80,6 @@ const LEGACY_CATALOG_PAGES: ReadonlySet<PageId> = new Set<PageId>([
   'settings_breakfast',
   'settings_pms_sync',
   'settings_api',
-  'settings_connectors',
   'settings_automations',
   'settings_rgpd',
   'settings_import_export',
@@ -233,6 +233,7 @@ const SettingsContent: React.FC<{
   if (activePage === 'settings_branding') return <BrandingPage />;
   if (activePage === 'settings_languages') return <LanguagesPage />;
   if (activePage === 'settings_notifications') return <NotificationsPage />;
+  if (activePage === 'settings_connectors') return <ConnectorsPage />;
   if (LEGACY_CATALOG_PAGES.has(activePage)) return <SettingsModule activePage={activePage} />;
   return <SettingsPlaceholder activePage={activePage} onNavigate={onNavigate} />;
 };
