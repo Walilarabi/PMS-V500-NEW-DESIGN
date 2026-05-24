@@ -22,6 +22,25 @@ export interface DateColumn {
   isToday: boolean;
 }
 
+// ─── Chambres virtuelles ───
+// Une chambre virtuelle n'a pas d'existence physique propre :
+// elle est composée d'une ou plusieurs chambres physiques.
+// Exemple : "Deux chambres adjacentes" = combinaison de 2 unités physiques
+// vendues comme une seule unité ; sa disponibilité dépend de la dispo des
+// composantes (verrouillage en cascade).
+export type VirtualRoomKind =
+  | "adjacent"        // chambres adjacentes (côte à côte)
+  | "connecting"      // chambres communicantes (porte intérieure)
+  | "suite_combo"     // suite composée (chambre + salon)
+  | "family_combo"    // combo familial (ex : double + single)
+  | "split_twin"      // unité physique vendable en twin ou double
+  | "custom";
+
+export interface VirtualRoomComposition {
+  componentRoomTypeIds: string[];   // chambres physiques composantes
+  componentsRequired: "all" | "any"; // "all" = toutes requises | "any" = au moins une
+}
+
 // ─── Room Type ───
 
 export interface RoomTypeData {
@@ -42,6 +61,10 @@ export interface RoomTypeData {
   diffType: "fixed" | "percent";
   statuses: RoomStatus[];
   ratePlans: RatePlanData[];
+  // ─── Chambres virtuelles (optionnel) ───
+  isVirtual?: boolean;
+  virtualKind?: VirtualRoomKind;
+  virtualComposition?: VirtualRoomComposition;
 }
 
 export interface RoomStatus {
@@ -180,6 +203,10 @@ export interface NewRoomPayload {
   distributionChannels: string[];
   diffFromRef: number;
   diffType: "fixed" | "percent";
+  // Création optionnelle d'une chambre virtuelle
+  isVirtual?: boolean;
+  virtualKind?: VirtualRoomKind;
+  virtualComposition?: VirtualRoomComposition;
 }
 
 export interface NewRatePlanPayload {

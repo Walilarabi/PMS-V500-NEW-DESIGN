@@ -524,6 +524,9 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         description: payload.description, isReference: payload.isReference, isActive: true,
         assignedRatePlanIds: payload.assignedRatePlanIds, distributionChannels: payload.distributionChannels,
         diffFromRef: payload.diffFromRef, diffType: payload.diffType, statuses, ratePlans: [],
+        isVirtual: payload.isVirtual,
+        virtualKind: payload.virtualKind,
+        virtualComposition: payload.virtualComposition,
       };
       return { roomTypes: [...state.roomTypes, newRoom], expandedRooms: { ...state.expandedRooms, [roomTypeId]: true } };
     }),
