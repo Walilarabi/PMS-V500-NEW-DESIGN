@@ -32,6 +32,7 @@ import {
   saveIntegrationReport, loadIntegrationReport,
   type IntegrationReport, type RoomTypeMapping, type MealPlanMapping,
 } from '@/src/services/settings/rate-plan-integration.service';
+import { logImportedRatePlanReport } from '@/src/services/settings/settingsPersistence';
 
 interface RatePlansPageProps {
   onNavigate: (page: PageId) => void;
@@ -99,6 +100,19 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
     logAudit({
       action: 'module_inspected', module: 'rms_revenue',
       detail: `Intégration plans tarifaires : ${report.created} créés, ${report.updated} mis à jour, ${report.rejected} rejetés, ${report.requiresMapping} requièrent mapping`,
+    });
+    // Trace l'import dans Supabase pour audit + historique inter-sessions
+    void logImportedRatePlanReport({
+      fileName: imported.fileName,
+      totalRows: report.total,
+      createdCount: report.created,
+      updatedCount: report.updated,
+      rejectedCount: report.rejected,
+      requiresMappingCount: report.requiresMapping,
+      roomMapping,
+      mealMapping,
+      report,
+      warnings: imported.warnings ?? [],
     });
     notify(`${report.created + report.updated} plans intégrés au système`);
     setIntegrationOpen(false);

@@ -20,6 +20,8 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
+import { syncPermissionsMatrixToSupabase } from '@/src/services/settings/settingsPersistence';
 
 const STORAGE_KEY = 'flowtym.roles.permissions';
 
@@ -191,6 +193,10 @@ export const RolesAccessPage: React.FC = () => {
   const [activeRole, setActiveRole] = useState<RoleId>('manager');
   const [toast, setToast] = useState<string | null>(null);
 
+  // RBAC — la gestion fine des permissions est réservée à l'admin (set_users = admin)
+  const canRead = usePermission('set_users', 'read');
+  const canEditMatrix = usePermission('set_users', 'admin');
+
   function notify(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2500);
@@ -198,6 +204,7 @@ export const RolesAccessPage: React.FC = () => {
 
   function setAccess(role: RoleId, capId: string, level: AccessLevel) {
     if (role === 'admin') return; // verrouillé
+    if (!canEditMatrix) return; // RBAC : lecture seule
     setMatrix((m) => ({ ...m, [role]: { ...m[role], [capId]: level } }));
     setDirty(true);
   }
@@ -206,6 +213,8 @@ export const RolesAccessPage: React.FC = () => {
     saveMatrix(matrix);
     setDirty(false);
     logAudit({ action: 'module_inspected', module: 'security_backups', detail: 'Matrice de permissions mise à jour' });
+    // Sync best-effort vers Supabase (RLS limite aux admins)
+    void syncPermissionsMatrixToSupabase(matrix);
     notify('Permissions enregistrées');
   }
 
@@ -230,6 +239,16 @@ export const RolesAccessPage: React.FC = () => {
   const activeRoleConfig = ROLES.find((r) => r.id === activeRole)!;
   const isLocked = !!activeRoleConfig.locked;
 
+  if (!canRead) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-slate-50/60">
+        <div className="w-full px-6 pt-6 pb-10">
+          <PermissionDeniedBanner capability="set_users" required="read" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -249,9 +268,10 @@ export const RolesAccessPage: React.FC = () => {
             </div>
           </div>
           <button
-            onClick={saveAll}
-            disabled={!dirty}
-            className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20 disabled:opacity-40"
+            onClick={() => canEditMatrix && saveAll()}
+            disabled={!dirty || !canEditMatrix}
+            title={!canEditMatrix ? 'Permission requise : set_users (admin)' : undefined}
+            className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Save className="w-3.5 h-3.5" /> Enregistrer
           </button>

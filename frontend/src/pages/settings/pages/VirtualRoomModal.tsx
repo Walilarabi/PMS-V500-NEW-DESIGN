@@ -20,6 +20,7 @@ import { Layers, X, Link2, Plus, Check, AlertCircle } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import type { RoomTypeData, VirtualRoomKind, BathroomType } from '@/src/components/rms/types';
+import { syncVirtualRoomToSupabase } from '@/src/services/settings/settingsPersistence';
 
 type Preset = {
   kind: VirtualRoomKind;
@@ -151,14 +152,18 @@ export const VirtualRoomModal: React.FC<VirtualRoomModalProps> = ({ open, onClos
       return;
     }
 
+    const trimmedCode = code.trim().toUpperCase();
+    const finalDescription = description.trim() || `Chambre virtuelle composée de ${components.map((c) => c.roomTypeName).join(' + ')}.`;
+    const componentIds = [...selectedIds];
+
     addRoomType({
       roomName: name.trim(),
-      roomCode: code.trim().toUpperCase(),
+      roomCode: trimmedCode,
       capacity: computedCapacity,
       bathroom,
       equipment: [],
       view: '',
-      description: description.trim() || `Chambre virtuelle composée de ${components.map((c) => c.roomTypeName).join(' + ')}.`,
+      description: finalDescription,
       isReference: false,
       assignedRatePlanIds: [],
       distributionChannels: ['Direct'],
@@ -167,9 +172,23 @@ export const VirtualRoomModal: React.FC<VirtualRoomModalProps> = ({ open, onClos
       isVirtual: true,
       virtualKind: preset.kind,
       virtualComposition: {
-        componentRoomTypeIds: selectedIds,
+        componentRoomTypeIds: componentIds,
         componentsRequired,
       },
+    });
+
+    // Synchro Supabase best-effort — n'altère pas l'UX si offline
+    void syncVirtualRoomToSupabase({
+      roomTypeId: `rt_${trimmedCode.toLowerCase()}`,
+      roomTypeName: name.trim(),
+      roomTypeCode: trimmedCode,
+      virtualKind: preset.kind,
+      componentRoomTypeIds: componentIds,
+      componentsRequired,
+      capacity: computedCapacity,
+      bathroom,
+      description: finalDescription,
+      isActive: true,
     });
 
     onCreated?.(`rt_${code.toLowerCase()}`);

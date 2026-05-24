@@ -9,6 +9,7 @@ import { fetchCalendarDataFromSupabase as fetchCalendarData } from "../data/supa
 import { fetchCalendarData as fetchCalendarDataMock } from "../data/mockData";
 import { PricingRulesEngine } from "../engines/PricingRulesEngine";
 import { CascadePricingEngine } from "../engines/CascadePricingEngine";
+import { propagateVirtualRoomCascade, rebuildAllVirtualInventories } from "../engines/VirtualRoomCascadeEngine";
 import { supabase } from "@/src/lib/supabase";
 
 // ─── Supabase persistence helper ──────────────────────────────────────────
@@ -267,7 +268,10 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         roomTypes.forEach((rt) => { expandedRooms[rt.roomTypeId] = true; });
         const roomIds = roomTypes.map(r => r.roomTypeId);
         const planNames = Array.from(new Set(roomTypes.flatMap(r => r.ratePlans.map(p => p.planName))));
-        set({ roomTypes, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
+        // Recalcule l'inventaire des chambres virtuelles à partir de leurs
+        // composantes physiques (cohérence après chargement).
+        const roomTypesWithVirtual = rebuildAllVirtualInventories(roomTypes);
+        set({ roomTypes: roomTypesWithVirtual, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
       } catch (err) {
         // En cas de timeout ou erreur Supabase, fallback immédiat sur le mock
         // au lieu de bloquer l'utilisateur sur un fallback erreur. C'est ce
@@ -370,8 +374,11 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         get().addAuditLog({ action: "inventory_force_open_ignored", target: `${roomTypeId}:${date}`, detail: `Surbooking refusé.`, result: "ignored" });
         return;
       }
-      // ✅ Update local state immédiatement (optimistic)
-      set({ roomTypes: cascadeEngine.updateInventory(roomTypes, roomTypeId, date, newInventory) });
+      // ✅ Update local state immédiatement (optimistic) puis propage la
+      // cascade des chambres virtuelles (composantes ↔ virtuelle).
+      const afterCascade = cascadeEngine.updateInventory(roomTypes, roomTypeId, date, newInventory);
+      const afterVirtual = propagateVirtualRoomCascade(afterCascade, roomTypeId, date);
+      set({ roomTypes: afterVirtual });
 
       // ✅ Persister override manuel en Supabase
       const status = target?.statuses.find(s => s.date === date);

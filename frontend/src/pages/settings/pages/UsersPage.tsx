@@ -19,6 +19,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePermission, PermissionDeniedBanner, RequirePermission } from '@/src/services/settings/permissionsService';
 
 type UserRole = 'admin' | 'receptionist' | 'housekeeping' | 'manager';
 
@@ -62,6 +63,10 @@ export const UsersPage: React.FC = () => {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<User>({ id: '', name: '', email: '', role: 'receptionist', active: true });
   const [savedToast, setSavedToast] = useState<string | null>(null);
+
+  // RBAC — page protégée : lecture min "read", écriture/admin requise pour CRUD
+  const canRead = usePermission('set_users', 'read');
+  const canWrite = usePermission('set_users', 'write');
 
   // ─── Métriques ────────────────────────────────────────────────────────
   const admins = users.filter((u) => u.role === 'admin' && u.active);
@@ -132,6 +137,16 @@ export const UsersPage: React.FC = () => {
     logAudit({ action: 'module_inspected', module: 'security_backups', detail: `2FA ${next[u.id] ? 'activé' : 'désactivé'} pour ${u.name}` });
   }
 
+  if (!canRead) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-slate-50/60">
+        <div className="w-full px-6 pt-6 pb-10">
+          <PermissionDeniedBanner capability="set_users" required="read" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -149,12 +164,14 @@ export const UsersPage: React.FC = () => {
               </p>
             </div>
           </div>
-          <button
-            onClick={startAdd}
-            className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
-          >
-            <Plus className="w-3.5 h-3.5" /> Nouvel utilisateur
-          </button>
+          <RequirePermission capability="set_users" level="write">
+            <button
+              onClick={startAdd}
+              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
+            >
+              <Plus className="w-3.5 h-3.5" /> Nouvel utilisateur
+            </button>
+          </RequirePermission>
         </header>
 
         {/* Métriques */}
@@ -246,16 +263,24 @@ export const UsersPage: React.FC = () => {
                   <td className="px-3 py-3 text-right">
                     <div className="inline-flex items-center gap-1">
                       <button
-                        onClick={() => startEdit(u)}
-                        className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500"
-                        title="Modifier"
+                        onClick={() => canWrite && startEdit(u)}
+                        disabled={!canWrite}
+                        className={cn(
+                          'p-1.5 rounded-md text-slate-500',
+                          canWrite ? 'hover:bg-slate-100' : 'opacity-30 cursor-not-allowed',
+                        )}
+                        title={canWrite ? 'Modifier' : 'Permission requise : set_users (write)'}
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => remove(u)}
-                        className="p-1.5 rounded-md hover:bg-rose-50 text-rose-600"
-                        title="Supprimer"
+                        onClick={() => canWrite && remove(u)}
+                        disabled={!canWrite}
+                        className={cn(
+                          'p-1.5 rounded-md',
+                          canWrite ? 'hover:bg-rose-50 text-rose-600' : 'text-rose-300 opacity-40 cursor-not-allowed',
+                        )}
+                        title={canWrite ? 'Supprimer' : 'Permission requise : set_users (write)'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

@@ -328,11 +328,24 @@ export const useEventsStore = create<EventsStore>()(
           sources: s.sources.map((src) => (src.id === id ? { ...src, active } : src)),
         })),
 
-      addSource: (source) =>
-        set((s) => ({ sources: [...s.sources, source] })),
+      addSource: (source) => {
+        set((s) => ({ sources: [...s.sources, source] }));
+        // Sync Supabase best-effort (uniquement pour les sources custom)
+        if (source.id.startsWith('custom_')) {
+          import('@/src/services/settings/settingsPersistence')
+            .then((m) => m.syncEventSourceToSupabase(source))
+            .catch(() => { /* offline ok */ });
+        }
+      },
 
-      removeSource: (id) =>
-        set((s) => ({ sources: s.sources.filter((src) => src.id !== id) })),
+      removeSource: (id) => {
+        set((s) => ({ sources: s.sources.filter((src) => src.id !== id) }));
+        if (id.startsWith('custom_')) {
+          import('@/src/services/settings/settingsPersistence')
+            .then((m) => m.deleteEventSourceFromSupabase(id))
+            .catch(() => { /* offline ok */ });
+        }
+      },
 
       setAutoSync: (v) => set({ autoSync: v }),
 
