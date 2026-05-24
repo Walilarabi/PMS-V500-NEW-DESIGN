@@ -22,6 +22,9 @@ export const AuditPage: React.FC = () => {
   const [actionFilter, setActionFilter] = useState<AuditAction | 'all'>('all');
   const [severityFilter, setSeverityFilter] = useState<AuditSeverity | 'all'>('all');
   const [toast, setToast] = useState<string | null>(null);
+  // Phase 8 — lazy paging pour ne pas rendre 200 lignes d'un coup
+  const PAGE = 50;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
 
   const entries = useMemo<AuditEntry[]>(() => readAudit(200), [tick]);
 
@@ -37,6 +40,13 @@ export const AuditPage: React.FC = () => {
       return true;
     });
   }, [entries, query, actionFilter, severityFilter]);
+
+  // Reset le visibleCount à chaque changement de filtres (UX)
+  React.useEffect(() => {
+    setVisibleCount(PAGE);
+  }, [query, actionFilter, severityFilter, tick]);
+
+  const visible = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
 
   function refresh() {
     setTick((t) => t + 1);
@@ -211,7 +221,7 @@ export const AuditPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((e) => (
+                {visible.map((e) => (
                   <tr key={e.id} className="border-t border-slate-100 hover:bg-slate-50/60">
                     <td className="px-5 py-2.5 text-slate-600 tabular-nums text-[12px]">
                       {new Date(e.at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -246,6 +256,20 @@ export const AuditPage: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          )}
+          {/* Lazy paging — "Voir plus" si > visibleCount */}
+          {visible.length < filtered.length && (
+            <div className="border-t border-slate-100 px-5 py-3 bg-slate-50/40 flex items-center justify-between">
+              <span className="text-[11.5px] text-slate-500">
+                {visible.length} / {filtered.length} entrées affichées
+              </span>
+              <button
+                onClick={() => setVisibleCount((c) => Math.min(filtered.length, c + PAGE))}
+                className="px-3 py-1.5 rounded-lg ring-1 ring-violet-200 bg-white text-[12px] font-medium text-violet-700 hover:bg-violet-50"
+              >
+                Charger {Math.min(PAGE, filtered.length - visible.length)} de plus
+              </button>
+            </div>
           )}
         </section>
 

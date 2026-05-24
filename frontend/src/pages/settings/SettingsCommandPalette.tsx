@@ -140,21 +140,32 @@ export const SettingsCommandPalette: React.FC<SettingsCommandPaletteProps> = ({
 
   if (!open) return null;
 
+  const listboxId = 'settings-palette-listbox';
+
   return (
     <div
       className="fixed inset-0 z-[100] bg-slate-950/60 backdrop-blur-sm flex items-start justify-center pt-[12vh] px-4"
       onClick={onClose}
+      role="presentation"
     >
       <div
         className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden ring-1 ring-slate-200"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Recherche dans les Paramètres"
       >
         {/* Input */}
         <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-          <Search className="w-4 h-4 text-slate-400 shrink-0" />
+          <Search className="w-4 h-4 text-slate-400 shrink-0" aria-hidden="true" />
           <input
             ref={inputRef}
             type="text"
+            role="combobox"
+            aria-expanded={results.length > 0}
+            aria-controls={listboxId}
+            aria-activedescendant={results[focused] ? `palette-opt-${focused}` : undefined}
+            aria-autocomplete="list"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -173,13 +184,16 @@ export const SettingsCommandPalette: React.FC<SettingsCommandPaletteProps> = ({
               Aucun résultat pour « {query} »
             </div>
           ) : (
-            <ul className="py-1">
+            <ul className="py-1" role="listbox" id={listboxId} aria-label="Pages des Paramètres">
               {results.map((r, idx) => {
                 const isFocused = idx === focused;
                 return (
-                  <li key={r.pageId}>
+                  <li key={r.pageId} role="presentation">
                     <button
                       data-idx={idx}
+                      id={`palette-opt-${idx}`}
+                      role="option"
+                      aria-selected={isFocused}
                       onMouseEnter={() => setFocused(idx)}
                       onClick={() => {
                         onNavigate(r.pageId);

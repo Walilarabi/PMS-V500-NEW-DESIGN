@@ -28,9 +28,9 @@ describe('<SettingsCommandPalette>', () => {
   it("affiche le placeholder et les pages quand ouvert", () => {
     render(<SettingsCommandPalette open onClose={() => {}} onNavigate={() => {}} />);
     expect(screen.getByPlaceholderText(/Rechercher/i)).toBeDefined();
-    // Au moins 1 page affichée
-    const buttons = screen.getAllByRole('button');
-    expect(buttons.length).toBeGreaterThan(0);
+    // Au moins 1 option de listbox affichée (a11y role="option")
+    const options = screen.getAllByRole('option');
+    expect(options.length).toBeGreaterThan(0);
   });
 
   it("filtre les résultats par recherche substring", () => {
@@ -81,8 +81,8 @@ describe('<SettingsCommandPalette>', () => {
     render(<SettingsCommandPalette open onClose={onClose} onNavigate={onNavigate} />);
     const input = screen.getByPlaceholderText(/Rechercher/i) as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'utilisateurs' } });
-    // Récupère le premier bouton de résultat (skip header / autres)
-    const utilBtn = screen.getAllByRole('button').find((b) =>
+    // Récupère la première option de résultat (a11y role="option")
+    const utilBtn = screen.getAllByRole('option').find((b) =>
       b.textContent?.toLowerCase().includes('utilisateurs'),
     );
     expect(utilBtn).toBeDefined();

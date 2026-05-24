@@ -12,11 +12,16 @@ function isEnvError(msg: string): boolean {
   return msg.includes('VITE_SUPABASE_URL') || msg.includes('VITE_SUPABASE_ANON_KEY');
 }
 
-export class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  State
-> {
-  constructor(props: { children: React.ReactNode }) {
+interface ErrorBoundaryProps { children: React.ReactNode }
+
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, State> {
+  // Re-déclare props/state pour TS strict + React 19
+  // (sinon TS perd les types inférés de React.Component)
+  declare props: ErrorBoundaryProps;
+  declare state: State;
+  declare setState: React.Component<ErrorBoundaryProps, State>['setState'];
+
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }
