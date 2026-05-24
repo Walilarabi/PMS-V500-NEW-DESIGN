@@ -241,7 +241,7 @@ export const ConnectorsPage: React.FC = () => {
             onClick={() => setAddingPartner(true)}
             className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
           >
-            <Plus className="w-3.5 h-3.5" /> Nouveau partenaire
+            <Plus className="w-3.5 h-3.5" /> Ajouter un partenaire de connectivité
           </button>
         </header>
 

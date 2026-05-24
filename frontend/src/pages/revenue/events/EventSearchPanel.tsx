@@ -9,15 +9,16 @@
  *
  * Le résultat est mergé directement dans le store par applySearchResult.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Search, Loader2, MapPin, RefreshCw, Info, CheckCircle2, AlertCircle, History, Building2,
+  Plus, Trash2, X,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useEventsStore } from '@/src/store/eventsStore';
 import { searchEvents } from '@/src/services/event-search.engine';
 import { useConfigStore } from '@/src/store/configStore';
-import type { EventImpactLevel } from '@/src/types/events';
+import type { EventImpactLevel, EventSource, SourceMethod, SyncFrequency } from '@/src/types/events';
 import { IMPACT_LABELS } from '@/src/types/events';
 import type { SyncLogEntry } from '@/src/store/eventsStore';
 
@@ -29,7 +30,8 @@ interface EventSearchPanelProps {
 }
 
 export const EventSearchPanel: React.FC<EventSearchPanelProps> = ({ open, onToggle }) => {
-  const { sources, toggleSource, applySearchResult, autoSync, setAutoSync, syncLogs } = useEventsStore();
+  const { sources, toggleSource, applySearchResult, autoSync, setAutoSync, syncLogs, addSource, removeSource } = useEventsStore();
+  const [addSourceOpen, setAddSourceOpen] = useState(false);
   const hotelCity = useConfigStore((s) => s.hotel.city);
   const hotelName = useConfigStore((s) => s.hotel.name);
 
@@ -177,7 +179,16 @@ export const EventSearchPanel: React.FC<EventSearchPanelProps> = ({ open, onTogg
 
           {/* Sources */}
           <section>
-            <SectionTitle index={3} label="Sources à interroger" />
+            <div className="flex items-center justify-between">
+              <SectionTitle index={3} label="Sources à interroger" />
+              <button
+                onClick={() => setAddSourceOpen(true)}
+                className="text-[11px] font-medium text-violet-700 hover:text-violet-800 flex items-center gap-1 px-2 py-1 rounded-lg ring-1 ring-violet-200 bg-violet-50 hover:bg-violet-100 transition-colors"
+                title="Ajouter une nouvelle source"
+              >
+                <Plus className="w-3 h-3" /> Nouvelle source
+              </button>
+            </div>
             <label className="flex items-center gap-2 mt-2 mb-2 text-[12px] text-slate-600 cursor-pointer">
               <input
                 type="checkbox"
@@ -189,8 +200,8 @@ export const EventSearchPanel: React.FC<EventSearchPanelProps> = ({ open, onTogg
             </label>
             <div className="space-y-1 max-h-[180px] overflow-y-auto pr-1">
               {citySources.map((s) => (
-                <label key={s.id} className="flex items-center justify-between gap-2 py-1 cursor-pointer">
-                  <span className="flex items-center gap-2 min-w-0">
+                <div key={s.id} className="flex items-center justify-between gap-2 py-1 group">
+                  <label className="flex items-center gap-2 min-w-0 cursor-pointer flex-1">
                     <input
                       type="checkbox"
                       checked={s.active}
@@ -198,13 +209,29 @@ export const EventSearchPanel: React.FC<EventSearchPanelProps> = ({ open, onTogg
                       className="w-3.5 h-3.5 accent-violet-600 shrink-0"
                     />
                     <span className="text-[12.5px] text-slate-700 truncate">{s.name}</span>
-                  </span>
-                  <span className="text-[10.5px] text-slate-400 flex items-center gap-1 shrink-0" title={`Fiabilité ${s.reliabilityScore}%`}>
-                    <Info className="w-3 h-3" />
-                    {s.reliabilityScore}
-                  </span>
-                </label>
+                  </label>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10.5px] text-slate-400 flex items-center gap-1" title={`Fiabilité ${s.reliabilityScore}%`}>
+                      <Info className="w-3 h-3" />
+                      {s.reliabilityScore}
+                    </span>
+                    {s.id.startsWith('custom_') && (
+                      <button
+                        onClick={() => removeSource(s.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-rose-500 hover:text-rose-700"
+                        title="Supprimer cette source"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))}
+              {citySources.length === 0 && (
+                <div className="text-[12px] text-slate-400 italic py-2 text-center">
+                  Aucune source pour {city}. Ajoutez-en une.
+                </div>
+              )}
             </div>
           </section>
 
@@ -286,7 +313,262 @@ export const EventSearchPanel: React.FC<EventSearchPanelProps> = ({ open, onTogg
           </div>
         </div>
       )}
+
+      {addSourceOpen && (
+        <AddSourceModal
+          city={city}
+          existingSources={sources}
+          syncLogs={syncLogs}
+          onClose={() => setAddSourceOpen(false)}
+          onAdd={(src) => {
+            addSource(src);
+            setAddSourceOpen(false);
+          }}
+        />
+      )}
     </aside>
+  );
+};
+
+// ─── Modal : Ajouter une nouvelle source ──────────────────────────────────
+
+const SOURCE_KINDS: { value: SourceMethod; label: string; description: string }[] = [
+  { value: 'api',      label: 'API externe',         description: 'API officielle (Ticketmaster, Eventbrite, Songkick…)' },
+  { value: 'rss',      label: 'Flux RSS',            description: 'Flux RSS d\'un site événementiel' },
+  { value: 'ical',     label: 'iCal / Agenda',       description: 'Agenda culturel, office du tourisme' },
+  { value: 'json_feed', label: 'Flux JSON',          description: 'Flux JSON ouvert' },
+  { value: 'xml',      label: 'Flux XML',            description: 'Flux XML d\'une billetterie' },
+  { value: 'scraping', label: 'Scraping web',        description: 'Site sans API (salle, billetterie, agenda)' },
+  { value: 'manual',   label: 'Saisie manuelle',     description: 'Source maintenue manuellement' },
+];
+
+const FREQUENCY_OPTIONS: { value: SyncFrequency; label: string }[] = [
+  { value: 'realtime', label: 'Temps réel' },
+  { value: '6h',       label: 'Toutes les 6 heures' },
+  { value: 'daily',    label: 'Quotidienne' },
+  { value: 'weekly',   label: 'Hebdomadaire' },
+  { value: 'monthly',  label: 'Mensuelle' },
+  { value: 'manual',   label: 'Manuelle' },
+];
+
+interface AddSourceModalProps {
+  city: string;
+  existingSources: EventSource[];
+  syncLogs: SyncLogEntry[];
+  onClose: () => void;
+  onAdd: (source: EventSource) => void;
+}
+
+const AddSourceModal: React.FC<AddSourceModalProps> = ({ city, existingSources, syncLogs, onClose, onAdd }) => {
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [method, setMethod] = useState<SourceMethod>('api');
+  const [frequency, setFrequency] = useState<SyncFrequency>('daily');
+  const [reliability, setReliability] = useState(75);
+  const [active, setActive] = useState(true);
+  const [notes, setNotes] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // Journal des dernières recherches (toutes sources confondues) — utile pour juger la couverture
+  const recentLogs = useMemo(() => syncLogs.slice(0, 5), [syncLogs]);
+
+  function handleSubmit() {
+    if (!name.trim()) {
+      setError('Le nom de la source est requis');
+      return;
+    }
+    if (method !== 'manual' && !url.trim()) {
+      setError('URL ou endpoint API requis pour cette méthode');
+      return;
+    }
+    // Anti-doublon : même nom dans la même ville
+    if (existingSources.some((s) => s.city === city && s.name.toLowerCase() === name.trim().toLowerCase())) {
+      setError('Une source du même nom existe déjà pour cette ville');
+      return;
+    }
+
+    const newSource: EventSource = {
+      id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      city,
+      country: 'France',
+      name: name.trim(),
+      type: 'multi',
+      url: url.trim() || undefined,
+      method,
+      syncFrequency: frequency,
+      status: 'idle',
+      reliabilityScore: reliability,
+      active,
+      apiAvailable: method === 'api' || method === 'json_feed' || method === 'xml',
+      priority: 'standard',
+      notes: notes.trim() || undefined,
+    };
+    onAdd(newSource);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-violet-50 text-violet-600 ring-1 ring-violet-100 flex items-center justify-center shrink-0">
+              <Plus className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-[15px] font-semibold text-slate-900">Ajouter une source</h3>
+              <p className="text-[11.5px] text-slate-500">Élargir la couverture événementielle pour <strong>{city}</strong></p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-4 overflow-y-auto">
+          <div>
+            <label className="block text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1">Nom de la source</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="ex: Zenith Paris, Ticketmaster FR, Office Tourisme…"
+              className="w-full px-3 py-2 text-[13px] rounded-lg ring-1 ring-slate-200 bg-white focus:ring-violet-500 outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1">URL / Endpoint API</label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://api.exemple.com/events ou https://salle.com/agenda"
+              className="w-full px-3 py-2 text-[13px] rounded-lg ring-1 ring-slate-200 bg-white focus:ring-violet-500 outline-none font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1.5">Type de source</label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {SOURCE_KINDS.map((k) => (
+                <button
+                  key={k.value}
+                  type="button"
+                  onClick={() => setMethod(k.value)}
+                  className={cn(
+                    'text-left px-2.5 py-1.5 rounded-lg ring-1 transition-all',
+                    method === k.value
+                      ? 'ring-violet-500 bg-violet-50 text-violet-900'
+                      : 'ring-slate-200 hover:ring-slate-300 bg-white text-slate-700',
+                  )}
+                >
+                  <div className="text-[12px] font-medium">{k.label}</div>
+                  <div className="text-[10.5px] text-slate-500 mt-0.5 leading-tight">{k.description}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1">Fréquence de synchro</label>
+              <select
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value as SyncFrequency)}
+                className="w-full px-3 py-2 text-[13px] rounded-lg ring-1 ring-slate-200 bg-white focus:ring-violet-500 outline-none"
+              >
+                {FREQUENCY_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1">
+                Fiabilité <span className="text-violet-600 font-semibold">{reliability}%</span>
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={reliability}
+                onChange={(e) => setReliability(parseInt(e.target.value, 10))}
+                className="w-full accent-violet-600 mt-2"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1">Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder="Ex: source officielle de la salle, mise à jour 1 fois/jour…"
+              className="w-full px-3 py-2 text-[12.5px] rounded-lg ring-1 ring-slate-200 bg-white focus:ring-violet-500 outline-none"
+            />
+          </div>
+
+          <label className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-slate-50 ring-1 ring-slate-100 cursor-pointer">
+            <div className="text-[12.5px]">
+              <div className="font-medium text-slate-900">Activer immédiatement</div>
+              <div className="text-slate-500 text-[11.5px]">La source sera interrogée à la prochaine recherche</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+              className="w-4 h-4 accent-violet-600 shrink-0"
+            />
+          </label>
+
+          {recentLogs.length > 0 && (
+            <div className="rounded-xl bg-slate-50 ring-1 ring-slate-100 px-3 py-2.5">
+              <div className="text-[11px] uppercase tracking-wide text-slate-500 font-medium mb-1.5 flex items-center gap-1.5">
+                <History className="w-3 h-3" /> Dernières recherches effectuées
+              </div>
+              <ul className="space-y-1">
+                {recentLogs.map((l, i) => (
+                  <li key={i} className="text-[11.5px] text-slate-600 flex items-center justify-between">
+                    <span>{new Date(l.at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="tabular-nums">{l.added} + · {l.updated} ↺ · {l.duplicates} ⛓</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-start gap-2 text-[12px] rounded-xl px-3 py-2 ring-1 bg-rose-50 ring-rose-100 text-rose-700">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={handleSubmit}
+            className="px-4 py-2 text-[13px] font-medium text-white bg-gradient-to-r from-violet-600 to-violet-500 rounded-lg shadow-sm hover:shadow-md transition-all flex items-center gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" /> Ajouter la source
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 

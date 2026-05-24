@@ -4,33 +4,62 @@
  * Tableau premium aéré : icône + nom, type, ville/zone, dates, durée, impact,
  * pickup, compression, influence prix, source, statut, sync RMS, actions.
  */
-import React, { useMemo, useState } from 'react';
-import { ChevronRight, Copy, Edit3, MoreVertical, Pause, Play, Trash2, Link2, Plug } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Edit3, MoreVertical, Pause, Play, Trash2, Link2, Plug } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useEventsStore } from '@/src/store/eventsStore';
 import type { RMSMarketEvent } from '@/src/types/events';
 import { CATEGORY_LABELS } from '@/src/types/events';
 import { ImpactBadge } from './components/ImpactBadge';
 import { CATEGORY_ICON } from './components/CategoryIcon';
-import { daysBetween, formatDateRange } from '@/src/services/event-impact.engine';
+import { daysBetween } from '@/src/services/event-impact.engine';
 
 interface EventsListProps {
   onSelect: (ev: RMSMarketEvent) => void;
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+/** Format compact "DD/MM/YYYY" sans dépendre de la locale du runtime. */
+function formatFr(iso: string): string {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/** "Du DD/MM/YYYY au DD/MM/YYYY" ou "DD/MM/YYYY" si même jour. */
+function formatCompactRange(start: string, end: string): string {
+  if (start === end) return formatFr(start);
+  return `Du ${formatFr(start)} au ${formatFr(end)}`;
+}
 
 export const EventsList: React.FC<EventsListProps> = ({ onSelect }) => {
-  const { getFilteredEvents, deleteEvent, duplicateEvent, setStatus } = useEventsStore();
+  const { getFilteredEvents, deleteEvent, duplicateEvent, setStatus, filters } = useEventsStore();
   const events = getFilteredEvents();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [menu, setMenu] = useState<string | null>(null);
 
+  // Conservation des filtres : on revient en page 1 dès qu'un filtre change
+  // (mais pas à chaque mutation pure du tableau).
+  useEffect(() => {
+    setPage(1);
+  }, [filters.search, filters.minImpact, filters.categories, filters.fromDate, filters.toDate, filters.activeOnly, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(events.length / pageSize));
+
+  // Clamp si le total a baissé (ex: filtre plus restrictif)
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   const pageEvents = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return events.slice(start, start + PAGE_SIZE);
-  }, [events, page]);
-  const totalPages = Math.max(1, Math.ceil(events.length / PAGE_SIZE));
+    const start = (page - 1) * pageSize;
+    return events.slice(start, start + pageSize);
+  }, [events, page, pageSize]);
+
+  const firstIdx = events.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastIdx = Math.min(page * pageSize, events.length);
 
   return (
     <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm overflow-hidden">
@@ -89,7 +118,7 @@ export const EventsList: React.FC<EventsListProps> = ({ onSelect }) => {
                     <div className="font-medium">{e.city}</div>
                     {e.zone && <div className="text-[11px] text-slate-500">{e.zone}</div>}
                   </td>
-                  <td className="px-3 py-3 text-slate-700 tabular-nums">{formatDateRange(e.startDate, e.endDate)}</td>
+                  <td className="px-3 py-3 text-slate-700 tabular-nums whitespace-nowrap">{formatCompactRange(e.startDate, e.endDate)}</td>
                   <td className="px-3 py-3 text-slate-700 tabular-nums">
                     {daysBetween(e.startDate, e.endDate)} j
                   </td>
@@ -178,32 +207,61 @@ export const EventsList: React.FC<EventsListProps> = ({ onSelect }) => {
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 text-[12px] text-slate-500">
-        <span>
-          {events.length === 0
-            ? '0 événement'
-            : `${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, events.length)} sur ${events.length} événements`}
-        </span>
-        <div className="flex items-center gap-1">
-          {Array.from({ length: totalPages }).map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setPage(i + 1)}
-              className={cn(
-                'w-7 h-7 rounded-md text-[12px] font-medium',
-                page === i + 1
-                  ? 'bg-violet-600 text-white'
-                  : 'text-slate-600 hover:bg-slate-100',
-              )}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-100 text-[12px] text-slate-500">
+        <div className="flex items-center gap-3">
+          <span>
+            {events.length === 0
+              ? '0 événement'
+              : <>Affichage <strong className="text-slate-700 tabular-nums">{firstIdx}–{lastIdx}</strong> sur <strong className="text-slate-700 tabular-nums">{events.length}</strong> événement{events.length > 1 ? 's' : ''}</>}
+          </span>
+          <span className="hidden sm:inline text-slate-300">|</span>
+          <label className="hidden sm:flex items-center gap-2">
+            <span>Lignes par page :</span>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+              className="px-2 py-1 rounded-md ring-1 ring-slate-200 bg-white text-[12px] font-medium focus:ring-violet-500 outline-none"
             >
-              {i + 1}
-            </button>
-          ))}
+              {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setPage(1)}
+            disabled={page === 1}
+            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent"
+            title="Première page"
+          >
+            <ChevronsLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setPage(Math.max(1, page - 1))}
+            disabled={page === 1}
+            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent"
+            title="Page précédente"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="px-2 text-[12px] text-slate-600 tabular-nums">
+            Page <strong className="text-slate-900">{page}</strong> / {totalPages}
+          </span>
           <button
             onClick={() => setPage(Math.min(totalPages, page + 1))}
-            className="ml-1 p-1.5 rounded-md hover:bg-slate-100 text-slate-500"
+            disabled={page === totalPages}
+            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent"
+            title="Page suivante"
           >
             <ChevronRight className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setPage(totalPages)}
+            disabled={page === totalPages}
+            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500 disabled:opacity-30 disabled:hover:bg-transparent"
+            title="Dernière page"
+          >
+            <ChevronsRight className="w-4 h-4" />
           </button>
         </div>
       </div>

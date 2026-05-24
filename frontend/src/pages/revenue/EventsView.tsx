@@ -17,8 +17,8 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Activity, AlertCircle, Calendar, CalendarDays, Euro, FileDown, FileSpreadsheet, Filter, LineChart,
-  List, Plus, Search, Sparkles, Upload, X,
+  Activity, AlertCircle, Calendar, CalendarDays, CalendarRange, Euro, FileDown, FileSpreadsheet, Filter,
+  LineChart, List, Plus, Search, Sparkles, Upload, X,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
@@ -28,6 +28,7 @@ import type { EventCategory, EventImpactLevel, RMSMarketEvent } from '@/src/type
 import { CATEGORY_LABELS, IMPACT_LABELS } from '@/src/types/events';
 import { EventsList } from './events/EventsList';
 import { EventsCalendar } from './events/EventsCalendar';
+import { EventsHistory } from './events/EventsHistory';
 import { EventDetailPanel } from './events/EventDetailPanel';
 import { EventSearchPanel } from './events/EventSearchPanel';
 import { EventImportModal } from './events/EventImportModal';
@@ -36,7 +37,7 @@ import { EventValidationModal } from './events/EventValidationModal';
 import { KpiTile } from './events/components/KpiTile';
 import { exportEventsToExcel, exportEventsToPDF } from '@/src/services/event-export.service';
 
-type ViewMode = 'list' | 'calendar';
+type ViewMode = 'list' | 'calendar' | 'history';
 
 export const EventsView: React.FC = () => {
   const {
@@ -216,6 +217,15 @@ export const EventsView: React.FC = () => {
             >
               <CalendarDays className="w-3.5 h-3.5" /> Vue calendrier
             </button>
+            <button
+              onClick={() => setView('history')}
+              className={cn(
+                'px-3 py-1.5 text-[12.5px] font-medium rounded-md flex items-center gap-1.5',
+                view === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+              )}
+            >
+              <CalendarRange className="w-3.5 h-3.5" /> Historique
+            </button>
           </div>
 
           {/* Search */}
@@ -269,14 +279,14 @@ export const EventsView: React.FC = () => {
         {/* ─── BODY ──────────────────────────────────────────────────── */}
         <div className="flex gap-4 items-start">
           <div className="flex-1 min-w-0">
-            {view === 'list' ? (
-              <EventsList onSelect={(e) => setSelected(e)} />
-            ) : (
+            {view === 'list' && <EventsList onSelect={(e) => setSelected(e)} />}
+            {view === 'calendar' && (
               <EventsCalendar
                 onSelectEvent={(e) => setSelected(e)}
                 onCreate={(date) => setEditor({ open: true, defaultDate: date })}
               />
             )}
+            {view === 'history' && <EventsHistory />}
 
             {/* Footer info */}
             <div className="mt-4 flex items-start gap-2 text-[12px] text-slate-500 bg-white/80 ring-1 ring-slate-100 rounded-2xl px-4 py-3">

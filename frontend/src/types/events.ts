@@ -50,6 +50,23 @@ export type EventStatus = 'active' | 'planned' | 'archived' | 'cancelled';
 
 export type SyncFrequency = 'realtime' | '6h' | 'daily' | 'weekly' | 'monthly' | 'manual';
 
+/**
+ * Récurrence de l'événement — utile pour l'analyse historique et la
+ * prévision (ex: salon annuel, festival biannuel).
+ */
+export type EventFrequency = 'ponctuel' | 'semestriel' | 'annuel' | 'biannuel';
+
+/**
+ * Impact réel observé après l'événement (saisi manuellement par le RM).
+ * Sert à l'apprentissage et à la calibration des prévisions.
+ */
+export interface RealImpact {
+  occupancy?: number;   // taux d'occupation observé (delta vs baseline, en %)
+  adr?: number;         // ADR observé (delta vs baseline, en %)
+  revenue?: number;     // CA observé (delta vs baseline, en %)
+  recordedAt?: string;  // ISO
+}
+
 export type SourceMethod =
   | 'api'
   | 'rss'
@@ -138,6 +155,12 @@ export interface RMSMarketEvent {
 
   rmsSynced: boolean;
   syncedAt?: string;
+
+  // ─── Historique & analyse ─────────────────────────────────────────────
+  frequency?: EventFrequency;
+  estimatedVisitors?: number;
+  realImpact?: RealImpact;
+  internalComment?: string;
 
   history: EventHistoryEntry[];
   createdAt: string;

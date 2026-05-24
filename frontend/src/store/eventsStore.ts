@@ -116,6 +116,8 @@ interface EventsStore {
 
   // sources
   toggleSource: (id: string, active: boolean) => void;
+  addSource: (source: EventSource) => void;
+  removeSource: (id: string) => void;
   setAutoSync: (v: boolean) => void;
 
   // filters
@@ -325,6 +327,12 @@ export const useEventsStore = create<EventsStore>()(
         set((s) => ({
           sources: s.sources.map((src) => (src.id === id ? { ...src, active } : src)),
         })),
+
+      addSource: (source) =>
+        set((s) => ({ sources: [...s.sources, source] })),
+
+      removeSource: (id) =>
+        set((s) => ({ sources: s.sources.filter((src) => src.id !== id) })),
 
       setAutoSync: (v) => set({ autoSync: v }),
 
