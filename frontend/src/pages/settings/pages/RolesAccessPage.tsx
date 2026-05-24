@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
-import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
 import { syncPermissionsMatrixToSupabase } from '@/src/services/settings/settingsPersistence';
 
@@ -196,6 +196,7 @@ export const RolesAccessPage: React.FC = () => {
   // RBAC — la gestion fine des permissions est réservée à l'admin (set_users = admin)
   const canRead = usePermission('set_users', 'read');
   const canEditMatrix = usePermission('set_users', 'admin');
+  const audit = useAuditLogger();
 
   function notify(msg: string) {
     setToast(msg);
@@ -212,7 +213,12 @@ export const RolesAccessPage: React.FC = () => {
   function saveAll() {
     saveMatrix(matrix);
     setDirty(false);
-    logAudit({ action: 'module_inspected', module: 'security_backups', detail: 'Matrice de permissions mise à jour' });
+    audit({
+      action: 'permission_changed',
+      module: 'security_backups',
+      detail: 'Matrice RBAC mise à jour',
+      meta: { roles: Object.keys(matrix).filter((r) => r !== 'admin') },
+    });
     // Sync best-effort vers Supabase (RLS limite aux admins)
     void syncPermissionsMatrixToSupabase(matrix);
     notify('Permissions enregistrées');

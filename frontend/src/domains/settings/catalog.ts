@@ -490,6 +490,20 @@ export const settingsSections: Record<SettingsPageId, SettingsSection> = {
       rows: [['07/05 15:12', 'Laurence W.', 'Réservation', 'Check-in', 'R-10421'], ['07/05 15:15', 'Fatima K.', 'HK', 'Statut', 'Chambre 101'], ['07/05 15:20', 'Système', 'Fiscalité', 'E-facture', '20260507-0001']],
     },
   },
+  settings_system_health: {
+    id: 'settings_system_health',
+    title: 'Santé du système',
+    eyebrow: 'Observabilité',
+    description: "Erreurs runtime captées, compteurs métier (RBAC, sync), occupation du stockage local.",
+    status: 'Monitoring temps réel',
+    actions: ['Rafraîchir', 'Purger erreurs', 'Réinitialiser compteurs'],
+    checklist: [
+      'Erreurs JS capturées (window.onerror + unhandledrejection)',
+      'Compteur permissions refusées (rbac_denied)',
+      'Compteur échecs de sync Supabase (settings_sync_failed)',
+      'Taille du localStorage (alerte si > 4 Mo)',
+    ],
+  },
   settings_backups: {
     id: 'settings_backups',
     title: 'Sauvegardes',

@@ -128,13 +128,29 @@ export function getPermissionLevel(
  * Hook : `usePermission('rev_pricing', 'write')` → boolean.
  * Mode dev : si pas de session (auth non chargée), retourne `true` pour
  * ne pas bloquer le développement local.
+ *
+ * Toute permission refusée incrémente le compteur `rbac_denied` du
+ * service de monitoring (debug / dashboard ops).
  */
 export function usePermission(capability: string, requiredLevel: AccessLevel): boolean {
   const auth = useAuth();
   return useMemo(() => {
     // Pas de session → mode dev, autoriser tout
     if (!auth.session) return true;
-    return hasPermission(auth.session.role, capability, requiredLevel);
+    const allowed = hasPermission(auth.session.role, capability, requiredLevel);
+    if (!allowed && typeof window !== 'undefined') {
+      // Import dynamique pour éviter un cycle de dépendance
+      import('./monitoringService')
+        .then((m) =>
+          m.captureMetric('rbac_denied', 1, {
+            capability,
+            requiredLevel,
+            role: auth.session?.role ?? 'unknown',
+          }),
+        )
+        .catch(() => { /* silencieux */ });
+    }
+    return allowed;
   }, [auth.session, capability, requiredLevel]);
 }
 

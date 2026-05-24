@@ -22,7 +22,6 @@ import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import type { RatePlanData, PensionType } from '@/src/components/rms/types';
 import type { PageId } from '@/src/types';
-import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import {
   parseRatePlanExcel, saveImportedRatePlans, loadImportedRatePlans, clearImportedRatePlans,
   type RatePlanImportReport,
@@ -33,6 +32,7 @@ import {
   type IntegrationReport, type RoomTypeMapping, type MealPlanMapping,
 } from '@/src/services/settings/rate-plan-integration.service';
 import { logImportedRatePlanReport } from '@/src/services/settings/settingsPersistence';
+import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 
 interface RatePlansPageProps {
   onNavigate: (page: PageId) => void;
@@ -43,6 +43,7 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
   const [search, setSearch] = useState('');
   const [filterRoom, setFilterRoom] = useState<string>('all');
   const [toast, setToast] = useState<string | null>(null);
+  const audit = useAuditLogger();
 
   // ─── Import Excel ─────────────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
@@ -60,7 +61,12 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
       saveImportedRatePlans(report);
       setImported(report);
       setShowImportedTable(true);
-      logAudit({ action: 'module_inspected', module: 'rms_revenue', detail: `Import Excel "${file.name}" : ${report.totalRows} plans tarifaires détectés (${report.warnings.length} avertissements)` });
+      audit({
+        action: 'rate_plan_imported',
+        module: 'rms_revenue',
+        detail: `"${file.name}" — ${report.totalRows} plans tarifaires détectés (${report.warnings.length} avertissements)`,
+        meta: { fileName: file.name, totalRows: report.totalRows, warnings: report.warnings.length },
+      });
       notify(`${report.totalRows} plans tarifaires importés`);
     } catch (err) {
       notify(`Erreur d'import : ${(err as Error).message}`);
@@ -97,9 +103,17 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
     const report = integrateRatePlans(imported.plans, roomMapping, mealMapping);
     saveIntegrationReport(report);
     setIntegrationReport(report);
-    logAudit({
-      action: 'module_inspected', module: 'rms_revenue',
-      detail: `Intégration plans tarifaires : ${report.created} créés, ${report.updated} mis à jour, ${report.rejected} rejetés, ${report.requiresMapping} requièrent mapping`,
+    audit({
+      action: 'rate_plan_integrated',
+      module: 'rms_revenue',
+      detail: `${report.created} créés · ${report.updated} mis à jour · ${report.rejected} rejetés · ${report.requiresMapping} à corriger`,
+      meta: {
+        created: report.created,
+        updated: report.updated,
+        rejected: report.rejected,
+        requiresMapping: report.requiresMapping,
+        total: report.total,
+      },
     });
     // Trace l'import dans Supabase pour audit + historique inter-sessions
     void logImportedRatePlanReport({

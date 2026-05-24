@@ -21,6 +21,7 @@ import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import type { RoomTypeData, VirtualRoomKind, BathroomType } from '@/src/components/rms/types';
 import { syncVirtualRoomToSupabase } from '@/src/services/settings/settingsPersistence';
+import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 
 type Preset = {
   kind: VirtualRoomKind;
@@ -105,6 +106,7 @@ interface VirtualRoomModalProps {
 export const VirtualRoomModal: React.FC<VirtualRoomModalProps> = ({ open, onClose, onCreated }) => {
   const { roomTypes, addRoomType } = useRateCalendarStore();
   const physicalRooms = useMemo(() => roomTypes.filter((rt) => !rt.isVirtual), [roomTypes]);
+  const audit = useAuditLogger();
 
   const [preset, setPreset] = useState<Preset>(PRESETS[0]);
   const [name, setName] = useState(PRESETS[0].defaultName);
@@ -189,6 +191,19 @@ export const VirtualRoomModal: React.FC<VirtualRoomModalProps> = ({ open, onClos
       bathroom,
       description: finalDescription,
       isActive: true,
+    });
+
+    audit({
+      action: 'virtual_room_created',
+      module: 'inventory_planning',
+      detail: `${name.trim()} (${trimmedCode}) — ${preset.label}`,
+      meta: {
+        roomTypeCode: trimmedCode,
+        virtualKind: preset.kind,
+        components: componentIds,
+        componentsRequired,
+        capacity: computedCapacity,
+      },
     });
 
     onCreated?.(`rt_${code.toLowerCase()}`);

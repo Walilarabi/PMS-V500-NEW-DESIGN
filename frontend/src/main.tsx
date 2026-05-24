@@ -7,6 +7,10 @@ import './index.css';
 import { ReservationProvider } from './contexts/ReservationContext';
 import { AuthProvider } from '@/src/domains/auth/AuthContext';
 import { ErrorBoundary } from '@/src/components/ErrorBoundary';
+import { installGlobalErrorHandlers } from '@/src/services/settings/monitoringService';
+
+// Capture window.onerror + unhandledrejection vers le ring buffer monitoring
+installGlobalErrorHandlers();
 
 const queryClient = new QueryClient({
   defaultOptions: {

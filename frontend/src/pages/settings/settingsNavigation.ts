@@ -152,6 +152,7 @@ export const SETTINGS_NAVIGATION: SettingsDomain[] = [
       { id: 'settings_sessions',      label: 'Sessions actives',      icon: Activity },
       { id: 'settings_rgpd',          label: 'RGPD',                  icon: ShieldCheck },
       { id: 'settings_audit',         label: 'Audit / Logs',          icon: Fingerprint },
+      { id: 'settings_system_health', label: 'Santé du système',      icon: Activity },
       { id: 'settings_backups',       label: 'Sauvegardes',           icon: HardDrive },
       { id: 'settings_import_export', label: 'Import / Export',       icon: Upload },
     ],

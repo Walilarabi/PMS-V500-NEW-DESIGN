@@ -7,35 +7,20 @@
  * Filtre par action et recherche full-text. Export CSV.
  */
 import React, { useMemo, useState } from 'react';
-import { Fingerprint, Search, Download, RefreshCw, Filter, Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Fingerprint, Search, Download, RefreshCw, Filter, Trash2, AlertCircle, CheckCircle2, User } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { clearAudit, readAudit, type AuditAction, type AuditEntry } from '@/src/services/settings/settingsAuditLogger';
+import {
+  clearAudit, readAudit,
+  ACTION_LABEL, SEVERITY_TONE, SEVERITY_LABEL,
+  type AuditAction, type AuditEntry, type AuditSeverity,
+} from '@/src/services/settings/settingsAuditLogger';
 import { MODULE_LABEL } from '@/src/types/settings/diagnostic';
-
-const ACTION_LABEL: Record<AuditAction, string> = {
-  diagnostic_run: 'Diagnostic lancé',
-  alert_resolved: 'Alerte résolue',
-  alert_dismissed: 'Alerte écartée',
-  config_exported: 'Configuration exportée',
-  dashboard_customized: 'Tableau personnalisé',
-  module_inspected: 'Module inspecté',
-  guided_step_resumed: 'Étape config reprise',
-};
-
-const ACTION_TONE: Record<AuditAction, string> = {
-  diagnostic_run: 'bg-violet-50 text-violet-700 ring-violet-200',
-  alert_resolved: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  alert_dismissed: 'bg-amber-50 text-amber-700 ring-amber-200',
-  config_exported: 'bg-sky-50 text-sky-700 ring-sky-200',
-  dashboard_customized: 'bg-slate-50 text-slate-700 ring-slate-200',
-  module_inspected: 'bg-slate-50 text-slate-700 ring-slate-200',
-  guided_step_resumed: 'bg-violet-50 text-violet-700 ring-violet-200',
-};
 
 export const AuditPage: React.FC = () => {
   const [tick, setTick] = useState(0);
   const [query, setQuery] = useState('');
   const [actionFilter, setActionFilter] = useState<AuditAction | 'all'>('all');
+  const [severityFilter, setSeverityFilter] = useState<AuditSeverity | 'all'>('all');
   const [toast, setToast] = useState<string | null>(null);
 
   const entries = useMemo<AuditEntry[]>(() => readAudit(200), [tick]);
@@ -44,13 +29,14 @@ export const AuditPage: React.FC = () => {
     const q = query.trim().toLowerCase();
     return entries.filter((e) => {
       if (actionFilter !== 'all' && e.action !== actionFilter) return false;
+      if (severityFilter !== 'all' && e.severity !== severityFilter) return false;
       if (q) {
-        const blob = `${ACTION_LABEL[e.action]} ${e.module ? MODULE_LABEL[e.module] : ''} ${e.detail ?? ''}`.toLowerCase();
+        const blob = `${ACTION_LABEL[e.action]} ${e.module ? MODULE_LABEL[e.module] : ''} ${e.detail ?? ''} ${e.actor?.email ?? ''}`.toLowerCase();
         if (!blob.includes(q)) return false;
       }
       return true;
     });
-  }, [entries, query, actionFilter]);
+  }, [entries, query, actionFilter, severityFilter]);
 
   function refresh() {
     setTick((t) => t + 1);
@@ -66,11 +52,13 @@ export const AuditPage: React.FC = () => {
 
   function exportCsv() {
     const rows = [
-      ['Date', 'Action', 'Module', 'Détail'],
+      ['Date', 'Sévérité', 'Action', 'Module', 'Acteur', 'Détail'],
       ...filtered.map((e) => [
         new Date(e.at).toLocaleString('fr-FR'),
+        SEVERITY_LABEL[e.severity],
         ACTION_LABEL[e.action],
         e.module ? MODULE_LABEL[e.module] : '',
+        e.actor?.email ?? '',
         e.detail ?? '',
       ]),
     ];
@@ -173,6 +161,16 @@ export const AuditPage: React.FC = () => {
             />
           </div>
           <select
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value as AuditSeverity | 'all')}
+            className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[12.5px]"
+          >
+            <option value="all">Toutes sévérités</option>
+            <option value="info">Info</option>
+            <option value="warning">Attention</option>
+            <option value="critical">Critique</option>
+          </select>
+          <select
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value as AuditAction | 'all')}
             className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[12.5px]"
@@ -205,8 +203,10 @@ export const AuditPage: React.FC = () => {
               <thead className="bg-slate-50/60 text-left text-[10.5px] uppercase tracking-wide text-slate-400">
                 <tr>
                   <th className="px-5 py-2.5 font-medium w-44">Date</th>
+                  <th className="px-3 py-2.5 font-medium w-24">Sévérité</th>
                   <th className="px-3 py-2.5 font-medium w-48">Action</th>
-                  <th className="px-3 py-2.5 font-medium w-44">Module</th>
+                  <th className="px-3 py-2.5 font-medium w-40">Module</th>
+                  <th className="px-3 py-2.5 font-medium w-40">Acteur</th>
                   <th className="px-3 py-2.5 font-medium">Détail</th>
                 </tr>
               </thead>
@@ -217,12 +217,27 @@ export const AuditPage: React.FC = () => {
                       {new Date(e.at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </td>
                     <td className="px-3 py-2.5">
-                      <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full ring-1 ring-inset text-[11px] font-semibold', ACTION_TONE[e.action])}>
+                      <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full ring-1 ring-inset text-[10.5px] font-semibold uppercase', SEVERITY_TONE[e.severity])}>
+                        {SEVERITY_LABEL[e.severity]}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className="text-[12px] font-medium text-slate-800">
                         {ACTION_LABEL[e.action]}
                       </span>
                     </td>
                     <td className="px-3 py-2.5 text-slate-700 text-[12px]">
                       {e.module ? MODULE_LABEL[e.module] : <span className="text-slate-400">—</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-slate-700 text-[12px]">
+                      {e.actor?.email ? (
+                        <span className="inline-flex items-center gap-1 truncate" title={`${e.actor.email} (${e.actor.role ?? '?'})`}>
+                          <User className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="truncate">{e.actor.email}</span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-slate-600 text-[12px]">
                       {e.detail || <span className="text-slate-400 italic">Aucun détail</span>}

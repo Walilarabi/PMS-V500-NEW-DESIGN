@@ -13,6 +13,7 @@ import { supabase } from '@/src/lib/supabase';
 import type { EventSource } from '@/src/types/events';
 import type { VirtualRoomKind } from '@/src/components/rms/types';
 import type { AccessLevel, RoleId } from './permissionsService';
+import type { AuditEntry } from './settingsAuditLogger';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -30,6 +31,12 @@ async function getCurrentHotelIdSafe(): Promise<string | null> {
 function logSyncError(table: string, op: string, err: unknown) {
   if (typeof console !== 'undefined') {
     console.warn(`[settingsPersistence] ${table}.${op} failed (offline?)`, err);
+  }
+  // Compteur monitoring (import dynamique pour éviter cycle)
+  if (typeof window !== 'undefined') {
+    import('./monitoringService')
+      .then((m) => m.captureMetric('settings_sync_failed', 1, { table, op }))
+      .catch(() => { /* silencieux */ });
   }
 }
 
@@ -267,6 +274,74 @@ export interface ImportedRatePlanReportRow {
   mealMapping: Record<string, string>;
   report: unknown;
   warnings: string[];
+}
+
+// ─── settings_audit_log ────────────────────────────────────────────────────
+
+export async function syncAuditEntryToSupabase(entry: AuditEntry): Promise<boolean> {
+  const hotelId = await getCurrentHotelIdSafe();
+  if (!hotelId) return false;
+  try {
+    const { error } = await supabase
+      .from('settings_audit_log')
+      .insert({
+        hotel_id: hotelId,
+        entry_id: entry.id,
+        at: entry.at,
+        action: entry.action,
+        severity: entry.severity,
+        module: entry.module ?? null,
+        detail: entry.detail ?? null,
+        actor_user_id: entry.actor?.userId ?? null,
+        actor_email: entry.actor?.email ?? null,
+        actor_role: entry.actor?.role ?? null,
+        meta: entry.meta ?? {},
+      });
+    if (error) {
+      logSyncError('settings_audit_log', 'insert', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logSyncError('settings_audit_log', 'insert', err);
+    return false;
+  }
+}
+
+export async function fetchAuditLogFromSupabase(limit = 200): Promise<AuditEntry[]> {
+  const hotelId = await getCurrentHotelIdSafe();
+  if (!hotelId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('settings_audit_log')
+      .select('*')
+      .eq('hotel_id', hotelId)
+      .order('at', { ascending: false })
+      .limit(limit);
+    if (error || !data) {
+      if (error) logSyncError('settings_audit_log', 'select', error);
+      return [];
+    }
+    return data.map((r: Record<string, unknown>) => ({
+      id: String(r.entry_id),
+      at: String(r.at),
+      action: r.action as AuditEntry['action'],
+      severity: (r.severity ?? 'info') as AuditEntry['severity'],
+      module: (r.module as AuditEntry['module']) ?? undefined,
+      detail: (r.detail as string) ?? undefined,
+      actor: r.actor_user_id || r.actor_email
+        ? {
+            userId: (r.actor_user_id as string | null) ?? null,
+            email: (r.actor_email as string | null) ?? null,
+            role: (r.actor_role as string | null) ?? null,
+          }
+        : undefined,
+      meta: (r.meta as Record<string, unknown> | undefined) ?? undefined,
+    }));
+  } catch (err) {
+    logSyncError('settings_audit_log', 'select', err);
+    return [];
+  }
 }
 
 export async function logImportedRatePlanReport(row: ImportedRatePlanReportRow): Promise<boolean> {

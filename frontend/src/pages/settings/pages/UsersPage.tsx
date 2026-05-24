@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
-import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 import { usePermission, PermissionDeniedBanner, RequirePermission } from '@/src/services/settings/permissionsService';
 
 type UserRole = 'admin' | 'receptionist' | 'housekeeping' | 'manager';
@@ -67,6 +67,7 @@ export const UsersPage: React.FC = () => {
   // RBAC — page protégée : lecture min "read", écriture/admin requise pour CRUD
   const canRead = usePermission('set_users', 'read');
   const canWrite = usePermission('set_users', 'write');
+  const audit = useAuditLogger();
 
   // ─── Métriques ────────────────────────────────────────────────────────
   const admins = users.filter((u) => u.role === 'admin' && u.active);
@@ -105,11 +106,24 @@ export const UsersPage: React.FC = () => {
     if (!draft.name.trim() || !draft.email.trim()) return;
     if (adding) {
       updateUsers([...users, draft]);
-      logAudit({ action: 'module_inspected', module: 'security_backups', detail: `Utilisateur créé : ${draft.name} (${ROLE_LABEL[draft.role]})` });
+      audit({
+        action: 'user_created',
+        module: 'security_backups',
+        detail: `${draft.name} (${ROLE_LABEL[draft.role]})`,
+        meta: { userId: draft.id, role: draft.role, email: draft.email },
+      });
       toast(`Utilisateur ${draft.name} créé`);
     } else if (editing) {
+      const roleChanged = editing.role !== draft.role;
       updateUsers(users.map((u) => (u.id === editing.id ? draft : u)));
-      logAudit({ action: 'module_inspected', module: 'security_backups', detail: `Utilisateur modifié : ${draft.name}` });
+      audit({
+        action: roleChanged ? 'role_changed' : 'user_updated',
+        module: 'security_backups',
+        detail: roleChanged
+          ? `${draft.name} : ${ROLE_LABEL[editing.role]} → ${ROLE_LABEL[draft.role]}`
+          : `${draft.name} modifié`,
+        meta: { userId: draft.id, before: { role: editing.role }, after: { role: draft.role } },
+      });
       toast(`Utilisateur ${draft.name} modifié`);
     }
     cancelEdit();
@@ -121,12 +135,23 @@ export const UsersPage: React.FC = () => {
       return;
     }
     updateUsers(users.filter((x) => x.id !== u.id));
-    logAudit({ action: 'module_inspected', module: 'security_backups', detail: `Utilisateur supprimé : ${u.name}` });
+    audit({
+      action: 'user_deleted',
+      module: 'security_backups',
+      detail: `${u.name} (${ROLE_LABEL[u.role]})`,
+      meta: { userId: u.id, role: u.role, email: u.email },
+    });
     toast(`Utilisateur ${u.name} supprimé`);
   }
 
   function toggleActive(u: User) {
     updateUsers(users.map((x) => (x.id === u.id ? { ...x, active: !x.active } : x)));
+    audit({
+      action: 'user_updated',
+      module: 'security_backups',
+      detail: `${u.name} ${u.active ? 'désactivé' : 'activé'}`,
+      meta: { userId: u.id, active: !u.active },
+    });
     toast(u.active ? `${u.name} désactivé` : `${u.name} activé`);
   }
 
@@ -134,7 +159,12 @@ export const UsersPage: React.FC = () => {
     const next = { ...tfaMap, [u.id]: !tfaMap[u.id] };
     setTfaMap(next);
     saveTfaMap(next);
-    logAudit({ action: 'module_inspected', module: 'security_backups', detail: `2FA ${next[u.id] ? 'activé' : 'désactivé'} pour ${u.name}` });
+    audit({
+      action: 'user_updated',
+      module: 'security_backups',
+      detail: `2FA ${next[u.id] ? 'activé' : 'désactivé'} pour ${u.name}`,
+      meta: { userId: u.id, twoFactorEnabled: next[u.id] },
+    });
   }
 
   if (!canRead) {

@@ -303,6 +303,47 @@ CREATE TRIGGER trg_settings_permissions_matrix_updated_at
   BEFORE UPDATE ON settings_permissions_matrix
   FOR EACH ROW EXECUTE FUNCTION set_updated_at_settings();
 
+-- ─── settings_audit_log ────────────────────────────────────────────────────
+-- Journal append-only des actions structurantes. Conservation 365 jours
+-- (purge applicative côté worker, pas ici).
+CREATE TABLE IF NOT EXISTS settings_audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  hotel_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+
+  entry_id TEXT NOT NULL,                           -- id côté client (anti-doublon)
+  at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  action TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'warning', 'critical')),
+  module TEXT,
+  detail TEXT,
+
+  actor_user_id UUID REFERENCES auth.users(id),
+  actor_email TEXT,
+  actor_role TEXT,
+
+  meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  UNIQUE (hotel_id, entry_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_settings_audit_log_hotel_at ON settings_audit_log(hotel_id, at DESC);
+CREATE INDEX IF NOT EXISTS idx_settings_audit_log_severity ON settings_audit_log(hotel_id, severity);
+CREATE INDEX IF NOT EXISTS idx_settings_audit_log_action ON settings_audit_log(hotel_id, action);
+
+ALTER TABLE settings_audit_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY settings_audit_log_select_own
+  ON settings_audit_log FOR SELECT
+  USING (hotel_id IN (SELECT hotel_id FROM hotel_users WHERE user_id = auth.uid()));
+
+-- Append-only : tout user du tenant peut insérer (l'application est responsable
+-- de mettre actor_user_id = auth.uid())
+CREATE POLICY settings_audit_log_insert_own
+  ON settings_audit_log FOR INSERT
+  WITH CHECK (hotel_id IN (SELECT hotel_id FROM hotel_users WHERE user_id = auth.uid()));
+
+-- Pas d'UPDATE / DELETE — table immuable (purge admin via service role)
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- FIN MIGRATION 20260524_settings_phase2.sql
 -- ═══════════════════════════════════════════════════════════════════════════

@@ -166,7 +166,8 @@ export type PageId =
   | 'settings_ota_parity'
   | 'settings_distribution_logs'
   | 'settings_roles'
-  | 'settings_sessions';
+  | 'settings_sessions'
+  | 'settings_system_health';
 
 export interface Reservation {
   id: string;

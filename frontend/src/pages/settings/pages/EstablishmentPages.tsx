@@ -2,69 +2,226 @@
  * FLOWTYM — Paramètres · Établissement (Multi-hôtels, Timezone, Contact,
  * LegalDocs, Photos, Classification, Compliance).
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Globe, Timer, MapPin, FileText, Image as ImageIcon, Star, ShieldCheck,
-  Save, Plus, Trash2, ExternalLink, CheckCircle2, AlertCircle,
+  Save, Plus, Trash2, ExternalLink, CheckCircle2, AlertCircle, Loader2, Building2,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { useAuth } from '@/src/domains/auth/AuthContext';
+import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
+import { cn } from '@/src/lib/utils';
 import {
   GenericListPage, SettingsPageHeader, SettingsMetric, SettingsToast, Phase2Notice,
   FormField, type GenericListItem,
 } from './_common';
 
 // ─── Multi-hôtels ─────────────────────────────────────────────────────────
-
-interface HotelEntry extends GenericListItem {
-  city: string;
-  country: string;
-  roomsCount: number;
-  status: 'active' | 'planned' | 'closed';
-}
+// Vrai multi-hôtels (Phase 3) : lit `session.accessibleHotels` depuis
+// AuthContext + permet de basculer via RPC `set_active_hotel`.
 
 export const MultiHotelPage: React.FC = () => {
-  const hotelName = useConfigStore((s) => s.hotel.name);
-  const hotelCity = useConfigStore((s) => s.hotel.city);
-  const hotelCountry = useConfigStore((s) => s.hotel.country);
-  return (
-    <GenericListPage<HotelEntry>
-      icon={Globe}
-      category="Établissement"
-      title="Multi-hôtels"
-      description="Établissements connectés au groupe. L'hôtel courant est synchronisé avec votre profil."
-      storageKey="flowtym.multi_hotel"
-      module="pms_reservations"
-      defaults={[
-        { id: 'current', label: hotelName || 'Hôtel courant', code: 'CURR', active: true, city: hotelCity || 'Paris', country: hotelCountry || 'FR', roomsCount: 58, status: 'active' },
-        { id: 'lyon', label: 'Hôtel Lyon Gare', code: 'LYO',  active: true, city: 'Lyon',     country: 'FR', roomsCount: 82, status: 'active' },
-        { id: 'nice', label: 'Hôtel Nice Mer', code: 'NCE',  active: true, city: 'Nice',     country: 'FR', roomsCount: 120, status: 'active' },
-      ]}
-      extraColumns={[
-        { header: 'Ville / Pays', render: (it) => `${it.city}, ${it.country}` },
-        { header: 'Chambres', render: (it) => <span className="font-bold tabular-nums">{it.roomsCount}</span> },
-        { header: 'Statut', render: (it) => {
-          const colors = { active: 'bg-emerald-100 text-emerald-700', planned: 'bg-sky-100 text-sky-700', closed: 'bg-slate-100 text-slate-500' };
-          return <span className={`px-1.5 py-0.5 rounded text-[10.5px] font-semibold uppercase ${colors[it.status]}`}>{it.status}</span>;
-        } },
-      ]}
-      extraFormFields={(item, set) => (
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block"><span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Ville</span>
-            <input type="text" value={item.city} onChange={(e) => set({ city: e.target.value })} className="mt-1.5 w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px]" /></label>
-          <label className="block"><span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Pays</span>
-            <input type="text" value={item.country} onChange={(e) => set({ country: e.target.value })} className="mt-1.5 w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px] font-mono" /></label>
-          <label className="block"><span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Chambres</span>
-            <input type="number" min={0} value={item.roomsCount} onChange={(e) => set({ roomsCount: parseInt(e.target.value) || 0 })} className="mt-1.5 w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px]" /></label>
-          <label className="block"><span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Statut</span>
-            <select value={item.status} onChange={(e) => set({ status: e.target.value as HotelEntry['status'] })} className="mt-1.5 w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px]">
-              <option value="active">Actif</option><option value="planned">Planifié</option><option value="closed">Fermé</option>
-            </select></label>
+  const { session, switchHotel, isSwitchingHotel, status } = useAuth();
+  const audit = useAuditLogger();
+  const [switching, setSwitching] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const hotels = useMemo(() => session?.accessibleHotels ?? [], [session]);
+  const activeHotel = hotels.find((h) => h.isActive);
+  const stats = useMemo(() => {
+    const total = hotels.length;
+    const active = hotels.filter((h) => h.isActive).length;
+    const byRole = new Map<string, number>();
+    hotels.forEach((h) => byRole.set(h.role, (byRole.get(h.role) ?? 0) + 1));
+    return { total, active, byRole };
+  }, [hotels]);
+
+  function notify(msg: string) {
+    setToast(msg);
+    window.setTimeout(() => setToast(null), 2500);
+  }
+
+  async function handleSwitch(hotelId: string, hotelName: string) {
+    if (activeHotel?.hotelId === hotelId) {
+      notify('Cet hôtel est déjà actif');
+      return;
+    }
+    setSwitching(hotelId);
+    setError(null);
+    try {
+      await switchHotel(hotelId);
+      audit({
+        action: 'hotel_switched',
+        module: 'security_backups',
+        detail: `Bascule vers ${hotelName}`,
+        meta: { fromHotelId: activeHotel?.hotelId ?? null, toHotelId: hotelId, hotelName },
+      });
+      notify(`Hôtel actif : ${hotelName}`);
+    } catch (err) {
+      const msg = (err as Error).message || 'Échec du basculement';
+      setError(msg);
+    } finally {
+      setSwitching(null);
+    }
+  }
+
+  // ─── Loading / vide ────────────────────────────────────────────────────
+  if (status === 'loading') {
+    return (
+      <div className="flex-1 overflow-y-auto bg-slate-50/60">
+        <div className="w-full px-6 pt-6 pb-10">
+          <div className="flex items-center gap-2 text-slate-500">
+            <Loader2 className="w-4 h-4 animate-spin" /> Chargement des hôtels accessibles…
+          </div>
         </div>
-      )}
-      emptyItem={() => ({ id: '', label: '', code: '', active: true, city: '', country: 'FR', roomsCount: 0, status: 'planned' })}
-      phase2="basculement multi-tenant Supabase RLS + synchronisation des paramètres mutualisables (rôles, conditions, taxes)."
-    />
+      </div>
+    );
+  }
+
+  if (status === 'unauthenticated' || hotels.length === 0) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-slate-50/60">
+        <div className="w-full px-6 pt-6 pb-10 space-y-4">
+          <SettingsPageHeader
+            icon={Globe}
+            category="Établissement"
+            title="Multi-hôtels"
+            description="Établissements accessibles à votre compte."
+          />
+          <div className="rounded-2xl ring-1 ring-amber-100 bg-amber-50/60 px-4 py-3 text-[12.5px] text-amber-800 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              <div className="font-medium">Aucun hôtel accessible</div>
+              <div className="text-amber-700/90 mt-0.5">
+                Connectez-vous pour voir les hôtels rattachés à votre compte. Si vous êtes connecté
+                mais ne voyez rien, vérifiez votre profil dans <code>public.users</code> et vos
+                rattachements dans <code>user_hotels</code>.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-slate-50/60">
+      <div className="w-full px-6 pt-6 pb-10 space-y-5">
+        <SettingsPageHeader
+          icon={Globe}
+          category="Établissement"
+          title="Multi-hôtels"
+          description="Établissements connectés au groupe. Sélectionnez l'hôtel actif pour basculer le tenant."
+        />
+
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+          <SettingsMetric label="Hôtels accessibles" value={String(stats.total)} caption="Lus depuis Supabase" />
+          <SettingsMetric label="Hôtel actif" value={activeHotel?.name ?? '—'} caption={activeHotel?.city ?? ''} tone={activeHotel ? 'emerald' : 'slate'} />
+          <SettingsMetric label="Rôles distincts" value={String(stats.byRole.size)} caption={[...stats.byRole.entries()].map(([r, c]) => `${r} (${c})`).join(' · ')} />
+          <SettingsMetric label="Tenant ID" value={session?.tenantId ? session.tenantId.slice(0, 8) + '…' : '—'} caption="Identifiant interne" />
+        </div>
+
+        {error && (
+          <div className="rounded-xl ring-1 ring-rose-100 bg-rose-50/60 px-4 py-3 text-[12.5px] text-rose-800 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {error}
+          </div>
+        )}
+
+        <section className="rounded-2xl ring-1 ring-slate-100 bg-white shadow-sm overflow-hidden">
+          <table className="w-full text-[13px]">
+            <thead className="bg-slate-50/60 text-left text-[10.5px] uppercase tracking-wide text-slate-400">
+              <tr>
+                <th className="px-5 py-2.5 font-medium">Hôtel</th>
+                <th className="px-3 py-2.5 font-medium">Ville / Pays</th>
+                <th className="px-3 py-2.5 font-medium">Mon rôle</th>
+                <th className="px-3 py-2.5 font-medium">Statut</th>
+                <th className="px-3 py-2.5 font-medium text-right w-32">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hotels.map((h) => {
+                const isActive = h.isActive;
+                const isDefault = h.isDefault;
+                const isLoading = switching === h.hotelId;
+                return (
+                  <tr key={h.hotelId} className={cn('border-t border-slate-100', isActive ? 'bg-emerald-50/30' : 'hover:bg-slate-50/60')}>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className={cn(
+                          'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
+                          isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500',
+                        )}>
+                          <Building2 className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-900 truncate flex items-center gap-1.5">
+                            {h.name}
+                            {isDefault && (
+                              <span className="text-[10px] font-semibold uppercase tracking-wider bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded">Défaut</span>
+                            )}
+                          </div>
+                          <div className="text-[10.5px] text-slate-400 font-mono truncate">{h.hotelId.slice(0, 13)}…</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-slate-700 text-[12.5px]">
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-slate-400" />
+                        {h.city ?? '?'}{h.country ? `, ${h.country}` : ''}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full ring-1 ring-inset text-[10.5px] font-semibold uppercase bg-violet-50 text-violet-700 ring-violet-200">
+                        {h.role}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      {isActive ? (
+                        <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-emerald-700">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Actif
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11.5px] text-slate-500">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300" /> Disponible
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {isActive ? (
+                        <span className="text-[11.5px] text-emerald-700 font-medium">— en cours —</span>
+                      ) : (
+                        <button
+                          onClick={() => handleSwitch(h.hotelId, h.name)}
+                          disabled={isLoading || isSwitchingHotel}
+                          className={cn(
+                            'px-3 py-1.5 rounded-lg text-[12px] font-medium ring-1 inline-flex items-center gap-1.5',
+                            isLoading || isSwitchingHotel
+                              ? 'bg-slate-100 text-slate-500 ring-slate-200 cursor-wait'
+                              : 'bg-violet-600 text-white ring-violet-600 hover:bg-violet-700',
+                          )}
+                        >
+                          {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRightLeft className="w-3 h-3" />}
+                          {isLoading ? 'Bascule…' : 'Basculer'}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+
+        <Phase2Notice>
+          <strong>À venir :</strong> ajout de nouveaux hôtels au compte (provisioning) via la page Utilisateurs / Invitations.
+        </Phase2Notice>
+
+        <SettingsToast message={toast} />
+      </div>
+    </div>
   );
 };
 
