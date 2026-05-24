@@ -9,10 +9,12 @@
  * unique de vérité).
  */
 import React, { useMemo, useState } from 'react';
-import { Tag, Search, ExternalLink, Bed, Users, ChevronRight, Layers, Plus } from 'lucide-react';
+import { Tag, Search, ExternalLink, Bed, Users, ChevronRight, Layers, Plus, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { RoomManagerPanel } from '@/src/components/rms/calendar/RoomManagerPanel';
+import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
+import { deleteVirtualRoomFromSupabase } from '@/src/services/settings/settingsPersistence';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
 import type { PageId } from '@/src/types';
 import { VirtualRoomModal } from './VirtualRoomModal';
@@ -31,11 +33,31 @@ interface RoomTypesPageProps {
 }
 
 export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
-  const { roomTypes, loadData } = useRateCalendarStore();
+  const { roomTypes, loadData, deleteRoomType } = useRateCalendarStore();
   const [search, setSearch] = useState('');
   const [virtualOpen, setVirtualOpen] = useState(false);
   const virtualCount = roomTypes.filter((rt) => rt.isVirtual).length;
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rooms');
+  const audit = useAuditLogger();
+
+  function handleDeleteVirtual(rt: { roomTypeId: string; roomTypeName: string; roomTypeCode: string }) {
+    if (!canWrite) return;
+    if (!window.confirm(`Supprimer la chambre virtuelle "${rt.roomTypeName}" ? Cette action est irréversible.`)) return;
+    deleteRoomType(rt.roomTypeId);
+    void deleteVirtualRoomFromSupabase(rt.roomTypeCode);
+    audit({
+      action: 'virtual_room_deleted',
+      module: 'inventory_planning',
+      detail: `${rt.roomTypeName} (${rt.roomTypeCode})`,
+      meta: { roomTypeId: rt.roomTypeId, roomTypeCode: rt.roomTypeCode },
+    });
+  }
+
+  function handleEditVirtual(roomTypeId: string) {
+    // L'édition complète passe par RoomManagerPanel via le store.
+    // Ouvrir le panel pré-chargé sur cette chambre :
+    useRateCalendarStore.getState().openRoomPanel(roomTypeId);
+  }
 
   React.useEffect(() => { if (roomTypes.length === 0) loadData(); }, []); // eslint-disable-line
 
@@ -156,9 +178,35 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
                         )}
                       </div>
                     </div>
-                    <button onClick={() => onNavigate('rev_calendar' as PageId)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400">
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {rt.isVirtual && (
+                        <>
+                          <button
+                            onClick={() => handleEditVirtual(rt.roomTypeId)}
+                            disabled={!canWrite}
+                            className={cn('p-1.5 rounded-md text-slate-500', canWrite ? 'hover:bg-slate-100 hover:text-slate-700' : 'opacity-30 cursor-not-allowed')}
+                            title={canWrite ? 'Modifier cette chambre virtuelle' : 'Permission requise : set_rooms (write)'}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteVirtual(rt)}
+                            disabled={!canWrite}
+                            className={cn('p-1.5 rounded-md', canWrite ? 'hover:bg-rose-50 text-rose-600' : 'text-rose-300 opacity-40 cursor-not-allowed')}
+                            title={canWrite ? 'Supprimer cette chambre virtuelle' : 'Permission requise : set_rooms (write)'}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => onNavigate('rev_calendar' as PageId)}
+                        className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400"
+                        title="Voir dans le Calendrier tarifaire"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
                   </li>
                 );
               })}

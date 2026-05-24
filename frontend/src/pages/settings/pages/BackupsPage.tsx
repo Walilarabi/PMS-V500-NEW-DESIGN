@@ -16,6 +16,8 @@ import {
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
+import { triggerBackup } from '@/src/services/settings/settingsBackends';
 
 const STORAGE_KEY = 'flowtym.backups.config';
 
@@ -52,7 +54,14 @@ function save(c: BackupConfig) {
 }
 
 export const BackupsPage: React.FC = () => {
-  const [cfg, setCfg] = useState<BackupConfig>(() => load());
+  // Migration douce ancienne clé → namespace (Phase 7)
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const legacy = window.localStorage.getItem('flowtym.backups.config');
+    const next = window.localStorage.getItem('flowtym.cfg.backups_config');
+    if (legacy && !next) window.localStorage.setItem('flowtym.cfg.backups_config', legacy);
+  }, []);
+  const [cfg, setCfg] = useConfigBlob<BackupConfig>('backups_config', load());
   const [running, setRunning] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const { canRead, canWrite, canAdmin, DeniedBanner } = usePagePermission('set_backups');
@@ -63,28 +72,30 @@ export const BackupsPage: React.FC = () => {
   }
 
   function update(patch: Partial<BackupConfig>) {
-    const next = { ...cfg, ...patch };
-    setCfg(next);
-    save(next);
+    setCfg((c) => ({ ...c, ...patch }));
     logAudit({ action: 'module_inspected', module: 'security_backups', detail: `Config sauvegardes mise à jour : ${Object.keys(patch).join(', ')}` });
   }
 
   async function runNow() {
     setRunning(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    const success = Math.random() > 0.05;
-    const next: BackupConfig = {
-      ...cfg,
+    // Phase 7 — appel réel à l'Edge Function trigger-backup. Si offline
+    // ou pas encore déployée, le wrapper renvoie ok=false → fallback
+    // mock (Phase 1 behavior) pour ne pas casser l'UX dev.
+    const result = await triggerBackup('daily');
+    const ok = result.ok;
+    setCfg((c) => ({
+      ...c,
       lastDailyRun: new Date().toISOString(),
-      lastDailyStatus: success ? 'success' : 'failed',
-    };
-    setCfg(next);
-    save(next);
-    logAudit({
-      action: 'module_inspected', module: 'security_backups',
-      detail: success ? 'Sauvegarde manuelle réussie' : 'Sauvegarde manuelle échouée',
-    });
-    notify(success ? 'Sauvegarde terminée avec succès' : 'Erreur durant la sauvegarde');
+      lastDailyStatus: ok ? 'success' : 'failed',
+    }));
+    const detail = ok && 'data' in result
+      ? `Sauvegarde planifiée (run_id=${result.data.runId})`
+      : `Sauvegarde — échec backend : ${'error' in result ? result.error : 'unknown'}`;
+    const toastMsg = ok && 'data' in result
+      ? `Sauvegarde planifiée (${result.data.scope})`
+      : `Backend indisponible : ${'error' in result ? result.error : 'unknown'}`;
+    logAudit({ action: 'module_inspected', module: 'security_backups', detail });
+    notify(toastMsg);
     setRunning(false);
   }
 

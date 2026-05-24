@@ -17,6 +17,7 @@ import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
+import { revokeOtherSessions } from '@/src/services/settings/settingsBackends';
 
 const STORAGE_KEY = 'flowtym.sessions';
 
@@ -154,13 +155,23 @@ export const SessionsPage: React.FC = () => {
     notify('Session révoquée');
   }
 
-  function revokeAll() {
+  async function revokeAll() {
     const count = sessions.filter((s) => !s.isCurrent).length;
     if (count === 0) return;
     if (!confirm(`Révoquer ${count} session${count > 1 ? 's' : ''} (votre session courante sera conservée) ?`)) return;
+    // Phase 7 — appel réel à l'Edge Function revoke-session (scope=others)
+    const result = await revokeOtherSessions();
     setSessions((arr) => arr.filter((s) => s.isCurrent));
-    logAudit({ action: 'module_inspected', module: 'security_backups', detail: `${count} session(s) révoquée(s) en masse` });
-    notify(`${count} session(s) révoquée(s)`);
+    const errMsg = 'error' in result ? result.error : 'unknown';
+    logAudit({
+      action: 'module_inspected', module: 'security_backups',
+      detail: result.ok
+        ? `${count} session(s) révoquée(s) — backend OK`
+        : `Révocation locale uniquement — backend indisponible (${errMsg})`,
+    });
+    notify(result.ok
+      ? `${count} session(s) révoquée(s)`
+      : 'Backend indisponible — sessions locales seulement');
   }
 
   function refresh() {

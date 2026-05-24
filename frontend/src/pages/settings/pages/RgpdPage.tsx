@@ -14,6 +14,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
 
 const STORAGE_KEY = 'flowtym.rgpd';
 
@@ -84,12 +85,18 @@ function save(tasks: RgpdTask[]) {
 }
 
 export const RgpdPage: React.FC = () => {
-  const [tasks, setTasks] = useState<RgpdTask[]>(() => load());
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const legacy = window.localStorage.getItem('flowtym.rgpd');
+    const next = window.localStorage.getItem('flowtym.cfg.rgpd');
+    if (legacy && !next) window.localStorage.setItem('flowtym.cfg.rgpd', legacy);
+  }, []);
+  const [tasks, setTasks] = useConfigBlob<RgpdTask[]>('rgpd', load());
   const [editing, setEditing] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rgpd');
 
-  useEffect(() => { save(tasks); }, [tasks]);
+  // useConfigBlob persiste à chaque setTasks — pas besoin de useEffect
 
   function notify(msg: string) {
     setToast(msg);

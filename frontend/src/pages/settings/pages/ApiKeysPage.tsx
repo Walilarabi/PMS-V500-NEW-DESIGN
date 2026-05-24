@@ -14,6 +14,8 @@ import {
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
+import { createApiKey as createApiKeyBackend } from '@/src/services/settings/settingsBackends';
 
 const KEYS_STORAGE = 'flowtym.api.keys';
 const HOOKS_STORAGE = 'flowtym.api.hooks';
@@ -82,8 +84,18 @@ function genSecret(prefix: string): string {
 }
 
 export const ApiKeysPage: React.FC = () => {
-  const [keys, setKeys] = useState<ApiKey[]>(() => loadKeys());
-  const [hooks, setHooks] = useState<WebhookConfig[]>(() => loadHooks());
+  // Phase 7 — migration douce vers useConfigBlob (Supabase + localStorage)
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const legacyK = window.localStorage.getItem('flowtym.api.keys');
+    const nextK = window.localStorage.getItem('flowtym.cfg.api_keys');
+    if (legacyK && !nextK) window.localStorage.setItem('flowtym.cfg.api_keys', legacyK);
+    const legacyH = window.localStorage.getItem('flowtym.api.hooks');
+    const nextH = window.localStorage.getItem('flowtym.cfg.api_hooks');
+    if (legacyH && !nextH) window.localStorage.setItem('flowtym.cfg.api_hooks', legacyH);
+  }, []);
+  const [keys, setKeys] = useConfigBlob<ApiKey[]>('api_keys', loadKeys());
+  const [hooks, setHooks] = useConfigBlob<WebhookConfig[]>('api_hooks', loadHooks());
   const [tab, setTab] = useState<'keys' | 'hooks'>('keys');
   const { canRead, canWrite, canAdmin, DeniedBanner } = usePagePermission('set_api');
   const [newKeyDraft, setNewKeyDraft] = useState<{ label: string; scopes: string[] }>({ label: '', scopes: ['read'] });
@@ -91,31 +103,52 @@ export const ApiKeysPage: React.FC = () => {
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => { saveKeys(keys); }, [keys]);
-  useEffect(() => { saveHooks(hooks); }, [hooks]);
-
   function notify(msg: string) {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2500);
   }
 
-  function createKey() {
+  async function createKey() {
     if (!newKeyDraft.label.trim()) return;
-    const secret = genSecret('flw_live');
-    const key: ApiKey = {
-      id: `key_${Date.now()}`,
-      label: newKeyDraft.label.trim(),
-      prefix: secret.slice(0, 12),
-      secret,
-      scopes: newKeyDraft.scopes,
-      createdAt: new Date().toISOString(),
-      revoked: false,
-    };
+    // Phase 7 — appel réel à l'Edge Function api-key-create. Le secret
+    // est généré server-side et hashé en base. Si backend indispo, on
+    // retombe sur la génération locale (dev/mock).
+    const remote = await createApiKeyBackend(newKeyDraft.label.trim(), newKeyDraft.scopes);
+    const key: ApiKey = remote.ok
+      ? {
+          id: remote.data.id,
+          label: remote.data.label,
+          prefix: remote.data.prefix,
+          secret: remote.data.secret,
+          scopes: remote.data.scopes,
+          createdAt: remote.data.createdAt,
+          revoked: false,
+        }
+      : (() => {
+          const secret = genSecret('flw_live');
+          return {
+            id: `key_${Date.now()}`,
+            label: newKeyDraft.label.trim(),
+            prefix: secret.slice(0, 12),
+            secret,
+            scopes: newKeyDraft.scopes,
+            createdAt: new Date().toISOString(),
+            revoked: false,
+          };
+        })();
     setKeys((arr) => [key, ...arr]);
     setRevealedKey(key.id);
     setNewKeyDraft({ label: '', scopes: ['read'] });
-    logAudit({ action: 'module_inspected', detail: `Clé API "${key.label}" créée (scopes: ${key.scopes.join(', ')})` });
-    notify('Clé créée — copiez-la maintenant, vous ne la reverrez plus en clair');
+    const errMsg = 'error' in remote ? remote.error : 'unknown';
+    logAudit({
+      action: 'module_inspected',
+      detail: remote.ok
+        ? `Clé API "${key.label}" créée via backend (scopes: ${key.scopes.join(', ')})`
+        : `Clé API "${key.label}" créée localement (backend indispo: ${errMsg})`,
+    });
+    notify(remote.ok
+      ? 'Clé créée — copiez-la maintenant, vous ne la reverrez plus en clair'
+      : 'Clé créée localement uniquement — backend indisponible');
   }
 
   function revokeKey(id: string) {
