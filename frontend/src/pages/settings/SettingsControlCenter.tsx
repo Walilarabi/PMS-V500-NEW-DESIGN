@@ -37,6 +37,8 @@ import { ModuleDetailModal } from './widgets/ModuleDetailModal';
 import { DashboardCustomizerModal, loadLayout, type WidgetPref } from './widgets/DashboardCustomizerModal';
 import { QuickWinsPanel } from './widgets/QuickWinsPanel';
 import { ScoreTrendsPanel } from './widgets/ScoreTrendsPanel';
+import { AlertSimulationModal } from './widgets/AlertSimulationModal';
+import type { ConfigAlert } from '@/src/types/settings/diagnostic';
 
 function emitNavigate(target: PageId) {
   window.dispatchEvent(new CustomEvent('navigate', { detail: { page: target } }));
@@ -48,6 +50,7 @@ export const SettingsControlCenter: React.FC = () => {
   const { report, running, rerun } = useSettingsDiagnostic();
 
   const [inspected, setInspected] = useState<ModuleStatus | null>(null);
+  const [simulating, setSimulating] = useState<ConfigAlert | null>(null);
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const [exportMenu, setExportMenu] = useState(false);
   const [layout, setLayout] = useState<WidgetPref[]>(() => loadLayout());
@@ -171,7 +174,7 @@ export const SettingsControlCenter: React.FC = () => {
           )}
           {widgets.includes('alerts') && (
             <div className={cn(widgets.includes('modules') ? 'xl:col-span-1' : 'xl:col-span-3')}>
-              <RecommendedActionsPanel alerts={report.alerts} onNavigate={emitNavigate} />
+              <RecommendedActionsPanel alerts={report.alerts} onNavigate={emitNavigate} onSimulate={setSimulating} />
             </div>
           )}
         </div>
@@ -212,6 +215,15 @@ export const SettingsControlCenter: React.FC = () => {
         open={customizerOpen}
         onClose={() => setCustomizerOpen(false)}
         onChange={setLayout}
+      />
+      <AlertSimulationModal
+        alert={simulating}
+        report={report}
+        onClose={() => setSimulating(null)}
+        onApplyAction={(target) => {
+          setSimulating(null);
+          emitNavigate(target);
+        }}
       />
     </div>
   );

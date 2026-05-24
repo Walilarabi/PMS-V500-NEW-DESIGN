@@ -52,6 +52,8 @@ import { ApiKeysPage } from './pages/ApiKeysPage';
 import { RoomsPage } from './pages/RoomsPage';
 import { RolesAccessPage } from './pages/RolesAccessPage';
 import { SessionsPage } from './pages/SessionsPage';
+import { RatePlansPage } from './pages/RatePlansPage';
+import { PaymentModesPage } from './pages/PaymentModesPage';
 
 /**
  * PageIds couvertes par le catalogue SettingsModule legacy.
@@ -65,13 +67,11 @@ const LEGACY_CATALOG_PAGES: ReadonlySet<PageId> = new Set<PageId>([
   'settings_room_status',
   'settings_preferences',
   'settings_products',
-  'settings_rate_plans',
   'settings_conditions',
   'settings_seasons',
   'settings_age_categories',
   'settings_invoice',
   'settings_numbering',
-  'settings_payment_modes',
   'settings_accounting',
   'settings_debtors',
   'settings_fiscal',
@@ -241,6 +241,8 @@ const SettingsContent: React.FC<{
   if (activePage === 'settings_rooms') return <RoomsPage />;
   if (activePage === 'settings_roles') return <RolesAccessPage />;
   if (activePage === 'settings_sessions') return <SessionsPage />;
+  if (activePage === 'settings_rate_plans') return <RatePlansPage onNavigate={onNavigate} />;
+  if (activePage === 'settings_payment_modes') return <PaymentModesPage />;
   if (LEGACY_CATALOG_PAGES.has(activePage)) return <SettingsModule activePage={activePage} />;
   return <SettingsPlaceholder activePage={activePage} onNavigate={onNavigate} />;
 };

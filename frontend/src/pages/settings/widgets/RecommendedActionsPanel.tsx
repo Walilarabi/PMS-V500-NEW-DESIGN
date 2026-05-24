@@ -7,7 +7,7 @@
  * Bouton "Marquer comme résolue" trace l'action dans l'audit.
  */
 import React from 'react';
-import { AlertOctagon, AlertTriangle, ArrowRight, CheckCircle2, Info, ShieldAlert } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ArrowRight, CheckCircle2, Info, ShieldAlert, Sparkles } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import type { AlertSeverity, ConfigAlert } from '@/src/types/settings/diagnostic';
 import { MODULE_LABEL, SEVERITY_LABEL } from '@/src/types/settings/diagnostic';
@@ -26,9 +26,11 @@ const TONE: Record<AlertSeverity, { ring: string; bg: string; text: string; icon
 interface RecommendedActionsPanelProps {
   alerts: ConfigAlert[];
   onNavigate: (page: PageId) => void;
+  /** Optionnel — si fourni, affiche un bouton "Simuler" sur chaque alerte. */
+  onSimulate?: (alert: ConfigAlert) => void;
 }
 
-export const RecommendedActionsPanel: React.FC<RecommendedActionsPanelProps> = ({ alerts, onNavigate }) => {
+export const RecommendedActionsPanel: React.FC<RecommendedActionsPanelProps> = ({ alerts, onNavigate, onSimulate }) => {
   // Plus de filtre local : la résolution est persistée dans settingsHistory,
   // donc l'alerte ne reviendra plus au prochain runDiagnostic. Le panneau
   // se contente d'afficher ce que le moteur lui passe.
@@ -94,6 +96,15 @@ export const RecommendedActionsPanel: React.FC<RecommendedActionsPanelProps> = (
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  {onSimulate && (
+                    <button
+                      onClick={() => onSimulate(a)}
+                      className="px-2 py-1 rounded-lg text-[11.5px] font-medium text-violet-700 hover:bg-violet-50"
+                      title="Simuler l'impact de la correction"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleAction(a)}
                     className="px-2.5 py-1 rounded-lg text-[12px] font-medium bg-violet-600 text-white hover:bg-violet-700 inline-flex items-center gap-1 shadow-sm shadow-violet-600/20"
