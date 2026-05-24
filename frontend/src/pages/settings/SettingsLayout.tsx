@@ -49,6 +49,9 @@ import { NotificationsPage } from './pages/NotificationsPage';
 import { ConnectorsPage } from './pages/ConnectorsPage';
 import { RgpdPage } from './pages/RgpdPage';
 import { ApiKeysPage } from './pages/ApiKeysPage';
+import { RoomsPage } from './pages/RoomsPage';
+import { RolesAccessPage } from './pages/RolesAccessPage';
+import { SessionsPage } from './pages/SessionsPage';
 
 /**
  * PageIds couvertes par le catalogue SettingsModule legacy.
@@ -59,7 +62,6 @@ import { ApiKeysPage } from './pages/ApiKeysPage';
 const LEGACY_CATALOG_PAGES: ReadonlySet<PageId> = new Set<PageId>([
   'settings_multihotel',
   'settings_room_types',
-  'settings_rooms',
   'settings_room_status',
   'settings_preferences',
   'settings_products',
@@ -236,6 +238,9 @@ const SettingsContent: React.FC<{
   if (activePage === 'settings_connectors') return <ConnectorsPage />;
   if (activePage === 'settings_rgpd') return <RgpdPage />;
   if (activePage === 'settings_api') return <ApiKeysPage />;
+  if (activePage === 'settings_rooms') return <RoomsPage />;
+  if (activePage === 'settings_roles') return <RolesAccessPage />;
+  if (activePage === 'settings_sessions') return <SessionsPage />;
   if (LEGACY_CATALOG_PAGES.has(activePage)) return <SettingsModule activePage={activePage} />;
   return <SettingsPlaceholder activePage={activePage} onNavigate={onNavigate} />;
 };

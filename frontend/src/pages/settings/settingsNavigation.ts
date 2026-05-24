@@ -147,7 +147,9 @@ export const SETTINGS_NAVIGATION: SettingsDomain[] = [
     label: 'Sécurité & Administration',
     icon: ShieldCheck,
     items: [
-      { id: 'settings_users',         label: 'Utilisateurs & droits', icon: KeyRound },
+      { id: 'settings_users',         label: 'Utilisateurs',          icon: KeyRound },
+      { id: 'settings_roles',         label: 'Rôles & permissions',   icon: UserCheck },
+      { id: 'settings_sessions',      label: 'Sessions actives',      icon: Activity },
       { id: 'settings_rgpd',          label: 'RGPD',                  icon: ShieldCheck },
       { id: 'settings_audit',         label: 'Audit / Logs',          icon: Fingerprint },
       { id: 'settings_backups',       label: 'Sauvegardes',           icon: HardDrive },

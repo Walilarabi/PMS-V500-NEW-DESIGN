@@ -27,7 +27,7 @@ interface User {
   active: boolean;
 }
 
-interface Room {
+export interface Room {
   id: string;
   number: string;
   type: string;
