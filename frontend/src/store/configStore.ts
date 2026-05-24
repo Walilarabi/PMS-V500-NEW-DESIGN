@@ -35,6 +35,13 @@ export interface Room {
   floor: string;
   status: 'clean' | 'dirty' | 'inspected' | 'out_of_order' | 'maintenance';
   price?: number; // Prix de base par nuit en €
+  /**
+   * Chambre fictive : visible dans le Planning pour la gestion opérationnelle
+   * (overflow, allotement, blocage commercial), mais EXCLUE de l'inventaire
+   * vendable (TO, disponibilité OTA, RMS). Cas d'usage Folkestone : numéros
+   * 800-820 réservés à des allotements groupes ou de l'overflow saisonnier.
+   */
+  isFictitious?: boolean;
 }
 
 export type EventImpact = 'low' | 'medium' | 'high' | 'critical';

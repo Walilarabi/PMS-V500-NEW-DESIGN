@@ -13,6 +13,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Share2, Plus, RefreshCw, CheckCircle2, AlertCircle, Globe, Pause, Play, Settings as SettingsIcon, ExternalLink,
+  X, Trash2,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useConfigStore, type ChannelConfig } from '@/src/store/configStore';
@@ -33,6 +34,7 @@ interface ConnectorMeta {
 }
 
 const STORAGE_KEY = 'flowtym.connectors';
+const CUSTOM_KEY = 'flowtym.connectors.custom';
 
 const CATALOG: Omit<ConnectorMeta, 'status' | 'lastSyncAt' | 'inventoryShare' | 'bookingsLast30d'>[] = [
   { id: 'booking',     name: 'Booking.com',    category: 'ota', url: 'https://www.booking.com' },
@@ -76,6 +78,21 @@ function saveStored(m: Record<string, Partial<ConnectorMeta>>) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(m));
 }
 
+/** Partenaires personnalisés ajoutés par l'utilisateur (non présents dans le catalogue). */
+type CustomCatalogEntry = Omit<ConnectorMeta, 'status' | 'lastSyncAt' | 'inventoryShare' | 'bookingsLast30d'>;
+
+function loadCustom(): CustomCatalogEntry[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+function saveCustom(arr: CustomCatalogEntry[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(CUSTOM_KEY, JSON.stringify(arr));
+}
+
 /**
  * Construit le tableau des connecteurs courant à partir du catalogue
  * + des overrides stockés en localStorage + des channels du
@@ -83,7 +100,10 @@ function saveStored(m: Record<string, Partial<ConnectorMeta>>) {
  */
 function buildConnectors(channels: ChannelConfig[]): ConnectorMeta[] {
   const stored = loadStored();
-  return CATALOG.map((c) => {
+  const custom = loadCustom();
+  // Fusion catalogue officiel + partenaires custom utilisateur
+  const combined: CustomCatalogEntry[] = [...CATALOG, ...custom];
+  return combined.map((c) => {
     const override = stored[c.id] ?? {};
     const inStore = channels.find((ch) => ch.id === c.id || ch.name === c.name);
     return {
@@ -104,6 +124,39 @@ export const ConnectorsPage: React.FC = () => {
   const [filter, setFilter] = useState<'all' | ConnectorMeta['category']>('all');
   const [toast, setToast] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [addingPartner, setAddingPartner] = useState(false);
+  const [partnerDraft, setPartnerDraft] = useState<CustomCatalogEntry>({
+    id: '', name: '', category: 'ota', url: '',
+  });
+
+  function addCustomPartner() {
+    if (!partnerDraft.name.trim()) return;
+    const id = `custom_${partnerDraft.name.toLowerCase().replace(/\W+/g, '_')}_${Date.now()}`;
+    const entry: CustomCatalogEntry = { ...partnerDraft, id };
+    const custom = loadCustom();
+    saveCustom([...custom, entry]);
+    setConnectors(buildConnectors(channels));
+    logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Partenaire custom "${entry.name}" ajouté (${entry.category})` });
+    notify(`Partenaire ${entry.name} ajouté`);
+    setAddingPartner(false);
+    setPartnerDraft({ id: '', name: '', category: 'ota', url: '' });
+  }
+
+  function removeCustomPartner(id: string) {
+    if (!id.startsWith('custom_')) {
+      notify('Seuls les partenaires personnalisés peuvent être supprimés');
+      return;
+    }
+    if (!confirm('Supprimer ce partenaire personnalisé ?')) return;
+    const custom = loadCustom().filter((c) => c.id !== id);
+    saveCustom(custom);
+    const stored = loadStored();
+    delete stored[id];
+    saveStored(stored);
+    setConnectors(buildConnectors(channels));
+    logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Partenaire custom supprimé : ${id}` });
+    notify('Partenaire supprimé');
+  }
 
   useEffect(() => { setConnectors(buildConnectors(channels)); }, [channels]);
 
@@ -171,7 +224,7 @@ export const ConnectorsPage: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
-        <header className="flex items-start justify-between gap-3">
+        <header className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-11 h-11 rounded-2xl bg-violet-50 text-violet-600 ring-1 ring-violet-100 flex items-center justify-center shrink-0">
               <Share2 className="w-5 h-5" />
@@ -184,6 +237,12 @@ export const ConnectorsPage: React.FC = () => {
               </p>
             </div>
           </div>
+          <button
+            onClick={() => setAddingPartner(true)}
+            className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
+          >
+            <Plus className="w-3.5 h-3.5" /> Nouveau partenaire
+          </button>
         </header>
 
         {/* Métriques */}
@@ -289,6 +348,15 @@ export const ConnectorsPage: React.FC = () => {
                   >
                     <ExternalLink className="w-3 h-3" />
                   </a>
+                  {c.id.startsWith('custom_') && (
+                    <button
+                      onClick={() => removeCustomPartner(c.id)}
+                      className="px-2 py-1.5 rounded-lg ring-1 ring-rose-200 bg-white text-[11.5px] text-rose-600 hover:bg-rose-50"
+                      title="Supprimer ce partenaire personnalisé"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -301,6 +369,106 @@ export const ConnectorsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal "Nouveau partenaire" */}
+      {addingPartner && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45"
+          onClick={() => setAddingPartner(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="w-[520px] max-w-[92vw] bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-[16px] font-semibold text-slate-900">Nouveau partenaire</h2>
+                <p className="text-[12px] text-slate-500 mt-0.5">
+                  Ajoutez un OTA, channel manager ou méta-recherche personnalisé.
+                </p>
+              </div>
+              <button onClick={() => setAddingPartner(false)} className="p-1.5 rounded-lg hover:bg-slate-100">
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'Agoda',    cat: 'ota' as const },
+                  { id: 'Ctrip',    cat: 'ota' as const },
+                  { id: 'Airbnb',   cat: 'ota' as const },
+                  { id: 'HRS',      cat: 'ota' as const },
+                  { id: 'Mister B&B', cat: 'ota' as const },
+                  { id: 'Cendyn',   cat: 'meta' as const },
+                  { id: 'WIHP',     cat: 'meta' as const },
+                  { id: 'TravelClick', cat: 'channel_manager' as const },
+                ].map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => setPartnerDraft({
+                      ...partnerDraft, name: preset.id, category: preset.cat,
+                      url: `https://www.${preset.id.toLowerCase().replace(/\s/g, '')}.com`,
+                    })}
+                    className="px-2.5 py-1.5 rounded-lg ring-1 ring-slate-200 text-[12px] font-medium text-slate-700 hover:bg-violet-50 hover:ring-violet-200 text-left"
+                  >
+                    + {preset.id}
+                  </button>
+                ))}
+              </div>
+
+              <div className="border-t border-slate-100 pt-3 space-y-3">
+                <label className="block">
+                  <span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Nom du partenaire</span>
+                  <input
+                    type="text"
+                    value={partnerDraft.name}
+                    onChange={(e) => setPartnerDraft({ ...partnerDraft, name: e.target.value })}
+                    placeholder="Ex. Agoda, Ctrip, Mister B&B…"
+                    className="mt-1.5 w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px] focus:ring-violet-500 outline-none"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Catégorie</span>
+                    <select
+                      value={partnerDraft.category}
+                      onChange={(e) => setPartnerDraft({ ...partnerDraft, category: e.target.value as ConnectorMeta['category'] })}
+                      className="mt-1.5 w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px]"
+                    >
+                      <option value="ota">OTA</option>
+                      <option value="gds">GDS</option>
+                      <option value="meta">Méta-recherche</option>
+                      <option value="pms">PMS externe</option>
+                      <option value="channel_manager">Channel Manager</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">Site officiel</span>
+                    <input
+                      type="url"
+                      value={partnerDraft.url}
+                      onChange={(e) => setPartnerDraft({ ...partnerDraft, url: e.target.value })}
+                      placeholder="https://…"
+                      className="mt-1.5 w-full px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px] font-mono focus:ring-violet-500 outline-none"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40 flex justify-end gap-2">
+              <button onClick={() => setAddingPartner(false)} className="px-3 py-2 rounded-lg text-[13px] font-medium text-slate-600 hover:bg-slate-100">
+                Annuler
+              </button>
+              <button
+                onClick={addCustomPartner}
+                disabled={!partnerDraft.name.trim()}
+                className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40"
+              >
+                <Plus className="w-3.5 h-3.5" /> Ajouter le partenaire
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -13,16 +13,20 @@
  * Alimente directement le driver "Plans tarifaires de référence"
  * du score Configuration.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
   Grid, Search, Settings as SettingsIcon, ExternalLink, Star, Power, CheckCircle2,
-  AlertCircle, Plug, Tag,
+  AlertCircle, Plug, Tag, Upload, Download, FileSpreadsheet, Trash2, X,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import type { RatePlanData } from '@/src/components/rms/types';
 import type { PageId } from '@/src/types';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import {
+  parseRatePlanExcel, saveImportedRatePlans, loadImportedRatePlans, clearImportedRatePlans,
+  type RatePlanImportReport,
+} from '@/src/services/settings/rate-plan-import.service';
 
 interface RatePlansPageProps {
   onNavigate: (page: PageId) => void;
@@ -33,6 +37,40 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
   const [search, setSearch] = useState('');
   const [filterRoom, setFilterRoom] = useState<string>('all');
   const [toast, setToast] = useState<string | null>(null);
+
+  // ─── Import Excel ─────────────────────────────────────────────────────
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<RatePlanImportReport | null>(() => loadImportedRatePlans());
+  const [showImportedTable, setShowImportedTable] = useState(false);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const report = parseRatePlanExcel(buf, file.name);
+      saveImportedRatePlans(report);
+      setImported(report);
+      setShowImportedTable(true);
+      logAudit({ action: 'module_inspected', module: 'rms_revenue', detail: `Import Excel "${file.name}" : ${report.totalRows} plans tarifaires détectés (${report.warnings.length} avertissements)` });
+      notify(`${report.totalRows} plans tarifaires importés`);
+    } catch (err) {
+      notify(`Erreur d'import : ${(err as Error).message}`);
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  function clearImported() {
+    if (!confirm('Effacer l\'import en cours ?')) return;
+    clearImportedRatePlans();
+    setImported(null);
+    setShowImportedTable(false);
+    notify('Import effacé');
+  }
 
   React.useEffect(() => {
     if (roomTypes.length === 0) loadData();
@@ -89,13 +127,137 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => onNavigate('rev_calendar' as PageId)}
-            className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
-          >
-            <Grid className="w-3.5 h-3.5" /> Ouvrir le Calendrier tarifaire
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFile}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={importing}
+              className="px-3 py-2 rounded-lg ring-1 ring-violet-200 bg-white text-[13px] font-medium text-violet-700 hover:bg-violet-50 inline-flex items-center gap-1.5 disabled:opacity-60"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              {importing ? 'Import en cours…' : 'Importer Excel'}
+            </button>
+            <button
+              onClick={() => onNavigate('rev_calendar' as PageId)}
+              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
+            >
+              <Grid className="w-3.5 h-3.5" /> Ouvrir le Calendrier tarifaire
+            </button>
+          </div>
         </header>
+
+        {/* ─── Bandeau import en cours ─────────────────────────────────── */}
+        {imported && imported.totalRows > 0 && (
+          <section className="rounded-2xl ring-1 ring-emerald-200 bg-emerald-50/40 p-4">
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center ring-1 ring-emerald-200 shrink-0">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold text-slate-900 truncate">
+                    Import Excel : <span className="font-mono">{imported.fileName}</span>
+                  </div>
+                  <div className="text-[11.5px] text-slate-600 mt-0.5">
+                    {imported.totalRows} plans tarifaires · {imported.uniqueRooms.length} typologies de chambres ·{' '}
+                    {imported.uniquePartners.length} partenaires détectés · {imported.uniqueMealPlans.length} pensions
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Importé le {new Date(imported.parsedAt).toLocaleString('fr-FR')}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setShowImportedTable(!showImportedTable)}
+                  className="px-2.5 py-1.5 rounded-lg ring-1 ring-emerald-200 bg-white text-[12px] font-medium text-emerald-700 hover:bg-emerald-50"
+                >
+                  {showImportedTable ? 'Masquer' : 'Voir les plans importés'}
+                </button>
+                <button
+                  onClick={clearImported}
+                  className="p-1.5 rounded-lg ring-1 ring-rose-200 text-rose-600 hover:bg-rose-50"
+                  title="Effacer l'import"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+            {imported.warnings.length > 0 && (
+              <div className="mt-3 rounded-lg bg-amber-50 ring-1 ring-amber-100 px-3 py-2 text-[11.5px] text-amber-800">
+                <div className="font-semibold mb-1 inline-flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {imported.warnings.length} avertissement{imported.warnings.length > 1 ? 's' : ''}
+                </div>
+                <ul className="space-y-0.5 ml-4 list-disc">
+                  {imported.warnings.slice(0, 3).map((w, i) => <li key={i}>{w}</li>)}
+                  {imported.warnings.length > 3 && <li className="italic">+{imported.warnings.length - 3} autres…</li>}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ─── Tableau des plans importés ──────────────────────────────── */}
+        {showImportedTable && imported && (
+          <section className="rounded-2xl ring-1 ring-slate-100 bg-white shadow-sm overflow-hidden">
+            <header className="px-5 py-3 border-b border-slate-100">
+              <h3 className="text-[13px] font-semibold text-slate-900">Plans tarifaires importés ({imported.totalRows})</h3>
+              <p className="text-[11.5px] text-slate-500 mt-0.5">Lecture seule — sera intégré au moteur RMS en Phase 2.</p>
+            </header>
+            <div className="overflow-x-auto max-h-[480px]">
+              <table className="w-full text-[12px]">
+                <thead className="bg-slate-50/60 sticky top-0">
+                  <tr className="text-left text-[10.5px] uppercase tracking-wide text-slate-400">
+                    <th className="px-3 py-2 font-medium">Code</th>
+                    <th className="px-3 py-2 font-medium">Nom</th>
+                    <th className="px-3 py-2 font-medium">Pension</th>
+                    <th className="px-3 py-2 font-medium">Calcul</th>
+                    <th className="px-3 py-2 font-medium">Base</th>
+                    <th className="px-3 py-2 font-medium">Chambres</th>
+                    <th className="px-3 py-2 font-medium">Partenaires</th>
+                    <th className="px-3 py-2 font-medium">Annulation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {imported.plans.map((p) => (
+                    <tr key={p.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                      <td className="px-3 py-2 font-mono text-[11px] text-slate-700">{p.code}</td>
+                      <td className="px-3 py-2 font-semibold text-slate-900">{p.name}</td>
+                      <td className="px-3 py-2 text-slate-600">{p.mealPlan}</td>
+                      <td className="px-3 py-2">
+                        {p.computation === 'reference' ? (
+                          <span className="inline-flex items-center gap-1 text-amber-700">
+                            <Star className="w-3 h-3 fill-amber-500" /> Référence
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">Dérivé</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-[11px] text-slate-600 truncate max-w-[140px]" title={p.baseRate}>
+                        {p.baseRate || '—'}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600 truncate max-w-[180px]" title={p.rooms.join(' / ')}>
+                        {p.rooms.length} type{p.rooms.length > 1 ? 's' : ''}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600 truncate max-w-[200px]" title={p.partners.join(' / ')}>
+                        {p.partners.length > 0 ? `${p.partners.length} canal${p.partners.length > 1 ? 'aux' : ''}` : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600 truncate max-w-[140px]" title={p.cancelCondition}>
+                        {p.cancelCondition || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {/* Métriques */}
         <div className="grid gap-3 md:grid-cols-4">

@@ -108,8 +108,11 @@ function scoreConfiguration(s: Snapshot): ScoreCard {
   points += hotelScore; total += 20;
 
   // Chambres avec étage (poids 20)
-  const roomsTotal = s.rooms.length;
-  const roomsWithFloor = s.rooms.filter((r) => r.floor && r.floor !== '').length;
+  // Driver "Chambres avec étage" — exclut les chambres fictives (overflow,
+  // allotement) qui n'ont pas vocation à être affectées comme l'inventaire.
+  const realRooms = s.rooms.filter((r) => !r.isFictitious);
+  const roomsTotal = realRooms.length;
+  const roomsWithFloor = realRooms.filter((r) => r.floor && r.floor !== '').length;
   const roomsScore = roomsTotal === 0 ? 0 : Math.round((roomsWithFloor / roomsTotal) * 20);
   drivers.push({ label: `Chambres avec étage (${roomsWithFloor}/${roomsTotal})`, weight: 20, ok: roomsTotal > 0 && roomsWithFloor === roomsTotal });
   points += roomsScore; total += 20;
@@ -324,7 +327,7 @@ function generateAlerts(s: Snapshot): ConfigAlert[] {
   const alerts: ConfigAlert[] = [];
   const now = new Date().toISOString();
 
-  const roomsWithoutFloor = s.rooms.filter((r) => !r.floor || r.floor === '').length;
+  const roomsWithoutFloor = s.rooms.filter((r) => !r.isFictitious && (!r.floor || r.floor === '')).length;
   if (roomsWithoutFloor > 0) {
     alerts.push({
       id: 'rooms_no_floor',
