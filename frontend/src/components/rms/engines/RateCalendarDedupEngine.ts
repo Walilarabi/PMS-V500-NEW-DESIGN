@@ -17,20 +17,60 @@
 import type { RatePlanData, RatePrice, RoomStatus, RoomTypeData } from '../types';
 
 /**
- * Dédupe une liste de RatePlanData par `planCode` (clé fonctionnelle).
- * En cas de doublon, on garde la dernière occurrence (présomption :
- * import le plus récent). Préserve l'ordre original sinon.
+ * Construit la clé fonctionnelle d'un plan tarifaire.
+ *
+ * Priorité : `planCode` (clé technique). Fallback :
+ *   `planName + pensionType + channelType` (combinaison qui identifie
+ *   de façon unique une offre commerciale).
+ *
+ * Permet de dédoublonner même quand un import a créé plusieurs lignes
+ * avec des planCodes différents mais une définition métier identique
+ * (ex : `FLEX_RO`, `FLEX_RO_OTA`, `FLEX_RO_V2` → tous "Flexible RO BB OTA").
+ */
+function planFunctionalKey(p: RatePlanData): string {
+  const code = (p.planCode ?? '').trim().toLowerCase();
+  if (code) return `code:${code}`;
+  const name = (p.planName ?? '').trim().toLowerCase();
+  const pension = (p.pensionType ?? '').toString().toLowerCase();
+  const channel = (p.channelType ?? '').toString().toLowerCase();
+  if (name) return `name:${name}|${pension}|${channel}`;
+  return `id:${(p.planId ?? '').toLowerCase()}`;
+}
+
+/**
+ * Dédupe une liste de RatePlanData par clé fonctionnelle (planCode ou
+ * planName+pensionType+channelType). Garde la dernière occurrence.
+ *
+ * Deuxième passe : dédoublonne aussi par planName+pension+channel
+ * pour éliminer les doublons sémantiques (planCodes différents mais
+ * plan métier identique).
  */
 export function dedupRatePlans(plans: RatePlanData[]): RatePlanData[] {
   if (plans.length <= 1) return plans.map(dedupRatePlanInner);
-  const seen = new Map<string, number>(); // planCode → index dans `plans`
+
+  // Passe 1 — dédup par planCode (clé technique)
+  const seenCode = new Map<string, number>();
   plans.forEach((p, idx) => {
-    const key = (p.planCode ?? p.planId ?? '').trim().toLowerCase();
+    const key = planFunctionalKey(p);
     if (!key) return;
-    seen.set(key, idx); // écrase = garde le plus récent
+    seenCode.set(key, idx); // écrase → garde le plus récent
   });
-  const keepIndexes = new Set(seen.values());
-  return plans.filter((_, i) => keepIndexes.has(i)).map(dedupRatePlanInner);
+  const keptByCode = new Set(seenCode.values());
+  const passOne = plans.filter((_, i) => keptByCode.has(i));
+
+  // Passe 2 — dédup sémantique par planName + pension + channel
+  // (cas import : plusieurs planCodes pour la même offre commerciale)
+  const seenSemantic = new Map<string, number>();
+  passOne.forEach((p, idx) => {
+    const name = (p.planName ?? '').trim().toLowerCase();
+    const pension = (p.pensionType ?? '').toString().toLowerCase();
+    const channel = (p.channelType ?? '').toString().toLowerCase();
+    if (!name) return;
+    const semanticKey = `${name}|${pension}|${channel}`;
+    seenSemantic.set(semanticKey, idx);
+  });
+  const keptBySemantic = new Set(seenSemantic.values());
+  return passOne.filter((_, i) => keptBySemantic.has(i)).map(dedupRatePlanInner);
 }
 
 /**

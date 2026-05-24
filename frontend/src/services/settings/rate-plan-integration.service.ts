@@ -13,6 +13,7 @@
 
 import type { ImportedRatePlan } from './rate-plan-import.service';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
+import { dedupRoomTypes } from '@/src/components/rms/engines/RateCalendarDedupEngine';
 import type { RoomTypeData, RatePlanData, PensionType, ChannelType, ConnectivityType, CalcMode } from '@/src/components/rms/types';
 
 export interface IntegrationRowResult {
@@ -213,8 +214,11 @@ export function integrateRatePlans(
     });
   }
 
-  // Commit dans le store via le setter zustand
-  useRateCalendarStore.setState({ roomTypes: next });
+  // Commit dans le store — dédup défensive obligatoire (setState bypass
+  // le safeSet du créator). Garantit qu'aucun doublon ne peut être
+  // injecté même si l'import contient des plans avec planCodes différents
+  // mais sémantique identique.
+  useRateCalendarStore.setState({ roomTypes: dedupRoomTypes(next) });
 
   return {
     ranAt,

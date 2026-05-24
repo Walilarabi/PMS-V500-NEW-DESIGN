@@ -151,6 +151,29 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
   const rulesEngine = new PricingRulesEngine(pricingRules);
   const cascadeEngine = new CascadePricingEngine(rulesEngine);
 
+  // Phase 8 — garde-fou universel : intercepte TOUS les `set({ roomTypes: ... })`
+  // et applique dedupRoomTypes avant de stocker. Garantit qu'aucun chemin
+  // d'écriture (mutation locale, import, RMS push, cascade, supabase load)
+  // ne peut produire de doublons dans le store.
+  type SetterArg = Parameters<typeof set>[0];
+  const safeSet = (partial: SetterArg) => {
+    if (typeof partial === 'function') {
+      set((state) => {
+        const next = (partial as (s: RateCalendarStore) => Partial<RateCalendarStore>)(state);
+        if (next && 'roomTypes' in next && Array.isArray((next as { roomTypes?: unknown }).roomTypes)) {
+          return { ...next, roomTypes: dedupRoomTypes((next as { roomTypes: RoomTypeData[] }).roomTypes) };
+        }
+        return next;
+      });
+    } else if (partial && typeof partial === 'object' && 'roomTypes' in partial && Array.isArray((partial as { roomTypes?: unknown }).roomTypes)) {
+      set({ ...partial, roomTypes: dedupRoomTypes((partial as { roomTypes: RoomTypeData[] }).roomTypes) } as SetterArg);
+    } else {
+      set(partial);
+    }
+  };
+  // Remplace `set` par `safeSet` dans le scope du store
+  set = safeSet as typeof set;
+
   return {
     viewMode: "1month",
     startDate: initialStartDate,
