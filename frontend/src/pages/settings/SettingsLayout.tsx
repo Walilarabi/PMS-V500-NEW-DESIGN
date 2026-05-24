@@ -43,6 +43,8 @@ import { UsersPage } from './pages/UsersPage';
 import { FloorsPage } from './pages/FloorsPage';
 import { BackupsPage } from './pages/BackupsPage';
 import { AuditPage } from './pages/AuditPage';
+import { BrandingPage } from './pages/BrandingPage';
+import { LanguagesPage } from './pages/LanguagesPage';
 
 /**
  * PageIds couvertes par le catalogue SettingsModule legacy.
@@ -228,6 +230,8 @@ const SettingsContent: React.FC<{
   if (activePage === 'settings_floors') return <FloorsPage />;
   if (activePage === 'settings_backups') return <BackupsPage />;
   if (activePage === 'settings_audit') return <AuditPage />;
+  if (activePage === 'settings_branding') return <BrandingPage />;
+  if (activePage === 'settings_languages') return <LanguagesPage />;
   if (LEGACY_CATALOG_PAGES.has(activePage)) return <SettingsModule activePage={activePage} />;
   return <SettingsPlaceholder activePage={activePage} onNavigate={onNavigate} />;
 };
