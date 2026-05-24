@@ -39,6 +39,10 @@ import { SettingsModule } from '@/src/domains/settings/SettingsModule';
 import { SettingsPlaceholder } from './pages/SettingsPlaceholder';
 import { HotelInfoPage } from './pages/HotelInfoPage';
 import { LocalTaxesPage } from './pages/LocalTaxesPage';
+import { UsersPage } from './pages/UsersPage';
+import { FloorsPage } from './pages/FloorsPage';
+import { BackupsPage } from './pages/BackupsPage';
+import { AuditPage } from './pages/AuditPage';
 
 /**
  * PageIds couvertes par le catalogue SettingsModule legacy.
@@ -50,7 +54,6 @@ const LEGACY_CATALOG_PAGES: ReadonlySet<PageId> = new Set<PageId>([
   'settings_multihotel',
   'settings_room_types',
   'settings_rooms',
-  'settings_floors',
   'settings_room_status',
   'settings_preferences',
   'settings_products',
@@ -74,13 +77,10 @@ const LEGACY_CATALOG_PAGES: ReadonlySet<PageId> = new Set<PageId>([
   'settings_pms_sync',
   'settings_api',
   'settings_connectors',
-  'settings_users',
   'settings_automations',
   'settings_notifications',
   'settings_rgpd',
   'settings_import_export',
-  'settings_audit',
-  'settings_backups',
 ]);
 
 interface SettingsLayoutProps {
@@ -224,6 +224,10 @@ const SettingsContent: React.FC<{
   if (activePage === 'settings') return <SettingsControlCenter />;
   if (activePage === 'settings_hotel') return <HotelInfoPage onNavigate={onNavigate} />;
   if (activePage === 'settings_taxes_local') return <LocalTaxesPage />;
+  if (activePage === 'settings_users') return <UsersPage />;
+  if (activePage === 'settings_floors') return <FloorsPage />;
+  if (activePage === 'settings_backups') return <BackupsPage />;
+  if (activePage === 'settings_audit') return <AuditPage />;
   if (LEGACY_CATALOG_PAGES.has(activePage)) return <SettingsModule activePage={activePage} />;
   return <SettingsPlaceholder activePage={activePage} onNavigate={onNavigate} />;
 };
