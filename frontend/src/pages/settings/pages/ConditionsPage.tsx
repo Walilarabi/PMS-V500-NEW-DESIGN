@@ -71,6 +71,8 @@ export const ConditionsPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, type: 'cancellation', freeUntilHours: 24, penaltyPercent: 100, depositPercent: 0 })}
+    capability="rev_pricing"
+    supabaseSync
     phase2="application automatique aux moteurs OTA + facturation + relances pour no-show."
   />
 );

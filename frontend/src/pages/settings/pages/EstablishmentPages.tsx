@@ -350,6 +350,8 @@ export const ContactPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, role: 'reception', phone: '', email: '' })}
+    capability="set_hotel"
+    supabaseSync
     phase2="annuaire automatique sur le portail client + carte de visite digitale."
   />
 );
@@ -397,6 +399,8 @@ export const LegalDocsPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, category: 'other', fileUrl: '', expiryDate: new Date().toISOString().slice(0, 10) })}
+    capability="set_hotel"
+    supabaseSync
     phase2="upload sécurisé + rappels automatiques 90/30 jours avant expiration."
   />
 );
@@ -447,6 +451,8 @@ export const PhotosPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, url: '', category: 'other', order: 99 })}
+    capability="set_hotel"
+    supabaseSync
     phase2="upload direct + recadrage + push OTAs / CMS portail client."
   />
 );

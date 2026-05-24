@@ -94,6 +94,8 @@ export const SeasonsPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, startMonth: 1, startDay: 1, endMonth: 12, endDay: 31, priceModifier: 0, tone: 'mid' })}
+    capability="rev_pricing"
+    supabaseSync
     phase2="injection automatique des modulateurs dans le Calendrier tarifaire à chaque ouverture."
   />
 );

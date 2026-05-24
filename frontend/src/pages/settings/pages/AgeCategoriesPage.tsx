@@ -53,6 +53,8 @@ export const AgeCategoriesPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, minAge: 0, maxAge: 17, pricingFactor: 0.7 })}
+    capability="rev_pricing"
+    supabaseSync
     phase2="application automatique à la facturation multi-occupants et aux exports OTA."
   />
 );

@@ -12,6 +12,7 @@ import { Layers, Plus, ArrowRight, CheckCircle2, AlertTriangle, Trash2 } from 'l
 import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 export const FloorsPage: React.FC = () => {
   const rooms = useConfigStore((s) => s.rooms);
@@ -19,6 +20,7 @@ export const FloorsPage: React.FC = () => {
 
   const [newFloor, setNewFloor] = useState('');
   const [savedToast, setSavedToast] = useState<string | null>(null);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rooms');
 
   function toast(msg: string) {
     setSavedToast(msg);
@@ -69,6 +71,8 @@ export const FloorsPage: React.FC = () => {
     }
     toast(`Étage ${floor} supprimé`);
   }
+
+  if (!canRead) return <DeniedBanner />;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
@@ -167,8 +171,9 @@ export const FloorsPage: React.FC = () => {
               />
               <button
                 onClick={addFloor}
-                disabled={!newFloor.trim()}
-                className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-[12.5px] font-medium hover:bg-violet-700 inline-flex items-center gap-1 disabled:opacity-40"
+                disabled={!newFloor.trim() || !canWrite}
+                title={!canWrite ? 'Permission requise : set_rooms (write)' : undefined}
+                className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-[12.5px] font-medium hover:bg-violet-700 inline-flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Plus className="w-3 h-3" /> Ajouter
               </button>
@@ -192,9 +197,10 @@ export const FloorsPage: React.FC = () => {
                     </div>
                   </div>
                   <button
-                    onClick={() => removeFloor(f.floor)}
-                    className="p-1.5 rounded-md hover:bg-rose-50 text-rose-600"
-                    title="Supprimer l'étage"
+                    onClick={() => canWrite && removeFloor(f.floor)}
+                    disabled={!canWrite}
+                    className={cn('p-1.5 rounded-md', canWrite ? 'hover:bg-rose-50 text-rose-600' : 'text-rose-300 opacity-40 cursor-not-allowed')}
+                    title={canWrite ? "Supprimer l'étage" : "Permission requise : set_rooms (write)"}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

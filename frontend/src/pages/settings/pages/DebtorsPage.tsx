@@ -59,6 +59,8 @@ export const DebtorsPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, daysAfterDue: 7, channel: 'email', template: '', feesPercent: 0 })}
+    capability="fin_payment"
+    supabaseSync
     phase2="déclenchement automatique des relances depuis le moteur de facturation."
   />
 );

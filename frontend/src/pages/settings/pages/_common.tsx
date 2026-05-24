@@ -12,6 +12,8 @@ import { cn } from '@/src/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 export const SettingsPageHeader: React.FC<{
   icon: LucideIcon;
@@ -104,29 +106,70 @@ interface GenericListPageProps<T extends GenericListItem> {
   customMetrics?: (items: T[]) => React.ReactNode;
   /** Empty value pour nouvelle entrée. */
   emptyItem: () => T;
+  /**
+   * Phase 5 — Capability RBAC.
+   * Si fournie, applique automatiquement :
+   *   - lecture min "read" pour afficher la page (bandeau "accès refusé" sinon)
+   *   - "write" pour autoriser create/update/delete/toggle (boutons disabled
+   *     + tooltip explicite sans le niveau requis)
+   * Si omise, comportement legacy (page ouverte à tous).
+   */
+  capability?: string;
+  /**
+   * Phase 5 — Active la sync Supabase via useConfigBlob.
+   * Si true, le storageKey est utilisé comme namespace (préfixe
+   * `flowtym.` ou `flowtym.cfg.` retiré). Best-effort : si offline,
+   * tout passe par localStorage comme avant.
+   */
+  supabaseSync?: boolean;
+}
+
+/** Dérive un namespace court à partir de la storageKey legacy. */
+function deriveNamespace(storageKey: string): string {
+  return storageKey
+    .replace(/^flowtym\.cfg\./, '')
+    .replace(/^flowtym\./, '')
+    .replace(/\./g, '_');
 }
 
 export function GenericListPage<T extends GenericListItem>({
   icon, category, title, description, storageKey, module: moduleKey,
   defaults, extraFormFields, extraColumns, phase2, headerAction, customMetrics, emptyItem,
+  capability, supabaseSync,
 }: GenericListPageProps<T>) {
-  const [items, setItems] = useState<T[]>(() => {
+  // RBAC (optionnel, opt-in via prop `capability`)
+  const { canRead, canWrite, DeniedBanner } = usePagePermission(capability ?? '__no_capability__');
+  const rbacEnabled = !!capability;
+  const effCanRead = rbacEnabled ? canRead : true;
+  const effCanWrite = rbacEnabled ? canWrite : true;
+
+  // Persistance : Supabase sync (opt-in) OU localStorage legacy
+  const namespace = deriveNamespace(storageKey);
+  const [blobItems, setBlobItems] = useConfigBlob<T[]>(namespace, defaults);
+  const [legacyItems, setLegacyItems] = useState<T[]>(() => {
     if (typeof window === 'undefined') return defaults;
     try {
       const raw = window.localStorage.getItem(storageKey);
       return raw ? JSON.parse(raw) : defaults;
     } catch { return defaults; }
   });
+  const items = supabaseSync ? blobItems : legacyItems;
+  const setItems = supabaseSync ? setBlobItems : setLegacyItems;
+
   const [editing, setEditing] = useState<T | null>(null);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<T>(emptyItem());
   const [toast, setToast] = useState<string | null>(null);
   const audit = useAuditLogger();
 
+  // Legacy : continue à persister sous l'ancienne clé pour rétrocompat
+  // (en plus du blob Supabase si supabaseSync est activé)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(storageKey, JSON.stringify(items));
-  }, [items, storageKey]);
+    if (!supabaseSync) {
+      window.localStorage.setItem(storageKey, JSON.stringify(items));
+    }
+  }, [items, storageKey, supabaseSync]);
 
   function notify(msg: string) {
     setToast(msg);
@@ -185,6 +228,13 @@ export function GenericListPage<T extends GenericListItem>({
 
   const activeCount = items.filter((x) => x.active !== false).length;
 
+  // RBAC early return
+  if (rbacEnabled && !effCanRead) return <DeniedBanner />;
+
+  const writeTooltip = !effCanWrite && rbacEnabled
+    ? `Permission requise : ${capability} (write)`
+    : undefined;
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -197,8 +247,10 @@ export function GenericListPage<T extends GenericListItem>({
             <div className="flex items-center gap-2">
               {headerAction}
               <button
-                onClick={startAdd}
-                className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5"
+                onClick={() => effCanWrite && startAdd()}
+                disabled={!effCanWrite}
+                title={writeTooltip}
+                className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Plus className="w-3.5 h-3.5" /> Ajouter
               </button>
@@ -245,9 +297,11 @@ export function GenericListPage<T extends GenericListItem>({
                       ))}
                       <td className="px-3 py-2.5 text-center">
                         <button
-                          onClick={() => toggleActive(it)}
+                          onClick={() => effCanWrite && toggleActive(it)}
+                          disabled={!effCanWrite}
+                          title={writeTooltip}
                           className={cn(
-                            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 ring-inset text-[11px] font-semibold',
+                            'inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 ring-inset text-[11px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed',
                             it.active !== false ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200',
                           )}
                         >
@@ -257,10 +311,20 @@ export function GenericListPage<T extends GenericListItem>({
                       </td>
                       <td className="px-3 py-2.5 text-right">
                         <div className="inline-flex items-center gap-1">
-                          <button onClick={() => startEdit(it)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500">
+                          <button
+                            onClick={() => effCanWrite && startEdit(it)}
+                            disabled={!effCanWrite}
+                            title={writeTooltip}
+                            className={cn('p-1.5 rounded-md text-slate-500', effCanWrite ? 'hover:bg-slate-100' : 'opacity-30 cursor-not-allowed')}
+                          >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
-                          <button onClick={() => remove(it)} className="p-1.5 rounded-md hover:bg-rose-50 text-rose-600">
+                          <button
+                            onClick={() => effCanWrite && remove(it)}
+                            disabled={!effCanWrite}
+                            title={writeTooltip}
+                            className={cn('p-1.5 rounded-md', effCanWrite ? 'hover:bg-rose-50 text-rose-600' : 'text-rose-300 opacity-40 cursor-not-allowed')}
+                          >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -315,9 +379,10 @@ export function GenericListPage<T extends GenericListItem>({
             <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40 flex justify-end gap-2">
               <button onClick={cancel} className="px-3 py-2 rounded-lg text-[13px] font-medium text-slate-600 hover:bg-slate-100">Annuler</button>
               <button
-                onClick={persist}
-                disabled={!draft.label.trim()}
-                className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40"
+                onClick={() => effCanWrite && persist()}
+                disabled={!draft.label.trim() || !effCanWrite}
+                title={writeTooltip}
+                className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Save className="w-3.5 h-3.5" /> {adding ? 'Créer' : 'Enregistrer'}
               </button>

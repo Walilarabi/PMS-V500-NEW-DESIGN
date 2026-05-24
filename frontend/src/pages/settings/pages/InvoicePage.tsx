@@ -1,13 +1,13 @@
 /**
  * FLOWTYM — Paramètres · Facture (mentions, footer, pied de page).
  */
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Receipt, Save, CheckCircle2, FileText } from 'lucide-react';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 import { SettingsPageHeader, SettingsToast, Phase2Notice } from './_common';
-
-const STORAGE_KEY = 'flowtym.invoice.config';
 
 interface InvoiceConfig {
   legalMentions: string;
@@ -33,24 +33,27 @@ const DEFAULT: InvoiceConfig = {
   signatureName: 'Le Directeur',
 };
 
-function load(): InvoiceConfig {
-  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT; } catch { return DEFAULT; }
-}
-function save(c: InvoiceConfig) { localStorage.setItem(STORAGE_KEY, JSON.stringify(c)); }
-
 export const InvoicePage: React.FC = () => {
   const hotelName = useConfigStore((s) => s.hotel.name);
-  const [cfg, setCfg] = useState<InvoiceConfig>(() => load());
+  // Migration douce ancien localStorage → namespace
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const legacy = window.localStorage.getItem('flowtym.invoice.config');
+    const next = window.localStorage.getItem('flowtym.cfg.invoice_config');
+    if (legacy && !next) window.localStorage.setItem('flowtym.cfg.invoice_config', legacy);
+  }, []);
+  const [cfg, setCfg] = useConfigBlob<InvoiceConfig>('invoice_config', DEFAULT);
   const [toast, setToast] = useState<string | null>(null);
-
-  useEffect(() => { save(cfg); }, [cfg]);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('fin_invoice');
 
   function handleSave() {
-    save(cfg);
+    setCfg((c) => c); // force re-sync
     logAudit({ action: 'module_inspected', module: 'finance_billing', detail: 'Paramètres facture mis à jour' });
     setToast('Paramètres enregistrés');
     window.setTimeout(() => setToast(null), 2500);
   }
+
+  if (!canRead) return <DeniedBanner />;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
@@ -61,7 +64,12 @@ export const InvoicePage: React.FC = () => {
           title="Paramètres facture"
           description="Mentions légales, pied de page, coordonnées bancaires et options d'affichage."
           action={
-            <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5">
+            <button
+              onClick={handleSave}
+              disabled={!canWrite}
+              title={!canWrite ? 'Permission requise : fin_invoice (write)' : undefined}
+              className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               <Save className="w-3.5 h-3.5" /> Enregistrer
             </button>
           }

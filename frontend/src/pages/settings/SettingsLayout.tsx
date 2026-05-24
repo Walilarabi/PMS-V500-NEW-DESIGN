@@ -35,6 +35,7 @@ import {
   findDomainForPage,
   type SettingsDomain,
 } from './settingsNavigation';
+import { SettingsCommandPalette, useCommandPalette } from './SettingsCommandPalette';
 import { SettingsControlCenter } from './SettingsControlCenter';
 import { SettingsModule } from '@/src/domains/settings/SettingsModule';
 import { SettingsPlaceholder } from './pages/SettingsPlaceholder';
@@ -114,6 +115,8 @@ interface SettingsLayoutProps {
 export const SettingsLayout: React.FC<SettingsLayoutProps> = ({ activePage, onNavigate }) => {
   const activeDomain = useMemo(() => findDomainForPage(activePage), [activePage]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Cmd+K palette globale (Phase 6)
+  const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPalette();
 
   function handleDomainChange(d: SettingsDomain) {
     // Par défaut, on charge le premier sous-menu du nouveau domaine
@@ -130,10 +133,18 @@ export const SettingsLayout: React.FC<SettingsLayoutProps> = ({ activePage, onNa
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-slate-50/60">
+      {/* Cmd+K palette globale */}
+      <SettingsCommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onNavigate={onNavigate}
+      />
+
       {/* ─── Onglets horizontaux des 10 domaines ─────────────────────── */}
       <SettingsTopTabs
         activeDomainId={activeDomain.id}
         onDomainChange={handleDomainChange}
+        onOpenPalette={() => setPaletteOpen(true)}
       />
 
       {/* ─── Barre mobile : burger + breadcrumb ──────────────────────── */}
@@ -194,12 +205,13 @@ export const SettingsLayout: React.FC<SettingsLayoutProps> = ({ activePage, onNa
 const SettingsTopTabs: React.FC<{
   activeDomainId: string;
   onDomainChange: (d: SettingsDomain) => void;
-}> = ({ activeDomainId, onDomainChange }) => (
+  onOpenPalette?: () => void;
+}> = ({ activeDomainId, onDomainChange, onOpenPalette }) => (
   <nav
     aria-label="Domaines Paramètres"
-    className="shrink-0 bg-white border-b border-slate-100 overflow-x-auto"
+    className="shrink-0 bg-white border-b border-slate-100 overflow-x-auto flex items-stretch"
   >
-    <ul className="flex items-stretch gap-1 px-4 min-w-max">
+    <ul className="flex items-stretch gap-1 px-4 min-w-max flex-1">
       {SETTINGS_NAVIGATION.map((d) => {
         const Icon = d.icon;
         const active = d.id === activeDomainId;
@@ -222,6 +234,16 @@ const SettingsTopTabs: React.FC<{
         );
       })}
     </ul>
+    {onOpenPalette && (
+      <button
+        onClick={onOpenPalette}
+        className="shrink-0 inline-flex items-center gap-2 px-3 mx-2 my-1.5 rounded-lg ring-1 ring-slate-200 bg-slate-50/60 text-[12px] text-slate-600 hover:bg-violet-50 hover:text-violet-700 hover:ring-violet-200 transition-colors"
+        title="Recherche globale dans les Paramètres (Cmd+K)"
+      >
+        <span>Rechercher</span>
+        <kbd className="font-mono bg-white px-1.5 py-0.5 rounded ring-1 ring-slate-200 text-[10px] text-slate-500">⌘K</kbd>
+      </button>
+    )}
   </nav>
 );
 

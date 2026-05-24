@@ -65,6 +65,8 @@ export const HkStatusPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, color: '#7C3AED', blocksRoom: false, description: '' })}
+    capability="set_rooms"
+    supabaseSync
     phase2="application en temps réel aux opérations housekeeping et bandeau planning."
   />
 );
@@ -113,6 +115,8 @@ export const HkChecklistsPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, roomType: '', taskCount: 0, estimatedMinutes: 0 })}
+    capability="set_rooms"
+    supabaseSync
     phase2="éditeur de tâches granulaires + signature numérique gouvernante."
   />
 );
@@ -235,6 +239,8 @@ export const HkDistributionPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, trigger: 'by_floor', floors: '*', maxRoomsPerAgent: 14 })}
+    capability="set_rooms"
+    supabaseSync
     phase2="moteur d'optimisation : équilibrage temps réel selon disponibilité et complexité."
   />
 );
@@ -299,6 +305,8 @@ export const MaintenancePage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, category: 'other', estimatedHours: 1, priority: 'medium' })}
+    capability="set_rooms"
+    supabaseSync
     phase2="système de tickets avec SLA, escalade automatique et photos attachées."
   />
 );
@@ -366,6 +374,8 @@ export const LostFoundPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, category: 'other', foundDate: new Date().toISOString().slice(0, 10), roomNumber: '', status: 'awaiting' })}
+    capability="set_rooms"
+    supabaseSync
     phase2="photo de l'objet + envoi email automatique au client si identifiable."
   />
 );
@@ -418,6 +428,8 @@ export const BreakfastPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, pricePerPerson: 0, serviceHours: '', capacity: 0, bookable: true })}
+    capability="set_rooms"
+    supabaseSync
     phase2="comptage automatique des couverts via check-in et facturation auto."
   />
 );

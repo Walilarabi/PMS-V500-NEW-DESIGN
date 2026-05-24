@@ -49,6 +49,8 @@ export const PreferencesPage: React.FC = () => (
       </label>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, category: 'comfort' })}
+    capability="cli_view"
+    supabaseSync
     phase2="affectation des préférences aux fiches clients pour attribution automatique à la réservation."
   />
 );

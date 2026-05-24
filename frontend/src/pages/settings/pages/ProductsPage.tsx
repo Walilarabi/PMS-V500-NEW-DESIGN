@@ -65,6 +65,8 @@ export const ProductsPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, price: 0, vatRate: 10, type: 'service' })}
+    capability="fin_invoice"
+    supabaseSync
     phase2="intégration au moteur de facturation et aux templates email."
   />
 );

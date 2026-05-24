@@ -138,6 +138,8 @@ export const AiRulesPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, type: 'guard', threshold: 0, unit: '€' })}
+    capability="rev_pricing"
+    supabaseSync
     phase2="application des garde-fous en temps réel au moteur Central Pricing Engine + explication des refus à l'utilisateur."
   />
 );
@@ -193,6 +195,8 @@ export const AiStrategiesPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, mode: 'balanced', targetOccupancy: 80, enabledFor: '' })}
+    capability="rev_pricing"
+    supabaseSync
     phase2="ML training sur historique pour suggérer la stratégie optimale en fonction du contexte temps réel."
   />
 );
@@ -241,6 +245,8 @@ export const OtaMappingPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, ota: '', internalRoomType: '', externalRoomCode: '' })}
+    capability="set_integrations"
+    supabaseSync
     phase2="détection automatique des mappings manquants en parsant les payloads OTA."
   />
 );
@@ -297,6 +303,8 @@ export const OtaParityPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, ota: '', parityRule: 'equal', delta: 0 })}
+    capability="set_integrations"
+    supabaseSync
     phase2="moniteur temps réel des écarts de prix avec alerte en cas de rupture de parité."
   />
 );
@@ -342,6 +350,8 @@ export const DistributionLogsPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, ota: '', eventType: 'push', timestamp: new Date().toISOString(), detail: '' })}
+    capability="set_integrations"
+    supabaseSync
     phase2="logs réels alimentés par les webhooks du channel manager, filtre/recherche avancée."
   />
 );
@@ -387,6 +397,8 @@ export const PmsSyncPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, vendor: '', syncDirection: 'both', frequency: 'realtime' })}
+    capability="set_integrations"
+    supabaseSync
     phase2="moniteur de santé des syncs avec retry exponentiel + escalade en cas de rupture > 5 min."
   />
 );

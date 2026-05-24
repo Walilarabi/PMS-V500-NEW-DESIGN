@@ -50,6 +50,8 @@ export const RoomStatusPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', description: '', active: true, housekeepingFlow: 'available', bookable: true })}
+    capability="set_rooms"
+    supabaseSync
     phase2="application au moteur housekeeping et propagation OTA en temps réel."
   />
 );

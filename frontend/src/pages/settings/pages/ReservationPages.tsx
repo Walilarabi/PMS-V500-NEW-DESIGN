@@ -45,6 +45,8 @@ export const CancellationPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, hoursBefore: 24, feePercent: 0, appliesTo: 'all' })}
+    capability="res_create"
+    supabaseSync
     phase2="application automatique aux factures + envoi email de confirmation d'annulation."
   />
 );
@@ -94,6 +96,8 @@ export const GuaranteesPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, guaranteeType: 'cb_preauth', amount: 1, amountType: 'first_night' })}
+    capability="res_create"
+    supabaseSync
     phase2="intégration Stripe / Adyen pour pré-autorisations CB réelles + libération automatique."
   />
 );
@@ -140,6 +144,8 @@ export const NoShowPage: React.FC = () => (
       </div>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, feePercent: 100, delayHours: 22, action: 'charge' })}
+    capability="res_create"
+    supabaseSync
     phase2="détection automatique no-show via heures de check-in + workflow batch nocturne."
   />
 );
@@ -192,6 +198,8 @@ export const EmailTemplatesPage: React.FC = () => (
       </>
     )}
     emptyItem={() => ({ id: '', label: '', code: '', active: true, subject: '', language: 'fr', channel: 'email' })}
+    capability="res_create"
+    supabaseSync
     phase2="éditeur visuel MJML + envoi de test depuis cette page + statistiques d'ouverture par template."
   />
 );
