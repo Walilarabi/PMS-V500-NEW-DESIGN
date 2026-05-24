@@ -26,7 +26,8 @@
  *   • Toute autre sous-page → SettingsModule legacy (catalogue détaillé)
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { Menu, X as XIcon } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import type { PageId } from '@/src/types';
 import {
@@ -54,38 +55,55 @@ import { RolesAccessPage } from './pages/RolesAccessPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { RatePlansPage } from './pages/RatePlansPage';
 import { PaymentModesPage } from './pages/PaymentModesPage';
+// Wave 9 — Inventaire
+import { RoomTypesPage } from './pages/RoomTypesPage';
+import { RoomStatusPage } from './pages/RoomStatusPage';
+import { PreferencesPage } from './pages/PreferencesPage';
+// Wave 10 — Tarifs & Prestations
+import { ProductsPage } from './pages/ProductsPage';
+import { ConditionsPage } from './pages/ConditionsPage';
+import { SeasonsPage } from './pages/SeasonsPage';
+import { AgeCategoriesPage } from './pages/AgeCategoriesPage';
+// Wave 11 — Finance
+import { InvoicePage } from './pages/InvoicePage';
+import { NumberingPage } from './pages/NumberingPage';
+import { AccountingPage } from './pages/AccountingPage';
+import { DebtorsPage } from './pages/DebtorsPage';
+import { FiscalPage } from './pages/FiscalPage';
+// Wave 12 — Housekeeping
+import {
+  HkStatusPage, HkChecklistsPage, HkStaffPage, HkDistributionPage,
+  MaintenancePage, LostFoundPage, BreakfastPage,
+} from './pages/HousekeepingPages';
+// Wave 13 — Automation & Distribution
+import {
+  AutomationsPage, AiRulesPage, AiStrategiesPage,
+  OtaMappingPage, OtaParityPage, DistributionLogsPage, PmsSyncPage,
+} from './pages/AutomationPages';
+// Wave 14 — Reservations
+import {
+  CancellationPage, GuaranteesPage, NoShowPage, EmailTemplatesPage,
+} from './pages/ReservationPages';
+// Wave 15 — Establishment restant
+import {
+  MultiHotelPage, TimezonePage, ContactPage, LegalDocsPage,
+  PhotosPage, ClassificationPage, CompliancePage,
+} from './pages/EstablishmentPages';
+// Wave 16 — Intégrations spécifiques
+import {
+  PosPage, LocksPage, KioskPage, PaymentIntegPage,
+  LighthouseIntegPage, ExpediaIntegPage, BookingIntegPage,
+  PublicApiPage, WebhooksPage,
+} from './pages/IntegrationPages';
+// Wave 17 — Import / Export
+import { ImportExportPage } from './pages/ImportExportPage';
 
 /**
- * PageIds couvertes par le catalogue SettingsModule legacy.
- * Les autres sous-pages (Branding, Langues, Fuseaux, etc.) ne sont pas
- * encore dans le catalogue ; on les route vers SettingsPlaceholder qui
- * affiche un état "Phase 2" propre avec liens vers les pages connexes.
+ * Toutes les pages Settings ont désormais leur composant dédié natif.
+ * Le SettingsModule legacy n'est plus utilisé — conservé en fallback de
+ * dernier recours pour les PageIds non reconnues (placeholder propre).
  */
-const LEGACY_CATALOG_PAGES: ReadonlySet<PageId> = new Set<PageId>([
-  'settings_multihotel',
-  'settings_room_types',
-  'settings_room_status',
-  'settings_preferences',
-  'settings_products',
-  'settings_conditions',
-  'settings_seasons',
-  'settings_age_categories',
-  'settings_invoice',
-  'settings_numbering',
-  'settings_accounting',
-  'settings_debtors',
-  'settings_fiscal',
-  'settings_hk_status',
-  'settings_hk_checklists',
-  'settings_hk_staff',
-  'settings_hk_distribution',
-  'settings_maintenance',
-  'settings_lost_found',
-  'settings_breakfast',
-  'settings_pms_sync',
-  'settings_automations',
-  'settings_import_export',
-]);
+const LEGACY_CATALOG_PAGES: ReadonlySet<PageId> = new Set<PageId>([]);
 
 interface SettingsLayoutProps {
   activePage: PageId;
@@ -94,12 +112,20 @@ interface SettingsLayoutProps {
 
 export const SettingsLayout: React.FC<SettingsLayoutProps> = ({ activePage, onNavigate }) => {
   const activeDomain = useMemo(() => findDomainForPage(activePage), [activePage]);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   function handleDomainChange(d: SettingsDomain) {
     // Par défaut, on charge le premier sous-menu du nouveau domaine
     const first = d.items[0]?.id;
     if (first) onNavigate(first);
   }
+
+  function handleSubNav(page: PageId) {
+    onNavigate(page);
+    setMobileMenuOpen(false);  // ferme le drawer mobile après navigation
+  }
+
+  const activeItem = activeDomain.items.find((i) => i.id === activePage);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-slate-50/60">
@@ -109,13 +135,51 @@ export const SettingsLayout: React.FC<SettingsLayoutProps> = ({ activePage, onNa
         onDomainChange={handleDomainChange}
       />
 
+      {/* ─── Barre mobile : burger + breadcrumb ──────────────────────── */}
+      <div className="lg:hidden shrink-0 px-4 py-2 bg-white border-b border-slate-100 flex items-center gap-2">
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="p-1.5 rounded-lg hover:bg-slate-100"
+          aria-label="Ouvrir le sous-menu"
+        >
+          <Menu className="w-4 h-4 text-slate-600" />
+        </button>
+        <div className="flex-1 min-w-0 text-[12.5px] text-slate-600 truncate">
+          {activeDomain.label} <span className="text-slate-400">·</span>{' '}
+          <span className="font-semibold text-slate-900">{activeItem?.label ?? 'Vue générale'}</span>
+        </div>
+      </div>
+
       {/* ─── Sub-nav + contenu ───────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        <SettingsSideNav
-          domain={activeDomain}
-          activePage={activePage}
-          onNavigate={onNavigate}
-        />
+        {/* Side nav desktop (visible ≥ lg) */}
+        <div className="hidden lg:block">
+          <SettingsSideNav
+            domain={activeDomain}
+            activePage={activePage}
+            onNavigate={handleSubNav}
+          />
+        </div>
+        {/* Side nav mobile (drawer overlay) */}
+        {mobileMenuOpen && (
+          <div className="lg:hidden fixed inset-0 z-40 flex" role="dialog" aria-modal="true">
+            <div className="absolute inset-0 bg-slate-900/40" onClick={() => setMobileMenuOpen(false)} />
+            <div className="relative z-10 w-72 max-w-[85vw] bg-white shadow-xl flex flex-col">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-slate-900">{activeDomain.label}</span>
+                <button onClick={() => setMobileMenuOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100">
+                  <XIcon className="w-4 h-4 text-slate-500" />
+                </button>
+              </div>
+              <SettingsSideNav
+                domain={activeDomain}
+                activePage={activePage}
+                onNavigate={handleSubNav}
+                fullWidth
+              />
+            </div>
+          </div>
+        )}
         <main className="flex-1 overflow-hidden flex flex-col">
           <SettingsContent activePage={activePage} onNavigate={onNavigate} />
         </main>
@@ -166,10 +230,14 @@ const SettingsSideNav: React.FC<{
   domain: SettingsDomain;
   activePage: PageId;
   onNavigate: (page: PageId) => void;
-}> = ({ domain, activePage, onNavigate }) => (
+  fullWidth?: boolean;
+}> = ({ domain, activePage, onNavigate, fullWidth }) => (
   <aside
     aria-label={`Sous-menu ${domain.label}`}
-    className="shrink-0 w-64 bg-white border-r border-slate-100 overflow-y-auto"
+    className={cn(
+      'bg-white border-r border-slate-100 overflow-y-auto',
+      fullWidth ? 'w-full flex-1' : 'shrink-0 w-64',
+    )}
   >
     <div className="px-4 py-4 border-b border-slate-50">
       <div className="text-[10px] uppercase tracking-wider font-semibold text-slate-400">
@@ -243,6 +311,72 @@ const SettingsContent: React.FC<{
   if (activePage === 'settings_sessions') return <SessionsPage />;
   if (activePage === 'settings_rate_plans') return <RatePlansPage onNavigate={onNavigate} />;
   if (activePage === 'settings_payment_modes') return <PaymentModesPage />;
+
+  // ─── Wave 9 — Inventaire ──────────────────────────────────────────────
+  if (activePage === 'settings_room_types') return <RoomTypesPage onNavigate={onNavigate} />;
+  if (activePage === 'settings_room_status') return <RoomStatusPage />;
+  if (activePage === 'settings_preferences') return <PreferencesPage />;
+
+  // ─── Wave 10 — Tarifs & Prestations ───────────────────────────────────
+  if (activePage === 'settings_products') return <ProductsPage />;
+  if (activePage === 'settings_conditions') return <ConditionsPage />;
+  if (activePage === 'settings_seasons') return <SeasonsPage />;
+  if (activePage === 'settings_age_categories') return <AgeCategoriesPage />;
+
+  // ─── Wave 11 — Finance ────────────────────────────────────────────────
+  if (activePage === 'settings_invoice') return <InvoicePage />;
+  if (activePage === 'settings_numbering') return <NumberingPage />;
+  if (activePage === 'settings_accounting') return <AccountingPage />;
+  if (activePage === 'settings_debtors') return <DebtorsPage />;
+  if (activePage === 'settings_fiscal') return <FiscalPage />;
+
+  // ─── Wave 12 — Housekeeping ───────────────────────────────────────────
+  if (activePage === 'settings_hk_status') return <HkStatusPage />;
+  if (activePage === 'settings_hk_checklists') return <HkChecklistsPage />;
+  if (activePage === 'settings_hk_staff') return <HkStaffPage />;
+  if (activePage === 'settings_hk_distribution') return <HkDistributionPage />;
+  if (activePage === 'settings_maintenance') return <MaintenancePage />;
+  if (activePage === 'settings_lost_found') return <LostFoundPage />;
+  if (activePage === 'settings_breakfast') return <BreakfastPage />;
+
+  // ─── Wave 13 — Automation & Distribution ──────────────────────────────
+  if (activePage === 'settings_automations') return <AutomationsPage />;
+  if (activePage === 'settings_ai_rules') return <AiRulesPage />;
+  if (activePage === 'settings_ai_strategies') return <AiStrategiesPage />;
+  if (activePage === 'settings_ota_mapping') return <OtaMappingPage />;
+  if (activePage === 'settings_ota_parity') return <OtaParityPage />;
+  if (activePage === 'settings_distribution_logs') return <DistributionLogsPage />;
+  if (activePage === 'settings_pms_sync') return <PmsSyncPage />;
+
+  // ─── Wave 14 — Réservations ───────────────────────────────────────────
+  if (activePage === 'settings_cancellation') return <CancellationPage />;
+  if (activePage === 'settings_guarantees') return <GuaranteesPage />;
+  if (activePage === 'settings_no_show') return <NoShowPage />;
+  if (activePage === 'settings_email_templates') return <EmailTemplatesPage />;
+
+  // ─── Wave 15 — Établissement restant ──────────────────────────────────
+  if (activePage === 'settings_multihotel') return <MultiHotelPage />;
+  if (activePage === 'settings_timezone') return <TimezonePage />;
+  if (activePage === 'settings_contact') return <ContactPage />;
+  if (activePage === 'settings_legal_docs') return <LegalDocsPage />;
+  if (activePage === 'settings_photos') return <PhotosPage />;
+  if (activePage === 'settings_classification') return <ClassificationPage />;
+  if (activePage === 'settings_compliance') return <CompliancePage />;
+
+  // ─── Wave 16 — Intégrations spécifiques ───────────────────────────────
+  if (activePage === 'settings_pos') return <PosPage />;
+  if (activePage === 'settings_locks') return <LocksPage />;
+  if (activePage === 'settings_kiosk') return <KioskPage />;
+  if (activePage === 'settings_payment_integ') return <PaymentIntegPage />;
+  if (activePage === 'settings_lighthouse_integ') return <LighthouseIntegPage />;
+  if (activePage === 'settings_expedia_integ') return <ExpediaIntegPage />;
+  if (activePage === 'settings_booking_integ') return <BookingIntegPage />;
+  if (activePage === 'settings_public_api') return <PublicApiPage />;
+  if (activePage === 'settings_webhooks') return <WebhooksPage />;
+
+  // ─── Wave 17 — Import / Export ────────────────────────────────────────
+  if (activePage === 'settings_import_export') return <ImportExportPage />;
+
   if (LEGACY_CATALOG_PAGES.has(activePage)) return <SettingsModule activePage={activePage} />;
   return <SettingsPlaceholder activePage={activePage} onNavigate={onNavigate} />;
 };

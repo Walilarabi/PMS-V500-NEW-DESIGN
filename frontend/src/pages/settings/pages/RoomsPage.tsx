@@ -61,7 +61,8 @@ export const RoomsPage: React.FC = () => {
 
   // ─── Filtres & tri ────────────────────────────────────────────────────
   const floors = useMemo(() => {
-    const set = new Set(rooms.map((r) => r.floor).filter(Boolean));
+    const set = new Set<string>();
+    rooms.forEach((r) => { if (r.floor) set.add(r.floor); });
     return [...set].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
   }, [rooms]);
 
@@ -145,7 +146,7 @@ export const RoomsPage: React.FC = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
-      <div className="px-6 pt-6 pb-10 space-y-5">
+      <div className="w-full px-6 pt-6 pb-10 space-y-5">
         {/* Header */}
         <header className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0">

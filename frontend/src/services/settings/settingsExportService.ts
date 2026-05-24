@@ -47,7 +47,8 @@ export function exportConfigExcel(report: DiagnosticReport) {
   // Feuille KPIs
   const kpisRows = [
     ['Score', 'Valeur', 'Tier'],
-    ...Object.values(report.scores).map((s) => [s.label, s.value, TIER_LABEL[s.tier]]),
+    ...(Object.values(report.scores) as DiagnosticReport['scores'][keyof DiagnosticReport['scores']][])
+      .map((s) => [s.label, s.value, TIER_LABEL[s.tier]] as (string | number)[]),
   ];
   const wsKpi = XLSX.utils.aoa_to_sheet(kpisRows);
   wsKpi['!cols'] = [{ wch: 24 }, { wch: 10 }, { wch: 14 }];

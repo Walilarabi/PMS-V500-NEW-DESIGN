@@ -45,7 +45,7 @@ export const SettingsModule: React.FC<SettingsModuleProps> = ({ activePage }) =>
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F8FAFC]">
-      <div className="mx-auto max-w-7xl space-y-8 p-8">
+      <div className="w-full space-y-6 px-6 py-6">
         <SettingsHeader
           hotelName={hotelName}
           searchQuery={searchQuery}

@@ -26,7 +26,7 @@ export const SettingsPlaceholder: React.FC<SettingsPlaceholderProps> = ({ active
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
-      <div className="px-6 pt-6 pb-10 space-y-5">
+      <div className="w-full px-6 pt-6 pb-10 space-y-5">
         <header className="flex items-start gap-3">
           <div className="w-11 h-11 rounded-2xl bg-violet-50 text-violet-600 ring-1 ring-violet-100 flex items-center justify-center shrink-0">
             <Icon className="w-5 h-5" />
