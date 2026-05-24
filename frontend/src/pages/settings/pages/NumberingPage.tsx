@@ -1,12 +1,11 @@
 /**
  * FLOWTYM — Paramètres · Numérotation (séquences de documents).
  */
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Save, AlertCircle, Lock } from 'lucide-react';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
 import { SettingsPageHeader, SettingsToast, Phase2Notice } from './_common';
-
-const STORAGE_KEY = 'flowtym.numbering';
 
 // Hash icon helper
 function Hash({ className }: { className?: string }) {
@@ -46,11 +45,6 @@ const DEFAULT: NumberingConfig = {
   fiscalYearReset: true,
 };
 
-function load(): NumberingConfig {
-  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT; } catch { return DEFAULT; }
-}
-function save(c: NumberingConfig) { localStorage.setItem(STORAGE_KEY, JSON.stringify(c)); }
-
 function preview(format: string, prefix: string, counter: number): string {
   const year = new Date().getFullYear();
   return format
@@ -61,13 +55,17 @@ function preview(format: string, prefix: string, counter: number): string {
 }
 
 export const NumberingPage: React.FC = () => {
-  const [cfg, setCfg] = useState<NumberingConfig>(() => load());
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const legacy = window.localStorage.getItem('flowtym.numbering');
+    const next = window.localStorage.getItem('flowtym.cfg.numbering');
+    if (legacy && !next) window.localStorage.setItem('flowtym.cfg.numbering', legacy);
+  }, []);
+  const [cfg, setCfg] = useConfigBlob<NumberingConfig>('numbering', DEFAULT);
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => { save(cfg); }, [cfg]);
-
   function handleSave() {
-    save(cfg);
+    setCfg((c) => c); // force re-sync vers Supabase
     logAudit({ action: 'module_inspected', module: 'finance_billing', detail: 'Numérotation mise à jour' });
     setToast('Numérotation enregistrée');
     window.setTimeout(() => setToast(null), 2500);

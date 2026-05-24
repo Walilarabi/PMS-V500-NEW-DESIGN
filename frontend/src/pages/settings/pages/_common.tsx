@@ -11,6 +11,7 @@ import { Plus, Pencil, Trash2, Save, X, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 
 export const SettingsPageHeader: React.FC<{
   icon: LucideIcon;
@@ -120,6 +121,7 @@ export function GenericListPage<T extends GenericListItem>({
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<T>(emptyItem());
   const [toast, setToast] = useState<string | null>(null);
+  const audit = useAuditLogger();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -146,11 +148,21 @@ export function GenericListPage<T extends GenericListItem>({
     if (!draft.label.trim()) return;
     if (adding) {
       setItems((arr) => [...arr, draft]);
-      logAudit({ action: 'module_inspected', module: moduleKey, detail: `${title} : "${draft.label}" créé` });
+      audit({
+        action: 'module_inspected',
+        module: moduleKey,
+        detail: `${title} : "${draft.label}" créé`,
+        meta: { entityId: draft.id, entityLabel: draft.label, op: 'create' },
+      });
       notify(`"${draft.label}" créé`);
     } else if (editing) {
       setItems((arr) => arr.map((x) => (x.id === editing.id ? draft : x)));
-      logAudit({ action: 'module_inspected', module: moduleKey, detail: `${title} : "${draft.label}" modifié` });
+      audit({
+        action: 'module_inspected',
+        module: moduleKey,
+        detail: `${title} : "${draft.label}" modifié`,
+        meta: { entityId: draft.id, entityLabel: draft.label, op: 'update' },
+      });
       notify(`"${draft.label}" mis à jour`);
     }
     cancel();
@@ -158,7 +170,13 @@ export function GenericListPage<T extends GenericListItem>({
   function remove(it: T) {
     if (!confirm(`Supprimer "${it.label}" ?`)) return;
     setItems((arr) => arr.filter((x) => x.id !== it.id));
-    logAudit({ action: 'module_inspected', module: moduleKey, detail: `${title} : "${it.label}" supprimé` });
+    audit({
+      action: 'module_inspected',
+      module: moduleKey,
+      detail: `${title} : "${it.label}" supprimé`,
+      severity: 'warning',
+      meta: { entityId: it.id, entityLabel: it.label, op: 'delete' },
+    });
     notify('Supprimé');
   }
   function toggleActive(it: T) {

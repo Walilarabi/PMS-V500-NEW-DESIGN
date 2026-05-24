@@ -10,8 +10,7 @@ import React, { useEffect, useState } from 'react';
 import { Languages, Globe, Save, CheckCircle2, Plus, Trash2, Coins, RefreshCw } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
-
-const STORAGE_KEY = 'flowtym.languages';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
 
 interface LangConfig {
   defaultLang: string;
@@ -54,25 +53,20 @@ const DEFAULT: LangConfig = {
   ratesUpdatedAt: undefined,
 };
 
-function load(): LangConfig {
-  if (typeof window === 'undefined') return DEFAULT;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT;
-  } catch { return DEFAULT; }
-}
-
-function save(c: LangConfig) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
-}
-
 export const LanguagesPage: React.FC = () => {
-  const [cfg, setCfg] = useState<LangConfig>(() => load());
+  // Phase 5 — persistance Supabase + localStorage via useConfigBlob.
+  // Migration douce depuis l'ancienne clé 'flowtym.languages' la 1re fois.
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const legacy = window.localStorage.getItem('flowtym.languages');
+    const next = window.localStorage.getItem('flowtym.cfg.languages');
+    if (legacy && !next) {
+      window.localStorage.setItem('flowtym.cfg.languages', legacy);
+    }
+  }, []);
+  const [cfg, setCfg] = useConfigBlob<LangConfig>('languages', DEFAULT);
   const [toast, setToast] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => { save(cfg); }, [cfg]);
 
   function notify(msg: string) {
     setToast(msg);

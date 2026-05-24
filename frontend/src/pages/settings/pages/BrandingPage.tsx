@@ -14,8 +14,7 @@ import { Sparkles, Save, Palette, CheckCircle2, Mail, FileText, RotateCcw } from
 import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
-
-const STORAGE_KEY = 'flowtym.branding';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
 
 interface BrandingConfig {
   logoUrl: string;
@@ -46,43 +45,34 @@ const DEFAULT: BrandingConfig = {
   fontStyle: 'modern',
 };
 
-function load(): BrandingConfig {
-  if (typeof window === 'undefined') return DEFAULT;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT;
-  } catch { return DEFAULT; }
-}
-
-function save(c: BrandingConfig) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
-}
-
 export const BrandingPage: React.FC = () => {
   const hotelName = useConfigStore((s) => s.hotel.name);
   const hotelLogo = useConfigStore((s) => s.hotel.logo);
   const updateHotel = useConfigStore((s) => s.updateHotel);
 
-  const [cfg, setCfg] = useState<BrandingConfig>(() => {
-    const loaded = load();
-    // Hydrate avec le logo du store si non défini en branding
-    if (!loaded.logoUrl && hotelLogo) loaded.logoUrl = hotelLogo;
-    return loaded;
-  });
+  // Migration douce ancien localStorage → nouveau namespace.
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const legacy = window.localStorage.getItem('flowtym.branding');
+    const next = window.localStorage.getItem('flowtym.cfg.branding');
+    if (legacy && !next) window.localStorage.setItem('flowtym.cfg.branding', legacy);
+  }, []);
+
+  const [cfg, setCfg] = useConfigBlob<BrandingConfig>('branding', DEFAULT);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
     if (hotelLogo && !cfg.logoUrl) setCfg((c) => ({ ...c, logoUrl: hotelLogo }));
-  }, [hotelLogo]);
+  }, [hotelLogo, cfg.logoUrl, setCfg]);
 
   function update<K extends keyof BrandingConfig>(k: K, v: BrandingConfig[K]) {
     setCfg((c) => ({ ...c, [k]: v }));
   }
 
   function handleSave() {
-    save(cfg);
-    // Sync le logo dans le store global (utilisé par Topbar etc.)
+    // useConfigBlob persiste déjà à chaque update — handleSave ne fait
+    // plus que propager le logo au store global + journaliser.
+    setCfg((c) => c); // force re-sync
     if (cfg.logoUrl !== hotelLogo) updateHotel({ logo: cfg.logoUrl });
     setSavedAt(new Date().toISOString());
     logAudit({ action: 'module_inspected', detail: 'Branding mis à jour' });

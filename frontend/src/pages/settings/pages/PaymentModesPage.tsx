@@ -15,8 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
-
-const STORAGE_KEY = 'flowtym.payment.modes';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
 
 type PaymentKind = 'card' | 'cash' | 'transfer' | 'check' | 'voucher' | 'link' | 'mobile';
 
@@ -71,18 +70,6 @@ const DEFAULT_MODES: PaymentMode[] = [
   { id: 'pm_link',  label: 'Lien Stripe',     kind: 'link',     active: true,  feesPercent: 1.4, feesFlat: 0.25, accountingCode: '5112000', channels: ['direct', 'b2b'],        cashDrawer: false },
 ];
 
-function load(): PaymentMode[] {
-  if (typeof window === 'undefined') return DEFAULT_MODES;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : DEFAULT_MODES;
-  } catch { return DEFAULT_MODES; }
-}
-function save(arr: PaymentMode[]) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-}
-
 const ALL_CHANNELS: { id: PaymentMode['channels'][0]; label: string }[] = [
   { id: 'reception', label: 'Réception' },
   { id: 'direct',    label: 'Direct (site)' },
@@ -91,7 +78,14 @@ const ALL_CHANNELS: { id: PaymentMode['channels'][0]; label: string }[] = [
 ];
 
 export const PaymentModesPage: React.FC = () => {
-  const [modes, setModes] = useState<PaymentMode[]>(() => load());
+  // Migration douce ancien localStorage → nouveau namespace (Phase 5).
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const legacy = window.localStorage.getItem('flowtym.payment.modes');
+    const next = window.localStorage.getItem('flowtym.cfg.payment_modes');
+    if (legacy && !next) window.localStorage.setItem('flowtym.cfg.payment_modes', legacy);
+  }, []);
+  const [modes, setModes] = useConfigBlob<PaymentMode[]>('payment_modes', DEFAULT_MODES);
   const [editing, setEditing] = useState<PaymentMode | null>(null);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<PaymentMode>({
@@ -100,7 +94,7 @@ export const PaymentModesPage: React.FC = () => {
   });
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => { save(modes); }, [modes]);
+  // Persistance via useConfigBlob (chaque setModes synchronise localStorage + Supabase)
 
   function notify(msg: string) {
     setToast(msg);

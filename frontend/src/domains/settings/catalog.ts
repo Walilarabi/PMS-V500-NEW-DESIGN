@@ -55,7 +55,15 @@ export const settingsOverviewAlerts = [
   'Nouvelle version fiscale disponible : FR-2026.09',
 ];
 
-export const settingsSections: Record<SettingsPageId, SettingsSection> = {
+/**
+ * Catalogue de fiches descriptives par page Paramètres. `Partial` car
+ * toutes les pages n'ont pas une fiche dédiée — les pages non listées
+ * tombent sur le placeholder générique (SettingsModule).
+ *
+ * Phase 5 — passé de `Record` à `Partial<Record>` pour ne plus exiger
+ * une entrée pour chacune des 65 PageId.
+ */
+export const settingsSections: Partial<Record<SettingsPageId, SettingsSection>> = {
   settings: {
     id: 'settings',
     title: 'Vue d’ensemble Paramètres',

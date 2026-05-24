@@ -17,6 +17,7 @@ import {
   type CapturedError,
 } from '@/src/services/settings/monitoringService';
 import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
+import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 
 function formatBytes(b: number): string {
   if (b < 1024) return `${b} o`;
@@ -38,6 +39,7 @@ export const SystemHealthPage: React.FC = () => {
   const [tick, setTick] = useState(0);
   const [expandedError, setExpandedError] = useState<string | null>(null);
   const canRead = usePermission('set_audit', 'read');
+  const audit = useAuditLogger();
 
   const snapshot = useMemo(() => getHealthSnapshot(), [tick]);
   const errors = useMemo<CapturedError[]>(() => readErrorBuffer(50), [tick]);
@@ -49,13 +51,29 @@ export const SystemHealthPage: React.FC = () => {
 
   function purgeErrors() {
     if (!confirm('Purger les erreurs locales ? Action irréversible.')) return;
+    const before = readErrorBuffer().length;
     clearErrorBuffer();
+    audit({
+      action: 'module_inspected',
+      module: 'security_backups',
+      detail: `Buffer d'erreurs purgé (${before} entrées)`,
+      severity: 'warning',
+      meta: { op: 'purge_errors', count: before },
+    });
     refresh();
   }
 
   function purgeMetrics() {
     if (!confirm('Réinitialiser tous les compteurs ? Action irréversible.')) return;
+    const before = readMetrics().length;
     resetMetrics();
+    audit({
+      action: 'module_inspected',
+      module: 'security_backups',
+      detail: `Compteurs de monitoring réinitialisés (${before} compteurs)`,
+      severity: 'warning',
+      meta: { op: 'reset_metrics', count: before },
+    });
     refresh();
   }
 

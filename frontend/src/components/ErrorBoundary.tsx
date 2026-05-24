@@ -1,5 +1,6 @@
 import React from 'react';
 import { RefreshCcw, AlertTriangle, Settings } from 'lucide-react';
+import { captureError } from '@/src/services/settings/monitoringService';
 
 interface State { hasError: boolean; error: Error | null; }
 
@@ -26,6 +27,16 @@ export class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[ErrorBoundary]', error, info.componentStack);
+    // Phase 5 — propage au monitoring service (ring buffer + audit critical).
+    // Best-effort : ne jamais relancer pour éviter une boucle infinie.
+    try {
+      captureError(error, {
+        source: 'react-error-boundary',
+        componentStack: info.componentStack ?? undefined,
+      });
+    } catch {
+      /* monitoring ne doit jamais crasher l'ErrorBoundary */
+    }
   }
 
   render() {

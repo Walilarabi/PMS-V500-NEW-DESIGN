@@ -12,6 +12,7 @@ import { Percent, Save, CheckCircle2, AlertCircle, Calculator } from 'lucide-rea
 import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { syncConfigBlobToSupabase, fetchConfigBlobFromSupabase } from '@/src/services/settings/settingsPersistence';
 
 export const LocalTaxesPage: React.FC = () => {
   const stored = useConfigStore((s) => s.taxes);
@@ -22,11 +23,28 @@ export const LocalTaxesPage: React.FC = () => {
 
   useEffect(() => { setDraft(stored); }, [stored.hebergement, stored.fb, stored.sejour]);
 
+  // Réconciliation Supabase au mount : si on a une config taxes côté
+  // Supabase, on l'applique au configStore (source de vérité).
+  useEffect(() => {
+    let cancelled = false;
+    fetchConfigBlobFromSupabase<typeof stored>('taxes').then((remote) => {
+      if (cancelled || !remote) return;
+      // N'écrase pas si le local diffère (utilisateur en cours d'édition)
+      if (JSON.stringify(remote) !== JSON.stringify(stored)) {
+        updateTaxes(remote);
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const dirty = JSON.stringify(draft) !== JSON.stringify(stored);
   const compliance = (draft.hebergement > 0 ? 35 : 0) + (draft.fb > 0 ? 35 : 0) + (draft.sejour > 0 ? 30 : 0);
 
   function save() {
     updateTaxes(draft);
+    // Sync Supabase best-effort (non bloquant)
+    void syncConfigBlobToSupabase('taxes', draft);
     setSavedAt(new Date().toISOString());
     logAudit({ action: 'module_inspected', module: 'finance_billing', detail: `Taxes mises à jour : héb. ${draft.hebergement}% · F&B ${draft.fb}% · séjour ${draft.sejour}€` });
     window.setTimeout(() => setSavedAt(null), 3000);

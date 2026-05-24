@@ -344,6 +344,69 @@ export async function fetchAuditLogFromSupabase(limit = 200): Promise<AuditEntry
   }
 }
 
+// ─── settings_config_blobs ─────────────────────────────────────────────────
+// Pattern key/value JSON pour les pages Paramètres avec une seule config
+// (taxes, branding, languages, payment modes, numbering, etc.).
+
+/**
+ * Sauvegarde un blob de configuration (best-effort). Retourne true si la
+ * synchro Supabase a réussi, false sinon (offline / pas de session).
+ */
+export async function syncConfigBlobToSupabase<T>(
+  namespace: string,
+  data: T,
+): Promise<boolean> {
+  const hotelId = await getCurrentHotelIdSafe();
+  if (!hotelId) return false;
+  try {
+    const { error } = await supabase
+      .from('settings_config_blobs')
+      .upsert(
+        {
+          hotel_id: hotelId,
+          namespace,
+          data: data as unknown as Record<string, unknown>,
+        },
+        { onConflict: 'hotel_id,namespace' },
+      );
+    if (error) {
+      logSyncError(`settings_config_blobs[${namespace}]`, 'upsert', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logSyncError(`settings_config_blobs[${namespace}]`, 'upsert', err);
+    return false;
+  }
+}
+
+/**
+ * Récupère un blob de configuration depuis Supabase (réconciliation au
+ * chargement). Retourne null si introuvable / offline.
+ */
+export async function fetchConfigBlobFromSupabase<T>(
+  namespace: string,
+): Promise<T | null> {
+  const hotelId = await getCurrentHotelIdSafe();
+  if (!hotelId) return null;
+  try {
+    const { data, error } = await supabase
+      .from('settings_config_blobs')
+      .select('data')
+      .eq('hotel_id', hotelId)
+      .eq('namespace', namespace)
+      .maybeSingle();
+    if (error || !data) {
+      if (error) logSyncError(`settings_config_blobs[${namespace}]`, 'select', error);
+      return null;
+    }
+    return (data as { data: T }).data ?? null;
+  } catch (err) {
+    logSyncError(`settings_config_blobs[${namespace}]`, 'select', err);
+    return null;
+  }
+}
+
 export async function logImportedRatePlanReport(row: ImportedRatePlanReportRow): Promise<boolean> {
   const hotelId = await getCurrentHotelIdSafe();
   if (!hotelId) return false;
