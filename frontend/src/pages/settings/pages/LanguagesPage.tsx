@@ -11,6 +11,7 @@ import { Languages, Globe, Save, CheckCircle2, Plus, Trash2, Coins, RefreshCw } 
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 interface LangConfig {
   defaultLang: string;
@@ -67,6 +68,8 @@ export const LanguagesPage: React.FC = () => {
   const [cfg, setCfg] = useConfigBlob<LangConfig>('languages', DEFAULT);
   const [toast, setToast] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_hotel');
+  if (!canRead) return <DeniedBanner />;
 
   function notify(msg: string) {
     setToast(msg);

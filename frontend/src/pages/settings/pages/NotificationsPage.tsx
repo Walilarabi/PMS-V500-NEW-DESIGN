@@ -7,15 +7,15 @@
  * localStorage. Phase 2 : sync vers le moteur d'envoi (SMTP / SMS
  * provider) avec test d'envoi réel.
  */
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Bell, Mail, MessageSquare, Save, RotateCcw, CheckCircle2, Eye, AlertCircle, Send,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
-
-const STORAGE_KEY = 'flowtym.notifications';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 type TemplateChannel = 'email' | 'sms';
 
@@ -96,31 +96,21 @@ const DEFAULT_TEMPLATES: TemplateConfig[] = [
   },
 ];
 
-function load(): TemplateConfig[] {
-  if (typeof window === 'undefined') return DEFAULT_TEMPLATES;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_TEMPLATES;
-    const arr = JSON.parse(raw) as TemplateConfig[];
-    // Merge avec defaults pour récupérer les nouveaux templates ajoutés en version ultérieure
-    return DEFAULT_TEMPLATES.map((d) => arr.find((x) => x.id === d.id) ?? d);
-  } catch { return DEFAULT_TEMPLATES; }
-}
-
-function save(arr: TemplateConfig[]) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-}
-
 export const NotificationsPage: React.FC = () => {
   const hotelName = useConfigStore((s) => s.hotel.name);
-  const [templates, setTemplates] = useState<TemplateConfig[]>(() => load());
+  // Migration douce ancien localStorage → namespace (Phase 6)
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const legacy = window.localStorage.getItem('flowtym.notifications');
+    const next = window.localStorage.getItem('flowtym.cfg.notifications');
+    if (legacy && !next) window.localStorage.setItem('flowtym.cfg.notifications', legacy);
+  }, []);
+  const [templates, setTemplates] = useConfigBlob<TemplateConfig[]>('notifications', DEFAULT_TEMPLATES);
   const [activeId, setActiveId] = useState<string>(templates[0]?.id ?? '');
   const [toast, setToast] = useState<string | null>(null);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_hotel');
 
   const active = templates.find((t) => t.id === activeId) ?? templates[0];
-
-  useEffect(() => { save(templates); }, [templates]);
 
   function notify(msg: string) {
     setToast(msg);
@@ -148,7 +138,9 @@ export const NotificationsPage: React.FC = () => {
   }
 
   function handleSave() {
-    save(templates);
+    // useConfigBlob persiste à chaque setTemplates — handleSave force juste
+    // un re-sync + journalise + toast.
+    setTemplates((t) => t);
     logAudit({ action: 'module_inspected', detail: `Template ${active.label} enregistré` });
     notify('Template enregistré');
   }
@@ -158,6 +150,8 @@ export const NotificationsPage: React.FC = () => {
   const previewSubject = useMemo(() => interpolate(active?.subject ?? '', hotelName), [active?.subject, hotelName]);
 
   const enabledCount = templates.filter((t) => t.enabled).length;
+
+  if (!canRead) return <DeniedBanner />;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">

@@ -15,6 +15,7 @@ import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import type { PageId } from '@/src/types';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 interface HotelInfoPageProps {
   onNavigate: (page: PageId) => void;
@@ -45,6 +46,7 @@ export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
 
   const [draft, setDraft] = useState(stored);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_hotel');
 
   // Si le store change ailleurs (réseau, autre onglet), on resynchronise
   useEffect(() => { setDraft(stored); }, [stored.name, stored.email]);
@@ -88,6 +90,8 @@ export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
     setDraft(stored);
   }
 
+  if (!canRead) return <DeniedBanner />;
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -116,8 +120,9 @@ export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
               Annuler
             </button>
             <button
-              onClick={handleSave}
-              disabled={!dirty || issues.length > 0}
+              onClick={() => canWrite && handleSave()}
+              disabled={!dirty || issues.length > 0 || !canWrite}
+              title={!canWrite ? 'Permission requise : set_hotel (write)' : undefined}
               className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Save className="w-3.5 h-3.5" /> Enregistrer

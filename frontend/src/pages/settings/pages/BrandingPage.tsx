@@ -15,6 +15,7 @@ import { cn } from '@/src/lib/utils';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 interface BrandingConfig {
   logoUrl: string;
@@ -60,6 +61,7 @@ export const BrandingPage: React.FC = () => {
 
   const [cfg, setCfg] = useConfigBlob<BrandingConfig>('branding', DEFAULT);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_hotel');
 
   useEffect(() => {
     if (hotelLogo && !cfg.logoUrl) setCfg((c) => ({ ...c, logoUrl: hotelLogo }));
@@ -83,6 +85,8 @@ export const BrandingPage: React.FC = () => {
     setCfg(DEFAULT);
   }
 
+  if (!canRead) return <DeniedBanner />;
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -101,10 +105,10 @@ export const BrandingPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={reset} className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5">
+            <button onClick={() => canWrite && reset()} disabled={!canWrite} title={!canWrite ? 'Permission requise : set_hotel (write)' : undefined} className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
               <RotateCcw className="w-3.5 h-3.5" /> Réinitialiser
             </button>
-            <button onClick={handleSave} className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20">
+            <button onClick={() => canWrite && handleSave()} disabled={!canWrite} title={!canWrite ? 'Permission requise : set_hotel (write)' : undefined} className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20 disabled:opacity-40 disabled:cursor-not-allowed">
               <Save className="w-3.5 h-3.5" /> Enregistrer
             </button>
           </div>

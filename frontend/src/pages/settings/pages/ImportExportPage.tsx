@@ -16,6 +16,7 @@ import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarSto
 import { exportConfigJSON, exportConfigExcel, exportConfigPDF } from '@/src/services/settings/settingsExportService';
 import { runDiagnostic } from '@/src/services/settings/settingsDiagnosticEngine';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 import { SettingsPageHeader, SettingsToast, Phase2Notice, SettingsMetric } from './_common';
 
 export const ImportExportPage: React.FC = () => {
@@ -25,6 +26,8 @@ export const ImportExportPage: React.FC = () => {
   const [toast, setToast] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+  // RBAC : exports = audit/read ; imports = admin (impact tenant-wide)
+  const { canRead, canAdmin, DeniedBanner } = usePagePermission('set_audit');
 
   function notify(msg: string) {
     setToast(msg);
@@ -94,6 +97,8 @@ export const ImportExportPage: React.FC = () => {
 
   const dataSize = JSON.stringify({ cfg: cfg.hotel, events: events.events, calendar: calendar.roomTypes }).length;
 
+  if (!canRead) return <DeniedBanner />;
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -128,8 +133,9 @@ export const ImportExportPage: React.FC = () => {
           <div className="text-[13px] font-semibold text-slate-900 mb-2">Importer</div>
           <p className="text-[12px] text-slate-500 mb-3">Importez une configuration depuis un fichier JSON exporté.</p>
           <div
-            onClick={() => fileRef.current?.click()}
-            className={`rounded-xl ring-1 ring-dashed ring-slate-300 hover:ring-violet-400 hover:bg-violet-50/30 transition-all px-5 py-8 text-center cursor-pointer ${importing ? 'opacity-60' : ''}`}
+            onClick={() => canAdmin && fileRef.current?.click()}
+            title={!canAdmin ? 'Permission requise : set_audit (admin) — import = impact tenant-wide' : undefined}
+            className={`rounded-xl ring-1 ring-dashed ring-slate-300 transition-all px-5 py-8 text-center ${canAdmin ? 'hover:ring-violet-400 hover:bg-violet-50/30 cursor-pointer' : 'opacity-50 cursor-not-allowed'} ${importing ? 'opacity-60' : ''}`}
           >
             <input ref={fileRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
             <Upload className="w-8 h-8 mx-auto text-violet-500 mb-2" />

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 import { SettingsPageHeader, SettingsMetric, SettingsToast, Phase2Notice, FormField } from './_common';
 import type { LucideIcon } from 'lucide-react';
 
@@ -56,6 +57,7 @@ const IntegrationPage: React.FC<IntegrationPageProps> = ({
 }) => {
   const [cfg, setCfg] = useState<IntegrationConfig>(() => loadConfig(storageKey));
   const [toast, setToast] = useState<string | null>(null);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_integrations');
 
   useEffect(() => { saveConfig(storageKey, cfg); }, [cfg, storageKey]);
 
@@ -65,6 +67,7 @@ const IntegrationPage: React.FC<IntegrationPageProps> = ({
   }
 
   function connect() {
+    if (!canWrite) return;
     if (!cfg.apiKey.trim()) {
       notify('Renseignez d\'abord la clé API');
       return;
@@ -76,15 +79,19 @@ const IntegrationPage: React.FC<IntegrationPageProps> = ({
   }
 
   function disconnect() {
+    if (!canWrite) return;
     setCfg({ ...cfg, enabled: false, status: 'idle' });
     logAudit({ action: 'module_inspected', module: moduleKey, detail: `Intégration ${vendorName} désactivée` });
     notify(`${vendorName} déconnecté`);
   }
 
   function testConnection() {
+    if (!canWrite) return;
     setCfg({ ...cfg, status: 'connected', lastSync: new Date().toISOString() });
     notify('Test : connexion OK (mock Phase 1)');
   }
+
+  if (!canRead) return <DeniedBanner />;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
@@ -143,17 +150,18 @@ const IntegrationPage: React.FC<IntegrationPageProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           {cfg.enabled ? (
             <>
-              <button onClick={testConnection} className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5">
+              <button onClick={testConnection} disabled={!canWrite} title={!canWrite ? 'Permission requise : set_integrations (write)' : undefined} className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
                 <RefreshCw className="w-3.5 h-3.5" /> Tester la connexion
               </button>
-              <button onClick={disconnect} className="px-3 py-2 rounded-lg ring-1 ring-rose-200 bg-white text-[13px] font-medium text-rose-700 hover:bg-rose-50 inline-flex items-center gap-1.5">
+              <button onClick={disconnect} disabled={!canWrite} title={!canWrite ? 'Permission requise : set_integrations (write)' : undefined} className="px-3 py-2 rounded-lg ring-1 ring-rose-200 bg-white text-[13px] font-medium text-rose-700 hover:bg-rose-50 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
                 Déconnecter
               </button>
             </>
           ) : (
             <button onClick={connect}
-              disabled={!cfg.apiKey.trim()}
-              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40">
+              disabled={!cfg.apiKey.trim() || !canWrite}
+              title={!canWrite ? 'Permission requise : set_integrations (write)' : undefined}
+              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
               <Plug className="w-3.5 h-3.5" /> Connecter {vendorName}
             </button>
           )}

@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { Save, AlertCircle, Lock } from 'lucide-react';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 import { SettingsPageHeader, SettingsToast, Phase2Notice } from './_common';
 
 // Hash icon helper
@@ -63,6 +64,7 @@ export const NumberingPage: React.FC = () => {
   }, []);
   const [cfg, setCfg] = useConfigBlob<NumberingConfig>('numbering', DEFAULT);
   const [toast, setToast] = useState<string | null>(null);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('fin_invoice');
 
   function handleSave() {
     setCfg((c) => c); // force re-sync vers Supabase
@@ -70,6 +72,8 @@ export const NumberingPage: React.FC = () => {
     setToast('Numérotation enregistrée');
     window.setTimeout(() => setToast(null), 2500);
   }
+
+  if (!canRead) return <DeniedBanner />;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
@@ -79,7 +83,7 @@ export const NumberingPage: React.FC = () => {
           category="Finance & Facturation"
           title="Numérotation"
           description="Séquences de numérotation des documents (factures, réservations, proformas)."
-          action={<button onClick={handleSave} className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5"><Save className="w-3.5 h-3.5" /> Enregistrer</button>}
+          action={<button onClick={() => canWrite && handleSave()} disabled={!canWrite} title={!canWrite ? 'Permission requise : fin_invoice (write)' : undefined} className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"><Save className="w-3.5 h-3.5" /> Enregistrer</button>}
         />
 
         <section className="rounded-2xl ring-1 ring-amber-100 bg-amber-50/40 p-4 flex items-start gap-3">
