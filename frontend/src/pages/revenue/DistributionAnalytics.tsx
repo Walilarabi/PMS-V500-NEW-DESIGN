@@ -556,7 +556,7 @@ export function DistributionAnalytics() {
   }, [channelData, dependencyData]);
 
   return (
-    <div className="flex flex-1 flex-col bg-gradient-to-b from-slate-50 to-white">
+    <div className="flex flex-1 flex-col overflow-y-auto bg-gradient-to-b from-slate-50 to-white">
       <div className="space-y-6 px-6 py-5">
         <PremiumHeader
           icon={Network}

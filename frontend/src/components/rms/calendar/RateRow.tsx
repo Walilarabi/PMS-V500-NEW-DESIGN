@@ -1,9 +1,10 @@
-import { memo, useCallback } from "react";
-import { RatePlanData } from "../types";
+import { memo, useCallback, useMemo } from "react";
+import { RatePlanData, RatePrice } from "../types";
 import { RateCell } from "./RateCell";
 import { useRateCalendarStore } from "../store/rateCalendarStore";
 import { cn } from "../utils/cn";
 import { LABEL_W } from "./CalendarGrid";
+import { dedupRatePrices } from "../engines/RateCalendarDedupEngine";
 
 export interface RateRowProps {
   roomTypeId: string;
@@ -49,6 +50,11 @@ export const RateRow = memo(function RateRow({
     [roomTypeId, plan.planId, getNextEditableCell, setActiveCell]
   );
 
+  // Garde-fou final contre les doublons de prices (même date apparue
+  // plusieurs fois) — symptôme du bug "3 lignes tarifaires" après push RMS.
+  // Le moteur dédoublonne aussi au load + adapter, ceci est défensif.
+  const dedupedPrices = useMemo<RatePrice[]>(() => dedupRatePrices(plan.prices), [plan.prices]);
+
   return (
     <div
       className="border-b border-gray-200 hover:bg-gray-50/40 transition-colors w-full"
@@ -77,7 +83,7 @@ export const RateRow = memo(function RateRow({
       </div>
 
       {/* Price cells — each is a CSS grid cell, automatically sized by 1fr */}
-      {plan.prices.map((price) => {
+      {dedupedPrices.map((price) => {
         const cellKey = getCellKey(roomTypeId, plan.planId, price.date);
         const isActive =
           activeCell?.roomTypeId === roomTypeId &&

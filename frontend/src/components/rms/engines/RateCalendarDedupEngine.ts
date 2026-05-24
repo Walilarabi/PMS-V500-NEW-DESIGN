@@ -14,7 +14,7 @@
  *   2. rateCalendarStore.loadData après chargement
  *   3. (defensive) au rendu, RoomSection vérifie filteredPlans
  */
-import type { RatePlanData, RoomStatus, RoomTypeData } from '../types';
+import type { RatePlanData, RatePrice, RoomStatus, RoomTypeData } from '../types';
 
 /**
  * Dédupe une liste de RatePlanData par `planCode` (clé fonctionnelle).
@@ -22,7 +22,7 @@ import type { RatePlanData, RoomStatus, RoomTypeData } from '../types';
  * import le plus récent). Préserve l'ordre original sinon.
  */
 export function dedupRatePlans(plans: RatePlanData[]): RatePlanData[] {
-  if (plans.length <= 1) return plans;
+  if (plans.length <= 1) return plans.map(dedupRatePlanInner);
   const seen = new Map<string, number>(); // planCode → index dans `plans`
   plans.forEach((p, idx) => {
     const key = (p.planCode ?? p.planId ?? '').trim().toLowerCase();
@@ -30,7 +30,40 @@ export function dedupRatePlans(plans: RatePlanData[]): RatePlanData[] {
     seen.set(key, idx); // écrase = garde le plus récent
   });
   const keepIndexes = new Set(seen.values());
-  return plans.filter((_, i) => keepIndexes.has(i));
+  return plans.filter((_, i) => keepIndexes.has(i)).map(dedupRatePlanInner);
+}
+
+/**
+ * Dédupe les `prices` d'un plan tarifaire par `date`. Évite l'affichage
+ * de plusieurs cellules pour une même date quand la table rate_prices
+ * Supabase contient des doublons (bug Phase 8 — push RMS répétés).
+ */
+export function dedupRatePrices(prices: RatePrice[]): RatePrice[] {
+  if (prices.length <= 1) return prices;
+  const byDate = new Map<string, RatePrice>();
+  for (const p of prices) {
+    const existing = byDate.get(p.date);
+    if (!existing) {
+      byDate.set(p.date, p);
+      continue;
+    }
+    // Merge : préfère la valeur la plus récente (priceVersion + priceId)
+    const moreRecent =
+      (p.priceVersion ?? 0) > (existing.priceVersion ?? 0)
+        ? p
+        : (existing.priceVersion ?? 0) > (p.priceVersion ?? 0)
+          ? existing
+          : p; // tie-break sur la dernière entrée du tableau
+    byDate.set(p.date, moreRecent);
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Helper interne : applique dedupRatePrices à un plan. */
+function dedupRatePlanInner(p: RatePlanData): RatePlanData {
+  const dedupedPrices = dedupRatePrices(p.prices);
+  if (dedupedPrices.length === p.prices.length) return p;
+  return { ...p, prices: dedupedPrices };
 }
 
 /**

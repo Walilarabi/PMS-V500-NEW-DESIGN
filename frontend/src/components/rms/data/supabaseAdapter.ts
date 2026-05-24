@@ -241,9 +241,21 @@ export async function fetchCalendarDataFromSupabase(
 
         // Build ratePlans for THIS room type
         const ratePlans: RatePlanData[] = plans.map((p) => {
-          const pricesForCell = prices.filter(
+          // Phase 8 — déduplication par date (bug "3 lignes tarifaires
+          // dupliquées" après push RMS répétés). On garde l'entrée avec
+          // la version la plus récente (priceVersion descendant).
+          const rawPrices = prices.filter(
             (px) => px.room_type_code === code && px.plan_id === p.id,
           );
+          const pricesByDate = new Map<string, typeof rawPrices[number]>();
+          for (const px of rawPrices) {
+            const existing = pricesByDate.get(px.stay_date);
+            if (!existing) { pricesByDate.set(px.stay_date, px); continue; }
+            const vNew = Number(px.version ?? 0);
+            const vOld = Number(existing.version ?? 0);
+            if (vNew > vOld) pricesByDate.set(px.stay_date, px);
+          }
+          const pricesForCell = Array.from(pricesByDate.values());
           return {
             internalId: idx * 1000 + plans.indexOf(p),
             planId: p.id,

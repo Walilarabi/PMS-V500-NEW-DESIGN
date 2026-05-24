@@ -7,9 +7,20 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  dedupRatePlans, dedupRoomStatuses, dedupRoomType, dedupRoomTypes,
+  dedupRatePlans, dedupRatePrices, dedupRoomStatuses, dedupRoomType, dedupRoomTypes,
 } from './RateCalendarDedupEngine';
-import type { RatePlanData, RoomStatus, RoomTypeData } from '../types';
+import type { RatePlanData, RatePrice, RoomStatus, RoomTypeData } from '../types';
+
+function price(date: string, p: number, extras: Partial<RatePrice> = {}): RatePrice {
+  return {
+    date,
+    price: p,
+    currency: 'EUR',
+    status: 'open',
+    isEditable: true,
+    ...extras,
+  };
+}
 
 function plan(id: string, code: string, name = code): RatePlanData {
   return {
@@ -115,6 +126,80 @@ describe('dedupRatePlans', () => {
   it("conserve un seul item s'il est valide (≥2 items pour passer le shortcut)", () => {
     const plans = [plan('', ''), plan('p1', 'OK')];
     expect(dedupRatePlans(plans)).toHaveLength(1);
+  });
+});
+
+describe('dedupRatePrices — bug "3 lignes tarifaires" après push RMS', () => {
+  it("garde une seule entrée par date", () => {
+    const prices = [
+      price('2026-06-01', 100),
+      price('2026-06-02', 110),
+      price('2026-06-01', 150),   // doublon date
+    ];
+    const r = dedupRatePrices(prices);
+    expect(r).toHaveLength(2);
+  });
+
+  it("préserve l'entrée avec la priceVersion la plus élevée", () => {
+    const prices = [
+      price('2026-06-01', 100, { priceVersion: 1 }),
+      price('2026-06-01', 150, { priceVersion: 3 }),  // gagnant
+      price('2026-06-01', 120, { priceVersion: 2 }),
+    ];
+    const r = dedupRatePrices(prices);
+    expect(r).toHaveLength(1);
+    expect(r[0].price).toBe(150);
+    expect(r[0].priceVersion).toBe(3);
+  });
+
+  it("trie par date ascendante en sortie", () => {
+    const prices = [
+      price('2026-06-03', 130),
+      price('2026-06-01', 100),
+      price('2026-06-02', 110),
+    ];
+    const r = dedupRatePrices(prices);
+    expect(r.map((p) => p.date)).toEqual(['2026-06-01', '2026-06-02', '2026-06-03']);
+  });
+
+  it("no-op si pas de doublons", () => {
+    const prices = [price('2026-06-01', 100), price('2026-06-02', 110)];
+    const r = dedupRatePrices(prices);
+    expect(r).toHaveLength(2);
+  });
+});
+
+describe('dedupRatePlans propage dedupRatePrices', () => {
+  function planWithDups(): RatePlanData {
+    return {
+      internalId: 1,
+      planId: 'p1',
+      planCode: 'FLEX',
+      planName: 'Flex',
+      pensionType: 'RO',
+      channelType: 'OTA',
+      calcMode: 'fixed',
+      calcValue: 0,
+      referencePlanId: '',
+      isReference: false,
+      isActive: true,
+      connectivityType: 'Aucun',
+      isConnectivityLocked: false,
+      assignedRoomTypeIds: [],
+      distributionChannels: [],
+      prices: [
+        price('2026-06-01', 100),
+        price('2026-06-01', 110),  // doublon date
+        price('2026-06-02', 120),
+      ],
+    };
+  }
+
+  it("dedupRatePlans nettoie aussi les prix dupliqués au sein de chaque plan", () => {
+    const plans = [planWithDups()];
+    const r = dedupRatePlans(plans);
+    expect(r).toHaveLength(1);
+    expect(r[0].prices).toHaveLength(2);
   });
 });
 
