@@ -117,10 +117,15 @@ const CAPABILITY_GROUPS: CapabilityGroup[] = [
     id: 'settings',
     label: 'Paramètres',
     capabilities: [
-      { id: 'set_hotel',    label: 'Informations établissement', description: 'Éditer le profil hôtel.' },
-      { id: 'set_users',    label: 'Utilisateurs & rôles',    description: 'CRUD comptes + permissions.' },
-      { id: 'set_api',      label: 'API & Webhooks',          description: 'Créer / révoquer des clés.' },
-      { id: 'set_audit',    label: 'Audit / Logs',            description: 'Consulter le journal d\'audit.' },
+      { id: 'set_hotel',        label: 'Informations établissement', description: 'Éditer le profil hôtel.' },
+      { id: 'set_rooms',        label: 'Chambres & inventaire',      description: 'Typologies, chambres physiques, étages.' },
+      { id: 'set_users',        label: 'Utilisateurs & rôles',       description: 'CRUD comptes + permissions.' },
+      { id: 'set_api',          label: 'API & Webhooks',             description: 'Créer / révoquer des clés.' },
+      { id: 'set_integrations', label: 'Intégrations & OTAs',        description: 'Partenaires de connectivité, channel managers.' },
+      { id: 'set_fiscal',       label: 'Fiscalité',                  description: 'Paramétrage fiscal + clôture.' },
+      { id: 'set_audit',        label: 'Audit / Logs',               description: 'Consulter le journal d\'audit.' },
+      { id: 'set_backups',      label: 'Sauvegardes',                description: 'Lancer / restaurer une sauvegarde.' },
+      { id: 'set_rgpd',         label: 'RGPD',                       description: 'Exports portabilité, droit à l\'oubli.' },
     ],
   },
 ];
@@ -137,7 +142,9 @@ const DEFAULT_MATRIX: PermissionsMatrix = {
     rev_view: 'admin', rev_decisions: 'admin', rev_pricing: 'admin', rev_autopilot: 'write',
     fin_invoice: 'admin', fin_payment: 'admin', fin_close: 'admin', fin_export: 'admin',
     hk_status: 'read', hk_assign: 'read', hk_maintain: 'read',
-    set_hotel: 'write', set_users: 'none', set_api: 'none', set_audit: 'read',
+    set_hotel: 'write', set_rooms: 'write', set_users: 'none', set_api: 'none',
+    set_integrations: 'write', set_fiscal: 'write', set_audit: 'read',
+    set_backups: 'read', set_rgpd: 'read',
   },
   receptionist: {
     res_view: 'admin', res_create: 'admin', res_groups: 'read',
@@ -145,7 +152,9 @@ const DEFAULT_MATRIX: PermissionsMatrix = {
     rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'write', fin_payment: 'write', fin_close: 'none', fin_export: 'none',
     hk_status: 'read', hk_assign: 'none', hk_maintain: 'none',
-    set_hotel: 'none', set_users: 'none', set_api: 'none', set_audit: 'none',
+    set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
   },
   housekeeping: {
     res_view: 'read', res_create: 'none', res_groups: 'none',
@@ -153,7 +162,9 @@ const DEFAULT_MATRIX: PermissionsMatrix = {
     rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
     hk_status: 'admin', hk_assign: 'write', hk_maintain: 'write',
-    set_hotel: 'none', set_users: 'none', set_api: 'none', set_audit: 'none',
+    set_hotel: 'none', set_rooms: 'read', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
   },
   reader: {
     res_view: 'read', res_create: 'none', res_groups: 'none',
@@ -161,7 +172,9 @@ const DEFAULT_MATRIX: PermissionsMatrix = {
     rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'read',
     hk_status: 'read', hk_assign: 'none', hk_maintain: 'none',
-    set_hotel: 'read', set_users: 'none', set_api: 'none', set_audit: 'read',
+    set_hotel: 'read', set_rooms: 'read', set_users: 'none', set_api: 'none',
+    set_integrations: 'read', set_fiscal: 'read', set_audit: 'read',
+    set_backups: 'read', set_rgpd: 'read',
   },
 };
 

@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Percent, Save, ShieldCheck, AlertCircle, Globe } from 'lucide-react';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 import { SettingsPageHeader, SettingsToast, Phase2Notice } from './_common';
 
 const STORAGE_KEY = 'flowtym.fiscal.config';
@@ -40,10 +41,12 @@ export const FiscalPage: React.FC = () => {
   const taxes = useConfigStore((s) => s.taxes);
   const [cfg, setCfg] = useState<FiscalConfig>(() => load());
   const [toast, setToast] = useState<string | null>(null);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_fiscal');
 
-  useEffect(() => { save(cfg); }, [cfg]);
+  useEffect(() => { if (canWrite) save(cfg); }, [cfg, canWrite]);
 
   function handleSave() {
+    if (!canWrite) return;
     save(cfg);
     logAudit({ action: 'module_inspected', module: 'finance_billing', detail: 'Paramètres fiscaux mis à jour' });
     setToast('Paramètres fiscaux enregistrés');
@@ -61,6 +64,8 @@ export const FiscalPage: React.FC = () => {
   ];
   const score = Math.round((checks.filter((c) => c.ok).length / checks.length) * 100);
 
+  if (!canRead) return <DeniedBanner />;
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -69,7 +74,16 @@ export const FiscalPage: React.FC = () => {
           category="Finance & Facturation"
           title="Fiscalité 2026 & e-facture"
           description="Conformité PPF / PDP, Factur-X, archivage immuable, piste d'audit fiable."
-          action={<button onClick={handleSave} className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5"><Save className="w-3.5 h-3.5" /> Enregistrer</button>}
+          action={
+            <button
+              onClick={handleSave}
+              disabled={!canWrite}
+              title={!canWrite ? 'Permission requise : set_fiscal (write)' : undefined}
+              className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Save className="w-3.5 h-3.5" /> Enregistrer
+            </button>
+          }
         />
 
         <section className={`rounded-2xl ring-1 p-5 flex items-start gap-4 ${score >= 80 ? 'ring-emerald-200 bg-emerald-50/60' : score >= 50 ? 'ring-amber-200 bg-amber-50/60' : 'ring-rose-200 bg-rose-50/60'}`}>

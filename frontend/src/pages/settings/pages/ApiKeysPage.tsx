@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 const KEYS_STORAGE = 'flowtym.api.keys';
 const HOOKS_STORAGE = 'flowtym.api.hooks';
@@ -84,6 +85,7 @@ export const ApiKeysPage: React.FC = () => {
   const [keys, setKeys] = useState<ApiKey[]>(() => loadKeys());
   const [hooks, setHooks] = useState<WebhookConfig[]>(() => loadHooks());
   const [tab, setTab] = useState<'keys' | 'hooks'>('keys');
+  const { canRead, canWrite, canAdmin, DeniedBanner } = usePagePermission('set_api');
   const [newKeyDraft, setNewKeyDraft] = useState<{ label: string; scopes: string[] }>({ label: '', scopes: ['read'] });
   const [newHookDraft, setNewHookDraft] = useState<{ label: string; url: string; events: string[] }>({ label: '', url: '', events: ['reservation.created'] });
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
@@ -159,6 +161,8 @@ export const ApiKeysPage: React.FC = () => {
     notify('Webhook supprimé');
   }
 
+  if (!canRead) return <DeniedBanner />;
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -209,9 +213,10 @@ export const ApiKeysPage: React.FC = () => {
                   className="px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px] focus:ring-violet-500 outline-none"
                 />
                 <button
-                  onClick={createKey}
-                  disabled={!newKeyDraft.label.trim()}
-                  className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40"
+                  onClick={() => canAdmin && createKey()}
+                  disabled={!newKeyDraft.label.trim() || !canAdmin}
+                  title={!canAdmin ? 'Permission requise : set_api (admin)' : undefined}
+                  className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-3.5 h-3.5" /> Créer la clé
                 </button>
@@ -296,11 +301,11 @@ export const ApiKeysPage: React.FC = () => {
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
                             {!k.revoked && (
-                              <button onClick={() => revokeKey(k.id)} className="p-1.5 rounded-md hover:bg-amber-50 text-amber-700" title="Révoquer">
+                              <button onClick={() => canAdmin && revokeKey(k.id)} disabled={!canAdmin} className={cn("p-1.5 rounded-md text-amber-700", canAdmin ? "hover:bg-amber-50" : "opacity-30 cursor-not-allowed")} title={canAdmin ? "Révoquer" : "Permission requise : set_api (admin)"}>
                                 <RotateCcw className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            <button onClick={() => deleteKey(k.id)} className="p-1.5 rounded-md hover:bg-rose-50 text-rose-700" title="Supprimer">
+                            <button onClick={() => canAdmin && deleteKey(k.id)} disabled={!canAdmin} className={cn("p-1.5 rounded-md text-rose-700", canAdmin ? "hover:bg-rose-50" : "opacity-30 cursor-not-allowed")} title={canAdmin ? "Supprimer" : "Permission requise : set_api (admin)"}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -358,9 +363,10 @@ export const ApiKeysPage: React.FC = () => {
               </div>
               <div className="mt-3 flex justify-end">
                 <button
-                  onClick={createHook}
-                  disabled={!newHookDraft.label.trim() || !newHookDraft.url.trim() || newHookDraft.events.length === 0}
-                  className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40"
+                  onClick={() => canAdmin && createHook()}
+                  disabled={!canAdmin || !newHookDraft.label.trim() || !newHookDraft.url.trim() || newHookDraft.events.length === 0}
+                  title={!canAdmin ? 'Permission requise : set_api (admin)' : undefined}
+                  className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Plus className="w-3.5 h-3.5" /> Créer le webhook
                 </button>
@@ -381,7 +387,7 @@ export const ApiKeysPage: React.FC = () => {
                 <ul className="divide-y divide-slate-100">
                   {hooks.map((h) => (
                     <li key={h.id} className="px-5 py-3 flex items-start gap-3">
-                      <button onClick={() => toggleHook(h.id)} className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0 mt-1', h.active ? 'bg-emerald-500' : 'bg-slate-300')}>
+                      <button onClick={() => canWrite && toggleHook(h.id)} disabled={!canWrite} title={!canWrite ? 'Permission requise : set_api (write)' : undefined} className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0 mt-1 disabled:opacity-40 disabled:cursor-not-allowed', h.active ? 'bg-emerald-500' : 'bg-slate-300')}>
                         <span className={cn('absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform', h.active && 'translate-x-4')} />
                       </button>
                       <div className="flex-1 min-w-0">
@@ -393,7 +399,7 @@ export const ApiKeysPage: React.FC = () => {
                           ))}
                         </div>
                       </div>
-                      <button onClick={() => deleteHook(h.id)} className="p-1.5 rounded-md hover:bg-rose-50 text-rose-700">
+                      <button onClick={() => canAdmin && deleteHook(h.id)} disabled={!canAdmin} title={!canAdmin ? 'Permission requise : set_api (admin)' : undefined} className={cn("p-1.5 rounded-md text-rose-700", canAdmin ? "hover:bg-rose-50" : "opacity-30 cursor-not-allowed")}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </li>

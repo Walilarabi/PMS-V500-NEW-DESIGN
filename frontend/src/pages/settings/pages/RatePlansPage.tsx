@@ -21,6 +21,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { RateManagerPanel } from '@/src/components/rms/calendar/RateManagerPanel';
+import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
 import type { RatePlanData, PensionType } from '@/src/components/rms/types';
 import type { PageId } from '@/src/types';
 import {
@@ -45,6 +46,10 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
   const [filterRoom, setFilterRoom] = useState<string>('all');
   const [toast, setToast] = useState<string | null>(null);
   const audit = useAuditLogger();
+
+  // RBAC — lecture min "read", mutations (import / intégration) en "write"
+  const canRead = usePermission('rev_pricing', 'read');
+  const canWrite = usePermission('rev_pricing', 'write');
 
   // ─── Import Excel ─────────────────────────────────────────────────────
   const fileRef = useRef<HTMLInputElement>(null);
@@ -172,6 +177,16 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
   // contrôles complets existent. Les toggles ci-dessous sont des indicateurs
   // visuels qui amènent au bon écran d'édition.
 
+  if (!canRead) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-slate-50/60">
+        <div className="w-full px-6 pt-6 pb-10">
+          <PermissionDeniedBanner capability="rev_pricing" required="read" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -197,16 +212,17 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
               className="hidden"
             />
             <button
-              onClick={() => fileRef.current?.click()}
-              disabled={importing}
-              className="px-3 py-2 rounded-lg ring-1 ring-violet-200 bg-white text-[13px] font-medium text-violet-700 hover:bg-violet-50 inline-flex items-center gap-1.5 disabled:opacity-60"
+              onClick={() => canWrite && fileRef.current?.click()}
+              disabled={importing || !canWrite}
+              title={!canWrite ? 'Permission requise : rev_pricing (write)' : undefined}
+              className="px-3 py-2 rounded-lg ring-1 ring-violet-200 bg-white text-[13px] font-medium text-violet-700 hover:bg-violet-50 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Upload className="w-3.5 h-3.5" />
               {importing ? 'Import en cours…' : 'Importer Excel'}
             </button>
             {/* Phase 4 — éditeur CRUD complet (déplacé depuis le calendrier).
                 Source unique de vérité : useRateCalendarStore. */}
-            <RateManagerPanel />
+            {canWrite && <RateManagerPanel />}
             <button
               onClick={() => onNavigate('rev_calendar' as PageId)}
               className="px-3 py-2 rounded-lg bg-white ring-1 ring-slate-200 text-slate-700 text-[13px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
@@ -246,15 +262,18 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
                   {showImportedTable ? 'Masquer' : 'Voir les plans importés'}
                 </button>
                 <button
-                  onClick={openIntegration}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[12.5px] font-medium hover:bg-emerald-700 inline-flex items-center gap-1.5 shadow-sm shadow-emerald-600/20"
+                  onClick={() => canWrite && openIntegration()}
+                  disabled={!canWrite}
+                  title={!canWrite ? 'Permission requise : rev_pricing (write)' : undefined}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[12.5px] font-medium hover:bg-emerald-700 inline-flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Zap className="w-3.5 h-3.5" /> Intégrer les tarifs au système
                 </button>
                 <button
-                  onClick={clearImported}
-                  className="p-1.5 rounded-lg ring-1 ring-rose-200 text-rose-600 hover:bg-rose-50"
-                  title="Effacer l'import"
+                  onClick={() => canWrite && clearImported()}
+                  disabled={!canWrite}
+                  title={!canWrite ? 'Permission requise : rev_pricing (write)' : "Effacer l'import"}
+                  className="p-1.5 rounded-lg ring-1 ring-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

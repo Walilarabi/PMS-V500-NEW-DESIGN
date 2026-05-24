@@ -38,7 +38,9 @@ const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
     rev_view: 'admin', rev_decisions: 'admin', rev_pricing: 'admin', rev_autopilot: 'write',
     fin_invoice: 'admin', fin_payment: 'admin', fin_close: 'admin', fin_export: 'admin',
     hk_status: 'read', hk_assign: 'read', hk_maintain: 'read',
-    set_hotel: 'write', set_users: 'none', set_api: 'none', set_audit: 'read',
+    set_hotel: 'write', set_rooms: 'write', set_users: 'none', set_api: 'none',
+    set_integrations: 'write', set_fiscal: 'write', set_audit: 'read',
+    set_backups: 'read', set_rgpd: 'read',
   },
   receptionist: {
     res_view: 'admin', res_create: 'admin', res_groups: 'read',
@@ -46,7 +48,9 @@ const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
     rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'write', fin_payment: 'write', fin_close: 'none', fin_export: 'none',
     hk_status: 'read', hk_assign: 'none', hk_maintain: 'none',
-    set_hotel: 'none', set_users: 'none', set_api: 'none', set_audit: 'none',
+    set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
   },
   housekeeping: {
     res_view: 'read', res_create: 'none', res_groups: 'none',
@@ -54,7 +58,9 @@ const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
     rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
     hk_status: 'admin', hk_assign: 'write', hk_maintain: 'write',
-    set_hotel: 'none', set_users: 'none', set_api: 'none', set_audit: 'none',
+    set_hotel: 'none', set_rooms: 'read', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
   },
   reader: {
     res_view: 'read', res_create: 'none', res_groups: 'none',
@@ -62,7 +68,9 @@ const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
     rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'read',
     hk_status: 'read', hk_assign: 'none', hk_maintain: 'none',
-    set_hotel: 'read', set_users: 'none', set_api: 'none', set_audit: 'read',
+    set_hotel: 'read', set_rooms: 'read', set_users: 'none', set_api: 'none',
+    set_integrations: 'read', set_fiscal: 'read', set_audit: 'read',
+    set_backups: 'read', set_rgpd: 'read',
   },
 };
 
@@ -159,6 +167,31 @@ export function useCurrentRole(): RoleId {
   const auth = useAuth();
   if (!auth.session) return 'admin'; // mode dev
   return normalizeRole(auth.session.role);
+}
+
+/**
+ * Hook combiné : retourne `{ canRead, canWrite, canAdmin, DeniedBanner }`
+ * pour la capability donnée. Le `DeniedBanner` est un composant prêt à
+ * être rendu en early-return si `!canRead`. Évite la duplication sur
+ * toutes les pages Paramètres.
+ */
+export function usePagePermission(capability: string): {
+  canRead: boolean;
+  canWrite: boolean;
+  canAdmin: boolean;
+  DeniedBanner: React.FC;
+} {
+  const canRead = usePermission(capability, 'read');
+  const canWrite = usePermission(capability, 'write');
+  const canAdmin = usePermission(capability, 'admin');
+  const DeniedBanner: React.FC = () => (
+    <div className="flex-1 overflow-y-auto bg-slate-50/60">
+      <div className="w-full px-6 pt-6 pb-10">
+        <PermissionDeniedBanner capability={capability} required="read" />
+      </div>
+    </div>
+  );
+  return { canRead, canWrite, canAdmin, DeniedBanner };
 }
 
 /**

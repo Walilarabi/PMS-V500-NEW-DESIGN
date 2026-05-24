@@ -13,6 +13,7 @@ import { Tag, Search, ExternalLink, Bed, Users, ChevronRight, Layers, Plus } fro
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { RoomManagerPanel } from '@/src/components/rms/calendar/RoomManagerPanel';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 import type { PageId } from '@/src/types';
 import { VirtualRoomModal } from './VirtualRoomModal';
 
@@ -34,6 +35,7 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
   const [search, setSearch] = useState('');
   const [virtualOpen, setVirtualOpen] = useState(false);
   const virtualCount = roomTypes.filter((rt) => rt.isVirtual).length;
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rooms');
 
   React.useEffect(() => { if (roomTypes.length === 0) loadData(); }, []); // eslint-disable-line
 
@@ -46,6 +48,8 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
   }, [roomTypes, search]);
 
   const totalCapacity = roomTypes.reduce((s, rt) => s + (rt.capacity ?? 0), 0);
+
+  if (!canRead) return <DeniedBanner />;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
@@ -65,15 +69,16 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => setVirtualOpen(true)}
-              className="px-3 py-2 rounded-lg bg-white ring-1 ring-violet-200 text-violet-700 text-[13px] font-medium hover:bg-violet-50 inline-flex items-center gap-1.5"
-              title="Créer une chambre virtuelle (adjacentes, communicantes, suite composée…)"
+              onClick={() => canWrite && setVirtualOpen(true)}
+              disabled={!canWrite}
+              title={!canWrite ? 'Permission requise : set_rooms (write)' : 'Créer une chambre virtuelle (adjacentes, communicantes, suite composée…)'}
+              className="px-3 py-2 rounded-lg bg-white ring-1 ring-violet-200 text-violet-700 text-[13px] font-medium hover:bg-violet-50 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Layers className="w-3.5 h-3.5" /> Créer une chambre virtuelle
             </button>
             {/* Phase 4 — éditeur CRUD complet (anciennement dans le calendrier).
                 Source unique de vérité : useRateCalendarStore. */}
-            <RoomManagerPanel />
+            {canWrite && <RoomManagerPanel />}
             <button
               onClick={() => onNavigate('rev_calendar' as PageId)}
               className="px-3 py-2 rounded-lg bg-white ring-1 ring-slate-200 text-slate-700 text-[13px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"

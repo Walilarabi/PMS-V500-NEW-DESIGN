@@ -17,6 +17,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useConfigStore, type Room } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 type RoomStatus = Room['status'];
 
@@ -42,6 +43,7 @@ const ROOM_TYPES = ['Simple', 'Double', 'Twin', 'Triple', 'Quadruple', 'Suite'];
 export const RoomsPage: React.FC = () => {
   const rooms = useConfigStore((s) => s.rooms);
   const updateRooms = useConfigStore((s) => s.updateRooms);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rooms');
 
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<RoomStatus | 'all'>('all');
@@ -178,6 +180,8 @@ export const RoomsPage: React.FC = () => {
     updateRooms(rooms.map((x) => (x.id === r.id ? { ...x, status } : x)));
   }
 
+  if (!canRead) return <DeniedBanner />;
+
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="w-full px-6 pt-6 pb-10 space-y-5">
@@ -197,15 +201,18 @@ export const RoomsPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => setBulkCreating(true)}
-              className="px-3 py-2 rounded-lg ring-1 ring-violet-200 bg-white text-[13px] font-medium text-violet-700 hover:bg-violet-50 inline-flex items-center gap-1.5"
-              title="Créer un lot de chambres fictives (overflow / allotement)"
+              onClick={() => canWrite && setBulkCreating(true)}
+              disabled={!canWrite}
+              title={!canWrite ? 'Permission requise : set_rooms (write)' : 'Créer un lot de chambres fictives (overflow / allotement)'}
+              className="px-3 py-2 rounded-lg ring-1 ring-violet-200 bg-white text-[13px] font-medium text-violet-700 hover:bg-violet-50 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-3.5 h-3.5" /> Chambres fictives
             </button>
             <button
-              onClick={startAdd}
-              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
+              onClick={() => canWrite && startAdd()}
+              disabled={!canWrite}
+              title={!canWrite ? 'Permission requise : set_rooms (write)' : undefined}
+              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-3.5 h-3.5" /> Ajouter une chambre
             </button>
@@ -358,10 +365,10 @@ export const RoomsPage: React.FC = () => {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="inline-flex items-center gap-1">
-                        <button onClick={() => startEdit(r)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500" title="Modifier">
+                        <button onClick={() => canWrite && startEdit(r)} disabled={!canWrite} className={cn("p-1.5 rounded-md text-slate-500", canWrite ? "hover:bg-slate-100" : "opacity-30 cursor-not-allowed")} title={canWrite ? "Modifier" : "Permission requise : set_rooms (write)"}>
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
-                        <button onClick={() => remove(r)} className="p-1.5 rounded-md hover:bg-rose-50 text-rose-600" title="Supprimer">
+                        <button onClick={() => canWrite && remove(r)} disabled={!canWrite} className={cn("p-1.5 rounded-md", canWrite ? "hover:bg-rose-50 text-rose-600" : "text-rose-300 opacity-40 cursor-not-allowed")} title={canWrite ? "Supprimer" : "Permission requise : set_rooms (write)"}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>

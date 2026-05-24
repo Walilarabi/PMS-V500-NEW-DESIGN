@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 const STORAGE_KEY = 'flowtym.rgpd';
 
@@ -86,6 +87,7 @@ export const RgpdPage: React.FC = () => {
   const [tasks, setTasks] = useState<RgpdTask[]>(() => load());
   const [editing, setEditing] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rgpd');
 
   useEffect(() => { save(tasks); }, [tasks]);
 
@@ -121,6 +123,8 @@ export const RgpdPage: React.FC = () => {
   const missingCritical = tasks.filter((t) => t.required && !t.done);
 
   const categories: RgpdCategory[] = ['documentation', 'consent', 'rights', 'security', 'governance'];
+
+  if (!canRead) return <DeniedBanner />;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
@@ -219,7 +223,9 @@ export const RgpdPage: React.FC = () => {
                   <li key={t.id} className="px-5 py-3">
                     <div className="flex items-start gap-3">
                       <button
-                        onClick={() => toggleDone(t.id)}
+                        onClick={() => canWrite && toggleDone(t.id)}
+                        disabled={!canWrite}
+                        title={!canWrite ? 'Permission requise : set_rgpd (write)' : undefined}
                         className={cn(
                           'w-5 h-5 rounded-md flex items-center justify-center transition-colors shrink-0 mt-0.5',
                           t.done

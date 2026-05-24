@@ -98,6 +98,56 @@ describe('permissionsService — getPermissionLevel', () => {
   });
 });
 
+describe('permissionsService — capabilities Phase 5 (set_rooms, set_integrations, set_fiscal, set_backups, set_rgpd)', () => {
+  beforeEach(() => {
+    if (typeof window !== 'undefined') window.localStorage.clear();
+  });
+
+  it("manager peut éditer les chambres et les intégrations", () => {
+    expect(hasPermission('manager', 'set_rooms', 'write')).toBe(true);
+    expect(hasPermission('manager', 'set_integrations', 'write')).toBe(true);
+    expect(hasPermission('manager', 'set_fiscal', 'write')).toBe(true);
+  });
+
+  it("manager peut lire les sauvegardes / RGPD mais pas les déclencher", () => {
+    expect(hasPermission('manager', 'set_backups', 'read')).toBe(true);
+    expect(hasPermission('manager', 'set_backups', 'write')).toBe(false);
+    expect(hasPermission('manager', 'set_rgpd', 'read')).toBe(true);
+    expect(hasPermission('manager', 'set_rgpd', 'write')).toBe(false);
+  });
+
+  it("receptionniste n'a aucun accès aux nouvelles capabilities", () => {
+    expect(hasPermission('receptionist', 'set_rooms', 'read')).toBe(false);
+    expect(hasPermission('receptionist', 'set_integrations', 'read')).toBe(false);
+    expect(hasPermission('receptionist', 'set_fiscal', 'read')).toBe(false);
+    expect(hasPermission('receptionist', 'set_backups', 'read')).toBe(false);
+    expect(hasPermission('receptionist', 'set_rgpd', 'read')).toBe(false);
+  });
+
+  it("housekeeping voit les chambres mais pas les autres modules sensibles", () => {
+    expect(hasPermission('housekeeping', 'set_rooms', 'read')).toBe(true);
+    expect(hasPermission('housekeeping', 'set_rooms', 'write')).toBe(false);
+    expect(hasPermission('housekeeping', 'set_integrations', 'read')).toBe(false);
+  });
+
+  it("reader a accès en lecture seule à toutes les nouvelles capabilities", () => {
+    expect(hasPermission('reader', 'set_rooms', 'read')).toBe(true);
+    expect(hasPermission('reader', 'set_integrations', 'read')).toBe(true);
+    expect(hasPermission('reader', 'set_fiscal', 'read')).toBe(true);
+    expect(hasPermission('reader', 'set_backups', 'read')).toBe(true);
+    expect(hasPermission('reader', 'set_rgpd', 'read')).toBe(true);
+    expect(hasPermission('reader', 'set_rooms', 'write')).toBe(false);
+  });
+
+  it("admin a toutes les permissions sur les nouvelles capabilities", () => {
+    expect(hasPermission('admin', 'set_rooms', 'admin')).toBe(true);
+    expect(hasPermission('admin', 'set_integrations', 'admin')).toBe(true);
+    expect(hasPermission('admin', 'set_fiscal', 'admin')).toBe(true);
+    expect(hasPermission('admin', 'set_backups', 'admin')).toBe(true);
+    expect(hasPermission('admin', 'set_rgpd', 'admin')).toBe(true);
+  });
+});
+
 describe('permissionsService — ACCESS_LEVEL_ORDER', () => {
   it('définit un ordre strict croissant', () => {
     expect(ACCESS_LEVEL_ORDER.none).toBeLessThan(ACCESS_LEVEL_ORDER.read);

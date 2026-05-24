@@ -4,6 +4,7 @@
 import React from 'react';
 import { BookOpen } from 'lucide-react';
 import { GenericListPage, type GenericListItem } from './_common';
+import { usePagePermission } from '@/src/services/settings/permissionsService';
 
 interface AccountItem extends GenericListItem {
   accountNumber: string;
@@ -29,7 +30,14 @@ const CAT_LABEL: Record<AccountItem['category'], string> = {
   rooms: 'Chambres', fb: 'F&B', misc: 'Divers', tax: 'Taxes', bank: 'Trésorerie',
 };
 
-export const AccountingPage: React.FC = () => (
+export const AccountingPage: React.FC = () => {
+  // RBAC : la lecture du plan comptable est ouverte aux rôles avec
+  // fin_export read ; les mutations passent par le GenericListPage interne
+  // qui resterait théoriquement éditable, mais on garde une lecture
+  // protégée pour ne pas exposer la structure à des rôles non-finance.
+  const { canRead, DeniedBanner } = usePagePermission('fin_export');
+  if (!canRead) return <DeniedBanner />;
+  return (
   <GenericListPage<AccountItem>
     icon={BookOpen}
     category="Finance & Facturation"
@@ -71,4 +79,5 @@ export const AccountingPage: React.FC = () => (
     emptyItem={() => ({ id: '', label: '', code: '', active: true, accountNumber: '', type: 'revenue', category: 'misc' })}
     phase2="export FEC + intégration Sage / Cegid via webhooks comptables."
   />
-);
+  );
+};
