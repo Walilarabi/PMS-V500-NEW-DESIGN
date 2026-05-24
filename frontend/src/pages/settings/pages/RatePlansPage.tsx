@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
+import { RateManagerPanel } from '@/src/components/rms/calendar/RateManagerPanel';
 import type { RatePlanData, PensionType } from '@/src/components/rms/types';
 import type { PageId } from '@/src/types';
 import {
@@ -203,11 +204,15 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
               <Upload className="w-3.5 h-3.5" />
               {importing ? 'Import en cours…' : 'Importer Excel'}
             </button>
+            {/* Phase 4 — éditeur CRUD complet (déplacé depuis le calendrier).
+                Source unique de vérité : useRateCalendarStore. */}
+            <RateManagerPanel />
             <button
               onClick={() => onNavigate('rev_calendar' as PageId)}
-              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
+              className="px-3 py-2 rounded-lg bg-white ring-1 ring-slate-200 text-slate-700 text-[13px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
+              title="Visualiser l'application dans le Calendrier tarifaire"
             >
-              <Grid className="w-3.5 h-3.5" /> Ouvrir le Calendrier tarifaire
+              <Grid className="w-3.5 h-3.5" /> Voir le Calendrier
             </button>
           </div>
         </header>

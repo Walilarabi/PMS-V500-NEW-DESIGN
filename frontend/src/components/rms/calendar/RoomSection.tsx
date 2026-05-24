@@ -1,10 +1,11 @@
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { RoomTypeData } from "../types";
 import { RateRow } from "./RateRow";
 import { useRateCalendarStore } from "../store/rateCalendarStore";
 import { BedDouble } from "lucide-react";
 import { cn } from "../utils/cn";
 import { LABEL_W } from "./CalendarGrid";
+import { dedupRatePlans, dedupRoomStatuses } from "../engines/RateCalendarDedupEngine";
 
 /* ─── Inline-editable inventory cell ─── */
 
@@ -138,9 +139,13 @@ export const RoomSection = memo(function RoomSection({
 
   const handleToggle = useCallback(() => toggleRoom(roomType.roomTypeId), [roomType.roomTypeId, toggleRoom]);
 
+  // Garde-fou final contre les doublons (le load fait déjà le ménage,
+  // mais ceci protège des injections runtime depuis la cascade / l'import).
+  const dedupedPlans = useMemo(() => dedupRatePlans(roomType.ratePlans), [roomType.ratePlans]);
+  const dedupedStatuses = useMemo(() => dedupRoomStatuses(roomType.statuses), [roomType.statuses]);
   const filteredPlans = visiblePlanNames
-    ? roomType.ratePlans.filter((p) => visiblePlanNames.includes(p.planName))
-    : roomType.ratePlans;
+    ? dedupedPlans.filter((p) => visiblePlanNames.includes(p.planName))
+    : dedupedPlans;
 
   return (
     <div className="border-b border-gray-300 w-full">
@@ -170,7 +175,7 @@ export const RoomSection = memo(function RoomSection({
             <div className="sticky left-0 z-20 flex items-center px-3 py-1.5 border-r border-gray-200 bg-gray-50" style={{ width: LABEL_W }}>
               <span className="text-xs font-medium text-gray-500">Statut de la chambre</span>
             </div>
-            {roomType.statuses.map((s) => (
+            {dedupedStatuses.map((s) => (
               <div
                 key={s.date}
                 className={cn(
@@ -190,7 +195,7 @@ export const RoomSection = memo(function RoomSection({
             <div className="sticky left-0 z-20 flex items-center px-3 py-1 border-r border-gray-200 bg-white" style={{ width: LABEL_W }}>
               <span className="text-xs text-gray-500">Nb. inventaires disponibles</span>
             </div>
-            {roomType.statuses.map((s) => (
+            {dedupedStatuses.map((s) => (
               <InventoryCell
                 key={s.date}
                 value={s.inventory}
@@ -211,7 +216,7 @@ export const RoomSection = memo(function RoomSection({
               <span className={cn("text-[10px] transition-transform inline-block", restrictionsOpen ? "rotate-0" : "-rotate-90")}>▼</span>
               <span className="text-xs text-gray-500">Inventaire disponible vendu</span>
             </div>
-            {roomType.statuses.map((s) => (
+            {dedupedStatuses.map((s) => (
               <div key={s.date} className="flex items-center justify-center border-r border-gray-200 text-sm text-gray-500">
                 {s.sold > 0 ? s.sold : ""}
               </div>
@@ -226,7 +231,7 @@ export const RoomSection = memo(function RoomSection({
                 <div className="sticky left-0 z-20 flex items-center pl-7 pr-2 py-1 border-r border-gray-200 bg-gray-50/60" style={{ width: LABEL_W }}>
                   <span className="text-[11px] text-gray-400">Min Stay</span>
                 </div>
-                {roomType.statuses.map((s) => (
+                {dedupedStatuses.map((s) => (
                   <NumberCell
                     key={s.date}
                     value={s.minStay}
@@ -240,7 +245,7 @@ export const RoomSection = memo(function RoomSection({
                 <div className="sticky left-0 z-20 flex items-center pl-7 pr-2 py-1 border-r border-gray-200 bg-gray-50/60" style={{ width: LABEL_W }}>
                   <span className="text-[11px] text-gray-400">Max Stay</span>
                 </div>
-                {roomType.statuses.map((s) => (
+                {dedupedStatuses.map((s) => (
                   <NumberCell
                     key={s.date}
                     value={s.maxStay}
@@ -254,7 +259,7 @@ export const RoomSection = memo(function RoomSection({
                 <div className="sticky left-0 z-20 flex items-center pl-7 pr-2 py-1 border-r border-gray-200 bg-gray-50/60" style={{ width: LABEL_W }}>
                   <span className="text-[11px] text-gray-400">CTA (Closed to Arrival)</span>
                 </div>
-                {roomType.statuses.map((s) => (
+                {dedupedStatuses.map((s) => (
                   <ToggleCell
                     key={s.date}
                     value={s.cta}
@@ -268,7 +273,7 @@ export const RoomSection = memo(function RoomSection({
                 <div className="sticky left-0 z-20 flex items-center pl-7 pr-2 py-1 border-r border-gray-200 bg-gray-50/60" style={{ width: LABEL_W }}>
                   <span className="text-[11px] text-gray-400">CTD (Closed to Departure)</span>
                 </div>
-                {roomType.statuses.map((s) => (
+                {dedupedStatuses.map((s) => (
                   <ToggleCell
                     key={s.date}
                     value={s.ctd}

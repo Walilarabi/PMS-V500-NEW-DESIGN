@@ -1,10 +1,17 @@
 import { memo, useEffect, useRef, useState, useMemo } from "react";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { Check, ChevronDown, Search, X, Settings2, ExternalLink } from "lucide-react";
 import { useRateCalendarStore } from "../store/rateCalendarStore";
-import { RoomManagerPanel } from "./RoomManagerPanel";
-import { RateManagerPanel } from "./RateManagerPanel";
 import { ConnectivityPanel } from "./ConnectivityPanel";
 import { cn } from "../utils/cn";
+
+/**
+ * Phase 4 — déplacement de la config chambres / tarifs vers Paramètres.
+ * Le module Revenue ne contient plus la logique CRUD de configuration.
+ * On affiche un raccourci contextuel vers la page Paramètres correspondante.
+ */
+function navigateToSettings(page: string) {
+  window.dispatchEvent(new CustomEvent('navigate', { detail: { page } }));
+}
 
 function FilterSelect({
   title,
@@ -114,11 +121,32 @@ export const FilterBar = memo(function FilterBar({ showFilters }: { showFilters:
 
   return (
     <div className="flex shrink-0 items-center gap-3 border-b border-violet-200 bg-violet-50/50 px-4 py-2.5">
-      <span className="text-sm font-semibold text-gray-700">Gérer</span>
-      <RoomManagerPanel />
-      <RateManagerPanel />
+      <span className="text-sm font-semibold text-gray-700">Filtrer / Connecter</span>
+
+      {/* Phase 4 — la configuration des chambres et des plans tarifaires
+          a été déplacée vers Paramètres > Chambres & Inventaire.
+          Ces raccourcis y emmènent en un clic. */}
+      <button
+        onClick={() => navigateToSettings('settings_room_types')}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg ring-1 ring-violet-200 bg-white text-violet-700 text-[12.5px] font-medium hover:bg-violet-50 hover:ring-violet-300 transition-all"
+        title="La configuration des chambres se fait dans Paramètres → Chambres & Inventaire"
+      >
+        <Settings2 className="h-3.5 w-3.5" />
+        Configurer les chambres
+        <ExternalLink className="h-3 w-3 opacity-60" />
+      </button>
+      <button
+        onClick={() => navigateToSettings('settings_rate_plans')}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg ring-1 ring-violet-200 bg-white text-violet-700 text-[12.5px] font-medium hover:bg-violet-50 hover:ring-violet-300 transition-all"
+        title="La configuration des plans tarifaires se fait dans Paramètres → Tarifs & Prestations"
+      >
+        <Settings2 className="h-3.5 w-3.5" />
+        Configurer les plans tarifaires
+        <ExternalLink className="h-3 w-3 opacity-60" />
+      </button>
+
       <ConnectivityPanel />
-      
+
       {showFilters && (
         <div className="ml-2 flex flex-wrap items-center gap-3 border-l border-violet-200 pl-4 animate-fade-in">
           <FilterSelect

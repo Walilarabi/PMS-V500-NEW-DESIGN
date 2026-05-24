@@ -10,6 +10,7 @@ import { fetchCalendarData as fetchCalendarDataMock } from "../data/mockData";
 import { PricingRulesEngine } from "../engines/PricingRulesEngine";
 import { CascadePricingEngine } from "../engines/CascadePricingEngine";
 import { propagateVirtualRoomCascade, rebuildAllVirtualInventories } from "../engines/VirtualRoomCascadeEngine";
+import { dedupRoomTypes } from "../engines/RateCalendarDedupEngine";
 import { supabase } from "@/src/lib/supabase";
 
 // ─── Supabase persistence helper ──────────────────────────────────────────
@@ -264,6 +265,13 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
           return { ...rt, ratePlans: plans };
         });
 
+        // ─── Déduplication défensive (Phase 4 — bug calendrier) ──────────
+        // Élimine les doublons de plans tarifaires (même planCode) et de
+        // statuses (même date) qui causaient le bug "3 lignes tarifaires
+        // dupliquées + dédoublement Ouverture/Fermeture". Stable : le plus
+        // récent gagne, l'ordre est préservé.
+        roomTypes = dedupRoomTypes(roomTypes);
+
         const expandedRooms: Record<string, boolean> = {};
         roomTypes.forEach((rt) => { expandedRooms[rt.roomTypeId] = true; });
         const roomIds = roomTypes.map(r => r.roomTypeId);
@@ -280,12 +288,14 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         const message = err instanceof Error ? err.message : 'Erreur inconnue lors du chargement';
         console.warn('[rateCalendarStore] loadData failed, falling back to mock:', message);
         try {
-          const { roomTypes, dateColumns } = await fetchCalendarDataMock(startDate, viewMode);
+          const mockData = await fetchCalendarDataMock(startDate, viewMode);
+          const dateColumns = mockData.dateColumns;
+          const cleanRoomTypes = rebuildAllVirtualInventories(dedupRoomTypes(mockData.roomTypes));
           const expandedRooms: Record<string, boolean> = {};
-          roomTypes.forEach((rt) => { expandedRooms[rt.roomTypeId] = true; });
-          const roomIds = roomTypes.map((r) => r.roomTypeId);
-          const planNames = Array.from(new Set(roomTypes.flatMap((r) => r.ratePlans.map((p) => p.planName))));
-          set({ roomTypes, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
+          cleanRoomTypes.forEach((rt) => { expandedRooms[rt.roomTypeId] = true; });
+          const roomIds = cleanRoomTypes.map((r) => r.roomTypeId);
+          const planNames = Array.from(new Set(cleanRoomTypes.flatMap((r) => r.ratePlans.map((p) => p.planName))));
+          set({ roomTypes: cleanRoomTypes, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
         } catch (mockErr) {
           console.error('[rateCalendarStore] mock fallback failed:', mockErr);
           set({ isLoading: false, loadError: message });

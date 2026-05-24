@@ -10,6 +10,7 @@
  * Fonction pure — pas d'état React.
  */
 
+import { safePastValueFromVariation } from './safeMedian';
 import type {
   LighthouseImport,
   LighthouseDayData,
@@ -340,7 +341,8 @@ function pastValue(
   day: LighthouseDayData
 ): number {
   // Lighthouse fournit varVsYesterday / varVs3Days / varVs7Days en pourcentage.
-  // Si la variation est de +X%, la valeur passée = current / (1 + X/100).
+  // Bug fix Phase 4 : protégé contre les divisions par zéro et les résultats
+  // négatifs via safePastValueFromVariation (clamp -99% / +500%).
   const variation = (() => {
     switch (period) {
       case 'hier':
@@ -357,8 +359,9 @@ function pastValue(
     }
   })();
 
-  if (variation == null) return current;
-  return Math.round(current / (1 + variation / 100));
+  // Fallback sûr : si variation invalide → retourne la valeur actuelle
+  // plutôt qu'une valeur négative qui pourrait passer en aval.
+  return safePastValueFromVariation(current, variation) ?? Math.round(current);
 }
 
 /**

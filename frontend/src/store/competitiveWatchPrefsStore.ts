@@ -128,15 +128,18 @@ export function resolveRangeWindow(
     };
   }
 
+  // Fenêtre forward : "7 jours" = aujourd'hui → aujourd'hui + 6 jours.
+  // (Bug fix Phase 4 — auparavant la fenêtre était en lookback, ce qui
+  // donnait des dates passées et le sélecteur semblait "ne pas marcher".)
   const days = parseInt(range.kind.replace('days', ''), 10) || 30;
   const anchor = range.anchor ? new Date(range.anchor) : new Date(today);
-  const end = new Date(anchor);
   const start = new Date(anchor);
-  start.setDate(start.getDate() - (days - 1));
+  const end = new Date(anchor);
+  end.setDate(end.getDate() + (days - 1));
   return {
     start: start.toISOString().slice(0, 10),
     end: end.toISOString().slice(0, 10),
-    label: `${days} jours glissants`,
+    label: `${days} prochains jours`,
   };
 }
 

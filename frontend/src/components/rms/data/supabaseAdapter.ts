@@ -153,7 +153,23 @@ export async function fetchCalendarDataFromSupabase(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rooms = (roomsRes.data ?? []) as any[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const plans = (plansRes.data ?? []) as any[];
+    const plansRaw = (plansRes.data ?? []) as any[];
+
+    // ─── Déduplication des plans tarifaires en provenance Supabase ───────
+    // Bug fix Phase 4 : si la table `rate_plans` contient plusieurs lignes
+    // pour le même plan_code (legacy import / sync défaillante), on
+    // n'en garde qu'une (la plus récente par created_at descendant). Évite
+    // l'affichage "3 lignes tarifaires dupliquées" dans le calendrier.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const seenPlanCodes = new Set<string>();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const plans = plansRaw.filter((p: any) => {
+      const key = String(p.plan_code ?? p.id ?? '').toLowerCase().trim();
+      if (!key) return false;
+      if (seenPlanCodes.has(key)) return false;
+      seenPlanCodes.add(key);
+      return true;
+    });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const prices = (pricesRes.data ?? []) as any[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

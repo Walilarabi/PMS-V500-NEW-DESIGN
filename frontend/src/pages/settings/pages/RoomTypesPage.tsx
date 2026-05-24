@@ -1,14 +1,18 @@
 /**
  * FLOWTYM — Paramètres · Types de chambres.
  *
- * Vue d'ensemble des typologies depuis useRateCalendarStore.roomTypes :
- * code, libellé, capacité, équipements, descriptif. Édition complète
- * dans le Calendrier tarifaire (RoomManagerPanel existant).
+ * Vue + CRUD complet des typologies (chambres physiques + virtuelles).
+ *
+ * Phase 4 : la configuration des chambres a été déplacée ici depuis
+ * Revenue → Calendrier tarifaire. Le module Revenue n'exploite plus que
+ * les données (lecture) ; toute mutation passe par cette page (source
+ * unique de vérité).
  */
 import React, { useMemo, useState } from 'react';
 import { Tag, Search, ExternalLink, Bed, Users, ChevronRight, Layers, Plus } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
+import { RoomManagerPanel } from '@/src/components/rms/calendar/RoomManagerPanel';
 import type { PageId } from '@/src/types';
 import { VirtualRoomModal } from './VirtualRoomModal';
 
@@ -67,11 +71,15 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
             >
               <Layers className="w-3.5 h-3.5" /> Créer une chambre virtuelle
             </button>
+            {/* Phase 4 — éditeur CRUD complet (anciennement dans le calendrier).
+                Source unique de vérité : useRateCalendarStore. */}
+            <RoomManagerPanel />
             <button
               onClick={() => onNavigate('rev_calendar' as PageId)}
-              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5"
+              className="px-3 py-2 rounded-lg bg-white ring-1 ring-slate-200 text-slate-700 text-[13px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
+              title="Visualiser l'application dans le Calendrier tarifaire"
             >
-              Édition complète <ExternalLink className="w-3 h-3" />
+              Voir le Calendrier <ExternalLink className="w-3 h-3" />
             </button>
           </div>
         </header>

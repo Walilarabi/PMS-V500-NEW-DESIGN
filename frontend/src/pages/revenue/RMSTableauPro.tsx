@@ -43,6 +43,7 @@ import {
   BarChart3,
   Lightbulb,
   RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { RMSPropagationService, RMSValidation } from '../../services/rms-propagation.service';
@@ -828,6 +829,92 @@ export function RMSTableauPro() {
     );
   }, []);
 
+  /**
+   * Bulk select : checkbox d'en-tête → coche/décoche toutes les lignes en
+   * attente de validation (les lignes déjà acceptées/refusées/maintenues
+   * sont laissées telles quelles pour ne pas re-déclencher la cascade).
+   */
+  const handleToggleSelectAll = useCallback(() => {
+    setRmsData((prev) => {
+      const anyPending = prev.some((d) => d.validationStatus === 'En attente' && !d.selected);
+      return prev.map((d) => {
+        if (d.validationStatus !== 'En attente') return d;
+        return { ...d, selected: anyPending };
+      });
+    });
+  }, []);
+
+  /**
+   * Bulk accept : accepte toutes les recommandations sélectionnées en
+   * série via le CENTRAL PRICING ENGINE (source unique), pousse les
+   * nouveaux tarifs vers le Calendrier tarifaire et journalise chaque
+   * décision dans l'historique RMS.
+   */
+  const handleAcceptSelected = useCallback(async () => {
+    const toAccept = rmsData.filter((d) => d.selected && d.validationStatus === 'En attente');
+    if (toAccept.length === 0) return;
+
+    // Pré-calcule les prix poussés via le central engine (boucle séquentielle
+    // pour préserver l'ordre dans l'historique d'audit RMS).
+    const pushed = new Map<string, number>();
+    for (const row of toAccept) {
+      centralPricingEngine.getOrSeed(row.date, {
+        current: row.currentPrice,
+        suggested: row.suggestedPrice,
+        confidence: row.confidenceScore,
+        strategy: row.strategy,
+        roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+        planId: referencePlan?.planId ?? null,
+      });
+      const updated = centralPricingEngine.accept(row.date, {
+        source: 'rms-table',
+        roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+        planId: referencePlan?.planId ?? null,
+      });
+      pushed.set(row.date, updated?.finalPrice ?? row.suggestedPrice);
+    }
+
+    // Mise à jour locale en un seul setRmsData (évite N rerenders)
+    setRmsData((prev) =>
+      prev.map((d) => {
+        if (!pushed.has(d.date)) return d;
+        return {
+          ...d,
+          finalPrice: pushed.get(d.date) ?? d.suggestedPrice,
+          validationStatus: 'Acceptée' as ValidationStatus,
+          selected: false,
+        };
+      }),
+    );
+
+    // Sync calendrier + Channel Manager + audit (journalise chaque ligne)
+    for (const row of toAccept) {
+      const finalPrice = pushed.get(row.date) ?? row.suggestedPrice;
+      syncRMSDecision({
+        date: row.date,
+        finalPrice,
+        status: 'Acceptée',
+        source: 'table',
+        roomTypeId: referenceRoom?.roomTypeId,
+        planId: referencePlan?.planId,
+      });
+      recordRmsDecision({
+        stayDate: row.date,
+        roomTypeCode: referenceRoom?.roomTypeCode ?? null,
+        action: 'accepted',
+        currentPrice: row.currentPrice,
+        suggestedPrice: row.suggestedPrice,
+        finalPrice,
+        strategy: row.strategy,
+        recommendation: row.recommendation,
+        confidenceScore: row.confidenceScore,
+        marketPressurePercent: Math.round(row.marketPressure),
+        occupancyRate: row.occupancyRate,
+        medianPrice: row.medianPrice,
+      });
+    }
+  }, [rmsData, referenceRoom, referencePlan]);
+
   // ─── Override manuel de la disponibilité ───────────────────────────────
   // Branche le service pricingPlanningSync : la valeur manuelle prime pendant
   // 15 min, sync planning suspendue, badge affiché, action journalisée.
@@ -1107,6 +1194,7 @@ export function RMSTableauPro() {
         {viewMode === 'table' && (
           <TableView data={rmsData} handlers={{
             handleAccept, handleReject, handleMaintain, handleToggleSelect,
+            handleToggleSelectAll, handleAcceptSelected,
             handleViewDetail: setDetailDate,
             handleAvailabilityChange,
             isAvailabilityOverridden,
@@ -1169,11 +1257,18 @@ function TableView({
     handleReject: (date: string) => void;
     handleMaintain: (date: string) => void;
     handleToggleSelect: (date: string) => void;
+    handleToggleSelectAll: () => void;
+    handleAcceptSelected: () => void;
     handleViewDetail: (date: string) => void;
     handleAvailabilityChange: (date: string, value: number) => void;
     isAvailabilityOverridden: (date: string) => boolean;
   };
 }) {
+  // Sélection courante (recommandations en attente sélectionnées)
+  const selectedPending = data.filter((d) => d.selected && d.validationStatus === 'En attente');
+  const totalPending = data.filter((d) => d.validationStatus === 'En attente');
+  const allPendingSelected = totalPending.length > 0 && selectedPending.length === totalPending.length;
+  const someSelected = selectedPending.length > 0;
   const availabilityRefs = React.useRef<Map<string, () => void>>(new Map());
 
   const registerAvailabilityFocus = useCallback((date: string, focusFn: () => void) => {
@@ -1193,11 +1288,58 @@ function TableView({
   }, [data]);
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto relative">
+      {/* Bulk action bar — visible dès qu'au moins une ligne en attente est sélectionnée */}
+      {someSelected && (
+        <div className="sticky top-0 z-20 px-4 py-2.5 bg-gradient-to-r from-violet-600 to-violet-500 text-white shadow-lg flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span className="text-[13px] font-medium">
+              <strong className="tabular-nums">{selectedPending.length}</strong> recommandation{selectedPending.length > 1 ? 's' : ''} sélectionnée{selectedPending.length > 1 ? 's' : ''}
+            </span>
+            <span className="text-[11.5px] text-violet-100 hidden md:inline">
+              → les tarifs seront poussés vers le Calendrier tarifaire et journalisés
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => handlers.handleToggleSelectAll()}
+              className="px-2.5 py-1 text-[12px] font-medium rounded-md bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              Désélectionner
+            </button>
+            <button
+              onClick={() => handlers.handleAcceptSelected()}
+              className="px-3 py-1.5 text-[12.5px] font-semibold rounded-md bg-white text-violet-700 hover:bg-violet-50 shadow-sm inline-flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Accepter les recommandations
+            </button>
+          </div>
+        </div>
+      )}
       <table className="w-full text-sm">
         <thead className="sticky top-0 z-10 bg-gray-50 border-b-2 border-gray-300">
           <tr>
-            <th className="px-2 py-2 text-left font-semibold text-gray-700 border-r border-gray-200 w-10">☐</th>
+            <th className="px-2 py-2 text-center font-semibold text-gray-700 border-r border-gray-200 w-10">
+              <input
+                type="checkbox"
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelected && !allPendingSelected;
+                }}
+                checked={allPendingSelected}
+                onChange={handlers.handleToggleSelectAll}
+                disabled={totalPending.length === 0}
+                title={
+                  totalPending.length === 0
+                    ? 'Aucune recommandation en attente'
+                    : allPendingSelected
+                      ? 'Tout désélectionner'
+                      : 'Tout sélectionner'
+                }
+                className="w-4 h-4 cursor-pointer accent-violet-600 disabled:opacity-30 disabled:cursor-not-allowed"
+              />
+            </th>
             <th className="px-2 py-2 text-left font-semibold text-gray-700 border-r border-gray-200 w-10">👁️</th>
             <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-200">Jour</th>
             <th className="px-3 py-2 text-left font-semibold text-gray-700 border-r border-gray-200">Date</th>

@@ -209,8 +209,9 @@ function clampDemand(v: number): number {
  * Plancher à 50€ (≈ tarif minimal réaliste sur le marché parisien) pour
  * éviter des médianes aberrantes en cas d'offset trop grand côté mock.
  */
+const MIN_VALID_MEDIAN = 50;
 function clampMedianPrice(v: number): number {
-  if (!Number.isFinite(v) || v < 50) return 50;
+  if (!Number.isFinite(v) || v < MIN_VALID_MEDIAN) return MIN_VALID_MEDIAN;
   if (v > 100_000) return 100_000;
   return Math.round(v);
 }
@@ -230,7 +231,10 @@ export function getComparisonData(
       } else {
         const off = PERIOD_OFFSET[period];
         demandPast = clampDemand(row.demandToday - off.demand);
-        medianPast = row.medianToday - off.median;
+        // Bug fix Phase 4 : si l'offset rend medianPast négatif, on
+        // re-clamp via clampMedianPrice (plancher 50€). clampMedianPrice
+        // ci-dessous garantit qu'aucune valeur négative ne passe à l'UI.
+        medianPast = Math.max(MIN_VALID_MEDIAN, row.medianToday - off.median);
       }
 
       return {
