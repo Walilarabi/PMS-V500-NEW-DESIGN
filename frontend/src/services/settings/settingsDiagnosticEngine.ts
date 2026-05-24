@@ -43,6 +43,7 @@ import { useConfigStore } from '@/src/store/configStore';
 import { useEventsStore } from '@/src/store/eventsStore';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { centralPricingEngine } from '@/src/services/revenue/centralPricingEngine.service';
+import { fingerprintAlert, getTrend, isResolved } from './settingsHistory';
 
 // ─── Snapshot ────────────────────────────────────────────────────────────
 
@@ -297,7 +298,9 @@ function hasConflictingRules(rules: Snapshot['pricingRules']): boolean {
 function scoreSystemHealth(scores: Record<ScoreCardId, ScoreCard>): ScoreCard {
   const ids: ScoreCardId[] = ['configuration', 'compliance', 'security', 'distribution', 'revenue'];
   const avg = Math.round(ids.reduce((sum, id) => sum + scores[id].value, 0) / ids.length);
-  const trend = ids.map((id) => scores[id].value);
+  // Trend réelle : historique multi-runs (last 12) sinon snapshot des dimensions.
+  const historic = getTrend('system_health', 12);
+  const trend = historic.length > 0 ? historic : ids.map((id) => scores[id].value);
   return {
     id: 'system_health',
     label: 'Santé système',
@@ -309,7 +312,9 @@ function scoreSystemHealth(scores: Record<ScoreCardId, ScoreCard>): ScoreCard {
       weight: 20,
       ok: scores[id].value >= 65,
     })),
-    caption: `Moyenne pondérée de ${ids.length} dimensions`,
+    caption: historic.length > 0
+      ? `Tendance sur ${Math.min(12, historic.length)} runs`
+      : `Moyenne pondérée de ${ids.length} dimensions`,
   };
 }
 
@@ -498,10 +503,15 @@ function generateAlerts(s: Snapshot): ConfigAlert[] {
     });
   }
 
+  // Filtre les alertes que l'utilisateur a déjà marquées résolues
+  // (persisté dans settingsHistory). On invalide la résolution si le
+  // texte de l'alerte change (fingerprint différent) — par sécurité.
+  const filtered = alerts.filter((a) => !isResolved(a.id, fingerprintAlert(a.title, a.description)));
+
   // Tri par sévérité
   const order: Record<ConfigAlert['severity'], number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
-  alerts.sort((a, b) => order[a.severity] - order[b.severity]);
-  return alerts;
+  filtered.sort((a, b) => order[a.severity] - order[b.severity]);
+  return filtered;
 }
 
 // ─── État des modules ────────────────────────────────────────────────────

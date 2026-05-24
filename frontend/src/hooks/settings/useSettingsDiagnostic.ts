@@ -10,13 +10,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { DiagnosticReport } from '@/src/types/settings/diagnostic';
 import { runDiagnostic } from '@/src/services/settings/settingsDiagnosticEngine';
+import { recordRun } from '@/src/services/settings/settingsHistory';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { useConfigStore } from '@/src/store/configStore';
 import { useEventsStore } from '@/src/store/eventsStore';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 
 export function useSettingsDiagnostic() {
-  const [report, setReport] = useState<DiagnosticReport>(() => runDiagnostic());
+  const [report, setReport] = useState<DiagnosticReport>(() => {
+    const r = runDiagnostic();
+    recordRun(r); // 1er snapshot dans l'historique
+    return r;
+  });
   const [running, setRunning] = useState(false);
 
   // Auto-recalcul à chaque changement de stores
@@ -25,8 +30,23 @@ export function useSettingsDiagnostic() {
   const calVersion = useRateCalendarStore((s) => `${s.roomTypes.length}|${s.roomTypes.reduce((a, r) => a + (r.ratePlans?.length ?? 0), 0)}`);
 
   useEffect(() => {
-    setReport(runDiagnostic());
+    const r = runDiagnostic();
+    recordRun(r);
+    setReport(r);
   }, [cfgVersion, evtVersion, calVersion]);
+
+  // Évènement personnalisé tiré par RecommendedActionsPanel quand
+  // l'utilisateur marque une alerte comme résolue — on rafraîchit
+  // immédiatement le cockpit sans attendre une mutation des stores.
+  useEffect(() => {
+    const handler = () => {
+      const r = runDiagnostic();
+      recordRun(r);
+      setReport(r);
+    };
+    window.addEventListener('settings:rerun-diagnostic', handler);
+    return () => window.removeEventListener('settings:rerun-diagnostic', handler);
+  }, []);
 
   /**
    * Diagnostic manuel : déclenche un délai court (UX loader) puis
@@ -36,6 +56,7 @@ export function useSettingsDiagnostic() {
     setRunning(true);
     await new Promise<void>((res) => setTimeout(res, 600));
     const r = runDiagnostic();
+    recordRun(r);
     setReport(r);
     logAudit({
       action: 'diagnostic_run',

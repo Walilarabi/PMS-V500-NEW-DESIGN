@@ -6,13 +6,14 @@
  * Configurer / Renouveler / Voir) qui navigue vers la page concernée.
  * Bouton "Marquer comme résolue" trace l'action dans l'audit.
  */
-import React, { useState } from 'react';
+import React from 'react';
 import { AlertOctagon, AlertTriangle, ArrowRight, CheckCircle2, Info, ShieldAlert } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import type { AlertSeverity, ConfigAlert } from '@/src/types/settings/diagnostic';
 import { MODULE_LABEL, SEVERITY_LABEL } from '@/src/types/settings/diagnostic';
 import type { PageId } from '@/src/types';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
+import { fingerprintAlert, markResolved } from '@/src/services/settings/settingsHistory';
 
 const TONE: Record<AlertSeverity, { ring: string; bg: string; text: string; icon: React.ComponentType<{ className?: string }> }> = {
   critical: { ring: 'ring-rose-200',    bg: 'bg-rose-50',    text: 'text-rose-700',    icon: AlertOctagon },
@@ -28,8 +29,10 @@ interface RecommendedActionsPanelProps {
 }
 
 export const RecommendedActionsPanel: React.FC<RecommendedActionsPanelProps> = ({ alerts, onNavigate }) => {
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
-  const visible = alerts.filter((a) => !dismissed.has(a.id));
+  // Plus de filtre local : la résolution est persistée dans settingsHistory,
+  // donc l'alerte ne reviendra plus au prochain runDiagnostic. Le panneau
+  // se contente d'afficher ce que le moteur lui passe.
+  const visible = alerts;
 
   function handleAction(a: ConfigAlert) {
     logAudit({ action: 'alert_dismissed', module: a.module, detail: `Navigation vers ${a.action.target} depuis "${a.title}"` });
@@ -38,7 +41,12 @@ export const RecommendedActionsPanel: React.FC<RecommendedActionsPanelProps> = (
 
   function handleResolve(a: ConfigAlert) {
     logAudit({ action: 'alert_resolved', module: a.module, detail: a.title });
-    setDismissed((prev) => new Set(prev).add(a.id));
+    markResolved(a.id, 'resolved', fingerprintAlert(a.title, a.description));
+    // Le prochain runDiagnostic (déclenché par l'effet du hook quand
+    // n'importe quel store mute) la fera disparaître. Pour un retour
+    // visuel immédiat, on déclenche un événement personnalisé que
+    // l'orchestrateur Control Center peut écouter (optionnel).
+    window.dispatchEvent(new CustomEvent('settings:rerun-diagnostic'));
   }
 
   return (
@@ -47,8 +55,7 @@ export const RecommendedActionsPanel: React.FC<RecommendedActionsPanelProps> = (
         <div>
           <h3 className="text-[14px] font-semibold text-slate-900">Alertes & actions recommandées</h3>
           <p className="text-[11.5px] text-slate-500 mt-0.5">
-            {visible.length} alerte{visible.length > 1 ? 's' : ''} ouverte{visible.length > 1 ? 's' : ''}
-            {dismissed.size > 0 && ` · ${dismissed.size} résolue${dismissed.size > 1 ? 's' : ''} cette session`}
+            {visible.length} alerte{visible.length > 1 ? 's' : ''} ouverte{visible.length > 1 ? 's' : ''} · résolutions persistées
           </p>
         </div>
       </header>
