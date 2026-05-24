@@ -35,6 +35,7 @@ import { GuidedSetupPanel } from './widgets/GuidedSetupPanel';
 import { SystemLogsPanel } from './widgets/SystemLogsPanel';
 import { ModuleDetailModal } from './widgets/ModuleDetailModal';
 import { DashboardCustomizerModal, loadLayout, type WidgetPref } from './widgets/DashboardCustomizerModal';
+import { QuickWinsPanel } from './widgets/QuickWinsPanel';
 
 function emitNavigate(target: PageId) {
   window.dispatchEvent(new CustomEvent('navigate', { detail: { page: target } }));
@@ -151,6 +152,10 @@ export const SettingsControlCenter: React.FC = () => {
             onOpenRevenue={() => emitNavigate('rev_dashboard' as PageId)}
           />
         )}
+
+        {/* Quick Wins — toujours visible juste sous les KPIs, conditionné à la
+            présence d'alertes par computeQuickWins (le panneau s'auto-cache si vide). */}
+        <QuickWinsPanel report={report} onNavigate={emitNavigate} />
 
         <div className="grid gap-4 xl:grid-cols-3">
           {widgets.includes('modules') && (
