@@ -1,12 +1,15 @@
 /**
  * FLOWTYM — Paramètres · Rôles & Permissions (RBAC).
  *
- * Matrice de contrôle d'accès par rôle. Chaque rôle (admin, manager,
- * réception, housekeeping, lecteur) reçoit des permissions par
- * domaine fonctionnel (réservations, finance, RMS, paramètres, etc.)
- * avec 4 niveaux : Aucun / Lecture / Écriture / Admin.
+ * Matrice de contrôle d'accès alignée sur l'enum Postgres
+ * `admin_user_role` (6 rôles métier hôteliers : direction, reception,
+ * gouvernante, femme_de_chambre, maintenance, breakfast).
  *
- * Phase 1 : persistance localStorage avec garde-fous (admin =
+ * Chaque rôle reçoit des permissions par domaine fonctionnel
+ * (réservations, finance, RMS, paramètres, etc.) avec 4 niveaux :
+ * Aucun / Lecture / Écriture / Admin.
+ *
+ * Phase 1 : persistance localStorage avec garde-fou (direction =
  * permissions verrouillées à "admin" partout). Phase 2 : application
  * réelle via middleware backend + RLS Supabase.
  *
@@ -23,7 +26,7 @@ import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
 import { syncPermissionsMatrixToSupabase } from '@/src/services/settings/settingsPersistence';
 
-const STORAGE_KEY = 'flowtym.roles.permissions';
+const STORAGE_KEY = 'flowtym.roles.permissions.v2';
 
 type AccessLevel = 'none' | 'read' | 'write' | 'admin';
 
@@ -43,14 +46,21 @@ const ACCESS_TONE: Record<AccessLevel, string> = {
 
 const ACCESS_ORDER: AccessLevel[] = ['none', 'read', 'write', 'admin'];
 
-type RoleId = 'admin' | 'manager' | 'receptionist' | 'housekeeping' | 'reader';
+type RoleId =
+  | 'direction'
+  | 'reception'
+  | 'gouvernante'
+  | 'femme_de_chambre'
+  | 'maintenance'
+  | 'breakfast';
 
 const ROLES: { id: RoleId; label: string; description: string; locked?: boolean }[] = [
-  { id: 'admin',        label: 'Administrateur', description: 'Accès complet à tous les modules — permissions verrouillées sur Admin.', locked: true },
-  { id: 'manager',      label: 'Manager',        description: 'Direction d\'exploitation : Revenue, Finance, Réservations.' },
-  { id: 'receptionist', label: 'Réception',      description: 'Check-in / check-out, encaissements, gestion clients.' },
-  { id: 'housekeeping', label: 'Housekeeping',   description: 'Statuts chambres, maintenance, objets trouvés.' },
-  { id: 'reader',       label: 'Lecteur',        description: 'Accès en lecture seule (rapport, KPIs).' },
+  { id: 'direction',        label: 'Direction',         description: 'Direction d\'exploitation : accès complet à tous les modules — verrouillé sur Admin.', locked: true },
+  { id: 'reception',        label: 'Réception',         description: 'Check-in / check-out, encaissements, factures, gestion clients.' },
+  { id: 'gouvernante',      label: 'Gouvernante',       description: 'Chef housekeeping : statuts chambres + affectation des équipes.' },
+  { id: 'femme_de_chambre', label: 'Femme de chambre',  description: 'Exécution du ménage : déclaration de statut des chambres assignées.' },
+  { id: 'maintenance',      label: 'Maintenance',       description: 'Tickets maintenance et chambres hors service (OOO).' },
+  { id: 'breakfast',        label: 'Petit-déjeuner',    description: 'Service petit-déjeuner : voit les arrivées du jour pour préparation.' },
 ];
 
 interface Capability {
@@ -133,21 +143,11 @@ const CAPABILITY_GROUPS: CapabilityGroup[] = [
 type PermissionsMatrix = Record<RoleId, Record<string, AccessLevel>>;
 
 const DEFAULT_MATRIX: PermissionsMatrix = {
-  admin: Object.fromEntries(
+  direction: Object.fromEntries(
     CAPABILITY_GROUPS.flatMap((g) => g.capabilities.map((c) => [c.id, 'admin' as AccessLevel])),
   ) as Record<string, AccessLevel>,
-  manager: {
+  reception: {
     res_view: 'admin', res_create: 'admin', res_groups: 'write',
-    cli_view: 'admin', cli_export: 'write', cli_merge: 'write',
-    rev_view: 'admin', rev_decisions: 'admin', rev_pricing: 'admin', rev_autopilot: 'write',
-    fin_invoice: 'admin', fin_payment: 'admin', fin_close: 'admin', fin_export: 'admin',
-    hk_status: 'read', hk_assign: 'read', hk_maintain: 'read',
-    set_hotel: 'write', set_rooms: 'write', set_users: 'none', set_api: 'none',
-    set_integrations: 'write', set_fiscal: 'write', set_audit: 'read',
-    set_backups: 'read', set_rgpd: 'read',
-  },
-  receptionist: {
-    res_view: 'admin', res_create: 'admin', res_groups: 'read',
     cli_view: 'admin', cli_export: 'read', cli_merge: 'none',
     rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'write', fin_payment: 'write', fin_close: 'none', fin_export: 'none',
@@ -156,25 +156,45 @@ const DEFAULT_MATRIX: PermissionsMatrix = {
     set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
     set_backups: 'none', set_rgpd: 'none',
   },
-  housekeeping: {
+  gouvernante: {
     res_view: 'read', res_create: 'none', res_groups: 'none',
-    cli_view: 'none', cli_export: 'none', cli_merge: 'none',
+    cli_view: 'read', cli_export: 'none', cli_merge: 'none',
     rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
-    hk_status: 'admin', hk_assign: 'write', hk_maintain: 'write',
+    hk_status: 'admin', hk_assign: 'admin', hk_maintain: 'write',
     set_hotel: 'none', set_rooms: 'read', set_users: 'none', set_api: 'none',
     set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
     set_backups: 'none', set_rgpd: 'none',
   },
-  reader: {
+  femme_de_chambre: {
     res_view: 'read', res_create: 'none', res_groups: 'none',
-    cli_view: 'read', cli_export: 'none', cli_merge: 'none',
-    rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
-    fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'read',
-    hk_status: 'read', hk_assign: 'none', hk_maintain: 'none',
-    set_hotel: 'read', set_rooms: 'read', set_users: 'none', set_api: 'none',
-    set_integrations: 'read', set_fiscal: 'read', set_audit: 'read',
-    set_backups: 'read', set_rgpd: 'read',
+    cli_view: 'none', cli_export: 'none', cli_merge: 'none',
+    rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
+    fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
+    hk_status: 'write', hk_assign: 'none', hk_maintain: 'none',
+    set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
+  },
+  maintenance: {
+    res_view: 'none', res_create: 'none', res_groups: 'none',
+    cli_view: 'none', cli_export: 'none', cli_merge: 'none',
+    rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
+    fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
+    hk_status: 'read', hk_assign: 'none', hk_maintain: 'admin',
+    set_hotel: 'none', set_rooms: 'read', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
+  },
+  breakfast: {
+    res_view: 'read', res_create: 'none', res_groups: 'none',
+    cli_view: 'none', cli_export: 'none', cli_merge: 'none',
+    rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
+    fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
+    hk_status: 'none', hk_assign: 'none', hk_maintain: 'none',
+    set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
   },
 };
 
@@ -187,7 +207,8 @@ function loadMatrix(): PermissionsMatrix {
     // Merge avec defaults pour gérer les nouvelles capabilities ajoutées
     const merged: PermissionsMatrix = JSON.parse(JSON.stringify(DEFAULT_MATRIX));
     for (const role of Object.keys(stored) as RoleId[]) {
-      if (role === 'admin') continue; // jamais override
+      if (role === 'direction') continue; // jamais override
+      if (!(role in DEFAULT_MATRIX)) continue; // ignore les RoleIds inconnus
       merged[role] = { ...merged[role], ...stored[role] };
     }
     return merged;
@@ -203,7 +224,7 @@ export const RolesAccessPage: React.FC = () => {
   const users = useConfigStore((s) => s.users);
   const [matrix, setMatrix] = useState<PermissionsMatrix>(() => loadMatrix());
   const [dirty, setDirty] = useState(false);
-  const [activeRole, setActiveRole] = useState<RoleId>('manager');
+  const [activeRole, setActiveRole] = useState<RoleId>('reception');
   const [toast, setToast] = useState<string | null>(null);
 
   // RBAC — la gestion fine des permissions est réservée à l'admin (set_users = admin)
@@ -217,7 +238,7 @@ export const RolesAccessPage: React.FC = () => {
   }
 
   function setAccess(role: RoleId, capId: string, level: AccessLevel) {
-    if (role === 'admin') return; // verrouillé
+    if (role === 'direction') return; // verrouillé
     if (!canEditMatrix) return; // RBAC : lecture seule
     setMatrix((m) => ({ ...m, [role]: { ...m[role], [capId]: level } }));
     setDirty(true);
@@ -230,7 +251,7 @@ export const RolesAccessPage: React.FC = () => {
       action: 'permission_changed',
       module: 'security_backups',
       detail: 'Matrice RBAC mise à jour',
-      meta: { roles: Object.keys(matrix).filter((r) => r !== 'admin') },
+      meta: { roles: Object.keys(matrix).filter((r) => r !== 'direction') },
     });
     // Sync best-effort vers Supabase (RLS limite aux admins)
     void syncPermissionsMatrixToSupabase(matrix);
@@ -238,19 +259,37 @@ export const RolesAccessPage: React.FC = () => {
   }
 
   function resetRole(role: RoleId) {
-    if (role === 'admin') return;
+    if (role === 'direction') return;
     if (!confirm(`Réinitialiser le rôle "${ROLES.find((r) => r.id === role)?.label}" à ses permissions par défaut ?`)) return;
     setMatrix((m) => ({ ...m, [role]: { ...DEFAULT_MATRIX[role] } }));
     setDirty(true);
   }
 
-  // Comptes par rôle (lus en temps réel depuis useConfigStore)
+  /**
+   * Mapping rétro-compat des anciens rôles legacy stockés dans le
+   * configStore (`admin`/`manager`/`receptionist`/`housekeeping`) vers
+   * les RoleIds métiers. Voir `permissionsService.ROLE_ALIASES` pour la
+   * source de vérité.
+   */
   const usersByRole = useMemo(() => {
+    const legacyMap: Record<string, RoleId> = {
+      admin: 'direction',
+      manager: 'direction',
+      receptionist: 'reception',
+      housekeeping: 'gouvernante',
+      reader: 'breakfast',
+      direction: 'direction',
+      reception: 'reception',
+      gouvernante: 'gouvernante',
+      femme_de_chambre: 'femme_de_chambre',
+      maintenance: 'maintenance',
+      breakfast: 'breakfast',
+    };
     const m = new Map<RoleId, number>();
     users.forEach((u) => {
       if (!u.active) return;
-      const r = (u.role === 'admin' || u.role === 'manager' || u.role === 'receptionist' || u.role === 'housekeeping') ? u.role : 'reader';
-      m.set(r as RoleId, (m.get(r as RoleId) ?? 0) + 1);
+      const mapped = legacyMap[u.role] ?? 'breakfast';
+      m.set(mapped, (m.get(mapped) ?? 0) + 1);
     });
     return m;
   }, [users]);
@@ -301,7 +340,7 @@ export const RolesAccessPage: React.FC = () => {
           <ShieldCheck className="w-5 h-5 text-violet-600 mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0 text-[12.5px] text-slate-700">
             <strong className="text-slate-900">Principe de séparation des privilèges :</strong> le rôle
-            Administrateur a accès en mode Admin à toutes les capacités (verrouillé). Pour confier des
+            Direction a accès en mode Admin à toutes les capacités (verrouillé). Pour confier des
             tâches précises sans donner tout pouvoir, utilisez les autres rôles.
           </div>
         </section>

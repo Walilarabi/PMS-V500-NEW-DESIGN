@@ -1,24 +1,46 @@
 /**
- * FLOWTYM — Service de permissions RBAC (Phase 1.5).
+ * FLOWTYM — Service de permissions RBAC.
  *
- * Pont entre la matrice RBAC définie dans RolesAccessPage (persistée
- * en localStorage sous "flowtym.roles.permissions") et le reste de
- * l'application. Permet de garder les composants découplés de la page
- * d'admin tout en exposant un hook simple `usePermission()` partout.
+ * Source de vérité unique des rôles : enum Postgres `admin_user_role`
+ * (cf. supabase.types.ts → AdminUserRole). Les 6 rôles métier hôteliers :
  *
- * Niveaux d'accès, du plus faible au plus fort :
- *   none < read < write < admin
+ *   direction          — propriétaire / direction d'exploitation (tout admin)
+ *   reception          — front-office : check-in/out, encaissement, factures
+ *   gouvernante        — chef housekeeping : statuts + affectations
+ *   femme_de_chambre   — exécution ménage : statut chambres uniquement
+ *   maintenance        — déclarations maintenance / OOO
+ *   breakfast          — service petit-déjeuner : voit les arrivées du jour
  *
- * Un appel `usePermission('rev_pricing', 'write')` renvoie `true` si
- * le rôle courant a au moins le niveau `write` sur la capability
- * `rev_pricing`. Par défaut, en l'absence de session, on retourne
- * `true` (mode dev / pré-auth) — l'app reste utilisable en dev local.
+ * Pont entre la matrice RBAC (persistée localStorage + Supabase) et le
+ * reste de l'app via `usePermission()` / `hasPermission()`.
+ *
+ * Niveaux d'accès (croissant) : none < read < write < admin.
+ *
+ * Mode dev (pas de session auth) → tout est autorisé pour ne pas
+ * bloquer le développement local.
+ *
+ * Rétro-compatibilité : les anciens RoleIds (admin / manager /
+ * receptionist / housekeeping / reader) sont acceptés et mappés vers
+ * leur équivalent métier — utile pour les mocks du configStore et les
+ * éventuelles données legacy en DB ou localStorage.
  */
 import React, { useMemo } from 'react';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 
 export type AccessLevel = 'none' | 'read' | 'write' | 'admin';
-export type RoleId = 'admin' | 'manager' | 'receptionist' | 'housekeeping' | 'reader';
+
+/**
+ * Identifiants de rôles RBAC alignés sur l'enum Postgres `admin_user_role`.
+ * `direction` joue le rôle de "super-admin" (toutes capabilities = admin,
+ * verrouillé côté UI matrix).
+ */
+export type RoleId =
+  | 'direction'
+  | 'reception'
+  | 'gouvernante'
+  | 'femme_de_chambre'
+  | 'maintenance'
+  | 'breakfast';
 
 export const ACCESS_LEVEL_ORDER: Record<AccessLevel, number> = {
   none: 0,
@@ -27,23 +49,30 @@ export const ACCESS_LEVEL_ORDER: Record<AccessLevel, number> = {
   admin: 3,
 };
 
-const STORAGE_KEY = 'flowtym.roles.permissions';
+/**
+ * Clé localStorage v2 : la matrice v1 utilisait des RoleIds anglais
+ * obsolètes (admin/manager/receptionist/...). Migration automatique via
+ * une nouvelle clé pour invalider les caches existants chez les users.
+ */
+const STORAGE_KEY = 'flowtym.roles.permissions.v2';
 
-/** Matrice par défaut — synchronisée avec RolesAccessPage.DEFAULT_MATRIX. */
+/** Liste explicite des rôles autres que `direction` (pour itération). */
+const OPERATIONAL_ROLES: ReadonlyArray<Exclude<RoleId, 'direction'>> = [
+  'reception',
+  'gouvernante',
+  'femme_de_chambre',
+  'maintenance',
+  'breakfast',
+];
+
+/**
+ * Matrice par défaut métier. `direction` reçoit 'admin' partout via
+ * `hasPermission` (court-circuit) — pas besoin de la définir ici.
+ */
 const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
-  admin: {},  // admin = tout, géré par le helper hasPermission ci-dessous
-  manager: {
+  direction: {}, // = 'admin' partout via court-circuit (voir hasPermission)
+  reception: {
     res_view: 'admin', res_create: 'admin', res_groups: 'write',
-    cli_view: 'admin', cli_export: 'write', cli_merge: 'write',
-    rev_view: 'admin', rev_decisions: 'admin', rev_pricing: 'admin', rev_autopilot: 'write',
-    fin_invoice: 'admin', fin_payment: 'admin', fin_close: 'admin', fin_export: 'admin',
-    hk_status: 'read', hk_assign: 'read', hk_maintain: 'read',
-    set_hotel: 'write', set_rooms: 'write', set_users: 'none', set_api: 'none',
-    set_integrations: 'write', set_fiscal: 'write', set_audit: 'read',
-    set_backups: 'read', set_rgpd: 'read',
-  },
-  receptionist: {
-    res_view: 'admin', res_create: 'admin', res_groups: 'read',
     cli_view: 'admin', cli_export: 'read', cli_merge: 'none',
     rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'write', fin_payment: 'write', fin_close: 'none', fin_export: 'none',
@@ -52,37 +81,79 @@ const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
     set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
     set_backups: 'none', set_rgpd: 'none',
   },
-  housekeeping: {
+  gouvernante: {
     res_view: 'read', res_create: 'none', res_groups: 'none',
-    cli_view: 'none', cli_export: 'none', cli_merge: 'none',
+    cli_view: 'read', cli_export: 'none', cli_merge: 'none',
     rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
-    hk_status: 'admin', hk_assign: 'write', hk_maintain: 'write',
+    hk_status: 'admin', hk_assign: 'admin', hk_maintain: 'write',
     set_hotel: 'none', set_rooms: 'read', set_users: 'none', set_api: 'none',
     set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
     set_backups: 'none', set_rgpd: 'none',
   },
-  reader: {
+  femme_de_chambre: {
     res_view: 'read', res_create: 'none', res_groups: 'none',
-    cli_view: 'read', cli_export: 'none', cli_merge: 'none',
-    rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
-    fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'read',
-    hk_status: 'read', hk_assign: 'none', hk_maintain: 'none',
-    set_hotel: 'read', set_rooms: 'read', set_users: 'none', set_api: 'none',
-    set_integrations: 'read', set_fiscal: 'read', set_audit: 'read',
-    set_backups: 'read', set_rgpd: 'read',
+    cli_view: 'none', cli_export: 'none', cli_merge: 'none',
+    rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
+    fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
+    hk_status: 'write', hk_assign: 'none', hk_maintain: 'none',
+    set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
+  },
+  maintenance: {
+    res_view: 'none', res_create: 'none', res_groups: 'none',
+    cli_view: 'none', cli_export: 'none', cli_merge: 'none',
+    rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
+    fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
+    hk_status: 'read', hk_assign: 'none', hk_maintain: 'admin',
+    set_hotel: 'none', set_rooms: 'read', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
+  },
+  breakfast: {
+    res_view: 'read', res_create: 'none', res_groups: 'none',
+    cli_view: 'none', cli_export: 'none', cli_merge: 'none',
+    rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
+    fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
+    hk_status: 'none', hk_assign: 'none', hk_maintain: 'none',
+    set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
   },
 };
 
-/** Normalise un rôle inconnu vers 'reader' (principe du moindre privilège). */
+/**
+ * Mapping rétro-compat : aliases historiques → RoleId métier.
+ * Couvre les RoleIds RBAC v1 et quelques variantes vues dans le code
+ * (`owner`, `admin`, `accountant`, etc.). Tout rôle non listé tombe sur
+ * `breakfast` (le rôle le plus restreint = principe du moindre privilège).
+ */
+const ROLE_ALIASES: Record<string, RoleId> = {
+  // Nomenclature DB (enum admin_user_role) — identité
+  direction: 'direction',
+  reception: 'reception',
+  gouvernante: 'gouvernante',
+  femme_de_chambre: 'femme_de_chambre',
+  maintenance: 'maintenance',
+  breakfast: 'breakfast',
+  // RoleIds RBAC v1 (legacy)
+  admin: 'direction',
+  manager: 'direction',
+  receptionist: 'reception',
+  housekeeping: 'gouvernante',
+  reader: 'breakfast',
+  // Autres aliases observés dans le code
+  owner: 'direction',
+  accountant: 'reception',
+  rms: 'direction',
+};
+
+/** Normalise un rôle vers un RoleId métier. Fallback : `breakfast`. */
 function normalizeRole(role: string | null | undefined): RoleId {
-  if (!role) return 'reader';
-  const r = role.toLowerCase();
-  if (r === 'admin') return 'admin';
-  if (r === 'manager') return 'manager';
-  if (r === 'receptionist') return 'receptionist';
-  if (r === 'housekeeping') return 'housekeeping';
-  return 'reader';
+  if (!role) return 'breakfast';
+  const r = role.toLowerCase().trim();
+  return ROLE_ALIASES[r] ?? 'breakfast';
 }
 
 /** Charge la matrice depuis le localStorage avec fallback sur les defaults. */
@@ -91,11 +162,10 @@ export function loadPermissionsMatrix(): Record<RoleId, Record<string, AccessLev
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_PERMISSIONS;
-    const stored = JSON.parse(raw) as Record<RoleId, Record<string, AccessLevel>>;
+    const stored = JSON.parse(raw) as Partial<Record<RoleId, Record<string, AccessLevel>>>;
     const merged = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS)) as typeof DEFAULT_PERMISSIONS;
-    for (const role of Object.keys(stored) as RoleId[]) {
-      if (role === 'admin') continue; // admin verrouillé
-      merged[role] = { ...merged[role], ...stored[role] };
+    for (const role of OPERATIONAL_ROLES) {
+      if (stored[role]) merged[role] = { ...merged[role], ...stored[role] };
     }
     return merged;
   } catch {
@@ -113,7 +183,7 @@ export function hasPermission(
   requiredLevel: AccessLevel,
 ): boolean {
   const normalized = normalizeRole(role);
-  if (normalized === 'admin') return true;
+  if (normalized === 'direction') return true;
   const matrix = loadPermissionsMatrix();
   const level = matrix[normalized]?.[capability] ?? 'none';
   return ACCESS_LEVEL_ORDER[level] >= ACCESS_LEVEL_ORDER[requiredLevel];
@@ -125,7 +195,7 @@ export function getPermissionLevel(
   capability: string,
 ): AccessLevel {
   const normalized = normalizeRole(role);
-  if (normalized === 'admin') return 'admin';
+  if (normalized === 'direction') return 'admin';
   const matrix = loadPermissionsMatrix();
   return matrix[normalized]?.[capability] ?? 'none';
 }
@@ -143,11 +213,9 @@ export function getPermissionLevel(
 export function usePermission(capability: string, requiredLevel: AccessLevel): boolean {
   const auth = useAuth();
   return useMemo(() => {
-    // Pas de session → mode dev, autoriser tout
     if (!auth.session) return true;
     const allowed = hasPermission(auth.session.role, capability, requiredLevel);
     if (!allowed && typeof window !== 'undefined') {
-      // Import dynamique pour éviter un cycle de dépendance
       import('./monitoringService')
         .then((m) =>
           m.captureMetric('rbac_denied', 1, {
@@ -162,10 +230,10 @@ export function usePermission(capability: string, requiredLevel: AccessLevel): b
   }, [auth.session, capability, requiredLevel]);
 }
 
-/** Hook : retourne le rôle effectif du user courant (ou 'admin' en mode dev). */
+/** Hook : retourne le rôle effectif du user courant (ou 'direction' en mode dev). */
 export function useCurrentRole(): RoleId {
   const auth = useAuth();
-  if (!auth.session) return 'admin'; // mode dev
+  if (!auth.session) return 'direction';
   return normalizeRole(auth.session.role);
 }
 
@@ -240,4 +308,3 @@ export const PermissionDeniedBanner: React.FC<{
     </div>
   </div>
 );
-

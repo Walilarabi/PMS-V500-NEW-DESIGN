@@ -209,7 +209,7 @@ export async function syncPermissionsMatrixToSupabase(
       access_level: string;
     }> = [];
     for (const [roleId, caps] of Object.entries(matrix)) {
-      if (roleId === 'admin') continue; // admin verrouillé en code
+      if (roleId === 'direction') continue; // direction verrouillée en code
       for (const [capabilityId, level] of Object.entries(caps)) {
         rows.push({
           hotel_id: hotelId,
