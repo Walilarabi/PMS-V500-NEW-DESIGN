@@ -18,6 +18,7 @@ import {
 } from '@/src/lib/rms/autoStrategyEngine';
 import type { StrategyId } from '@/src/lib/rms/strategies';
 import { emitRmsEvent } from '@/src/lib/rms/eventBus';
+import { centralPricingEngine } from '@/src/services/revenue/centralPricingEngine.service';
 import {
   INITIAL_SIGNALS,
   INITIAL_RECOMMENDATIONS,
@@ -305,6 +306,14 @@ export const useRmsAutomationStore = create<RmsAutomationState>((set, get) => ({
       recommendations: state.recommendations.filter((r) => r.id !== id),
       decisionLog: [entry, ...state.decisionLog],
     }));
+    // Pont vers le Central Pricing Engine → propagé au Calendrier via useCentralPricingSync
+    centralPricingEngine.getOrSeed(reco.stayDate, {
+      current: reco.currentPrice,
+      suggested: reco.recommendedPrice,
+      confidence: reco.confidence,
+      strategy: reco.strategy,
+    });
+    centralPricingEngine.accept(reco.stayDate, { source: 'autopilot' });
     syncToChannelManager(entry.id);
   },
 
@@ -321,6 +330,18 @@ export const useRmsAutomationStore = create<RmsAutomationState>((set, get) => ({
       recommendations: state.recommendations.filter((r) => r.id !== id),
       decisionLog: [entry, ...state.decisionLog],
     }));
+    // Pont vers le Central Pricing Engine — conserve le prix courant (statu quo)
+    centralPricingEngine.getOrSeed(reco.stayDate, {
+      current: reco.currentPrice,
+      suggested: reco.recommendedPrice,
+      confidence: reco.confidence,
+      strategy: reco.strategy,
+    });
+    centralPricingEngine.reject(reco.stayDate, {
+      source: 'autopilot',
+      manualPrice: reco.currentPrice,
+      reason: 'Rejet manuel depuis l\'Autopilote',
+    });
   },
 
   rollbackDecision: (id) => {
@@ -351,6 +372,12 @@ export const useRmsAutomationStore = create<RmsAutomationState>((set, get) => ({
         ...state.decisionLog.map((e) => (e.id === id ? { ...e, status: 'rolled_back' as const } : e)),
       ],
     }));
+    // Rollback dans le Central Pricing Engine → le Calendrier revient au prix initial
+    centralPricingEngine.reject(entry.stayDate, {
+      source: 'autopilot',
+      manualPrice: entry.oldPrice,
+      reason: `Rollback autopilote — tarif rétabli à ${entry.oldPrice} €`,
+    });
     syncToChannelManager(rollback.id);
   },
 
@@ -365,6 +392,14 @@ export const useRmsAutomationStore = create<RmsAutomationState>((set, get) => ({
         verdict.outcome === 'auto' || (automationLevel === 4 && verdict.outcome === 'review');
       if (eligible) {
         applied.push(logFromRecommendation(reco, automationLevel));
+        // Pont vers le Central Pricing Engine pour chaque reco automatiquement appliquée
+        centralPricingEngine.getOrSeed(reco.stayDate, {
+          current: reco.currentPrice,
+          suggested: reco.recommendedPrice,
+          confidence: reco.confidence,
+          strategy: reco.strategy,
+        });
+        centralPricingEngine.accept(reco.stayDate, { source: 'autopilot' });
       } else {
         remaining.push(reco);
       }
