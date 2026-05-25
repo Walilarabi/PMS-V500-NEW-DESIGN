@@ -25,6 +25,7 @@ import type {
   EventActualVsForecast,
   EventImpactScore,
   EventReliabilityScore,
+  HotelCluster,
   MarketCompressionScore,
   MarketHeatmapCell,
   MarketImpactForecast,
@@ -64,6 +65,7 @@ import {
 import {
   generateRmsRecommendations,
 } from './rms-recommendation.engine';
+import { startPipelineRun } from './pipeline-monitoring.service';
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* RE-EXPORTS — pour l'UI et les tests                                         */
@@ -78,6 +80,9 @@ export * from './event-correlation.engine';
 export * from './confidence.engine';
 export * from './event-prediction.engine';
 export * from './rms-recommendation.engine';
+export * from './compset-clustering.engine';
+export * from './lighthouse-to-snapshots.adapter';
+export * from './pipeline-monitoring.service';
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* HIGH-LEVEL API                                                              */
@@ -90,6 +95,12 @@ export interface MarketIntelligenceContext {
   sources: EventSource[];
   /** Série de snapshots compset, idéalement 1/jour sur les 60 derniers jours. */
   snapshots: MarketSnapshot[];
+  /**
+   * Snapshots segmentés par cluster (luxury/midscale/budget/...) pour
+   * produire des compressions par segment. Optionnel — si absent, seule
+   * la compression globale est calculée.
+   */
+  segmentedSnapshots?: Map<HotelCluster, MarketSnapshot[]>;
   /** Historique forecast vs réel par eventKey (pour Reliability). */
   history?: Map<string, EventActualVsForecast[]>;
   /** Taille compset par défaut (utilisée pour qualité données). */
@@ -107,6 +118,11 @@ export interface MarketIntelligenceResult {
   reliabilities: Map<string, EventReliabilityScore>;
   /** Compression par date (sur la fenêtre des snapshots). */
   compression: Map<string, MarketCompressionScore>;
+  /**
+   * Compression segmentée par cluster (luxury/midscale/budget/...).
+   * Map<cluster, Map<date, MarketCompressionScore>>.
+   */
+  segmentedCompression: Map<HotelCluster, Map<string, MarketCompressionScore>>;
   /** Vélocité par date. */
   velocity: Map<string, MarketVelocity>;
   /** Forecasts d'impact par événement. */
@@ -129,6 +145,7 @@ export interface MarketIntelligenceResult {
 export function computeMarketIntelligence(
   ctx: MarketIntelligenceContext,
 ): MarketIntelligenceResult {
+  const stopRun = startPipelineRun('full');
   const compsetSize = ctx.compsetSize ?? 10;
   const freshnessHours = ctx.freshnessHours ?? 12;
   const today = ctx.today ?? new Date().toISOString().slice(0, 10);
@@ -153,6 +170,21 @@ export function computeMarketIntelligence(
     for (const [d, vv] of v.entries()) velocity.set(d, vv);
     const c = computeCompressionWindow(ctx.snapshots, velocity);
     for (const [d, cc] of c.entries()) compression.set(d, cc);
+  }
+
+  // ─── 4bis. Compression segmentée par cluster (si snapshots segmentés) ────
+  const segmentedCompression = new Map<HotelCluster, Map<string, MarketCompressionScore>>();
+  if (ctx.segmentedSnapshots) {
+    for (const [cluster, snaps] of ctx.segmentedSnapshots.entries()) {
+      if (snaps.length === 0) continue;
+      // Vélocité propre au cluster — réutilise la fonction window
+      const clusterVel = computeVelocityWindow(snaps, snaps[0].date, snaps[snaps.length - 1].date);
+      // Scope = cluster (luxury/midscale/budget si applicable, sinon localized)
+      const scope = (cluster === 'luxury' || cluster === 'midscale' || cluster === 'budget')
+        ? cluster : 'localized';
+      const clusterComp = computeCompressionWindow(snaps, clusterVel, scope);
+      segmentedCompression.set(cluster, clusterComp);
+    }
   }
 
   // ─── 5. Correlation events ↔ marché ─────────────────────────────────────
@@ -256,16 +288,30 @@ export function computeMarketIntelligence(
   // ─── 10. Alertes ─────────────────────────────────────────────────────────
   const alerts = generateAlerts(enrichedList, compression, velocity, reactions);
 
-  return {
+  const result = {
     enriched: enrichedList,
     reliabilities,
     compression,
+    segmentedCompression,
     velocity,
     forecasts,
     recommendations,
     heatmap,
     alerts,
   };
+
+  stopRun({
+    metrics: {
+      events: ctx.events.length,
+      snapshots: ctx.snapshots.length,
+      compressionDays: compression.size,
+      recoCount: Array.from(recommendations.values()).reduce((s, l) => s + l.length, 0),
+      alertCount: alerts.length,
+      segmentCount: segmentedCompression.size,
+    },
+  });
+
+  return result;
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */

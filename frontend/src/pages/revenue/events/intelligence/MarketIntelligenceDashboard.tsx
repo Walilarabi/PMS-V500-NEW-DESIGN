@@ -27,14 +27,17 @@ import {
   Target,
   TrendingUp,
   Zap,
+  HeartPulse,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useMarketIntelligence } from '@/src/hooks/useMarketIntelligence';
+import { usePipelineHealth } from '@/src/hooks/usePipelineHealth';
 import { CompressionHeatmap } from './CompressionHeatmap';
 import { CriticalEventsList } from './CriticalEventsList';
 import { MarketAlertsPanel } from './MarketAlertsPanel';
 import { VelocityRadar } from './VelocityRadar';
 import { ForecastTimeline } from './ForecastTimeline';
+import { SegmentedCompressionPanel } from './SegmentedCompressionPanel';
 import {
   COMPRESSION_CLASSIFICATION_LABELS,
   type MarketCompressionScore,
@@ -42,6 +45,7 @@ import {
 
 export const MarketIntelligenceDashboard: React.FC = () => {
   const intelligence = useMarketIntelligence();
+  const health = usePipelineHealth();
   const [windowDays, setWindowDays] = useState<30 | 60 | 90 | 180>(60);
 
   // Fenêtre visible (à partir d'aujourd'hui)
@@ -97,9 +101,15 @@ export const MarketIntelligenceDashboard: React.FC = () => {
             <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
+            <h3 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2 flex-wrap">
               Intelligence Marché
               <SourceBadge source={intelligence.source} freshnessHours={intelligence.freshnessHours} snapshotCount={intelligence.snapshotCount} />
+              <HealthBadge
+                lastDurationMs={health.lastFullDurationMs}
+                medianDurationMs={health.medianFullDurationMs}
+                errorRate={health.errorRate}
+                runs={health.runs.length}
+              />
             </h3>
             <p className="text-[11.5px] text-slate-500">
               Compression · vélocité · prédictions · recommandations RMS
@@ -221,6 +231,18 @@ export const MarketIntelligenceDashboard: React.FC = () => {
           </section>
 
           <section>
+            <SectionTitle icon={Layers}>Compression par segment compset</SectionTitle>
+            <div className="mt-2">
+              <SegmentedCompressionPanel
+                segmentedCompression={intelligence.segmentedCompression}
+                compsetDistribution={intelligence.compsetDistribution}
+                from={today}
+                to={windowEnd}
+              />
+            </div>
+          </section>
+
+          <section>
             <SectionTitle icon={AlertTriangle}>Top événements critiques</SectionTitle>
             <div className="mt-2">
               <CriticalEventsList
@@ -307,6 +329,40 @@ function formatShortDate(date: string): string {
 /* ────────────────────────────────────────────────────────────────────────── */
 /* SOURCE BADGE                                                                */
 /* ────────────────────────────────────────────────────────────────────────── */
+
+/* Badge santé pipeline — couleur basée sur error rate + latence */
+const HealthBadge: React.FC<{
+  lastDurationMs: number | null;
+  medianDurationMs: number;
+  errorRate: number;
+  runs: number;
+}> = ({ lastDurationMs, medianDurationMs, errorRate, runs }) => {
+  if (runs === 0) return null;
+  const latencyDegraded =
+    medianDurationMs > 0 && lastDurationMs !== null &&
+    lastDurationMs > medianDurationMs * 2 && lastDurationMs > 300;
+  const status: 'healthy' | 'degraded' | 'failed' =
+    errorRate >= 0.2 ? 'failed' :
+    latencyDegraded || errorRate >= 0.05 ? 'degraded' : 'healthy';
+  const map = {
+    healthy:  { cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200', dot: 'bg-emerald-500', label: 'Pipeline OK' },
+    degraded: { cls: 'bg-amber-50 text-amber-700 ring-amber-200',       dot: 'bg-amber-500',   label: 'Pipeline lent' },
+    failed:   { cls: 'bg-rose-50 text-rose-700 ring-rose-200',           dot: 'bg-rose-500',    label: 'Pipeline KO' },
+  }[status];
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] uppercase font-bold tracking-wide ring-1',
+        map.cls,
+      )}
+      title={`Pipeline · ${runs} runs · médiane ${medianDurationMs}ms · dernier ${lastDurationMs ?? '?'}ms · erreurs ${Math.round(errorRate * 100)}%`}
+    >
+      <HeartPulse className="w-2.5 h-2.5" />
+      <span className={cn('w-1.5 h-1.5 rounded-full', map.dot, status === 'healthy' && 'animate-pulse')} />
+      {map.label}
+    </span>
+  );
+};
 
 const SourceBadge: React.FC<{
   source: 'lighthouse' | 'expedia' | 'mock';

@@ -26,8 +26,14 @@ import {
   type MarketIntelligenceResult,
 } from '../services/marketIntelligence';
 import { lighthouseImportToSnapshots } from '../services/marketIntelligence/lighthouse-to-snapshots.adapter';
+import {
+  buildSegmentedSnapshots,
+  classifyCompset,
+  compsetDistribution,
+  type HotelClassification,
+} from '../services/marketIntelligence/compset-clustering.engine';
 import { generateParisMarketSnapshots } from '../data/marketSnapshotsMock';
-import type { MarketSnapshot } from '../types/marketIntelligence';
+import type { HotelCluster, MarketSnapshot } from '../types/marketIntelligence';
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* CACHE MOCK                                                                  */
@@ -54,6 +60,10 @@ export interface MarketIntelligenceData extends MarketIntelligenceResult {
   snapshotCount: number;
   /** Fraîcheur en heures (depuis le dernier import / capture). */
   freshnessHours: number;
+  /** Classification des hôtels du compset (LOT 8). */
+  compsetClassifications: Map<string, HotelClassification>;
+  /** Distribution agrégée (luxury 3, midscale 5, budget 2…). */
+  compsetDistribution: ReturnType<typeof compsetDistribution>;
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -72,18 +82,31 @@ export function useMarketIntelligence(): MarketIntelligenceData {
     let source: MarketIntelligenceSource = 'mock';
     let snaps: MarketSnapshot[];
     let freshnessHours = 12;
+    let classifications = new Map<string, HotelClassification>();
+    let segmentedSnapshots = new Map<HotelCluster, MarketSnapshot[]>();
 
     if (lighthouse && lighthouse.days.length > 0) {
       snaps = lighthouseImportToSnapshots(lighthouse);
       source = 'lighthouse';
       freshnessHours = computeFreshnessHours(lighthouse.importedAt);
+      // Clustering compset + snapshots segmentés
+      classifications = classifyCompset({
+        hotelNames: lighthouse.competitorNames,
+        days: lighthouse.days,
+      });
+      segmentedSnapshots = buildSegmentedSnapshots({
+        days: lighthouse.days,
+        classifications,
+        capturedAt: lighthouse.importedAt,
+      });
     } else if (expedia && expedia.days.length > 0) {
-      // Expedia store : on convertit aussi en snapshots via l'adapter
-      // Lighthouse en utilisant un mapping minimal (le projet a déjà
-      // un helper expediaAsLighthouse — on l'utilise indirectement).
+      // Expedia store : conversion en snapshots via l'adapter local.
       snaps = adaptExpediaToSnapshots(expedia);
       source = 'expedia';
       freshnessHours = computeFreshnessHours(expedia.importedAt);
+      // (Pas de clustering Expedia pour l'instant — schéma de données
+      //  moins riche. Ajouté quand l'adapter Expedia → LighthouseDayData
+      //  est complété.)
     } else {
       snaps = mockSnapshots();
       source = 'mock';
@@ -96,7 +119,8 @@ export function useMarketIntelligence(): MarketIntelligenceData {
       ),
       sources,
       snapshots: snaps,
-      compsetSize: source === 'mock' ? 12 : Math.max(4, snaps[0]?.compsetMedian ? 10 : 4),
+      segmentedSnapshots: segmentedSnapshots.size > 0 ? segmentedSnapshots : undefined,
+      compsetSize: source === 'mock' ? 12 : Math.max(4, classifications.size || 10),
       freshnessHours,
       today: new Date().toISOString().slice(0, 10),
     });
@@ -106,6 +130,8 @@ export function useMarketIntelligence(): MarketIntelligenceData {
       source,
       snapshotCount: snaps.length,
       freshnessHours,
+      compsetClassifications: classifications,
+      compsetDistribution: compsetDistribution(classifications),
     };
   }, [events, sources, hotelCity, lighthouse, expedia]);
 }
