@@ -183,17 +183,21 @@ export function analyzeImport(
       issues.push(
         isPast
           ? `Similaire à "${bestMatch.name}" (passé)`
-          : `Similaire à "${bestMatch.name}" — vérifiez avant fusion`,
+          : `Similaire à "${bestMatch.name}" — fusion possible`,
       );
       stats.duplicate++;
+      // Doublon d'événement passé → on ignore (règle métier).
+      // Doublon d'événement futur → on PRÉ-SÉLECTIONNE : bulkUpsert protège
+      // les historiques et fusionne intelligemment côté store. L'utilisateur
+      // peut décocher manuellement s'il veut vraiment ignorer.
       return {
         event: ev,
         status: 'duplicate',
         confidence: Math.round(bestScore * 100),
         existingMatch: bestMatch,
         issues,
-        autoAction: 'skip',
-        selected: false,
+        autoAction: isPast ? 'skip' : 'update',
+        selected: !isPast,
       };
     }
 

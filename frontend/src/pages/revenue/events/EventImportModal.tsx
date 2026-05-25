@@ -268,23 +268,38 @@ function StepReview({
     );
   }
 
+  function selectAllItems() {
+    onItemsChange(items.map((item) => ({ ...item, selected: item.status !== 'invalid' })));
+  }
+
+  function deselectAllItems() {
+    onItemsChange(items.map((item) => ({ ...item, selected: false })));
+  }
+
+  function selectByStatus(status: ImportStatus) {
+    onItemsChange(items.map((item) => item.status === status ? { ...item, selected: true } : item));
+  }
+
   const allDisplayedSelected = displayed.length > 0 && displayed.every((i) => i.selected);
 
   return (
-    <div className="flex flex-col gap-4" style={{ maxHeight: '62vh', overflow: 'hidden' }}>
-      {/* Stats bar */}
+    <div className="flex flex-col gap-3 min-h-0 h-full">
+      {/* Stats bar — cliquable pour filtrer */}
       <div className="grid grid-cols-6 gap-2 shrink-0">
-        {(Object.entries(report.stats) as [ImportStatus, number][])
-          .filter(([, v]) => v > 0)
-          .map(([status, count]) => {
+        {(['valid','update','duplicate','incomplete','conflict','invalid'] as ImportStatus[])
+          .map((status) => {
+            const count = report.stats[status] ?? 0;
             const m = STATUS_META[status];
+            const active = filter === status;
             return (
               <button
                 key={status}
-                onClick={() => setFilter(filter === status ? 'all' : status)}
+                onClick={() => setFilter(active ? 'all' : status)}
+                disabled={count === 0}
                 className={cn(
                   'rounded-xl px-2 py-2 ring-1 ring-inset text-center transition-all',
-                  filter === status ? `${m.bg} ${m.ring}` : 'bg-white ring-slate-200 hover:ring-slate-300',
+                  active ? `${m.bg} ${m.ring}` : 'bg-white ring-slate-200 hover:ring-slate-300',
+                  count === 0 && 'opacity-40 cursor-not-allowed',
                 )}
               >
                 <div className={cn('text-[18px] font-bold tabular-nums', m.color)}>{count}</div>
@@ -292,6 +307,39 @@ function StepReview({
               </button>
             );
           })}
+      </div>
+
+      {/* Bulk actions bar — explicit and always visible */}
+      <div className="flex items-center gap-2 shrink-0 flex-wrap rounded-xl bg-slate-50 ring-1 ring-slate-200 px-3 py-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          Actions rapides
+        </span>
+        <button
+          onClick={selectAllItems}
+          className="px-2.5 py-1 rounded-md bg-white ring-1 ring-slate-200 hover:ring-violet-300 hover:bg-violet-50 text-[11.5px] font-medium text-slate-700 flex items-center gap-1"
+        >
+          <Check className="w-3 h-3 text-emerald-600" /> Tout sélectionner ({items.filter((i) => i.status !== 'invalid').length})
+        </button>
+        <button
+          onClick={deselectAllItems}
+          className="px-2.5 py-1 rounded-md bg-white ring-1 ring-slate-200 hover:ring-slate-300 text-[11.5px] font-medium text-slate-700 flex items-center gap-1"
+        >
+          <Minus className="w-3 h-3 text-slate-500" /> Tout désélectionner
+        </button>
+        {report.stats.valid > 0 && (
+          <button
+            onClick={() => selectByStatus('valid')}
+            className="px-2.5 py-1 rounded-md bg-white ring-1 ring-emerald-200 hover:bg-emerald-50 text-[11.5px] font-medium text-emerald-700 flex items-center gap-1"
+          >
+            <CheckCircle2 className="w-3 h-3" /> Valides uniquement ({report.stats.valid})
+          </button>
+        )}
+        <span className="ml-auto text-[12px] text-slate-600">
+          <span className="font-bold text-slate-900 tabular-nums">{selectedCount}</span>
+          {' / '}
+          <span className="tabular-nums">{items.length}</span>
+          {' sélectionné' + (selectedCount > 1 ? 's' : '')}
+        </span>
       </div>
 
       {/* Filters row */}
@@ -321,13 +369,10 @@ function StepReview({
             </button>
           ))}
         </div>
-        <span className="ml-auto text-[11.5px] text-slate-500">
-          {selectedCount} sélectionné{selectedCount > 1 ? 's' : ''} / {items.length}
-        </span>
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-y-auto rounded-xl ring-1 ring-slate-100 bg-white">
+      <div className="flex-1 min-h-0 overflow-y-auto rounded-xl ring-1 ring-slate-100 bg-white">
         <table className="w-full text-[12.5px]">
           <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-sm z-10">
             <tr className="text-left text-[10.5px] uppercase tracking-wide text-slate-400">
@@ -337,6 +382,7 @@ function StepReview({
                   checked={allDisplayedSelected}
                   onChange={(e) => toggleAll(e.target.checked)}
                   className="w-3.5 h-3.5 accent-violet-600"
+                  title="Sélectionner toutes les lignes affichées"
                 />
               </th>
               <th className="px-3 py-2.5 font-medium">Statut</th>
@@ -587,19 +633,33 @@ export const EventImportModal: React.FC<EventImportModalProps> = ({ open, onClos
 
   function handleConfirmImport() {
     if (!report) return;
+    setError(null);
     const toImport = reviewItems
       .filter((i) => i.selected && i.status !== 'invalid')
       .map((i) => i.event);
 
-    const stats = bulkUpsert(toImport);
+    if (toImport.length === 0) {
+      setError('Aucun événement sélectionné. Utilisez "Tout sélectionner" ou cochez au moins une ligne.');
+      return;
+    }
 
-    // Pont RMS — propage les événements haute priorité
+    let stats: { added: number; updated: number; duplicates: number };
+    try {
+      stats = bulkUpsert(toImport);
+    } catch (e) {
+      setError(`Échec de l'intégration : ${(e as Error).message}`);
+      return;
+    }
+
+    // Pont RMS — propage les événements haute priorité (non-bloquant)
     let rmsIntegrated = 0;
     try {
       const highImpact = toImport.filter((ev) => ev.impact.compression >= 60);
       integrateEventsToRMS(highImpact);
       rmsIntegrated = highImpact.length;
-    } catch {/* non-bloquant */}
+    } catch (e) {
+      console.warn('[Events import] RMS integration failed (non-blocking):', e);
+    }
 
     setImportResult({
       added: stats.added,
@@ -623,10 +683,10 @@ export const EventImportModal: React.FC<EventImportModalProps> = ({ open, onClos
       <div
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          'bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col',
-          step === 'review' ? 'w-[1020px] max-w-[96vw]' : 'w-[680px] max-w-[92vw]',
+          'bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col min-h-0',
+          step === 'review' ? 'w-[1100px] max-w-[97vw] h-[88vh]' : 'w-[680px] max-w-[92vw]',
         )}
-        style={{ maxHeight: '90vh' }}
+        style={step === 'review' ? undefined : { maxHeight: '90vh' }}
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
@@ -669,7 +729,7 @@ export const EventImportModal: React.FC<EventImportModalProps> = ({ open, onClos
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 flex-1 overflow-hidden">
+        <div className="px-6 py-5 flex-1 min-h-0 overflow-hidden flex flex-col">
           {error && (
             <div className="mb-4 flex items-start gap-2 text-[12.5px] rounded-xl px-3 py-2.5 ring-1 bg-rose-50 ring-rose-100 text-rose-700">
               <AlertCircle className="w-4 h-4 mt-0.5" />
@@ -710,11 +770,18 @@ export const EventImportModal: React.FC<EventImportModalProps> = ({ open, onClos
               </button>
               <button
                 onClick={handleConfirmImport}
-                disabled={selectedCount === 0}
-                className="px-4 py-2 rounded-xl bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-violet-600/20 flex items-center gap-1.5"
+                className={cn(
+                  'px-4 py-2 rounded-xl text-[13px] font-semibold flex items-center gap-1.5 shadow-sm transition-all',
+                  selectedCount === 0
+                    ? 'bg-slate-100 text-slate-400 ring-1 ring-slate-200 cursor-pointer hover:bg-slate-200'
+                    : 'bg-violet-600 text-white hover:bg-violet-700 shadow-violet-600/20',
+                )}
+                title={selectedCount === 0 ? 'Cochez au moins une ligne pour activer l\'intégration' : undefined}
               >
                 <Check className="w-4 h-4" />
-                Intégrer {selectedCount} événement{selectedCount > 1 ? 's' : ''}
+                {selectedCount === 0
+                  ? 'Sélectionnez des événements'
+                  : `Intégrer ${selectedCount} événement${selectedCount > 1 ? 's' : ''}`}
               </button>
             </div>
           </div>
