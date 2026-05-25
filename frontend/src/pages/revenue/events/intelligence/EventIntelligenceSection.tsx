@@ -12,10 +12,10 @@
  * Tout vient du hook useMarketIntelligence (orchestrateur).
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Sparkles, ShieldAlert, ShieldCheck, History, Target, Zap, AlertOctagon,
-  AlertTriangle, Info,
+  AlertTriangle, Info, Check, X as XIcon, Clock,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useMarketIntelligence } from '@/src/hooks/useMarketIntelligence';
@@ -26,6 +26,7 @@ import {
   type RmsRecommendationSeverity,
 } from '@/src/types/marketIntelligence';
 import { explainRecommendation } from '@/src/services/marketIntelligence';
+import { recordAction, upsertRecommendations } from '@/src/services/marketIntelligence/persistence.service';
 
 interface EventIntelligenceSectionProps {
   event: RMSMarketEvent;
@@ -224,6 +225,22 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 const RecommendationItem: React.FC<{ reco: RmsRecommendation }> = ({ reco }) => {
+  const [status, setStatus] = useState<'pending' | 'accepted' | 'rejected' | 'snoozed' | 'syncing'>('pending');
+
+  const handleAction = async (action: 'accept' | 'reject' | 'snooze') => {
+    setStatus('syncing');
+    // Persist reco then action (best-effort, offline OK)
+    await upsertRecommendations([reco]);
+    const res = await recordAction({
+      recommendationId: reco.id,
+      action,
+      appliedValue: action === 'accept' ? reco.suggestedValue : undefined,
+    });
+    setStatus(res.ok
+      ? (action === 'accept' ? 'accepted' : action === 'reject' ? 'rejected' : 'snoozed')
+      : 'pending'); // si offline, on remet pending pour retry possible
+  };
+
   return (
     <li className="bg-white rounded-lg ring-1 ring-slate-100 px-3 py-2">
       <div className="flex items-start justify-between gap-2">
@@ -249,6 +266,51 @@ const RecommendationItem: React.FC<{ reco: RmsRecommendation }> = ({ reco }) => 
           <div className="text-[12.5px] font-semibold tabular-nums text-slate-900">{reco.confidence}%</div>
         </div>
       </div>
+
+      {/* Boutons d'action — uniquement si pending */}
+      {status === 'pending' && (
+        <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+          <button
+            onClick={() => handleAction('accept')}
+            className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 ring-1 ring-emerald-200 transition"
+          >
+            <Check className="w-3 h-3" /> Accepter
+          </button>
+          <button
+            onClick={() => handleAction('reject')}
+            className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 ring-1 ring-rose-200 transition"
+          >
+            <XIcon className="w-3 h-3" /> Rejeter
+          </button>
+          <button
+            onClick={() => handleAction('snooze')}
+            className="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-medium bg-slate-50 text-slate-600 hover:bg-slate-100 ring-1 ring-slate-200 transition"
+            title="Reporter — la reco reste visible mais ne déclenche pas d'alerte."
+          >
+            <Clock className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+      {status === 'syncing' && (
+        <div className="mt-2 pt-2 border-t border-slate-100 text-[10.5px] text-slate-500 italic">
+          Enregistrement en cours…
+        </div>
+      )}
+      {status === 'accepted' && (
+        <div className="mt-2 pt-2 border-t border-emerald-100 text-[10.5px] text-emerald-700 font-medium flex items-center gap-1">
+          <Check className="w-3 h-3" /> Recommandation acceptée — à appliquer dans le RMS.
+        </div>
+      )}
+      {status === 'rejected' && (
+        <div className="mt-2 pt-2 border-t border-rose-100 text-[10.5px] text-rose-700 font-medium flex items-center gap-1">
+          <XIcon className="w-3 h-3" /> Rejetée — feedback enregistré pour l'IA.
+        </div>
+      )}
+      {status === 'snoozed' && (
+        <div className="mt-2 pt-2 border-t border-slate-100 text-[10.5px] text-slate-600 font-medium flex items-center gap-1">
+          <Clock className="w-3 h-3" /> Reportée — réapparaîtra à la prochaine analyse.
+        </div>
+      )}
     </li>
   );
 };

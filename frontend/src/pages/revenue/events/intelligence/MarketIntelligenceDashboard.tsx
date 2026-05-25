@@ -97,7 +97,10 @@ export const MarketIntelligenceDashboard: React.FC = () => {
             <Sparkles className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-[15px] font-semibold text-slate-900">Intelligence Marché</h3>
+            <h3 className="text-[15px] font-semibold text-slate-900 flex items-center gap-2">
+              Intelligence Marché
+              <SourceBadge source={intelligence.source} freshnessHours={intelligence.freshnessHours} snapshotCount={intelligence.snapshotCount} />
+            </h3>
             <p className="text-[11.5px] text-slate-500">
               Compression · vélocité · prédictions · recommandations RMS
             </p>
@@ -300,3 +303,32 @@ function toneForScore(score: number): KpiCellProps['tone'] {
 function formatShortDate(date: string): string {
   return new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/* SOURCE BADGE                                                                */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+const SourceBadge: React.FC<{
+  source: 'lighthouse' | 'expedia' | 'mock';
+  freshnessHours: number;
+  snapshotCount: number;
+}> = ({ source, freshnessHours, snapshotCount }) => {
+  const isLive = source !== 'mock';
+  const label = source === 'lighthouse' ? 'Lighthouse'
+    : source === 'expedia' ? 'Expedia'
+    : 'Démo';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] uppercase font-bold tracking-wide ring-1',
+        isLive
+          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+          : 'bg-amber-50 text-amber-700 ring-amber-200',
+      )}
+      title={`Source ${label} · ${snapshotCount} snapshots · ${isLive ? `Fraîcheur ${freshnessHours}h` : 'Données synthétiques de démonstration'}`}
+    >
+      <span className={cn('w-1.5 h-1.5 rounded-full', isLive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500')} />
+      {isLive ? `Live · ${label}` : 'Démo'}
+    </span>
+  );
+};
