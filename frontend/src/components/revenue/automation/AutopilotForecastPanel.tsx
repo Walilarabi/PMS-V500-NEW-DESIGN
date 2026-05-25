@@ -11,7 +11,7 @@
  * Permet de lancer un push effectif vers le Channel Manager pour les
  * recommandations validées (boutons "Tout pousser" et "Rollback").
  */
-import React, { useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   Plane, Play, RotateCcw, Calendar, Shield, Zap, AlertCircle,
   CheckCircle2, Clock, ArrowRight,
@@ -21,6 +21,11 @@ import { tacticalRulesEngine } from '@/src/services/revenue/tacticalRulesEngine'
 import { getEventsForDate } from '@/src/data/rms/events';
 import type { MarketContext } from '@/src/types/revenue/tacticalRules.types';
 import { cn } from '@/src/lib/utils';
+import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
+import {
+  getAverageBarPriceAhead,
+  getBarPriceValueForDate,
+} from '@/src/lib/rms/calendarPriceSync';
 
 interface DayForecast {
   date: string;             // YYYY-MM-DD
@@ -86,7 +91,7 @@ export interface AutopilotForecastPanelProps {
 
 export const AutopilotForecastPanel: React.FC<AutopilotForecastPanelProps> = ({
   daysAhead = 30,
-  defaultBasePrice = 150,
+  defaultBasePrice,
 }) => {
   // Re-render quand les engines bougent — snapshot stable via version().
   useSyncExternalStore(
@@ -95,9 +100,35 @@ export const AutopilotForecastPanel: React.FC<AutopilotForecastPanelProps> = ({
     () => tacticalRulesEngine.version(),
   );
 
+  // Branchement Calendrier tarifaire — SOURCE UNIQUE DE VÉRITÉ pour les
+  // prix de référence. Avant cette correction, l'Autopilote utilisait un
+  // basePrice figé à 150€, indépendant du tableau RMS / du calendrier →
+  // divergence garantie. Le hook ci-dessous récupère le prix BAR (Best
+  // Available Rate) du type de chambre de référence, à chaque date du
+  // forecast, depuis le rateCalendarStore.
+  const roomTypes = useRateCalendarStore((s) => s.roomTypes);
+
+  // Prix par défaut = moyenne BAR sur les prochains jours du calendrier.
+  // Garantit que l'Autopilote démarre sa simulation avec une valeur
+  // cohérente avec ce que voit le RM dans le tableau RMS.
+  const calendarBasePrice = useMemo(
+    () => getAverageBarPriceAhead(roomTypes, daysAhead),
+    [roomTypes, daysAhead],
+  );
+  const initialBase = defaultBasePrice ?? calendarBasePrice;
+
   const [autopilot, setAutopilot] = useState(false);
-  const [basePrice, setBasePrice] = useState(defaultBasePrice);
+  const [basePrice, setBasePrice] = useState(initialBase);
+  const [basePriceOverride, setBasePriceOverride] = useState(false);
   const [pushed, setPushed] = useState<Set<string>>(new Set());
+
+  // Si le calendrier change ET que l'utilisateur n'a pas pris la main,
+  // resync le basePrice. Cohérence en temps réel.
+  useEffect(() => {
+    if (!basePriceOverride && Number.isFinite(initialBase) && initialBase > 0) {
+      setBasePrice(initialBase);
+    }
+  }, [initialBase, basePriceOverride]);
 
   const forecast = useMemo<DayForecast[]>(() => {
     const baseline = tacticalRulesEngine.getContext();
@@ -111,10 +142,19 @@ export const AutopilotForecastPanel: React.FC<AutopilotForecastPanelProps> = ({
       const ctx = deriveContext(date, baseline);
       const events = getEventsForDate(date).map((e) => e.name);
 
+      // Prix de référence du jour : si l'utilisateur a forcé un basePrice
+      // global on l'utilise pour toutes les dates (mode simulation).
+      // Sinon on prend le prix EXACT du calendrier pour cette date —
+      // ce qui garantit que la prévision Autopilote reflète à 100 % les
+      // prix réels du calendrier tarifaire.
+      const dailyBase = basePriceOverride
+        ? basePrice
+        : getBarPriceValueForDate(roomTypes, date);
+
       const result = rmsRuleEvaluator.evaluate({
         autopilot: false, // génération de prévision = jamais push réel
         context: ctx,
-        basePrice,
+        basePrice: dailyBase,
         previousPrice,
         date,
         silent: true, // ne pas inonder l'audit + bus avec 30 logs/évaluation
@@ -123,7 +163,7 @@ export const AutopilotForecastPanel: React.FC<AutopilotForecastPanelProps> = ({
       rows.push({
         date,
         weekday: d.toLocaleDateString('fr-FR', { weekday: 'short' }),
-        basePrice,
+        basePrice: dailyBase,
         previousPrice,
         events,
         result,
@@ -132,7 +172,7 @@ export const AutopilotForecastPanel: React.FC<AutopilotForecastPanelProps> = ({
     }
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [basePrice, daysAhead]);
+  }, [basePrice, basePriceOverride, daysAhead, roomTypes]);
 
   const stats = useMemo(() => {
     let up = 0, down = 0, blocked = 0, eventDays = 0;
@@ -190,11 +230,34 @@ export const AutopilotForecastPanel: React.FC<AutopilotForecastPanelProps> = ({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <div>
-            <label className="text-[10px] uppercase tracking-wider font-semibold text-gray-500 block">Prix base</label>
+            <label className="text-[10px] uppercase tracking-wider font-semibold text-gray-500 block flex items-center gap-1">
+              Prix base
+              {!basePriceOverride && (
+                <span
+                  className="inline-flex items-center px-1 py-px rounded-sm text-[9px] font-bold tracking-wide bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                  title="Synchronisé automatiquement avec le calendrier tarifaire"
+                >
+                  Calendrier
+                </span>
+              )}
+              {basePriceOverride && (
+                <button
+                  type="button"
+                  onClick={() => { setBasePriceOverride(false); setBasePrice(initialBase); }}
+                  className="text-[9px] font-medium text-violet-600 hover:underline"
+                  title="Revenir aux prix du calendrier tarifaire"
+                >
+                  Resync ↺
+                </button>
+              )}
+            </label>
             <input
               type="number"
               value={basePrice}
-              onChange={(e) => setBasePrice(Math.max(1, Number(e.target.value)))}
+              onChange={(e) => {
+                setBasePriceOverride(true);
+                setBasePrice(Math.max(1, Number(e.target.value)));
+              }}
               className="w-24 px-2 py-1.5 text-[13px] border border-[#E5E7EB] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#8B5CF6]/30"
             />
           </div>

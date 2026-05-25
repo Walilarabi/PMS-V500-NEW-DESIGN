@@ -8,15 +8,16 @@
 export type ImportSourceId =
   | 'lighthouse-file'
   | 'lighthouse-api'
-  | 'expedia'
-  | 'events';
+  | 'expedia';
+// NOTE : `events` retiré — l'import est centralisé dans le module Événements
+// (frontend/src/pages/revenue/events/EventImportModal.tsx).
 
 export type ImportSourceStatus =
   | 'file'             // import fichier disponible aujourd'hui
   | 'api-ready'        // API branchée et prête
   | 'api-coming-soon'; // API prévue, pas encore active
 
-export type ImportSourceIcon = 'lighthouse' | 'expedia' | 'events';
+export type ImportSourceIcon = 'lighthouse' | 'expedia';
 
 /**
  * Méta-description d'une source d'import, exposée à l'UI.

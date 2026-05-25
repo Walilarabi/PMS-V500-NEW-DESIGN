@@ -18,10 +18,11 @@ interface ImportSourceSelectorProps {
   onSelect: (source: ImportSourceMeta) => void;
 }
 
+// NOTE : la source 'events' n'est plus listée ici — l'import des
+// événements vit exclusivement dans le module Événements.
 const ICON_BY_KIND: Record<ImportSourceMeta['icon'], LucideIcon> = {
   lighthouse: Sparkles,
   expedia: FileSpreadsheet,
-  events: Clock,
 };
 
 const STATUS_META: Record<
@@ -80,9 +81,7 @@ export const ImportSourceSelector: React.FC<ImportSourceSelectorProps> = ({
                   'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
                   src.icon === 'lighthouse'
                     ? 'bg-violet-100 text-violet-700'
-                    : src.icon === 'expedia'
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-sky-100 text-sky-700'
+                    : 'bg-amber-100 text-amber-700'
                 )}
               >
                 <Icon className="h-5 w-5" strokeWidth={2.2} />

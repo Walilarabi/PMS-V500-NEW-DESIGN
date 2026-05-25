@@ -11,6 +11,13 @@
  */
 
 import { safePastValueFromVariation } from './safeMedian';
+import {
+  aggregateVariation,
+  demandVariationsPerDay,
+  positionDelta,
+  variationsPerDay,
+  type CompareLag,
+} from './historicalComparison';
 import type {
   LighthouseImport,
   LighthouseDayData,
@@ -331,65 +338,55 @@ export function buildMarketMonth(data: LighthouseImport): MarketDay[] {
 /* ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * Reconstitue la série « aujourd'hui vs passé » à partir des variations
- * Lighthouse. Les périodes J-14 et J-30 n'étant pas exposées dans le fichier
- * Lighthouse standard, elles retombent sur une approximation à partir de J-7.
+ * Reconstitue la série « aujourd'hui vs passé » à partir de la SÉRIE
+ * RÉELLE des médianes — pas d'extrapolation linéaire bricolée.
+ *
+ * Pour chaque jour de la série, on cherche son snapshot J-lag dans la
+ * même série (tolérance ±2 jours), et on utilise la médiane RÉELLEMENT
+ * observée à J-lag — pas un multiple arbitraire de `varVs7Days`.
+ *
+ * Outliers et données manquantes : gérés par `historicalComparison.ts`
+ * (IQR ×3, clamp ±60 %, fallback valeur courante).
  */
-function pastValue(
-  current: number,
-  period: ComparePeriodKey,
-  day: LighthouseDayData
-): number {
-  // Lighthouse fournit varVsYesterday / varVs3Days / varVs7Days en pourcentage.
-  // Bug fix Phase 4 : protégé contre les divisions par zéro et les résultats
-  // négatifs via safePastValueFromVariation (clamp -99% / +500%).
-  const variation = (() => {
-    switch (period) {
-      case 'hier':
-        return day.varVsYesterday;
-      case 'j3':
-        return day.varVs3Days;
-      case 'j7':
-        return day.varVs7Days;
-      case 'j14':
-        // approximation : 2x J-7 (variations cumulent grossièrement)
-        return day.varVs7Days != null ? day.varVs7Days * 2 : null;
-      case 'j30':
-        return day.varVs7Days != null ? day.varVs7Days * 4 : null;
-    }
-  })();
 
-  // Fallback sûr : si variation invalide → retourne la valeur actuelle
-  // plutôt qu'une valeur négative qui pourrait passer en aval.
-  return safePastValueFromVariation(current, variation) ?? Math.round(current);
-}
-
-/**
- * Mêmes valeurs que le mock pour la demande passée — on prend un offset
- * raisonnable selon la période, car Lighthouse ne trace pas la demande passée.
- */
-function pastDemand(current: number, period: ComparePeriodKey): number {
-  const offset: Record<ComparePeriodKey, number> = {
-    hier: -2, j3: -5, j7: -10, j14: -15, j30: -20,
-  };
-  return Math.max(2, Math.min(99, Math.round(current + offset[period])));
-}
+const COMPARE_PERIOD_TO_LAG: Record<ComparePeriodKey, CompareLag> = {
+  hier: 1, j3: 3, j7: 7, j14: 14, j30: 30,
+};
 
 export function buildComparisonData(
   data: LighthouseImport,
   period: ComparePeriodKey
 ): ComparisonDay[] {
-  return data.days
-    .filter((d) => d.ourPrice > 0 && d.compsetMedian > 0)
-    .map((d) => ({
+  const validDays = data.days.filter((d) => d.ourPrice > 0 && d.compsetMedian > 0);
+  if (validDays.length === 0) return [];
+
+  const lag = COMPARE_PERIOD_TO_LAG[period];
+  const medianVariations = variationsPerDay(validDays, lag);
+  const variationByDate = new Map(medianVariations.map((v) => [v.date, v]));
+  const demandVariations = demandVariationsPerDay(validDays, lag);
+  const demandByDate = new Map(demandVariations.map((v) => [v.date, v]));
+
+  return validDays.map((d) => {
+    const medVar = variationByDate.get(d.date);
+    const demVar = demandByDate.get(d.date);
+    // Si on a un snapshot historique → on prend sa valeur réelle.
+    // Sinon on tombe sur la valeur actuelle (pas de saut artificiel).
+    const medianPast = medVar && medVar.medianPast > 0
+      ? medVar.medianPast
+      : Math.round(d.compsetMedian);
+    const demandPast = demVar && demVar.demandPast != null
+      ? Math.round(demVar.demandPast)
+      : Math.round(d.marketDemandPercent);
+    return {
       date: d.date,
       label: shortDateLabel(d.date),
       demandToday: Math.round(d.marketDemandPercent),
-      demandPast: pastDemand(d.marketDemandPercent, period),
+      demandPast,
       medianToday: Math.round(d.compsetMedian),
-      medianPast: pastValue(d.compsetMedian, period, d),
+      medianPast,
       ourPrice: Math.round(d.ourPrice),
-    }));
+    };
+  });
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -415,24 +412,27 @@ function periodReferenceDate(period: ComparePeriodKey, today: Date): Date {
   return d;
 }
 
-function averageVariation(days: LighthouseDayData[], period: ComparePeriodKey): number {
-  const variations = days
-    .map((d) => {
-      switch (period) {
-        case 'hier':
-          return d.varVsYesterday;
-        case 'j3':
-          return d.varVs3Days;
-        case 'j7':
-          return d.varVs7Days;
-        case 'j14':
-          return d.varVs7Days != null ? d.varVs7Days * 2 : null;
-        case 'j30':
-          return d.varVs7Days != null ? d.varVs7Days * 4 : null;
-      }
-    })
-    .filter((v): v is number => v != null && Number.isFinite(v));
-  return variations.length ? mean(variations) : 0;
+/**
+ * Variation agrégée robuste pour une période.
+ *
+ * MIGRATION : remplace l'ancien `averageVariation` qui multipliait
+ * `varVs7Days * 2` (J-14) ou `× 4` (J-30) — extrapolation linéaire
+ * statistiquement fausse, source des "valeurs aberrantes" rapportées.
+ *
+ * Nouvelle méthode (cf. historicalComparison.ts) :
+ *   • compare la médiane RÉELLE à J vs J-lag via le snapshot le plus
+ *     proche (tolérance ±2 jours)
+ *   • filtre IQR ×3 sur la distribution des variations
+ *   • renvoie la médiane de la distribution (robuste aux outliers résiduels)
+ *   • clamp ±60 % (au-delà = donnée corrompue, exclue)
+ */
+function aggregatedMedianVariation(
+  days: LighthouseDayData[],
+  period: ComparePeriodKey,
+): number {
+  const lag: CompareLag = COMPARE_PERIOD_TO_LAG[period];
+  const { variationPct } = aggregateVariation(days, lag);
+  return variationPct;
 }
 
 export function buildComparePeriods(
@@ -445,7 +445,7 @@ export function buildComparePeriods(
   const avgOurPrice = mean(days.map((d) => d.ourPrice));
 
   return (['hier', 'j3', 'j7', 'j14', 'j30'] as ComparePeriodKey[]).map((key) => {
-    const pct = averageVariation(days, key);
+    const pct = aggregatedMedianVariation(days, key);
     // delta absolu = (pct/100) * prix moyen
     const delta = Math.round((pct / 100) * avgOurPrice);
     return {
@@ -464,24 +464,31 @@ export function buildQuickComparison(data: LighthouseImport): QuickComparisonRow
   if (days.length === 0) return [];
 
   return (['hier', 'j3', 'j7', 'j14'] as ComparePeriodKey[]).map((key) => {
-    const medianPctVar = averageVariation(days, key);
+    const lag: CompareLag = COMPARE_PERIOD_TO_LAG[key];
+
+    // Médiane delta — depuis la variation agrégée robuste
+    const medianPctVar = aggregatedMedianVariation(days, key);
     const avgMedian = mean(days.map((d) => d.compsetMedian));
     const medianDelta = Math.round((medianPctVar / 100) * avgMedian);
 
-    // demand delta = écart moyen demande aujourd'hui vs estimation passée
-    const demandDelta = Math.round(
-      mean(days.map((d) => d.marketDemandPercent - pastDemand(d.marketDemandPercent, key)))
-    );
+    // Demand delta — depuis la VRAIE variation historique (pas d'offset bidon)
+    const demandSeries = demandVariationsPerDay(days, lag);
+    const demandDeltas: number[] = [];
+    for (const e of demandSeries) {
+      if (e.demandPast != null) demandDeltas.push(e.demandNow - e.demandPast);
+    }
+    const demandDelta = demandDeltas.length > 0
+      ? Math.round(mean(demandDeltas))
+      : 0;
 
-    // gap delta = écart médiane vs notre prix (négatif = on est plus bas)
+    // Gap delta = écart médiane vs notre prix (négatif = on est plus bas)
     const avgOur = mean(days.map((d) => d.ourPrice));
     const gapDelta = Math.round(avgOur - avgMedian);
 
-    // position delta = approximation via rank average (positif = on gagne des places)
-    const ranks = days
-      .map((d) => d.rankPosition)
-      .filter((v): v is number => v != null);
-    const positionDelta = ranks.length ? Math.round((Math.random() - 0.5) * 2) : 0;
+    // Position delta — calculé depuis les vraies positions de rang historisées
+    // (PAS de Math.random — l'ancien code utilisait une valeur aléatoire qui
+    // produisait des résultats incohérents entre deux rendus identiques).
+    const posDelta = positionDelta(days, lag);
 
     return {
       key,
@@ -489,7 +496,7 @@ export function buildQuickComparison(data: LighthouseImport): QuickComparisonRow
       demandDelta,
       medianDelta,
       gapDelta,
-      positionDelta,
+      positionDelta: posDelta,
     };
   });
 }
