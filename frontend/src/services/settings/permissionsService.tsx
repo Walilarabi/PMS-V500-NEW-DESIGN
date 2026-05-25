@@ -78,10 +78,18 @@ const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
 function normalizeRole(role: string | null | undefined): RoleId {
   if (!role) return 'reader';
   const r = role.toLowerCase();
+  // Rôles internes RBAC
   if (r === 'admin') return 'admin';
   if (r === 'manager') return 'manager';
   if (r === 'receptionist') return 'receptionist';
   if (r === 'housekeeping') return 'housekeeping';
+  // Rôles DB (enum admin_user_role)
+  if (r === 'direction') return 'admin';
+  if (r === 'reception') return 'receptionist';
+  if (r === 'gouvernante') return 'housekeeping';
+  if (r === 'femme_de_chambre') return 'housekeeping';
+  if (r === 'maintenance') return 'housekeeping';
+  if (r === 'breakfast') return 'housekeeping';
   return 'reader';
 }
 
