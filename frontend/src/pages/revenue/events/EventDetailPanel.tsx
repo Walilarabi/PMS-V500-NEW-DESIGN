@@ -9,7 +9,7 @@
  *   • actions (modifier, dupliquer, archiver)
  */
 import React from 'react';
-import { X, Sparkles, Activity, TrendingUp, ShieldAlert, Building2, History, Copy, Archive, Edit3 } from 'lucide-react';
+import { X, Sparkles, Activity, TrendingUp, ShieldAlert, Building2, History, Copy, Archive, Edit3, Gauge } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import type { RMSMarketEvent } from '@/src/types/events';
 import { CATEGORY_LABELS, IMPACT_LABELS } from '@/src/types/events';
@@ -17,6 +17,7 @@ import { useEventsStore } from '@/src/store/eventsStore';
 import { ImpactBadge, impactColor } from './components/ImpactBadge';
 import { CATEGORY_ICON } from './components/CategoryIcon';
 import { aggregateImpact, daysBetween, formatDateRange } from '@/src/services/event-impact.engine';
+import { EventIntelligenceSection } from './intelligence/EventIntelligenceSection';
 
 interface EventDetailPanelProps {
   event: RMSMarketEvent | null;
@@ -70,6 +71,11 @@ export const EventDetailPanel: React.FC<EventDetailPanelProps> = ({ event, onClo
 
         {/* Content scroll */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+          {/* Intelligence Marché — premium section */}
+          <Section icon={Gauge} title="Intelligence marché (Pro)">
+            <EventIntelligenceSection event={event} />
+          </Section>
+
           {/* Coefficients */}
           <Section icon={Activity} title="Coefficients d'impact RMS">
             <div className="grid grid-cols-2 gap-2.5">

@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertCircle, Calendar, CalendarDays, CalendarRange, Euro, FileDown, FileSpreadsheet, Filter,
-  LineChart, List, Plus, Search, Sparkles, Upload, X,
+  LineChart, List, Plus, Search, Sparkles, Upload, X, Gauge,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
@@ -35,9 +35,10 @@ import { EventImportModal } from './events/EventImportModal';
 import { EventEditorModal } from './events/EventEditorModal';
 import { EventValidationModal } from './events/EventValidationModal';
 import { KpiTile } from './events/components/KpiTile';
+import { MarketIntelligenceDashboard } from './events/intelligence/MarketIntelligenceDashboard';
 import { exportEventsToExcel, exportEventsToPDF } from '@/src/services/event-export.service';
 
-type ViewMode = 'list' | 'calendar' | 'history';
+type ViewMode = 'list' | 'calendar' | 'history' | 'intelligence';
 
 export const EventsView: React.FC = () => {
   const {
@@ -226,6 +227,19 @@ export const EventsView: React.FC = () => {
             >
               <CalendarRange className="w-3.5 h-3.5" /> Historique
             </button>
+            <button
+              onClick={() => setView('intelligence')}
+              className={cn(
+                'px-3 py-1.5 text-[12.5px] font-medium rounded-md flex items-center gap-1.5 relative',
+                view === 'intelligence' ? 'bg-white text-violet-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+              )}
+              title="Intelligence Marché — compression, vélocité, recommandations RMS"
+            >
+              <Gauge className="w-3.5 h-3.5" /> Intelligence
+              <span className="text-[9px] uppercase font-bold tracking-wide bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-1 py-px rounded-sm">
+                Pro
+              </span>
+            </button>
           </div>
 
           {/* Search */}
@@ -287,6 +301,7 @@ export const EventsView: React.FC = () => {
               />
             )}
             {view === 'history' && <EventsHistory />}
+            {view === 'intelligence' && <MarketIntelligenceDashboard />}
 
             {/* Footer info */}
             <div className="mt-4 flex items-start gap-2 text-[12px] text-slate-500 bg-white/80 ring-1 ring-slate-100 rounded-2xl px-4 py-3">
