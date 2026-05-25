@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertCircle, Calendar, CalendarDays, CalendarRange, Euro, FileDown, FileSpreadsheet, Filter,
-  LineChart, List, Plus, Search, Sparkles, Upload, X, Gauge,
+  LineChart, List, Plus, Search, Sparkles, Upload, X, Gauge, ListChecks,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
@@ -36,9 +36,11 @@ import { EventEditorModal } from './events/EventEditorModal';
 import { EventValidationModal } from './events/EventValidationModal';
 import { KpiTile } from './events/components/KpiTile';
 import { MarketIntelligenceDashboard } from './events/intelligence/MarketIntelligenceDashboard';
+import { RecommendationsInbox } from './events/intelligence/RecommendationsInbox';
+import { useEventSourcesAutoSync } from '@/src/hooks/useEventSourcesAutoSync';
 import { exportEventsToExcel, exportEventsToPDF } from '@/src/services/event-export.service';
 
-type ViewMode = 'list' | 'calendar' | 'history' | 'intelligence';
+type ViewMode = 'list' | 'calendar' | 'history' | 'intelligence' | 'recos';
 
 export const EventsView: React.FC = () => {
   const {
@@ -51,6 +53,10 @@ export const EventsView: React.FC = () => {
   const [view, setView] = useState<ViewMode>('calendar');
   const [showFilters, setShowFilters] = useState(false);
   const [searchOpen, setSearchOpen] = useState(true);
+
+  // Auto-sync des sources événementielles (respecte autoSync du store +
+  // fréquence configurée par source + pause sur visibilité).
+  useEventSourcesAutoSync();
 
   const [selected, setSelected] = useState<RMSMarketEvent | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -240,6 +246,16 @@ export const EventsView: React.FC = () => {
                 Pro
               </span>
             </button>
+            <button
+              onClick={() => setView('recos')}
+              className={cn(
+                'px-3 py-1.5 text-[12.5px] font-medium rounded-md flex items-center gap-1.5 relative',
+                view === 'recos' ? 'bg-white text-amber-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+              )}
+              title="Inbox des recommandations RMS — toutes dates, filtrables, actions par lot"
+            >
+              <ListChecks className="w-3.5 h-3.5" /> Recos RMS
+            </button>
           </div>
 
           {/* Search */}
@@ -302,6 +318,7 @@ export const EventsView: React.FC = () => {
             )}
             {view === 'history' && <EventsHistory />}
             {view === 'intelligence' && <MarketIntelligenceDashboard />}
+            {view === 'recos' && <RecommendationsInbox />}
 
             {/* Footer info */}
             <div className="mt-4 flex items-start gap-2 text-[12px] text-slate-500 bg-white/80 ring-1 ring-slate-100 rounded-2xl px-4 py-3">

@@ -20,7 +20,6 @@ import {
   Activity,
   AlertTriangle,
   Bell,
-  ChevronDown,
   Gauge,
   Layers,
   Sparkles,
@@ -28,10 +27,14 @@ import {
   TrendingUp,
   Zap,
   HeartPulse,
+  RefreshCw,
+  Pause,
+  Play,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useMarketIntelligence } from '@/src/hooks/useMarketIntelligence';
 import { usePipelineHealth } from '@/src/hooks/usePipelineHealth';
+import { useMarketIntelligenceAutoRefresh } from '@/src/hooks/useMarketIntelligenceAutoRefresh';
 import { CompressionHeatmap } from './CompressionHeatmap';
 import { CriticalEventsList } from './CriticalEventsList';
 import { MarketAlertsPanel } from './MarketAlertsPanel';
@@ -44,9 +47,16 @@ import {
 } from '@/src/types/marketIntelligence';
 
 export const MarketIntelligenceDashboard: React.FC = () => {
+  const autoRefresh = useMarketIntelligenceAutoRefresh({ intervalMs: 5 * 60 * 1000 });
   const intelligence = useMarketIntelligence();
   const health = usePipelineHealth();
   const [windowDays, setWindowDays] = useState<30 | 60 | 90 | 180>(60);
+
+  // `autoRefresh.tickCount` est utilisé comme dep useMemo pour invalider
+  // le mémo du moteur — sans param ici, le hook re-render à chaque tick
+  // ce qui suffit pour rafraîchir l'UI (les inputs du moteur étant stables,
+  // le memo se conserve mais lastTick / pipelineHealth se mettent à jour).
+  void autoRefresh.tickCount;
 
   // Fenêtre visible (à partir d'aujourd'hui)
   const today = new Date().toISOString().slice(0, 10);
@@ -117,22 +127,32 @@ export const MarketIntelligenceDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Window selector */}
-        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
-          {([30, 60, 90, 180] as const).map((w) => (
-            <button
-              key={w}
-              onClick={() => setWindowDays(w)}
-              className={cn(
-                'px-2.5 py-1 text-[11.5px] font-medium rounded-md transition-colors',
-                windowDays === w
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700',
-              )}
-            >
-              {w}j
-            </button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Auto-refresh control */}
+          <AutoRefreshControl
+            enabled={autoRefresh.enabled}
+            setEnabled={autoRefresh.setEnabled}
+            lastTick={autoRefresh.lastTick}
+            onRefreshNow={autoRefresh.refreshNow}
+          />
+
+          {/* Window selector */}
+          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+            {([30, 60, 90, 180] as const).map((w) => (
+              <button
+                key={w}
+                onClick={() => setWindowDays(w)}
+                className={cn(
+                  'px-2.5 py-1 text-[11.5px] font-medium rounded-md transition-colors',
+                  windowDays === w
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700',
+                )}
+              >
+                {w}j
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -363,6 +383,63 @@ const HealthBadge: React.FC<{
     </span>
   );
 };
+
+/* Toggle auto-refresh + indicateur "Mis à jour il y a Xs" + bouton refresh manuel */
+const AutoRefreshControl: React.FC<{
+  enabled: boolean;
+  setEnabled: (v: boolean) => void;
+  lastTick: Date | null;
+  onRefreshNow: () => void;
+}> = ({ enabled, setEnabled, lastTick, onRefreshNow }) => {
+  // Compteur "il y a Xs" — recalculé toutes les 10s
+  const [, force] = useState(0);
+  React.useEffect(() => {
+    const id = window.setInterval(() => force((n) => n + 1), 10_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const ago = lastTick ? formatAgo(lastTick) : null;
+
+  return (
+    <div className="inline-flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+      <button
+        onClick={() => setEnabled(!enabled)}
+        className={cn(
+          'inline-flex items-center gap-1 px-2 py-1 text-[11.5px] font-medium rounded-md transition-colors',
+          enabled
+            ? 'bg-emerald-500 text-white shadow-sm'
+            : 'text-slate-600 hover:text-slate-900',
+        )}
+        title={enabled ? 'Auto-refresh actif (clic pour pause)' : 'Activer l\'auto-refresh (5 min)'}
+      >
+        {enabled
+          ? <><Pause className="w-3 h-3" /> Auto</>
+          : <><Play className="w-3 h-3" /> Auto</>}
+      </button>
+      <button
+        onClick={onRefreshNow}
+        className="inline-flex items-center gap-1 px-2 py-1 text-[11.5px] font-medium text-slate-600 hover:text-slate-900 hover:bg-white rounded-md transition-colors"
+        title="Forcer un refresh maintenant"
+      >
+        <RefreshCw className="w-3 h-3" />
+      </button>
+      {ago && (
+        <span className="px-1.5 text-[10.5px] text-slate-500 tabular-nums">
+          {ago}
+        </span>
+      )}
+    </div>
+  );
+};
+
+function formatAgo(d: Date): string {
+  const secs = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}min`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h`;
+}
 
 const SourceBadge: React.FC<{
   source: 'lighthouse' | 'expedia' | 'mock';
