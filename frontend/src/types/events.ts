@@ -46,7 +46,16 @@ export type EventCategory =
   | 'world_tour'        // tournée mondiale d'un artiste majeur
   | 'other';
 
-export type EventStatus = 'active' | 'planned' | 'archived' | 'cancelled';
+export type EventStatus =
+  | 'new'         // Nouveau — détecté automatiquement, non encore examiné
+  | 'confirmed'   // Confirmé — vérifié et validé par le RM
+  | 'estimated'   // Estimé — données non officielles, à confirmer
+  | 'active'      // Actif — en cours
+  | 'planned'     // Planifié
+  | 'modified'    // Modifié — mis à jour par rapport à la source originale
+  | 'to_verify'   // À vérifier — doute sur les données
+  | 'archived'    // Archivé
+  | 'cancelled';  // Annulé
 
 export type SyncFrequency = 'realtime' | '6h' | 'daily' | 'weekly' | 'monthly' | 'manual';
 

@@ -15,8 +15,9 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, Calendar, CalendarDays, Euro, FileDown, FileSpreadsheet, Filter,
-  Flame, LineChart, List, Plus, RotateCcw, Search, Sparkles, Upload, Users, X,
+  AlertCircle, Calendar, CalendarDays, Database, Euro, FileDown, FileSpreadsheet,
+  Filter, Flame, History, LineChart, List, Plus, RotateCcw, Search, Sparkles,
+  Upload, Users, X,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
@@ -34,6 +35,8 @@ import { EventsRightPanel } from './events/EventsRightPanel';
 import { EventsHeatmapView } from './events/EventsHeatmapView';
 import { EventSchoolHolidaysView } from './events/EventSchoolHolidaysView';
 import { EventLiveSearchModal } from './events/EventLiveSearchModal';
+import { EventSearchPanel } from './events/EventSearchPanel';
+import { EventsHistory } from './events/EventsHistory';
 import { KpiTile } from './events/components/KpiTile';
 import { YearSelector } from './events/components/YearSelector';
 import { EventsNotificationBanner } from './events/components/EventsNotificationBanner';
@@ -43,14 +46,18 @@ import { exportEventsToExcel, exportEventsToPDF } from '@/src/services/event-exp
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = 'list' | 'calendar' | 'heatmap' | 'holidays';
+type Tab = 'list' | 'calendar' | 'heatmap' | 'holidays' | 'sources' | 'history';
 
 const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'list',     label: 'Liste',              icon: List },
+  { id: 'list',     label: 'Liste',              icon: List      },
   { id: 'calendar', label: 'Calendrier',         icon: CalendarDays },
-  { id: 'heatmap',  label: 'Heatmap',            icon: Flame },
-  { id: 'holidays', label: 'Vacances scolaires', icon: Calendar },
+  { id: 'heatmap',  label: 'Heatmap',            icon: Flame     },
+  { id: 'holidays', label: 'Vacances scolaires', icon: Calendar  },
+  { id: 'sources',  label: 'Sources & API',      icon: Database  },
+  { id: 'history',  label: 'Import & Historique',icon: History   },
 ];
+
+const STORAGE_TAB_KEY = 'flowtym_events_last_tab';
 
 const QUICK_IMPACTS: { key: EventImpactLevel | 'all'; label: string }[] = [
   { key: 'all',      label: 'Tous' },
@@ -70,7 +77,17 @@ export const EventsView: React.FC = () => {
   const hotelName = useConfigStore((s) => s.hotel.name);
   const hotelCity = useConfigStore((s) => s.hotel.city);
 
-  const [tab, setTab] = useState<Tab>('list');
+  const [tab, setTabRaw] = useState<Tab>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_TAB_KEY);
+      const valid: Tab[] = ['list', 'calendar', 'heatmap', 'holidays', 'sources', 'history'];
+      return valid.includes(saved as Tab) ? (saved as Tab) : 'list';
+    } catch { return 'list'; }
+  });
+  function setTab(t: Tab) {
+    setTabRaw(t);
+    try { localStorage.setItem(STORAGE_TAB_KEY, t); } catch { /* storage unavailable */ }
+  }
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [selected, setSelected] = useState<RMSMarketEvent | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -137,6 +154,8 @@ export const EventsView: React.FC = () => {
   }
 
   const showRightPanel = tab === 'list' || tab === 'calendar';
+  const showFilters    = tab === 'list' || tab === 'calendar';
+  const [sourcePanelOpen, setSourcePanelOpen] = useState(false);
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
@@ -241,7 +260,7 @@ export const EventsView: React.FC = () => {
           </div>
 
           {/* Filtres rapides (Liste & Calendrier uniquement) */}
-          {(tab === 'list' || tab === 'calendar') && (
+          {showFilters && (
             <div className="px-4 py-3 space-y-2.5">
               {/* Recherche */}
               <div className="flex items-center gap-2.5 flex-wrap">
@@ -305,10 +324,21 @@ export const EventsView: React.FC = () => {
         </div>
 
         {/* ─── 4-6. CORPS PRINCIPAL ───────────────────────────────────────── */}
-        {showAdvanced && (tab === 'list' || tab === 'calendar') && (
+        {showAdvanced && showFilters && (
           <AdvancedFilters onClose={() => setShowAdvanced(false)} onReset={resetFilters} />
         )}
 
+        {/* Sources & API — pleine largeur */}
+        {tab === 'sources' && (
+          <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm overflow-hidden">
+            <EventSearchPanel open={true} onToggle={() => setTab('list')} />
+          </div>
+        )}
+
+        {/* Import & Historique — pleine largeur */}
+        {tab === 'history' && <EventsHistory />}
+
+        {tab !== 'sources' && tab !== 'history' && (
         <div className={cn('flex gap-4 items-start', !showRightPanel && 'block')}>
           <div className="flex-1 min-w-0 space-y-4">
             {tab === 'list' && <EventsList onSelect={setSelected} />}
@@ -336,6 +366,7 @@ export const EventsView: React.FC = () => {
             />
           )}
         </div>
+        )} {/* end tab !== sources && tab !== history */}
 
       </div>
 

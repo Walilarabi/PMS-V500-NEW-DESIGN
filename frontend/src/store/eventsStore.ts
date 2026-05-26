@@ -264,6 +264,16 @@ export const useEventsStore = create<EventsStore>()(
         const merged = Array.from(byId.values());
         const { deduped, merged: dups } = dedupEvents(merged);
         set({ events: deduped });
+        // Propagation RMS automatique — déclenche le Central Pricing Engine et
+        // le signal eventIntensity pour l'autopilote (effets de bord async).
+        const newAndUpdated = incoming.filter(
+          (ev) => ev.impact.compression >= 0, // toutes les gammes
+        );
+        if (newAndUpdated.length > 0) {
+          import('@/src/services/event-rms-integration.service')
+            .then(({ integrateEventsToRMS }) => integrateEventsToRMS(newAndUpdated))
+            .catch(() => { /* best-effort — ne bloque pas l'UI */ });
+        }
         return { added, updated, duplicates: dups };
       },
 
