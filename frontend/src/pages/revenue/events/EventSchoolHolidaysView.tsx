@@ -1,9 +1,11 @@
 /**
- * FLOWTYM Events — Vacances scolaires (France)
+ * FLOWTYM Events — Vacances scolaires multi-pays
  *
- * Source officielle : data.education.gouv.fr (dataset fr-en-calendrier-scolaire).
- * Pas de clé API requise — données ouvertes du Ministère de l'Éducation.
- * Couvre les périodes passées (2024, 2025), en cours (2026) et à venir (2027).
+ * • France   → API officielle data.education.gouv.fr (zones A/B/C/Corse)
+ * • Autres   → OpenHolidaysAPI (BE, CH, DE, ES, GB, IT, LU, NL, PT, AT)
+ *
+ * Toutes les données sont ouvertes — aucune clé API requise.
+ * Couvre 2024 → 2027 et expose un sélecteur année par défaut.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -13,11 +15,68 @@ import {
 import { cn } from '@/src/lib/utils';
 import {
   fetchSchoolHolidays,
+  fetchOpenHolidaysSchool,
   normalizeSchoolHoliday,
+  schoolHolidayImpact,
+  HOLIDAY_COUNTRIES,
   type SchoolHolidayRecord,
+  type HolidayCountry,
+  type CountryHoliday,
 } from '@/src/services/event-live-search.service';
 import { useEventsStore } from '@/src/store/eventsStore';
 import type { EventImpactLevel, RMSMarketEvent } from '@/src/types/events';
+
+// Convertit un CountryHoliday (OpenHolidaysAPI) vers le format unifié interne.
+function toUnifiedRecord(h: CountryHoliday, year: number): SchoolHolidayRecord {
+  return {
+    description:   h.name,
+    startDate:     h.startDate,
+    endDate:       h.endDate,
+    zones:         h.region ?? (h.nationwide ? 'National' : ''),
+    location:      h.countryCode,
+    anneeScolaire: `${year}-${year + 1}`,
+    population:    'Élèves',
+  };
+}
+
+// Normalise vers un RMSMarketEvent avec le pays correct
+function normalizeForeignHoliday(h: CountryHoliday, country: HolidayCountry): RMSMarketEvent {
+  const level = schoolHolidayImpact(h.name);
+  const now   = new Date().toISOString();
+  const slug  = (h.name + '_' + (h.region ?? '')).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
+  return {
+    id:             `vs_${country.code}_${slug}_${h.startDate}`,
+    name:           h.region ? `${h.name} — ${h.region}` : h.name,
+    category:       'culture',
+    status:         'active',
+    city:           country.name,
+    country:        country.code,
+    startDate:      h.startDate,
+    endDate:        h.endDate || h.startDate,
+    impact:         IMPACT_FROM_LEVEL[level],
+    influencePrice: INFLUENCE_FROM_LEVEL[level],
+    description:    `Vacances scolaires ${country.name} · ${h.region ?? (h.nationwide ? 'National' : '')}`.trim(),
+    sources:        ['school_holidays'],
+    primarySource:  `OpenHolidaysAPI · ${country.code}`,
+    rmsSynced:      false,
+    history:        [{ at: now, action: 'imported', source: 'openholidaysapi.org' }],
+    createdAt:      now,
+    updatedAt:      now,
+  };
+}
+
+const IMPACT_FROM_LEVEL: Record<EventImpactLevel, RMSMarketEvent['impact']> = {
+  hyper_compression: { demand: 45, adr: 38, occupancy: 25, pickup: 35, revpar: 44, compression: 95, confidence: 88, level: 'hyper_compression' },
+  critical:          { demand: 38, adr: 32, occupancy: 20, pickup: 30, revpar: 38, compression: 88, confidence: 85, level: 'critical' },
+  high:              { demand: 26, adr: 22, occupancy: 14, pickup: 22, revpar: 24, compression: 72, confidence: 82, level: 'high' },
+  medium:            { demand: 14, adr: 11, occupancy: 8,  pickup: 12, revpar: 13, compression: 50, confidence: 78, level: 'medium' },
+  low:               { demand: 6,  adr: 4,  occupancy: 3,  pickup: 5,  revpar: 5,  compression: 22, confidence: 72, level: 'low' },
+  very_low:          { demand: 3,  adr: 2,  occupancy: 1,  pickup: 2,  revpar: 2,  compression: 10, confidence: 65, level: 'very_low' },
+};
+
+const INFLUENCE_FROM_LEVEL: Record<EventImpactLevel, number> = {
+  hyper_compression: 45, critical: 30, high: 18, medium: 10, low: 5, very_low: 0,
+};
 
 const IMPACT_STYLES: Record<EventImpactLevel, { label: string; cls: string }> = {
   hyper_compression: { label: 'Hyper',       cls: 'bg-purple-50 text-purple-700 ring-purple-200' },
@@ -55,8 +114,9 @@ interface EventSchoolHolidaysViewProps {
 
 export const EventSchoolHolidaysView: React.FC<EventSchoolHolidaysViewProps> = ({ onImportEvents }) => {
   const [year, setYear] = useState<number>(2026);
+  const [country, setCountry] = useState<HolidayCountry>(HOLIDAY_COUNTRIES[0]);
   const [zone, setZone] = useState<string | undefined>(undefined);
-  const [records, setRecords] = useState<SchoolHolidayRecord[] | null>(null);
+  const [records, setRecords] = useState<Array<{ rec: SchoolHolidayRecord; ev: RMSMarketEvent }> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -70,10 +130,27 @@ export const EventSchoolHolidaysView: React.FC<EventSchoolHolidaysViewProps> = (
       setLoading(true);
       setError(null);
       try {
-        const r = await fetchSchoolHolidays({ year, zone });
-        if (!cancelled) {
-          setRecords(r);
-          setSelected(new Set(r.map(keyFor)));
+        if (country.code === 'FR') {
+          // Source officielle française avec zones
+          const r = await fetchSchoolHolidays({ year, zone });
+          if (!cancelled) {
+            const items = r.map((rec) => ({ rec, ev: normalizeSchoolHoliday(rec) }));
+            setRecords(items);
+            setSelected(new Set(items.map((i) => keyFor(i.rec))));
+          }
+        } else {
+          // OpenHolidaysAPI pour les autres pays
+          const raw = await fetchOpenHolidaysSchool(country, year);
+          if (!cancelled) {
+            const items = raw
+              .filter((h) => !zone || h.region === zone)
+              .map((h) => ({
+                rec: toUnifiedRecord(h, year),
+                ev:  normalizeForeignHoliday(h, country),
+              }));
+            setRecords(items);
+            setSelected(new Set(items.map((i) => keyFor(i.rec))));
+          }
         }
       } catch (e) {
         if (!cancelled) setError((e as Error).message);
@@ -83,10 +160,10 @@ export const EventSchoolHolidaysView: React.FC<EventSchoolHolidaysViewProps> = (
     }
     void load();
     return () => { cancelled = true; };
-  }, [year, zone]);
+  }, [country, year, zone]);
 
   const normalized = useMemo(
-    () => (records ?? []).map((r) => ({ rec: r, ev: normalizeSchoolHoliday(r), key: keyFor(r) })),
+    () => (records ?? []).map((item) => ({ rec: item.rec, ev: item.ev, key: keyFor(item.rec) })),
     [records],
   );
 
@@ -131,10 +208,12 @@ export const EventSchoolHolidaysView: React.FC<EventSchoolHolidaysViewProps> = (
         <div>
           <h2 className="text-[15px] font-bold text-slate-900 flex items-center gap-2">
             <Backpack className="w-4 h-4 text-violet-600" />
-            Vacances scolaires France
+            Vacances scolaires {country.flag} {country.name}
           </h2>
           <p className="text-[12px] text-slate-500 mt-0.5">
-            Calendrier officiel · data.education.gouv.fr · 4 années couvertes
+            {country.code === 'FR'
+              ? 'Calendrier officiel · data.education.gouv.fr · zones académiques A / B / C / Corse'
+              : 'Calendrier officiel · openholidaysapi.org · données ouvertes'}
           </p>
         </div>
         {importedCount > 0 && (
@@ -158,6 +237,24 @@ export const EventSchoolHolidaysView: React.FC<EventSchoolHolidaysViewProps> = (
         </div>
 
         <div className="px-5 py-4 flex flex-wrap items-end gap-5">
+          <div>
+            <label className="block text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1.5">
+              Pays <span className="text-slate-300">·</span> <span className="text-slate-700 font-semibold">{country.flag} {country.name}</span>
+            </label>
+            <select
+              value={country.code}
+              onChange={(e) => {
+                const c = HOLIDAY_COUNTRIES.find((h) => h.code === e.target.value);
+                if (c) { setCountry(c); setZone(undefined); }
+              }}
+              className="px-3 py-1.5 text-[12.5px] font-medium rounded-lg ring-1 ring-slate-200 bg-white outline-none focus:ring-violet-400 min-w-[180px]"
+            >
+              {HOLIDAY_COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1.5">
               Année <span className="text-slate-300">·</span> <span className="text-violet-600 font-semibold tabular-nums">{year}</span>
@@ -192,43 +289,45 @@ export const EventSchoolHolidaysView: React.FC<EventSchoolHolidaysViewProps> = (
             </div>
           </div>
 
-          <div>
-            <label className="block text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1.5">
-              Zone académique
-            </label>
-            <div className="flex items-center gap-1 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setZone(undefined)}
-                className={cn(
-                  'px-3 py-1.5 text-[12px] font-medium rounded-lg ring-1 transition-all',
-                  !zone
-                    ? 'bg-violet-50 text-violet-700 ring-violet-200'
-                    : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
-                )}
-              >
-                Toutes
-              </button>
-              {ZONES.map((z) => {
-                const active = zone === z;
-                return (
-                  <button
-                    key={z}
-                    type="button"
-                    onClick={() => setZone(z)}
-                    className={cn(
-                      'px-3 py-1.5 text-[12px] font-medium rounded-lg ring-1 transition-all',
-                      active
-                        ? 'bg-violet-50 text-violet-700 ring-violet-200'
-                        : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
-                    )}
-                  >
-                    {z}
-                  </button>
-                );
-              })}
+          {country.code === 'FR' && (
+            <div>
+              <label className="block text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1.5">
+                Zone académique
+              </label>
+              <div className="flex items-center gap-1 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setZone(undefined)}
+                  className={cn(
+                    'px-3 py-1.5 text-[12px] font-medium rounded-lg ring-1 transition-all',
+                    !zone
+                      ? 'bg-violet-50 text-violet-700 ring-violet-200'
+                      : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  Toutes
+                </button>
+                {ZONES.map((z) => {
+                  const active = zone === z;
+                  return (
+                    <button
+                      key={z}
+                      type="button"
+                      onClick={() => setZone(z)}
+                      className={cn(
+                        'px-3 py-1.5 text-[12px] font-medium rounded-lg ring-1 transition-all',
+                        active
+                          ? 'bg-violet-50 text-violet-700 ring-violet-200'
+                          : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
+                      )}
+                    >
+                      {z}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {loading && (
             <div className="flex items-center gap-2 text-[12px] text-violet-700 bg-violet-50 ring-1 ring-violet-100 px-3 py-2 rounded-lg">

@@ -472,3 +472,96 @@ export function normalizeSchoolHoliday(h: SchoolHolidayRecord): RMSMarketEvent {
     updatedAt:     now,
   };
 }
+
+// ─── Vacances scolaires multi-pays (OpenHolidaysAPI) ──────────────────────────
+
+/**
+ * Pays supportés pour les vacances scolaires.
+ * OpenHolidaysAPI couvre la majeure partie de l'UE + Royaume-Uni — pas les US.
+ */
+export interface HolidayCountry {
+  code: string;     // ISO 3166-1 alpha-2
+  name: string;
+  flag: string;     // emoji drapeau
+  lang: string;     // langue de retour préférée
+}
+
+export const HOLIDAY_COUNTRIES: HolidayCountry[] = [
+  { code: 'FR', name: 'France',       flag: '🇫🇷', lang: 'FR' },
+  { code: 'DE', name: 'Allemagne',    flag: '🇩🇪', lang: 'DE' },
+  { code: 'GB', name: 'Royaume-Uni',  flag: '🇬🇧', lang: 'EN' },
+  { code: 'ES', name: 'Espagne',      flag: '🇪🇸', lang: 'ES' },
+  { code: 'IT', name: 'Italie',       flag: '🇮🇹', lang: 'IT' },
+  { code: 'BE', name: 'Belgique',     flag: '🇧🇪', lang: 'FR' },
+  { code: 'CH', name: 'Suisse',       flag: '🇨🇭', lang: 'FR' },
+  { code: 'NL', name: 'Pays-Bas',     flag: '🇳🇱', lang: 'EN' },
+  { code: 'AT', name: 'Autriche',     flag: '🇦🇹', lang: 'DE' },
+  { code: 'PT', name: 'Portugal',     flag: '🇵🇹', lang: 'PT' },
+  { code: 'LU', name: 'Luxembourg',   flag: '🇱🇺', lang: 'FR' },
+];
+
+export interface CountryHoliday {
+  countryCode: string;
+  name: string;
+  startDate: string;  // ISO YYYY-MM-DD
+  endDate:   string;
+  type:      string;  // "School" en majorité
+  region?:   string;  // subdivision (ex: "DE-BW")
+  nationwide: boolean;
+}
+
+const OPEN_HOLIDAYS_URL = 'https://openholidaysapi.org/SchoolHolidays';
+
+export async function fetchOpenHolidaysSchool(
+  country: HolidayCountry,
+  year: number,
+): Promise<CountryHoliday[]> {
+  const params = new URLSearchParams({
+    countryIsoCode:  country.code,
+    languageIsoCode: country.lang,
+    validFrom:       `${year}-01-01`,
+    validTo:         `${year}-12-31`,
+  });
+
+  const r = await fetch(`${OPEN_HOLIDAYS_URL}?${params.toString()}`, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!r.ok) throw new Error(`OpenHolidays ${country.code}: HTTP ${r.status}`);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any[] = await r.json();
+  return data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((rec: any): CountryHoliday => {
+      const nameList: Array<{ language: string; text: string }> = rec.name ?? [];
+      const nameEntry = nameList.find((n) => n.language === country.lang) ?? nameList[0];
+      return {
+        countryCode: country.code,
+        name:        nameEntry?.text ?? '—',
+        startDate:   String(rec.startDate ?? '').substring(0, 10),
+        endDate:     String(rec.endDate   ?? '').substring(0, 10),
+        type:        String(rec.type ?? 'School'),
+        region:      rec.subdivisions?.[0]?.shortName,
+        nationwide:  Boolean(rec.nationwide),
+      };
+    })
+    .filter((h) => h.startDate && h.name);
+}
+
+/**
+ * Récupère les vacances scolaires de plusieurs pays en parallèle.
+ * Les pays en erreur sont simplement omis (sans bloquer l'ensemble).
+ */
+export async function fetchOpenHolidaysMulti(
+  countries: HolidayCountry[],
+  year: number,
+): Promise<Record<string, CountryHoliday[]>> {
+  const results = await Promise.allSettled(
+    countries.map((c) => fetchOpenHolidaysSchool(c, year).then((rows) => ({ code: c.code, rows }))),
+  );
+  const out: Record<string, CountryHoliday[]> = {};
+  for (const r of results) {
+    if (r.status === 'fulfilled') out[r.value.code] = r.value.rows;
+  }
+  return out;
+}

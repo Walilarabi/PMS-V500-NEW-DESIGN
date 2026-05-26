@@ -1,19 +1,22 @@
 /**
- * FLOWTYM RMS — Module Événements
+ * FLOWTYM RMS — Module Événements (page principale)
  *
- * Architecture à 3 sections clairement séparées :
- *   • Événements       — calendrier, liste, intelligence RM, recos, historique
- *   • Vacances scolaires — calendrier officiel France 2024 → 2027
- *   • Recherche Live     — Ticketmaster · OpenAgenda en temps réel
+ * Architecture stricte (validée par maquette) :
+ *   • En-tête : titre + actions (Importer Excel, Ajouter un événement)
+ *   • 5 cartes KPI horizontales
+ *   • Menu interne horizontal : Liste | Calendrier | Heatmap | Vacances scolaires
+ *   • Layout 2 colonnes (Liste & Calendrier uniquement) :
+ *       - colonne principale : vue active
+ *       - panneau droit (320 px) : mini-calendrier vacances + heatmap pays + recherche
+ *   • Heatmap & Vacances scolaires : vue pleine largeur
  *
- * Navigation : panneau gauche fixe (200 px) + contenu scrollable.
- * Filtres     : barre horizontale contextuelle, uniquement section Événements.
+ * Conserve les deux menus globaux de Flowtym (vertical gauche + horizontal haut).
+ * AUCUN second menu latéral interne dans la page.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  AlertCircle, Backpack, Calendar, CalendarDays, CalendarRange, ChevronRight,
-  Euro, FileDown, FileSpreadsheet, Filter, Gauge, LineChart, List, ListChecks,
-  Plus, Radio, Search, Sparkles, Upload, X,
+  AlertCircle, Calendar, CalendarDays, Euro, FileDown, FileSpreadsheet, Filter,
+  Flame, LineChart, List, Plus, RotateCcw, Search, Sparkles, Upload, Users, X,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
@@ -23,40 +26,30 @@ import type { EventCategory, EventImpactLevel, RMSMarketEvent } from '@/src/type
 import { CATEGORY_LABELS, IMPACT_LABELS } from '@/src/types/events';
 import { EventsList } from './events/EventsList';
 import { EventsCalendar } from './events/EventsCalendar';
-import { EventsHistory } from './events/EventsHistory';
 import { EventDetailPanel } from './events/EventDetailPanel';
-import { EventSearchPanel } from './events/EventSearchPanel';
 import { EventImportModal } from './events/EventImportModal';
 import { EventEditorModal } from './events/EventEditorModal';
 import { EventValidationModal } from './events/EventValidationModal';
-import { KpiTile } from './events/components/KpiTile';
-import { MarketIntelligenceDashboard } from './events/intelligence/MarketIntelligenceDashboard';
-import { RecommendationsInbox } from './events/intelligence/RecommendationsInbox';
-import { EventLiveSearchView } from './events/EventLiveSearchView';
+import { EventsRightPanel } from './events/EventsRightPanel';
+import { EventsHeatmapView } from './events/EventsHeatmapView';
 import { EventSchoolHolidaysView } from './events/EventSchoolHolidaysView';
+import { EventLiveSearchModal } from './events/EventLiveSearchModal';
+import { KpiTile } from './events/components/KpiTile';
 import { useEventSourcesAutoSync } from '@/src/hooks/useEventSourcesAutoSync';
 import { exportEventsToExcel, exportEventsToPDF } from '@/src/services/event-export.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainSection  = 'events' | 'holidays' | 'livesearch';
-type EventSubView = 'calendar' | 'list' | 'intelligence' | 'recos' | 'history';
+type Tab = 'list' | 'calendar' | 'heatmap' | 'holidays';
 
-const EVENT_SUB_VIEWS: {
-  id: EventSubView;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  badge?: string;
-  title?: string;
-}[] = [
-  { id: 'calendar',     label: 'Calendrier',     icon: CalendarDays },
-  { id: 'list',         label: 'Liste',           icon: List },
-  { id: 'intelligence', label: 'Intelligence RM', icon: Gauge,       badge: 'Pro', title: 'Compression, vélocité, recommandations RMS' },
-  { id: 'recos',        label: 'Recos RMS',       icon: ListChecks,               title: 'Inbox recommandations — toutes dates' },
-  { id: 'history',      label: 'Historique',      icon: CalendarRange },
+const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'list',     label: 'Liste',              icon: List },
+  { id: 'calendar', label: 'Calendrier',         icon: CalendarDays },
+  { id: 'heatmap',  label: 'Heatmap',            icon: Flame },
+  { id: 'holidays', label: 'Vacances scolaires', icon: Calendar },
 ];
 
-const QUICK_FILTERS: { key: EventImpactLevel | 'all'; label: string }[] = [
+const QUICK_IMPACTS: { key: EventImpactLevel | 'all'; label: string }[] = [
   { key: 'all',      label: 'Tous' },
   { key: 'critical', label: 'Critique' },
   { key: 'high',     label: 'Fort' },
@@ -65,111 +58,6 @@ const QUICK_FILTERS: { key: EventImpactLevel | 'all'; label: string }[] = [
 ];
 
 const YEAR_PRESETS = [2024, 2025, 2026, 2027] as const;
-
-// ─── Panneau de navigation gauche ────────────────────────────────────────────
-
-function ModuleNav({
-  section,
-  onSection,
-  eventsView,
-  onEventsView,
-}: {
-  section: MainSection;
-  onSection: (s: MainSection) => void;
-  eventsView: EventSubView;
-  onEventsView: (v: EventSubView) => void;
-}) {
-  return (
-    <nav
-      aria-label="Navigation module événements"
-      className="w-52 shrink-0 bg-white border-r border-slate-100 flex flex-col overflow-y-auto"
-    >
-      <div className="px-3 pt-5 pb-6 flex flex-col gap-0.5">
-
-        {/* ── Événements ─────────────────── */}
-        <button
-          onClick={() => onSection('events')}
-          className={cn(
-            'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-semibold transition-colors',
-            section === 'events'
-              ? 'bg-violet-50 text-violet-700'
-              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-          )}
-        >
-          <Calendar className="w-4 h-4 shrink-0" />
-          <span className="flex-1 text-left">Événements</span>
-          {section !== 'events' && <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
-        </button>
-
-        {section === 'events' && (
-          <div className="ml-3 flex flex-col gap-0.5 mt-0.5 mb-1">
-            {EVENT_SUB_VIEWS.map((sv) => {
-              const active = eventsView === sv.id;
-              return (
-                <button
-                  key={sv.id}
-                  onClick={() => onEventsView(sv.id)}
-                  title={sv.title}
-                  className={cn(
-                    'w-full flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-lg text-[12px] transition-colors',
-                    active
-                      ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-100 font-medium'
-                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50',
-                  )}
-                >
-                  <sv.icon className="w-3.5 h-3.5 shrink-0" />
-                  <span className="flex-1 text-left">{sv.label}</span>
-                  {sv.badge && (
-                    <span className="text-[8px] uppercase font-bold tracking-wide bg-gradient-to-r from-violet-600 to-indigo-500 text-white px-1 py-px rounded">
-                      {sv.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Vacances scolaires ──────────── */}
-        <div className="pt-2">
-          <div className="h-px bg-slate-100 mb-2" />
-          <button
-            onClick={() => onSection('holidays')}
-            className={cn(
-              'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-semibold transition-colors',
-              section === 'holidays'
-                ? 'bg-rose-50 text-rose-700'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-            )}
-          >
-            <Backpack className="w-4 h-4 shrink-0" />
-            <span className="flex-1 text-left leading-tight">Vacances scolaires</span>
-            {section !== 'holidays' && <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
-          </button>
-        </div>
-
-        {/* ── Recherche Live ──────────────── */}
-        <div className="pt-2">
-          <div className="h-px bg-slate-100 mb-2" />
-          <button
-            onClick={() => onSection('livesearch')}
-            className={cn(
-              'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-semibold transition-colors',
-              section === 'livesearch'
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-            )}
-          >
-            <Radio className="w-4 h-4 shrink-0" />
-            <span className="flex-1 text-left">Recherche Live</span>
-            {section !== 'livesearch' && <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
-          </button>
-        </div>
-
-      </div>
-    </nav>
-  );
-}
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
@@ -181,27 +69,31 @@ export const EventsView: React.FC = () => {
   const hotelName = useConfigStore((s) => s.hotel.name);
   const hotelCity = useConfigStore((s) => s.hotel.city);
 
-  const [section,   setSection]   = useState<MainSection>('events');
-  const [eventsView, setEventsView] = useState<EventSubView>('calendar');
-  const [showFilters, setShowFilters] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(true);
+  const [tab, setTab] = useState<Tab>('list');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [selected, setSelected] = useState<RMSMarketEvent | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [editor, setEditor] = useState<{
-    open: boolean; initial?: RMSMarketEvent | null; defaultDate?: string;
-  }>({ open: false });
+  const [editor, setEditor] = useState<{ open: boolean; initial?: RMSMarketEvent | null; defaultDate?: string }>({ open: false });
   const [validationOpen, setValidationOpen] = useState(false);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [liveSearchOpen, setLiveSearchOpen] = useState(false);
 
   useEventSourcesAutoSync();
   const kpis = useMemo(() => getKpis(), [getKpis]);
   const lastSearchAt = useEventsStore((s) => s.lastSearchAt);
 
+  // KPI Visiteurs estimés (somme des estimatedVisitors filtrés)
+  const filteredEvents = getFilteredEvents();
+  const estimatedVisitors = useMemo(
+    () => filteredEvents.reduce((acc, e) => acc + (e.estimatedVisitors ?? 0), 0),
+    [filteredEvents],
+  );
+
   useEffect(() => {
     if (lastSearchAt && pendingValidation.length > 0) setValidationOpen(true);
   }, [lastSearchAt, pendingValidation.length]);
 
-  // Déduit l'année active depuis les filtres dates (ex: 2026-01-01 → 2026-12-31 = année 2026)
+  // Année active dérivée des filtres de dates
   const activeYear = useMemo<number | undefined>(() => {
     if (!filters.fromDate) return undefined;
     const y = filters.fromDate.substring(0, 4);
@@ -211,13 +103,7 @@ export const EventsView: React.FC = () => {
 
   function selectYear(y: number | undefined) {
     if (!y) setFilters({ fromDate: undefined, toDate: undefined });
-    else     setFilters({ fromDate: `${y}-01-01`, toDate: `${y}-12-31` });
-  }
-
-  function handleSetSection(s: MainSection) {
-    setSection(s);
-    setExportMenuOpen(false);
-    setShowFilters(false);
+    else    setFilters({ fromDate: `${y}-01-01`, toDate: `${y}-12-31` });
   }
 
   function handleExport(kind: 'excel' | 'pdf') {
@@ -235,224 +121,238 @@ export const EventsView: React.FC = () => {
     setExportMenuOpen(false);
   }
 
+  function handleLaunchSearch(query: string) {
+    if (query.trim()) setFilters({ search: query.trim() });
+    setLiveSearchOpen(true);
+  }
+
+  const showRightPanel = tab === 'list' || tab === 'calendar';
+
   return (
-    <div className="flex-1 overflow-hidden flex">
+    <div className="flex-1 overflow-y-auto bg-slate-50/60">
+      <div className="px-6 pt-5 pb-10 space-y-4 max-w-[1600px] mx-auto">
 
-      {/* ─── PANNEAU NAVIGATION GAUCHE ────────────────────────────────────── */}
-      <ModuleNav
-        section={section}
-        onSection={handleSetSection}
-        eventsView={eventsView}
-        onEventsView={setEventsView}
-      />
-
-      {/* ─── CONTENU PRINCIPAL (scrollable) ───────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto bg-slate-50/60">
-
-        {/* ══ SECTION : ÉVÉNEMENTS ══════════════════════════════════════════ */}
-        {section === 'events' && (
-          <div className="px-6 pt-5 pb-10 space-y-4">
-
-            {/* En-tête + boutons d'action */}
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <RevenueHeader
-                icon={Calendar}
-                title="Événements"
-                subtitle="Visualisez et anticipez les événements impactant votre marché."
-                className="mb-0"
-                actions={null}
-              />
-              <div className="flex items-center gap-2 relative">
-                {/* Export */}
-                <div className="relative">
-                  <button
-                    onClick={() => setExportMenuOpen((v) => !v)}
-                    className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
-                  >
-                    <FileDown className="w-3.5 h-3.5" /> Exporter
-                  </button>
-                  {exportMenuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setExportMenuOpen(false)} />
-                      <div className="absolute right-0 top-full mt-1 w-56 z-20 bg-white rounded-xl ring-1 ring-slate-200 shadow-lg py-1 text-[13px]">
-                        <button onClick={() => handleExport('excel')} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
-                          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                          <div>
-                            <div className="font-medium text-slate-900">Exporter en Excel</div>
-                            <div className="text-[11px] text-slate-400">Couleurs d'impact + filtres</div>
-                          </div>
-                        </button>
-                        <button onClick={() => handleExport('pdf')} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
-                          <FileDown className="w-4 h-4 text-rose-600" />
-                          <div>
-                            <div className="font-medium text-slate-900">Exporter en PDF</div>
-                            <div className="text-[11px] text-slate-400">Document premium pour réunion RM</div>
-                          </div>
-                        </button>
+        {/* ─── 1. EN-TÊTE ─────────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <RevenueHeader
+            icon={Calendar}
+            title="Événements"
+            subtitle="Anticipez et maximisez votre performance grâce à la veille événementielle."
+            className="mb-0"
+            actions={null}
+          />
+          <div className="flex items-center gap-2 relative">
+            <div className="relative">
+              <button
+                onClick={() => setExportMenuOpen((v) => !v)}
+                className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
+              >
+                <FileDown className="w-3.5 h-3.5" /> Exporter
+              </button>
+              {exportMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setExportMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 w-56 z-20 bg-white rounded-xl ring-1 ring-slate-200 shadow-lg py-1 text-[13px]">
+                    <button onClick={() => handleExport('excel')} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <div>
+                        <div className="font-medium text-slate-900">Exporter en Excel</div>
+                        <div className="text-[11px] text-slate-400">Couleurs d'impact + filtres</div>
                       </div>
-                    </>
+                    </button>
+                    <button onClick={() => handleExport('pdf')} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2">
+                      <FileDown className="w-4 h-4 text-rose-600" />
+                      <div>
+                        <div className="font-medium text-slate-900">Exporter en PDF</div>
+                        <div className="text-[11px] text-slate-400">Rapport premium réunion RM</div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => setImportOpen(true)}
+              className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
+            >
+              <Upload className="w-3.5 h-3.5" /> Importer Excel
+            </button>
+            <button
+              onClick={() => setEditor({ open: true })}
+              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
+            >
+              <Plus className="w-3.5 h-3.5" /> Ajouter un événement
+            </button>
+          </div>
+        </div>
+
+        {/* ─── 2. KPI CARDS (5 cards) ─────────────────────────────────────── */}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+          <KpiTile icon={CalendarDays} tone="violet"  label="Événements à venir"     value={kpis.upcoming}                       hint="+8 ce mois-ci" />
+          <KpiTile icon={AlertCircle}  tone="rose"    label="Événements à fort impact" value={kpis.critical}                   hint="+3 ce mois-ci" />
+          <KpiTile icon={Euro}         tone="emerald" label="Impact ADR estimé"      value={`+${kpis.influencedAdrPct}%`}      hint="Moyenne pondérée" />
+          <KpiTile icon={LineChart}    tone="amber"   label="Impact RevPAR estimé"   value={`+${kpis.influencedRevparPct} pts`} hint="Moyenne pondérée" />
+          <KpiTile icon={Users}        tone="sky"     label="Visiteurs estimés"      value={formatBigNumber(estimatedVisitors)} hint="Sur les 90 prochains jours" />
+        </div>
+
+        {/* ─── 3. MENU HORIZONTAL INTERNE ─────────────────────────────────── */}
+        <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm">
+          <div className="flex items-center gap-1 px-3 border-b border-slate-100">
+            {TABS.map((t) => {
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={cn(
+                    'relative flex items-center gap-2 px-4 py-3 text-[13px] font-medium transition-colors',
+                    active
+                      ? 'text-violet-700'
+                      : 'text-slate-500 hover:text-slate-800',
                   )}
-                </div>
-                {/* Importer */}
-                <button
-                  onClick={() => setImportOpen(true)}
-                  className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[13px] font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
                 >
-                  <Upload className="w-3.5 h-3.5" /> Importer
+                  <t.icon className="w-4 h-4" />
+                  {t.label}
+                  {active && <span className="absolute left-3 right-3 -bottom-px h-0.5 bg-violet-600 rounded-t" />}
                 </button>
-                {/* Ajouter */}
+              );
+            })}
+          </div>
+
+          {/* Filtres rapides (Liste & Calendrier uniquement) */}
+          {(tab === 'list' || tab === 'calendar') && (
+            <div className="px-4 py-3 space-y-2.5">
+              {/* Recherche */}
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="flex-1 min-w-[260px] relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={(e) => setFilters({ search: e.target.value })}
+                    placeholder="Rechercher un événement, lieu, ville, catégorie…"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg ring-1 ring-slate-200 bg-slate-50/60 focus:bg-white focus:ring-violet-400 outline-none text-[13px]"
+                  />
+                </div>
                 <button
-                  onClick={() => setEditor({ open: true })}
-                  className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 flex items-center gap-1.5 shadow-sm shadow-violet-600/20"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className={cn(
+                    'px-3 py-2 rounded-lg ring-1 text-[12px] font-medium flex items-center gap-1.5 shrink-0',
+                    showAdvanced
+                      ? 'bg-violet-50 text-violet-700 ring-violet-200'
+                      : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50',
+                  )}
                 >
-                  <Plus className="w-3.5 h-3.5" /> Ajouter un événement
+                  <Filter className="w-3.5 h-3.5" /> Filtres avancés
+                </button>
+                <button
+                  onClick={() => { resetFilters(); }}
+                  className="px-3 py-2 rounded-lg ring-1 ring-slate-200 bg-white text-[12px] font-medium text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Réinitialiser
                 </button>
               </div>
-            </div>
 
-            {/* KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <KpiTile icon={CalendarDays} tone="violet"  label="Événements à venir"  value={kpis.upcoming}                    hint="+8 ce mois-ci" />
-              <KpiTile icon={AlertCircle}  tone="rose"    label="Impact fort / critique" value={kpis.critical}                 hint="+3 ce mois-ci" />
-              <KpiTile icon={Euro}         tone="emerald" label="Impact ADR estimé"    value={`+${kpis.influencedAdrPct}%`}    hint="Moyenne pondérée" />
-              <KpiTile icon={LineChart}    tone="amber"   label="Impact TO estimé"     value={`+${kpis.influencedRevparPct} pts`} hint="Moyenne pondérée" />
-            </div>
+              {/* Rangée filtres principaux : Pays / Ville / Catégorie / Impact / Statut */}
+              <FilterRow filters={filters} setFilters={setFilters} />
 
-            {/* Barre de filtres */}
-            <div className="flex flex-wrap items-center gap-2.5 bg-white rounded-2xl ring-1 ring-slate-100 px-4 py-3 shadow-sm">
-
-              {/* Sélecteur d'année */}
-              <div className="flex items-center gap-1 shrink-0" aria-label="Filtrer par année">
-                <button
-                  onClick={() => selectYear(undefined)}
-                  className={cn(
-                    'px-2 py-1 text-[11.5px] font-medium rounded-md ring-1 transition-all',
-                    !activeYear
-                      ? 'bg-violet-50 text-violet-700 ring-violet-200'
-                      : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
-                  )}
-                >
-                  Tous
-                </button>
-                {YEAR_PRESETS.map((y) => (
+              {/* Année + impacts rapides */}
+              <div className="flex items-center gap-2 flex-wrap pt-1">
+                <span className="text-[10.5px] uppercase tracking-wide text-slate-400 font-medium">Année</span>
+                <div className="flex items-center gap-1">
                   <button
-                    key={y}
-                    onClick={() => selectYear(activeYear === y ? undefined : y)}
-                    title={y === 2026 ? 'Année en cours' : y < 2026 ? 'Passé' : 'À venir'}
+                    onClick={() => selectYear(undefined)}
                     className={cn(
-                      'px-2 py-1 text-[11.5px] font-bold rounded-md ring-1 transition-all tabular-nums',
-                      activeYear === y
-                        ? y === 2026
-                          ? 'bg-violet-600 text-white ring-violet-600 shadow-sm'
-                          : y === 2027
-                            ? 'bg-emerald-600 text-white ring-emerald-600 shadow-sm'
-                            : 'bg-slate-700 text-white ring-slate-700 shadow-sm'
+                      'px-2 py-0.5 text-[11px] font-medium rounded-md ring-1 transition-all',
+                      !activeYear
+                        ? 'bg-violet-50 text-violet-700 ring-violet-200'
                         : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
                     )}
                   >
-                    {y}
+                    Tous
                   </button>
-                ))}
-              </div>
-
-              <div className="w-px h-5 bg-slate-200 shrink-0" />
-
-              {/* Recherche texte */}
-              <div className="flex-1 min-w-[180px] relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                <input
-                  type="text"
-                  value={filters.search}
-                  onChange={(e) => setFilters({ search: e.target.value })}
-                  placeholder="Nom, lieu, catégorie…"
-                  className="w-full pl-9 pr-3 py-1.5 rounded-lg ring-1 ring-slate-200 bg-slate-50/60 focus:bg-white focus:ring-violet-400 outline-none text-[13px]"
-                />
-              </div>
-
-              {/* Filtres d'impact rapides */}
-              <div className="flex items-center gap-1 shrink-0">
-                {QUICK_FILTERS.map((q) => (
-                  <button
-                    key={q.key}
-                    onClick={() =>
-                      setFilters({ minImpact: q.key === 'all' ? undefined : (q.key as EventImpactLevel) })
-                    }
-                    className={cn(
-                      'px-2 py-1 rounded-md text-[11.5px] font-medium ring-1 transition-all',
-                      filters.minImpact === q.key || (q.key === 'all' && !filters.minImpact)
-                        ? 'bg-violet-50 text-violet-700 ring-violet-200'
-                        : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50',
-                    )}
-                  >
-                    {q.label}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setShowFilters((v) => !v)}
-                className={cn(
-                  'px-2.5 py-1.5 rounded-lg ring-1 text-[12px] font-medium flex items-center gap-1.5 shrink-0',
-                  showFilters
-                    ? 'bg-violet-50 text-violet-700 ring-violet-200'
-                    : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50',
-                )}
-              >
-                <Filter className="w-3.5 h-3.5" /> Filtres avancés
-              </button>
-            </div>
-
-            {/* Tiroir filtres avancés */}
-            {showFilters && (
-              <AdvancedFilters
-                onClose={() => setShowFilters(false)}
-                onReset={resetFilters}
-              />
-            )}
-
-            {/* Corps : vue principale + panneau sources */}
-            <div className="flex gap-4 items-start">
-              <div className="flex-1 min-w-0">
-                {eventsView === 'list'         && <EventsList onSelect={setSelected} />}
-                {eventsView === 'calendar'     && (
-                  <EventsCalendar
-                    onSelectEvent={setSelected}
-                    onCreate={(date) => setEditor({ open: true, defaultDate: date })}
-                  />
-                )}
-                {eventsView === 'history'      && <EventsHistory />}
-                {eventsView === 'intelligence' && <MarketIntelligenceDashboard />}
-                {eventsView === 'recos'        && <RecommendationsInbox />}
-
-                <div className="mt-4 flex items-start gap-2 text-[12px] text-slate-500 bg-white/80 ring-1 ring-slate-100 rounded-2xl px-4 py-3">
-                  <Sparkles className="w-3.5 h-3.5 text-violet-500 mt-0.5 shrink-0" />
-                  <span>
-                    Les événements impactent automatiquement vos recommandations tarifaires, la pression marché et vos alertes.
-                  </span>
+                  {YEAR_PRESETS.map((y) => (
+                    <button
+                      key={y}
+                      onClick={() => selectYear(activeYear === y ? undefined : y)}
+                      title={y === 2026 ? 'Année en cours' : y < 2026 ? 'Passé' : 'À venir'}
+                      className={cn(
+                        'px-2 py-0.5 text-[11px] font-bold rounded-md ring-1 transition-all tabular-nums',
+                        activeYear === y
+                          ? y === 2026
+                            ? 'bg-violet-600 text-white ring-violet-600'
+                            : y === 2027
+                              ? 'bg-emerald-600 text-white ring-emerald-600'
+                              : 'bg-slate-700 text-white ring-slate-700'
+                          : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
+                      )}
+                    >
+                      {y}
+                    </button>
+                  ))}
+                </div>
+                <div className="w-px h-4 bg-slate-200" />
+                <span className="text-[10.5px] uppercase tracking-wide text-slate-400 font-medium">Impact</span>
+                <div className="flex items-center gap-1">
+                  {QUICK_IMPACTS.map((q) => {
+                    const active = filters.minImpact === q.key || (q.key === 'all' && !filters.minImpact);
+                    return (
+                      <button
+                        key={q.key}
+                        onClick={() => setFilters({ minImpact: q.key === 'all' ? undefined : (q.key as EventImpactLevel) })}
+                        className={cn(
+                          'px-2 py-0.5 rounded-md text-[11px] font-medium ring-1',
+                          active
+                            ? 'bg-violet-50 text-violet-700 ring-violet-200'
+                            : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50',
+                        )}
+                      >
+                        {q.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              <EventSearchPanel open={searchOpen} onToggle={() => setSearchOpen((v) => !v)} />
+            </div>
+          )}
+        </div>
+
+        {/* ─── 4-6. CORPS PRINCIPAL ───────────────────────────────────────── */}
+        {showAdvanced && (tab === 'list' || tab === 'calendar') && (
+          <AdvancedFilters onClose={() => setShowAdvanced(false)} onReset={resetFilters} />
+        )}
+
+        <div className={cn('flex gap-4 items-start', !showRightPanel && 'block')}>
+          <div className="flex-1 min-w-0 space-y-4">
+            {tab === 'list' && <EventsList onSelect={setSelected} />}
+            {tab === 'calendar' && (
+              <EventsCalendar
+                onSelectEvent={setSelected}
+                onCreate={(date) => setEditor({ open: true, defaultDate: date })}
+              />
+            )}
+            {tab === 'heatmap'  && <EventsHeatmapView />}
+            {tab === 'holidays' && <EventSchoolHolidaysView onImportEvents={() => setValidationOpen(true)} />}
+
+            <div className="flex items-start gap-2 text-[12px] text-slate-500 bg-white/80 ring-1 ring-slate-100 rounded-2xl px-4 py-3 shadow-sm">
+              <Sparkles className="w-3.5 h-3.5 text-violet-500 mt-0.5 shrink-0" />
+              <span>
+                Chaque événement validé alimente automatiquement le RMS, l'autopilote, le calendrier tarifaire et les alertes.
+              </span>
             </div>
           </div>
-        )}
 
-        {/* ══ SECTION : VACANCES SCOLAIRES ══════════════════════════════════ */}
-        {section === 'holidays' && (
-          <div className="px-6 pt-5 pb-10">
-            <EventSchoolHolidaysView onImportEvents={() => setValidationOpen(true)} />
-          </div>
-        )}
-
-        {/* ══ SECTION : RECHERCHE LIVE ══════════════════════════════════════ */}
-        {section === 'livesearch' && (
-          <div className="px-6 pt-5 pb-10">
-            <EventLiveSearchView onImportEvents={() => setValidationOpen(true)} />
-          </div>
-        )}
+          {showRightPanel && (
+            <EventsRightPanel
+              year={activeYear ?? new Date().getFullYear()}
+              onLaunchSearch={handleLaunchSearch}
+            />
+          )}
+        </div>
 
       </div>
 
-      {/* ─── PANNEAUX & MODALES ───────────────────────────────────────────── */}
+      {/* ─── PANNEAUX & MODALES ─────────────────────────────────────────────── */}
       <EventDetailPanel
         event={selected}
         onClose={() => setSelected(null)}
@@ -468,14 +368,101 @@ export const EventsView: React.FC = () => {
       <EventValidationModal
         open={validationOpen && pendingValidation.length > 0}
         candidates={pendingValidation}
-        onClose={() => {
-          setValidationOpen(false);
-          clearPendingValidation();
-        }}
+        onClose={() => { setValidationOpen(false); clearPendingValidation(); }}
+      />
+      <EventLiveSearchModal
+        open={liveSearchOpen}
+        onClose={() => setLiveSearchOpen(false)}
+        onImportEvents={() => setValidationOpen(true)}
       />
     </div>
   );
 };
+
+// ─── Rangée filtres principaux ────────────────────────────────────────────────
+
+function FilterRow({
+  filters, setFilters,
+}: {
+  filters: ReturnType<typeof useEventsStore.getState>['filters'];
+  setFilters: (patch: Partial<ReturnType<typeof useEventsStore.getState>['filters']>) => void;
+}) {
+  const allEvents = useEventsStore((s) => s.events);
+
+  const countries = useMemo(() => Array.from(new Set(allEvents.map((e) => e.country).filter(Boolean))).sort(), [allEvents]);
+  const cities    = useMemo(() => Array.from(new Set(allEvents.map((e) => e.city).filter(Boolean))).sort(),    [allEvents]);
+  const allCategories = Object.keys(CATEGORY_LABELS) as EventCategory[];
+
+  const cityValue     = filters.cities?.[0]     ?? '';
+  const countryValue  = filters.countries?.[0]  ?? '';
+  const catValue      = filters.categories?.[0] ?? '';
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+      <FilterField label="Pays">
+        <select
+          value={countryValue}
+          onChange={(e) => setFilters({ countries: e.target.value ? [e.target.value] : [] })}
+          className="w-full px-2 py-1.5 rounded-lg ring-1 ring-slate-200 text-[12px] bg-white outline-none focus:ring-violet-400"
+        >
+          <option value="">Tous</option>
+          {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </FilterField>
+      <FilterField label="Ville">
+        <select
+          value={cityValue}
+          onChange={(e) => setFilters({ cities: e.target.value ? [e.target.value] : [] })}
+          className="w-full px-2 py-1.5 rounded-lg ring-1 ring-slate-200 text-[12px] bg-white outline-none focus:ring-violet-400"
+        >
+          <option value="">Toutes</option>
+          {cities.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </FilterField>
+      <FilterField label="Catégorie">
+        <select
+          value={catValue}
+          onChange={(e) => setFilters({ categories: e.target.value ? [e.target.value as EventCategory] : [] })}
+          className="w-full px-2 py-1.5 rounded-lg ring-1 ring-slate-200 text-[12px] bg-white outline-none focus:ring-violet-400"
+        >
+          <option value="">Toutes</option>
+          {allCategories.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
+        </select>
+      </FilterField>
+      <FilterField label="Impact min.">
+        <select
+          value={filters.minImpact ?? ''}
+          onChange={(e) => setFilters({ minImpact: (e.target.value || undefined) as EventImpactLevel | undefined })}
+          className="w-full px-2 py-1.5 rounded-lg ring-1 ring-slate-200 text-[12px] bg-white outline-none focus:ring-violet-400"
+        >
+          <option value="">Tous</option>
+          {(['very_low', 'low', 'medium', 'high', 'critical', 'hyper_compression'] as EventImpactLevel[]).map((l) =>
+            <option key={l} value={l}>{IMPACT_LABELS[l]}</option>,
+          )}
+        </select>
+      </FilterField>
+      <FilterField label="Statut">
+        <select
+          value={filters.activeOnly ? 'active' : 'all'}
+          onChange={(e) => setFilters({ activeOnly: e.target.value === 'active' })}
+          className="w-full px-2 py-1.5 rounded-lg ring-1 ring-slate-200 text-[12px] bg-white outline-none focus:ring-violet-400"
+        >
+          <option value="all">Tous</option>
+          <option value="active">Actifs uniquement</option>
+        </select>
+      </FilterField>
+    </div>
+  );
+}
+
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-slate-400 font-medium mb-0.5">{label}</div>
+      {children}
+    </div>
+  );
+}
 
 // ─── Filtres avancés ──────────────────────────────────────────────────────────
 
@@ -487,28 +474,22 @@ function AdvancedFilters({ onClose, onReset }: { onClose: () => void; onReset: (
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-[13px] font-semibold text-slate-900">Filtres avancés</h4>
         <div className="flex items-center gap-2">
-          <button onClick={onReset} className="text-[12px] text-slate-500 hover:text-slate-700">
-            Réinitialiser
-          </button>
+          <button onClick={onReset} className="text-[12px] text-slate-500 hover:text-slate-700">Réinitialiser</button>
           <button onClick={onClose} className="p-1 rounded-md hover:bg-slate-100">
             <X className="w-3.5 h-3.5 text-slate-500" />
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <div>
-          <div className="text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1">Catégorie</div>
+          <div className="text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1">Catégories (multi)</div>
           <div className="flex flex-wrap gap-1.5">
             {allCategories.map((c) => (
               <button
                 key={c}
                 onClick={() => {
-                  const isOn = filters.categories.includes(c);
-                  setFilters({
-                    categories: isOn
-                      ? filters.categories.filter((x) => x !== c)
-                      : [...filters.categories, c],
-                  });
+                  const on = filters.categories.includes(c);
+                  setFilters({ categories: on ? filters.categories.filter((x) => x !== c) : [...filters.categories, c] });
                 }}
                 className={cn(
                   'px-2 py-0.5 rounded-md text-[11px] font-medium ring-1',
@@ -541,23 +522,6 @@ function AdvancedFilters({ onClose, onReset }: { onClose: () => void; onReset: (
           </div>
         </div>
         <div>
-          <div className="text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1">
-            Impact minimum
-          </div>
-          <select
-            value={filters.minImpact ?? ''}
-            onChange={(e) =>
-              setFilters({ minImpact: (e.target.value || undefined) as EventImpactLevel | undefined })
-            }
-            className="w-full px-2 py-1.5 rounded-lg ring-1 ring-slate-200 text-[12px] bg-white"
-          >
-            <option value="">Tous</option>
-            {(['very_low', 'low', 'medium', 'high', 'critical', 'hyper_compression'] as EventImpactLevel[]).map(
-              (l) => <option key={l} value={l}>{IMPACT_LABELS[l]}</option>,
-            )}
-          </select>
-        </div>
-        <div>
           <div className="text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1">Options</div>
           <label className="flex items-center gap-2 text-[12px] text-slate-600">
             <input
@@ -572,4 +536,12 @@ function AdvancedFilters({ onClose, onReset }: { onClose: () => void; onReset: (
       </div>
     </div>
   );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatBigNumber(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
 }
