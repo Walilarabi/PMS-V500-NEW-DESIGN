@@ -35,6 +35,9 @@ import { EventsHeatmapView } from './events/EventsHeatmapView';
 import { EventSchoolHolidaysView } from './events/EventSchoolHolidaysView';
 import { EventLiveSearchModal } from './events/EventLiveSearchModal';
 import { KpiTile } from './events/components/KpiTile';
+import { YearSelector } from './events/components/YearSelector';
+import { EventsNotificationBanner } from './events/components/EventsNotificationBanner';
+import { CountryFlag } from './events/components/CountryFlag';
 import { useEventSourcesAutoSync } from '@/src/hooks/useEventSourcesAutoSync';
 import { exportEventsToExcel, exportEventsToPDF } from '@/src/services/event-export.service';
 
@@ -56,8 +59,6 @@ const QUICK_IMPACTS: { key: EventImpactLevel | 'all'; label: string }[] = [
   { key: 'medium',   label: 'Moyen' },
   { key: 'low',      label: 'Faible' },
 ];
-
-const YEAR_PRESETS = [2024, 2025, 2026, 2027] as const;
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 
@@ -89,22 +90,31 @@ export const EventsView: React.FC = () => {
     [filteredEvents],
   );
 
-  useEffect(() => {
-    if (lastSearchAt && pendingValidation.length > 0) setValidationOpen(true);
-  }, [lastSearchAt, pendingValidation.length]);
+  // Notification discrète à la place de l'ouverture automatique de la modale.
+  // L'utilisateur peut ouvrir/masquer manuellement.
+  const [notifDismissed, setNotifDismissed] = useState(false);
+  useEffect(() => { if (lastSearchAt) setNotifDismissed(false); }, [lastSearchAt]);
+  const showNotif = !notifDismissed && pendingValidation.length > 0;
 
-  // Année active dérivée des filtres de dates
-  const activeYear = useMemo<number | undefined>(() => {
-    if (!filters.fromDate) return undefined;
+  // Année sélectionnée — dérivée des filtres de dates ; fallback année en cours.
+  const currentYear = new Date().getFullYear();
+  const activeYear = useMemo<number>(() => {
+    if (!filters.fromDate) return currentYear;
     const y = filters.fromDate.substring(0, 4);
-    return (filters.fromDate === `${y}-01-01` && filters.toDate === `${y}-12-31`)
-      ? Number(y) : undefined;
-  }, [filters.fromDate, filters.toDate]);
+    return Number(y) || currentYear;
+  }, [filters.fromDate, currentYear]);
 
-  function selectYear(y: number | undefined) {
-    if (!y) setFilters({ fromDate: undefined, toDate: undefined });
-    else    setFilters({ fromDate: `${y}-01-01`, toDate: `${y}-12-31` });
+  // Sélection d'année : initialise une fenêtre 01/01–31/12 (synchronise
+  // automatiquement liste, calendrier, heatmap, vacances scolaires).
+  function selectYear(y: number) {
+    setFilters({ fromDate: `${y}-01-01`, toDate: `${y}-12-31` });
   }
+
+  // Au premier chargement, force l'année en cours si aucune fenêtre n'est définie.
+  useEffect(() => {
+    if (!filters.fromDate && !filters.toDate) selectYear(currentYear);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleExport(kind: 'excel' | 'pdf') {
     const events = getFilteredEvents();
@@ -142,6 +152,7 @@ export const EventsView: React.FC = () => {
             actions={null}
           />
           <div className="flex items-center gap-2 relative">
+            <YearSelector value={activeYear} onChange={selectYear} />
             <div className="relative">
               <button
                 onClick={() => setExportMenuOpen((v) => !v)}
@@ -194,6 +205,16 @@ export const EventsView: React.FC = () => {
           <KpiTile icon={LineChart}    tone="amber"   label="Impact RevPAR estimé"   value={`+${kpis.influencedRevparPct} pts`} hint="Moyenne pondérée" />
           <KpiTile icon={Users}        tone="sky"     label="Visiteurs estimés"      value={formatBigNumber(estimatedVisitors)} hint="Sur les 90 prochains jours" />
         </div>
+
+        {/* ─── Notification discrète (pas de modale auto) ──────────────────── */}
+        {showNotif && (
+          <EventsNotificationBanner
+            count={pendingValidation.length}
+            lastSearchAt={lastSearchAt}
+            onOpen={() => setValidationOpen(true)}
+            onDismiss={() => setNotifDismissed(true)}
+          />
+        )}
 
         {/* ─── 3. MENU HORIZONTAL INTERNE ─────────────────────────────────── */}
         <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm">
@@ -256,42 +277,8 @@ export const EventsView: React.FC = () => {
               {/* Rangée filtres principaux : Pays / Ville / Catégorie / Impact / Statut */}
               <FilterRow filters={filters} setFilters={setFilters} />
 
-              {/* Année + impacts rapides */}
+              {/* Impacts rapides (l'année est gérée en haut via YearSelector) */}
               <div className="flex items-center gap-2 flex-wrap pt-1">
-                <span className="text-[10.5px] uppercase tracking-wide text-slate-400 font-medium">Année</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => selectYear(undefined)}
-                    className={cn(
-                      'px-2 py-0.5 text-[11px] font-medium rounded-md ring-1 transition-all',
-                      !activeYear
-                        ? 'bg-violet-50 text-violet-700 ring-violet-200'
-                        : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
-                    )}
-                  >
-                    Tous
-                  </button>
-                  {YEAR_PRESETS.map((y) => (
-                    <button
-                      key={y}
-                      onClick={() => selectYear(activeYear === y ? undefined : y)}
-                      title={y === 2026 ? 'Année en cours' : y < 2026 ? 'Passé' : 'À venir'}
-                      className={cn(
-                        'px-2 py-0.5 text-[11px] font-bold rounded-md ring-1 transition-all tabular-nums',
-                        activeYear === y
-                          ? y === 2026
-                            ? 'bg-violet-600 text-white ring-violet-600'
-                            : y === 2027
-                              ? 'bg-emerald-600 text-white ring-emerald-600'
-                              : 'bg-slate-700 text-white ring-slate-700'
-                          : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
-                      )}
-                    >
-                      {y}
-                    </button>
-                  ))}
-                </div>
-                <div className="w-px h-4 bg-slate-200" />
                 <span className="text-[10.5px] uppercase tracking-wide text-slate-400 font-medium">Impact</span>
                 <div className="flex items-center gap-1">
                   {QUICK_IMPACTS.map((q) => {
@@ -344,7 +331,7 @@ export const EventsView: React.FC = () => {
 
           {showRightPanel && (
             <EventsRightPanel
-              year={activeYear ?? new Date().getFullYear()}
+              year={activeYear}
               onLaunchSearch={handleLaunchSearch}
             />
           )}
@@ -400,14 +387,17 @@ function FilterRow({
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
       <FilterField label="Pays">
-        <select
-          value={countryValue}
-          onChange={(e) => setFilters({ countries: e.target.value ? [e.target.value] : [] })}
-          className="w-full px-2 py-1.5 rounded-lg ring-1 ring-slate-200 text-[12px] bg-white outline-none focus:ring-violet-400"
-        >
-          <option value="">Tous</option>
-          {countries.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <div className="flex items-center gap-1.5 rounded-lg ring-1 ring-slate-200 bg-white px-1.5 py-0.5 focus-within:ring-violet-400">
+          {countryValue ? <CountryFlag code={countryValue} size="xs" /> : <span className="w-[22px] h-4 rounded-sm bg-slate-100 ring-1 ring-slate-200" />}
+          <select
+            value={countryValue}
+            onChange={(e) => setFilters({ countries: e.target.value ? [e.target.value] : [] })}
+            className="w-full px-1 py-1 text-[12px] bg-white outline-none border-0 cursor-pointer"
+          >
+            <option value="">Tous les pays</option>
+            {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
       </FilterField>
       <FilterField label="Ville">
         <select

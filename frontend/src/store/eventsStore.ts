@@ -429,7 +429,20 @@ export const useEventsStore = create<EventsStore>()(
         autoSync: s.autoSync,
         syncLogs: s.syncLogs,
         refusedEvents: s.refusedEvents,
+        // Mémorisation des filtres entre sessions (dernière vue utilisateur).
+        filters: s.filters,
       }),
+      // Merge robuste : garantit que les champs récents (countries…) ne sont
+      // jamais `undefined` même si le snapshot persistant date d'avant leur
+      // ajout. Indispensable pour éviter les crashs au démarrage.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<EventsStore>;
+        return {
+          ...current,
+          ...p,
+          filters: { ...DEFAULT_FILTERS, ...(p.filters ?? {}) },
+        };
+      },
     },
   ),
 );

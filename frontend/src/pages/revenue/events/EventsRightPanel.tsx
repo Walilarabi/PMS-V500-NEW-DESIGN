@@ -21,6 +21,7 @@ import {
   type CountryHoliday,
   type HolidayCountry,
 } from '@/src/services/event-live-search.service';
+import { CountryFlag } from './components/CountryFlag';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -110,19 +111,22 @@ function HolidaysCalendarWidget({ year }: { year: number }) {
 
       {/* Country + Month nav */}
       <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2">
-        <select
-          value={country.code}
-          onChange={(e) => {
-            const c = HOLIDAY_COUNTRIES.find((h) => h.code === e.target.value);
-            if (c) { setCountry(c); setMonthOffset(0); }
-          }}
-          className="text-[12px] font-medium text-slate-800 rounded-lg ring-1 ring-slate-200 bg-white px-2 py-1 outline-none focus:ring-violet-400"
-          aria-label="Choisir le pays"
-        >
-          {HOLIDAY_COUNTRIES.map((c) => (
-            <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1.5 rounded-lg ring-1 ring-slate-200 bg-white pl-1.5 pr-0.5 py-0.5 focus-within:ring-violet-400">
+          <CountryFlag code={country.code} size="xs" />
+          <select
+            value={country.code}
+            onChange={(e) => {
+              const c = HOLIDAY_COUNTRIES.find((h) => h.code === e.target.value);
+              if (c) { setCountry(c); setMonthOffset(0); }
+            }}
+            className="text-[12px] font-medium text-slate-800 bg-white px-1 py-0.5 outline-none border-0 cursor-pointer"
+            aria-label="Choisir le pays"
+          >
+            {HOLIDAY_COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
+          </select>
+        </div>
 
         <div className="flex items-center gap-1">
           <button
@@ -288,9 +292,9 @@ function HolidaysHeatmapWidget({ year }: { year: number }) {
         </div>
         {/* Country rows */}
         {HEATMAP_COUNTRIES.map((c) => (
-          <div key={c.code} className="grid grid-cols-[64px_repeat(12,1fr)] gap-0.5 items-center mb-0.5">
-            <div className="text-[10px] font-medium text-slate-700 flex items-center gap-1 truncate">
-              <span>{c.flag}</span>
+          <div key={c.code} className="grid grid-cols-[72px_repeat(12,1fr)] gap-0.5 items-center mb-0.5">
+            <div className="text-[10px] font-medium text-slate-700 flex items-center gap-1.5 truncate">
+              <CountryFlag code={c.code} size="xs" />
               <span className="truncate">{c.name}</span>
             </div>
             {(matrix[c.code] ?? Array(12).fill(0)).map((days, idx) => (
