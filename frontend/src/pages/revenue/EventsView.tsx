@@ -159,7 +159,7 @@ export const EventsView: React.FC = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
-      <div className="px-6 pt-5 pb-10 space-y-4 max-w-[1600px] mx-auto">
+      <div className="px-4 pt-4 pb-10 space-y-3 max-w-[1920px] mx-auto">
 
         {/* ─── 1. EN-TÊTE ─────────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -328,11 +328,9 @@ export const EventsView: React.FC = () => {
           <AdvancedFilters onClose={() => setShowAdvanced(false)} onReset={resetFilters} />
         )}
 
-        {/* Sources & API — pleine largeur */}
+        {/* Sources & API — pleine largeur (géré par EventsSourcesView) */}
         {tab === 'sources' && (
-          <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm overflow-hidden">
-            <EventSearchPanel open={true} onToggle={() => setTab('list')} />
-          </div>
+          <EventSearchPanel open={true} onToggle={() => setTab('list')} />
         )}
 
         {/* Import & Historique — pleine largeur */}
