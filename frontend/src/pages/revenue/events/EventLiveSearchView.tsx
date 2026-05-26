@@ -6,8 +6,8 @@
  */
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  AlertCircle, Calendar, ChevronDown, ChevronUp, Eye, EyeOff,
-  Globe, Key, Loader2, MapPin, Plus, Radio, RotateCcw,
+  AlertCircle, AlertTriangle, Calendar, ChevronDown, ChevronUp, Eye, EyeOff,
+  Globe, Key, Loader2, MapPin, Plus, Radio, RotateCcw, Sparkles as SparklesIcon,
   ShieldCheck, Sparkles, TrendingUp, X,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
@@ -77,6 +77,64 @@ function fmtAttendance(ev: RMSMarketEvent): { text: string; estimated: boolean }
   const range = ATTENDANCE_RANGE[ev.impact.level] ?? ATTENDANCE_RANGE.medium;
   return { text: range.label, estimated: true };
 }
+
+// ─── Diff Engine ─────────────────────────────────────────────────────────────
+// Compare fetched events against the existing store and classify each one.
+
+export type DiffStatus = 'new' | 'modified' | 'existing' | 'cancelled';
+
+export interface DiffResult {
+  status: DiffStatus;
+  changes?: { field: string; before: string; after: string }[];
+}
+
+function normKey(ev: RMSMarketEvent): string {
+  return ev.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) + '_' + ev.startDate.slice(0, 7);
+}
+
+export function computeDiff(
+  fetched: RMSMarketEvent[],
+  existing: RMSMarketEvent[],
+): Map<string, DiffResult> {
+  const existingByKey = new Map<string, RMSMarketEvent>();
+  for (const ev of existing) existingByKey.set(normKey(ev), ev);
+
+  const result = new Map<string, DiffResult>();
+
+  for (const ev of fetched) {
+    const key = normKey(ev);
+    const stored = existingByKey.get(key);
+
+    if (!stored) {
+      result.set(ev.id, { status: 'new' });
+      continue;
+    }
+
+    const changes: { field: string; before: string; after: string }[] = [];
+
+    if (stored.startDate !== ev.startDate)
+      changes.push({ field: 'Date début', before: stored.startDate, after: ev.startDate });
+    if (stored.endDate !== ev.endDate)
+      changes.push({ field: 'Date fin', before: stored.endDate, after: ev.endDate });
+    if (stored.venue !== ev.venue && ev.venue)
+      changes.push({ field: 'Lieu', before: stored.venue ?? '—', after: ev.venue });
+    if (stored.status === 'cancelled' && ev.status !== 'cancelled')
+      changes.push({ field: 'Statut', before: 'Annulé', after: ev.status });
+
+    result.set(ev.id, changes.length > 0
+      ? { status: 'modified', changes }
+      : { status: 'existing' });
+  }
+
+  return result;
+}
+
+const DIFF_STYLES: Record<DiffStatus, { label: string; cls: string; Icon: React.ComponentType<{ className?: string }> }> = {
+  new:      { label: 'Nouveau',  cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200', Icon: SparklesIcon  },
+  modified: { label: 'Modifié', cls: 'bg-amber-50 text-amber-700 ring-amber-200',         Icon: AlertTriangle  },
+  existing: { label: 'Existant', cls: 'bg-slate-50 text-slate-500 ring-slate-200',        Icon: ShieldCheck    },
+  cancelled:{ label: 'Annulé',   cls: 'bg-rose-50 text-rose-600 ring-rose-200',           Icon: X              },
+};
 
 // ─── API Config Card ──────────────────────────────────────────────────────────
 
@@ -514,16 +572,22 @@ function ResultsTable({
   events,
   city,
   densePeriods,
+  diff,
   onImport,
 }: {
   events: RMSMarketEvent[];
   city: string;
   densePeriods: Map<string, DensePeriodInfo>;
+  diff: Map<string, DiffResult>;
   onImport: (selected: RMSMarketEvent[]) => void;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(events.map((e) => e.id)),
+  // Default: only pre-select new + modified events; existing can still be selected
+  const newOrModified = useMemo(
+    () => new Set(events.filter((e) => { const d = diff.get(e.id); return !d || d.status === 'new' || d.status === 'modified'; }).map((e) => e.id)),
+    [events, diff],
   );
+  const [selected, setSelected] = useState<Set<string>>(() => newOrModified);
+  const [diffFilter, setDiffFilter] = useState<DiffStatus | 'all'>('all');
   const [sortKey, setSortKey] = useState<'date' | 'impact' | 'name' | 'capacity'>('impact');
   const [tooltip, setTooltip] = useState<{ ev: RMSMarketEvent; x: number; y: number } | null>(null);
   const { IMPACT_LEVEL_ORDER } = useMemo(() => ({
@@ -531,7 +595,10 @@ function ResultsTable({
   }), []);
 
   const sorted = useMemo(() => {
-    return [...events].sort((a, b) => {
+    const filtered = diffFilter === 'all'
+      ? events
+      : events.filter((e) => (diff.get(e.id)?.status ?? 'new') === diffFilter);
+    return [...filtered].sort((a, b) => {
       if (sortKey === 'date')     return a.startDate.localeCompare(b.startDate);
       if (sortKey === 'impact')   return (IMPACT_LEVEL_ORDER[b.impact.level] ?? 0) - (IMPACT_LEVEL_ORDER[a.impact.level] ?? 0);
       if (sortKey === 'capacity') {
@@ -541,9 +608,9 @@ function ResultsTable({
       }
       return a.name.localeCompare(b.name);
     });
-  }, [events, sortKey, IMPACT_LEVEL_ORDER]);
+  }, [events, sortKey, IMPACT_LEVEL_ORDER, diffFilter, diff]);
 
-  const selectedEvents = events.filter((e) => selected.has(e.id));
+  const selectedEvents = sorted.filter((e) => selected.has(e.id));
 
   function toggleAll() {
     setSelected((s) => s.size === events.length ? new Set() : new Set(events.map((e) => e.id)));
@@ -574,40 +641,59 @@ function ResultsTable({
   return (
     <div className="rounded-2xl ring-1 ring-slate-200 bg-white overflow-hidden flex flex-col">
       {/* Results bar */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 bg-slate-50/40">
-        <div className="text-[12.5px] text-slate-700">
-          <span className="font-semibold text-slate-900 tabular-nums">{events.length}</span>
-          {' '}événement{events.length !== 1 ? 's' : ''} trouvé{events.length !== 1 ? 's' : ''} pour{' '}
-          <span className="font-semibold">{city}</span>
+      <div className="border-b border-slate-100 bg-slate-50/40">
+        <div className="flex flex-wrap items-center justify-between px-5 py-2.5 gap-3">
+          <div className="text-[12.5px] text-slate-700">
+            <span className="font-semibold text-slate-900 tabular-nums">{sorted.length}</span>
+            {' '}/ {events.length} événement{events.length !== 1 ? 's' : ''} pour{' '}
+            <span className="font-semibold">{city}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelected(new Set(sorted.map((e) => e.id)))} className="text-[11.5px] text-violet-600 hover:text-violet-800 font-medium">
+              Tout sélectionner
+            </button>
+            <span className="text-slate-300">·</span>
+            <button onClick={() => setSelected(new Set())} className="text-[11.5px] text-slate-500 hover:text-slate-800 font-medium">
+              Aucun
+            </button>
+            <span className="text-slate-300">·</span>
+            <button
+              onClick={() => onImport(selectedEvents)}
+              disabled={selectedEvents.length === 0}
+              className={cn(
+                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all',
+                selectedEvents.length > 0
+                  ? 'bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-600/20'
+                  : 'bg-slate-100 text-slate-400 cursor-not-allowed',
+              )}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Importer {selectedEvents.length > 0 ? `${selectedEvents.length} ` : ''}événement{selectedEvents.length !== 1 ? 's' : ''}
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setSelected(new Set(events.map((e) => e.id)))}
-            className="text-[11.5px] text-violet-600 hover:text-violet-800 font-medium"
-          >
-            Tout sélectionner
-          </button>
-          <span className="text-slate-300">·</span>
-          <button
-            onClick={() => setSelected(new Set())}
-            className="text-[11.5px] text-slate-500 hover:text-slate-800 font-medium"
-          >
-            Aucun
-          </button>
-          <span className="text-slate-300">·</span>
-          <button
-            onClick={() => onImport(selectedEvents)}
-            disabled={selectedEvents.length === 0}
-            className={cn(
-              'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all',
-              selectedEvents.length > 0
-                ? 'bg-violet-600 text-white hover:bg-violet-700 shadow-sm shadow-violet-600/20'
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed',
-            )}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Importer {selectedEvents.length > 0 ? `${selectedEvents.length} ` : ''}événement{selectedEvents.length !== 1 ? 's' : ''}
-          </button>
+        {/* Diff filter chips */}
+        <div className="flex items-center gap-1.5 px-5 pb-2.5">
+          {(['all', 'new', 'modified', 'existing'] as const).map((f) => {
+            const count = f === 'all' ? events.length : events.filter((e) => (diff.get(e.id)?.status ?? 'new') === f).length;
+            const active = diffFilter === f;
+            return (
+              <button
+                key={f}
+                onClick={() => setDiffFilter(f)}
+                className={cn(
+                  'flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium ring-1 transition-all',
+                  active ? 'bg-slate-800 text-white ring-slate-800' : 'bg-white text-slate-600 ring-slate-200 hover:ring-slate-300',
+                )}
+              >
+                {f === 'all'      && 'Tous'}
+                {f === 'new'      && <><SparklesIcon className="w-3 h-3 text-emerald-500" /> Nouveaux</>}
+                {f === 'modified' && <><AlertTriangle className="w-3 h-3 text-amber-500" /> Modifiés</>}
+                {f === 'existing' && <><ShieldCheck className="w-3 h-3 text-slate-400" /> Existants</>}
+                <span className={cn('ml-0.5 tabular-nums', active ? 'text-white/70' : 'text-slate-400')}>{count}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -626,6 +712,7 @@ function ResultsTable({
                 />
               </th>
               <SortTh label="Événement" k="name" />
+              <th className="px-3 py-2.5 font-medium">Statut</th>
               <th className="px-3 py-2.5 font-medium">Source</th>
               <SortTh label="Dates" k="date" />
               <th className="px-3 py-2.5 font-medium">Durée</th>
@@ -675,6 +762,17 @@ function ResultsTable({
                         </span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {(() => {
+                      const d = diff.get(ev.id) ?? { status: 'new' as DiffStatus };
+                      const ds = DIFF_STYLES[d.status];
+                      return (
+                        <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset', ds.cls)}>
+                          <ds.Icon className="w-2.5 h-2.5" />{ds.label}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-2.5">
                     <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset', srcStyle.cls)}>
@@ -844,9 +942,14 @@ interface EventLiveSearchViewProps {
 
 export const EventLiveSearchView: React.FC<EventLiveSearchViewProps> = ({ onImportEvents }) => {
   const [cfg, setCfg] = useState<LiveSearchConfig>(getLiveConfig);
-  const [results, setResults] = useState<{ events: RMSMarketEvent[]; city: string; densePeriods: Map<string, DensePeriodInfo> } | null>(null);
+  const [results, setResults] = useState<{
+    events: RMSMarketEvent[];
+    city: string;
+    densePeriods: Map<string, DensePeriodInfo>;
+    diff: Map<string, DiffResult>;
+  } | null>(null);
   const [importedCount, setImportedCount] = useState(0);
-  const { setPendingValidation } = useEventsStore();
+  const { setPendingValidation, getFilteredEvents } = useEventsStore();
 
   function handleImport(selected: RMSMarketEvent[]) {
     if (selected.length === 0) return;
@@ -882,13 +985,17 @@ export const EventLiveSearchView: React.FC<EventLiveSearchViewProps> = ({ onImpo
       {/* Search */}
       <SearchCard
         cfg={cfg}
-        onResults={(r) => { setResults({ events: r.events, city: r.city, densePeriods: r.densePeriods }); setImportedCount(0); }}
+        onResults={(r) => {
+          const diff = computeDiff(r.events, getFilteredEvents());
+          setResults({ events: r.events, city: r.city, densePeriods: r.densePeriods, diff });
+          setImportedCount(0);
+        }}
       />
 
       {/* Results */}
       {results !== null
         ? results.events.length > 0
-          ? <ResultsTable events={results.events} city={results.city} densePeriods={results.densePeriods} onImport={handleImport} />
+          ? <ResultsTable events={results.events} city={results.city} densePeriods={results.densePeriods} diff={results.diff} onImport={handleImport} />
           : (
             <div className="rounded-2xl ring-1 ring-slate-200 bg-white py-12 flex flex-col items-center gap-2 text-center">
               <RotateCcw className="w-8 h-8 text-slate-300" />
