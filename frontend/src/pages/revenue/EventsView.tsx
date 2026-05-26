@@ -370,6 +370,9 @@ export const EventsView: React.FC = () => {
 
       </div>
 
+      {/* ─── BARRE DE STATUT INFÉRIEURE ──────────────────────────────────────── */}
+      <EventsStatusBar />
+
       {/* ─── PANNEAUX & MODALES ─────────────────────────────────────────────── */}
       <EventDetailPanel
         event={selected}
@@ -396,6 +399,82 @@ export const EventsView: React.FC = () => {
     </div>
   );
 };
+
+// ─── Barre de statut inférieure ──────────────────────────────────────────────
+
+function EventsStatusBar() {
+  const { syncLogs, sources, lastSearchAt } = useEventsStore();
+  const activeSources = sources.filter((s) => s.active).length;
+  const lastLog = syncLogs[0];
+  const autoSync = useEventsStore((s) => s.autoSync);
+
+  function formatSyncTime(iso?: string): string {
+    if (!iso) return 'Jamais';
+    const d = new Date(iso);
+    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+      + ', ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function handleDailyReport() {
+    const events = useEventsStore.getState().getFilteredEvents();
+    import('@/src/services/event-export.service').then(({ exportEventsToPDF }) => {
+      const ctx = {
+        hotelName: '',
+        city: 'Paris',
+        fileBaseName: `flowtym_rapport_quotidien_${new Date().toISOString().slice(0, 10)}`,
+        kpis: { upcoming: 0, critical: 0, influencedAdrPct: 0, influencedRevparPct: 0 },
+      };
+      exportEventsToPDF(events, ctx);
+    });
+  }
+
+  return (
+    <div className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 backdrop-blur px-6 py-2 flex flex-wrap items-center justify-between gap-3 text-[11.5px] text-slate-500">
+      <div className="flex items-center gap-4 flex-wrap">
+        {/* Dernière synchronisation */}
+        <span className="flex items-center gap-1.5">
+          <span className="text-slate-400">Dernière synchronisation :</span>
+          <strong className="text-slate-700 tabular-nums">
+            {formatSyncTime(lastSearchAt ?? lastLog?.at)}
+          </strong>
+        </span>
+        <span className="text-slate-200">·</span>
+        {/* Moteur */}
+        <span className="flex items-center gap-1.5">
+          <span className={cn(
+            'w-1.5 h-1.5 rounded-full',
+            autoSync ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse' : 'bg-slate-300',
+          )} />
+          <span className={autoSync ? 'text-emerald-700 font-medium' : 'text-slate-500'}>
+            Moteur de recherche {autoSync ? 'actif' : 'inactif'}
+          </span>
+        </span>
+        <span className="text-slate-200">·</span>
+        {/* Sources */}
+        <span className="flex items-center gap-1">
+          <span className="text-slate-400">Sources actives :</span>
+          <strong className="text-slate-700 tabular-nums">{activeSources}</strong>
+        </span>
+        {lastLog && lastLog.pending > 0 && (
+          <>
+            <span className="text-slate-200">·</span>
+            <span className="flex items-center gap-1 text-violet-600 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+              {lastLog.pending} nouveau{lastLog.pending > 1 ? 'x' : ''} détecté{lastLog.pending > 1 ? 's' : ''}
+            </span>
+          </>
+        )}
+      </div>
+      <button
+        onClick={handleDailyReport}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg ring-1 ring-slate-200 bg-white text-[11.5px] font-medium text-slate-700 hover:bg-slate-50 hover:ring-violet-300 hover:text-violet-700 transition-all"
+      >
+        <FileDown className="w-3.5 h-3.5" />
+        Rapport quotidien
+      </button>
+    </div>
+  );
+}
 
 // ─── Rangée filtres principaux ────────────────────────────────────────────────
 

@@ -9,7 +9,8 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown as ChevronDownIcon,
+  ChevronsLeft, ChevronsRight,
   Copy, Edit3, MoreVertical, Pause, Play, Trash2,
   CheckCircle2, Clock, Archive, XCircle, AlertTriangle, Pencil, HelpCircle,
   TrendingUp, Plug,
@@ -119,6 +120,37 @@ function SkeletonRow() {
   );
 }
 
+// ─── Tri ──────────────────────────────────────────────────────────────────────
+
+type SortKey = 'name' | 'startDate' | 'city' | 'occupancy' | 'adr' | 'revpar' | 'confidence' | 'status';
+
+function sortEvents(events: RMSMarketEvent[], key: SortKey, dir: 1 | -1): RMSMarketEvent[] {
+  return [...events].sort((a, b) => {
+    let va: string | number, vb: string | number;
+    switch (key) {
+      case 'name':       va = a.name;             vb = b.name;       break;
+      case 'startDate':  va = a.startDate;        vb = b.startDate;  break;
+      case 'city':       va = a.city;             vb = b.city;       break;
+      case 'occupancy':  va = a.impact.occupancy; vb = b.impact.occupancy; break;
+      case 'adr':        va = a.impact.adr;       vb = b.impact.adr; break;
+      case 'revpar':     va = a.impact.revpar;    vb = b.impact.revpar; break;
+      case 'confidence': va = a.impact.confidence; vb = b.impact.confidence; break;
+      case 'status':     va = a.status;           vb = b.status;     break;
+      default:           return 0;
+    }
+    if (va < vb) return -dir;
+    if (va > vb) return dir;
+    return 0;
+  });
+}
+
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: 1 | -1 }) {
+  if (col !== sortKey) return <ChevronDownIcon className="w-3 h-3 opacity-20" />;
+  return sortDir === 1
+    ? <ChevronUp className="w-3 h-3 text-violet-600" />
+    : <ChevronDownIcon className="w-3 h-3 text-violet-600" />;
+}
+
 // ─── Main list ────────────────────────────────────────────────────────────────
 
 interface EventsListProps { onSelect: (ev: RMSMarketEvent) => void }
@@ -130,6 +162,14 @@ export const EventsList: React.FC<EventsListProps> = ({ onSelect }) => {
   const [pageSize, setPageSize] = useState(10);
   const [menu, setMenu]         = useState<string | null>(null);
   const [skeleton, setSkeleton] = useState(false);
+  const [sortKey, setSortKey]   = useState<SortKey>('startDate');
+  const [sortDir, setSortDir]   = useState<1 | -1>(1);
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) setSortDir((d) => (d === 1 ? -1 : 1));
+    else { setSortKey(key); setSortDir(1); }
+    setPage(1);
+  }
 
   // Simule un court skeleton visuel quand les filtres changent.
   const prevFilters = useRef(filters);
@@ -146,16 +186,18 @@ export const EventsList: React.FC<EventsListProps> = ({ onSelect }) => {
   useEffect(() => { setPage(1); },
     [filters.search, filters.minImpact, filters.categories, filters.fromDate, filters.toDate, filters.activeOnly, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(events.length / pageSize));
+  const sorted = useMemo(() => sortEvents(events, sortKey, sortDir), [events, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
 
   const pageEvents = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return events.slice(start, start + pageSize);
-  }, [events, page, pageSize]);
+    return sorted.slice(start, start + pageSize);
+  }, [sorted, page, pageSize]);
 
-  const firstIdx = events.length === 0 ? 0 : (page - 1) * pageSize + 1;
-  const lastIdx  = Math.min(page * pageSize, events.length);
+  const firstIdx = sorted.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastIdx  = Math.min(page * pageSize, sorted.length);
 
   return (
     <div className="bg-white rounded-2xl ring-1 ring-slate-100 shadow-sm overflow-hidden">
@@ -163,23 +205,28 @@ export const EventsList: React.FC<EventsListProps> = ({ onSelect }) => {
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 z-10">
             <tr className="text-left text-[10.5px] uppercase tracking-wide text-slate-400 bg-slate-50/95 backdrop-blur border-b border-slate-100">
-              <th className="px-4 py-3 font-semibold">Événement</th>
-              <th className="px-3 py-3 font-semibold">Lieu</th>
-              <th className="px-3 py-3 font-semibold">Dates</th>
+              <Th onClick={() => toggleSort('name')} label="Événement" sortKey="name" active={sortKey} dir={sortDir} />
+              <Th onClick={() => toggleSort('city')} label="Lieu" sortKey="city" active={sortKey} dir={sortDir} />
+              <Th onClick={() => toggleSort('startDate')} label="Dates" sortKey="startDate" active={sortKey} dir={sortDir} />
               <th className="px-3 py-3 font-semibold">Catégorie</th>
-              {/* Impact estimé — 3 sous-colonnes */}
-              <th className="px-3 py-3 font-semibold" colSpan={3}>
-                <span className="inline-flex flex-col gap-0">
-                  <span>Impact estimé</span>
-                  <span className="flex gap-3 text-[9px] normal-case tracking-normal mt-0.5 text-slate-300 font-normal">
-                    <span className="w-10 text-right">TO</span>
-                    <span className="w-10 text-right">ADR</span>
-                    <span className="w-12 text-right">RevPAR</span>
-                  </span>
+              {/* Impact estimé — 3 sous-colonnes cliquables */}
+              <th className="px-3 py-3 font-semibold cursor-pointer hover:text-violet-600 select-none text-right" onClick={() => toggleSort('occupancy')}>
+                <span className="flex items-center justify-end gap-1">
+                  TO <SortIcon col="occupancy" sortKey={sortKey} sortDir={sortDir} />
                 </span>
               </th>
-              <th className="px-3 py-3 font-semibold">Score</th>
-              <th className="px-3 py-3 font-semibold">Statut</th>
+              <th className="px-3 py-3 font-semibold cursor-pointer hover:text-violet-600 select-none text-right" onClick={() => toggleSort('adr')}>
+                <span className="flex items-center justify-end gap-1">
+                  ADR <SortIcon col="adr" sortKey={sortKey} sortDir={sortDir} />
+                </span>
+              </th>
+              <th className="px-3 py-3 font-semibold cursor-pointer hover:text-violet-600 select-none text-right" onClick={() => toggleSort('revpar')}>
+                <span className="flex items-center justify-end gap-1">
+                  RevPAR <SortIcon col="revpar" sortKey={sortKey} sortDir={sortDir} />
+                </span>
+              </th>
+              <Th onClick={() => toggleSort('confidence')} label="Score" sortKey="confidence" active={sortKey} dir={sortDir} />
+              <Th onClick={() => toggleSort('status')} label="Statut" sortKey="status" active={sortKey} dir={sortDir} />
               <th className="px-3 py-3 font-semibold">Source</th>
               <th className="px-3 py-3 w-10" />
             </tr>
@@ -187,7 +234,7 @@ export const EventsList: React.FC<EventsListProps> = ({ onSelect }) => {
           <tbody>
             {skeleton
               ? Array.from({ length: pageSize }).map((_, i) => <SkeletonRow key={i} />)
-              : pageEvents.length === 0
+              : sorted.length === 0
                 ? (
                   <tr>
                     <td colSpan={11} className="px-4 py-16 text-center text-slate-400 text-sm">
@@ -216,9 +263,9 @@ export const EventsList: React.FC<EventsListProps> = ({ onSelect }) => {
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-t border-slate-100 bg-white/95 backdrop-blur text-[12px] text-slate-500">
         <div className="flex items-center gap-3">
           <span className="tabular-nums">
-            {events.length === 0
+            {sorted.length === 0
               ? '0 événement'
-              : <><strong className="text-slate-800">{firstIdx}–{lastIdx}</strong> sur <strong className="text-slate-800">{events.length}</strong> événement{events.length > 1 ? 's' : ''}</>}
+              : <><strong className="text-slate-800">{firstIdx}–{lastIdx}</strong> sur <strong className="text-slate-800">{sorted.length}</strong> événement{sorted.length > 1 ? 's' : ''}</>}
           </span>
           <span className="hidden sm:inline text-slate-300">·</span>
           <label className="hidden sm:flex items-center gap-2">
@@ -237,6 +284,29 @@ export const EventsList: React.FC<EventsListProps> = ({ onSelect }) => {
     </div>
   );
 };
+
+// ─── Sortable column header ───────────────────────────────────────────────────
+
+function Th({ label, sortKey, active, dir, onClick }: {
+  label: string; sortKey: SortKey; active: SortKey; dir: 1 | -1;
+  onClick: () => void;
+}) {
+  const isActive = sortKey === active;
+  return (
+    <th
+      className={cn(
+        'px-3 py-3 font-semibold cursor-pointer select-none hover:text-violet-600 transition-colors',
+        isActive && 'text-violet-600',
+      )}
+      onClick={onClick}
+    >
+      <span className="flex items-center gap-1">
+        {label}
+        <SortIcon col={sortKey} sortKey={active} sortDir={dir} />
+      </span>
+    </th>
+  );
+}
 
 // ─── EventRow ─────────────────────────────────────────────────────────────────
 
