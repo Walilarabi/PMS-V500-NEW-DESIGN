@@ -55,6 +55,28 @@ function dayCount(start: string, end: string): number {
   return Math.max(1, Math.round((d1.getTime() - d0.getTime()) / 86_400_000) + 1);
 }
 
+// Attendance estimate ranges by impact level — used when API provides no capacity
+const ATTENDANCE_RANGE: Record<string, { label: string; mid: number }> = {
+  hyper_compression: { label: '50 000+',       mid: 60_000 },
+  critical:          { label: '20 000–50 000',  mid: 30_000 },
+  high:              { label: '5 000–20 000',   mid: 10_000 },
+  medium:            { label: '1 000–5 000',    mid: 2_500 },
+  low:               { label: '200–1 000',      mid: 500 },
+  very_low:          { label: '< 200',          mid: 100 },
+};
+
+function fmtAttendance(ev: RMSMarketEvent): { text: string; estimated: boolean } {
+  if (ev.estimatedVisitors && ev.estimatedVisitors > 0) {
+    const n = ev.estimatedVisitors;
+    const text = n >= 1_000
+      ? `~${(n / 1_000).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} k`
+      : `~${n.toLocaleString('fr-FR')}`;
+    return { text, estimated: false };
+  }
+  const range = ATTENDANCE_RANGE[ev.impact.level] ?? ATTENDANCE_RANGE.medium;
+  return { text: range.label, estimated: true };
+}
+
 // ─── API Config Card ──────────────────────────────────────────────────────────
 
 function ApiConfigCard({
@@ -499,7 +521,7 @@ function ResultsTable({
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(events.map((e) => e.id)),
   );
-  const [sortKey, setSortKey] = useState<'date' | 'impact' | 'name'>('date');
+  const [sortKey, setSortKey] = useState<'date' | 'impact' | 'name' | 'capacity'>('impact');
   const [tooltip, setTooltip] = useState<{ ev: RMSMarketEvent; x: number; y: number } | null>(null);
   const { IMPACT_LEVEL_ORDER } = useMemo(() => ({
     IMPACT_LEVEL_ORDER: { very_low: 0, low: 1, medium: 2, high: 3, critical: 4, hyper_compression: 5 } as Record<string, number>,
@@ -507,8 +529,13 @@ function ResultsTable({
 
   const sorted = useMemo(() => {
     return [...events].sort((a, b) => {
-      if (sortKey === 'date')   return a.startDate.localeCompare(b.startDate);
-      if (sortKey === 'impact') return (IMPACT_LEVEL_ORDER[b.impact.level] ?? 0) - (IMPACT_LEVEL_ORDER[a.impact.level] ?? 0);
+      if (sortKey === 'date')     return a.startDate.localeCompare(b.startDate);
+      if (sortKey === 'impact')   return (IMPACT_LEVEL_ORDER[b.impact.level] ?? 0) - (IMPACT_LEVEL_ORDER[a.impact.level] ?? 0);
+      if (sortKey === 'capacity') {
+        const ca = a.estimatedVisitors ?? (ATTENDANCE_RANGE[a.impact.level]?.mid ?? 0);
+        const cb = b.estimatedVisitors ?? (ATTENDANCE_RANGE[b.impact.level]?.mid ?? 0);
+        return cb - ca;
+      }
       return a.name.localeCompare(b.name);
     });
   }, [events, sortKey, IMPACT_LEVEL_ORDER]);
@@ -527,7 +554,7 @@ function ResultsTable({
     });
   }
 
-  function SortTh({ label, k }: { label: string; k: typeof sortKey }) {
+  function SortTh({ label, k }: { label: string; k: 'date' | 'impact' | 'name' | 'capacity' }) {
     return (
       <th
         className={cn(
@@ -599,6 +626,7 @@ function ResultsTable({
               <th className="px-3 py-2.5 font-medium">Source</th>
               <SortTh label="Dates" k="date" />
               <th className="px-3 py-2.5 font-medium">Durée</th>
+              <SortTh label="Fréquentation" k="capacity" />
               <SortTh label="Impact RM" k="impact" />
               <th className="px-3 py-2.5 font-medium">Métriques</th>
               <th className="px-3 py-2.5 font-medium">Lieu</th>
@@ -651,6 +679,22 @@ function ResultsTable({
                   </td>
                   <td className="px-3 py-2.5 tabular-nums text-slate-600">
                     {days}j
+                  </td>
+                  <td className="px-3 py-2.5 whitespace-nowrap">
+                    {(() => {
+                      const { text, estimated } = fmtAttendance(ev);
+                      return (
+                        <span className={cn(
+                          'inline-flex items-center gap-1 text-[11.5px] font-semibold',
+                          estimated ? 'text-slate-400' : 'text-slate-700',
+                        )}>
+                          {text}
+                          {estimated && (
+                            <span className="text-[9px] font-normal text-slate-400" title="Estimation par niveau d'impact">est.</span>
+                          )}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-2.5">
                     <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold ring-1 ring-inset', imp.cls)}>
@@ -716,6 +760,15 @@ function EventTooltip({ ev, x, y }: { ev: RMSMarketEvent; x: number; y: number }
         <Row k="Lieu"     v={ev.venue ?? ev.city} />
         <Row k="Impact"   v={<span className={cn('px-1.5 py-px rounded text-[10px] font-bold ring-1 ring-inset', imp.cls)}>{imp.label}</span>} />
         <Row k="Catégorie" v={ev.category} />
+        {(() => {
+          const { text, estimated } = fmtAttendance(ev);
+          return (
+            <Row
+              k="Fréquentation"
+              v={<span className={estimated ? 'text-slate-400' : 'text-slate-700'}>{text}{estimated ? ' (est.)' : ''}</span>}
+            />
+          );
+        })()}
       </div>
       <div className="mt-2 pt-2 border-t border-slate-100 grid grid-cols-3 gap-1.5">
         <MetricBox label="ADR" value={`+${ev.impact.adr}%`} color="text-amber-600" />

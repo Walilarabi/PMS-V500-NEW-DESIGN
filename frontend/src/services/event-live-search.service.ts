@@ -208,7 +208,10 @@ function normTM(ev: any, city: LiveCity): RMSMarketEvent {
   const start: string = ev.dates?.start?.localDate ?? '';
   const end: string   = ev.dates?.end?.localDate ?? start;
   const genre: string = ev.classifications?.[0]?.genre?.name ?? ev.classifications?.[0]?.segment?.name ?? '';
-  const attendance: number = ev.capacity ?? 0;
+  const attendance: number =
+    ev.capacity ??
+    ev._embedded?.venues?.[0]?.capacity ??
+    0;
   const level = lsImpactLevel(genre, attendance);
   const coefs = lsCoefs(level);
   const now = new Date().toISOString();
@@ -226,6 +229,7 @@ function normTM(ev: any, city: LiveCity): RMSMarketEvent {
     endDate: end,
     impact: { ...coefs, level },
     influencePrice: lsInfluencePrice(level),
+    estimatedVisitors: attendance > 0 ? attendance : undefined,
     sources: ['ticketmaster'],
     primarySource: 'Ticketmaster',
     rmsSynced: false,
