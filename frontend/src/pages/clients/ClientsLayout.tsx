@@ -27,6 +27,7 @@ import { SegmentsView } from './SegmentsView';
 import { BlacklistView } from './BlacklistView';
 import { AutomationView } from './AutomationView';
 import { GdprView } from './GdprView';
+import { ClientsMergeView } from './ClientsMergeView';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -91,13 +92,7 @@ export const ClientsLayout: React.FC<ClientsLayoutProps> = ({ activePage }) => {
         return <SegmentsView />;
 
       case 'clients_merge':
-        return (
-          <ComingSoon
-            title="Fusion / Dédoublonnage"
-            subtitle="Détection automatique des doublons par similarité de nom, email ou téléphone."
-            icon={GitMerge}
-          />
-        );
+        return <ClientsMergeView />;
 
       case 'clients_documents':
         return <GdprView />;

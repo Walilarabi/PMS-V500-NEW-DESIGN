@@ -28,6 +28,7 @@ import { DunningView } from './DunningView';
 import { BankReconciliationView } from './BankReconciliationView';
 import { AuditChainView } from './AuditChainView';
 import { CashManagementView } from './CashManagementView';
+import { PaiementsSecurisesView } from './PaiementsSecurisesView';
 import { fetchFinanceKpis, type FinanceDashboardKpis } from '../../services/finance/finance.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -115,14 +116,7 @@ export const FinanceLayout: React.FC<FinanceLayoutProps> = ({ activePage }) => {
         {activePage === 'fin_bank_reco' && <BankReconciliationView />}
         {activePage === 'fin_einvoice' && <EInvoiceView />}
         {activePage === 'tva2026' && <TvaDeclarationView />}
-        {activePage === 'paiements_securises' && (
-          <PlaceholderModule
-            icon={CreditCard}
-            title="Paiements sécurisés"
-            description="Pré-autorisations, captures différées, 3D-Secure, gestion des tokens carte"
-            comingSoon={['Pré-autorisation 7j', 'Capture partielle/totale', 'Réconciliation Stripe/Adyen', 'Tokenisation PCI-DSS']}
-          />
-        )}
+        {activePage === 'paiements_securises' && <PaiementsSecurisesView />}
         {activePage === 'comptabilite' && <AuditLogView />}
         {activePage === 'fin_audit_chain' && <AuditChainView />}
         {activePage === 'cash_management' && <CashManagementView />}

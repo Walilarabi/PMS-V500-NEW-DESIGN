@@ -40,6 +40,23 @@ import { ReconciliationView } from '@/src/pages/finance/ReconciliationView';
 import { RevenueIntegrityView } from '@/src/pages/finance/RevenueIntegrityView';
 import { OdmsView }         from '@/src/pages/sas/OdmsView';
 
+// Réservations sub-pages
+import { ResFilteredView }  from '@/src/pages/reservations/ResFilteredView';
+import { GroupesView }      from '@/src/pages/reservations/GroupesView';
+import { ResPaymentsView }  from '@/src/pages/reservations/ResPaymentsView';
+import { ResAnomaliesView } from '@/src/pages/reservations/ResAnomaliesView';
+import { ResRelancesView }  from '@/src/pages/reservations/ResRelancesView';
+
+// Flowday ops
+import { HousekeepingView } from '@/src/pages/flowday/HousekeepingView';
+import { MaintenanceView }  from '@/src/pages/flowday/MaintenanceView';
+
+// SAS sub-pages
+import { SasIncomingView }   from '@/src/pages/sas/SasIncomingView';
+import { SasAnomaliesView }  from '@/src/pages/sas/SasAnomaliesView';
+import { SasQuarantineView } from '@/src/pages/sas/SasQuarantineView';
+import { SasPartnersView }   from '@/src/pages/sas/SasPartnersView';
+
 // Realtime hooks
 import {
   useReservationsRealtime,
@@ -94,29 +111,29 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'flowboard':   return <FlowboardView />;
     case 'planning':    return <PlanningView />;
     case 'today':       return <TodayView />;
-    case 'housekeeping':return <Placeholder title="Housekeeping" icon={Bed} />;
-    case 'maintenance': return <Placeholder title="Maintenance" icon={Wrench} />;
+    case 'housekeeping':return <HousekeepingView />;
+    case 'maintenance': return <MaintenanceView />;
 
     // ── SAS ───────────────────────────────────────────────────────────────────
     case 'sas':
-    case 'sas_incoming':       return <Placeholder title="Réservations entrantes OTA" icon={Inbox} />;
+    case 'sas_incoming':       return <SasIncomingView />;
     case 'sas_rie':            return <RevenueIntegrityView />;
-    case 'sas_anomalies':      return <Placeholder title="Anomalies détectées" icon={AlertTriangle} />;
-    case 'sas_quarantine':     return <Placeholder title="File quarantaine" icon={Lock} />;
+    case 'sas_anomalies':      return <SasAnomaliesView />;
+    case 'sas_quarantine':     return <SasQuarantineView />;
     case 'sas_odms':           return <OdmsView />;
     case 'sas_reconciliation': return <ReconciliationView />;
     case 'sas_audit':          return <AuditLogView />;
-    case 'sas_partners':       return <Placeholder title="Config. partenaires OTA" icon={Settings} />;
+    case 'sas_partners':       return <SasPartnersView />;
 
     // ── RÉSERVATIONS ──────────────────────────────────────────────────────────
     case 'reservations':  return <ReservationsView />;
-    case 'res_confirmed': return <Placeholder title="Réservations confirmées" icon={CheckCircle2} />;
-    case 'res_hold':      return <Placeholder title="En option (Hold)" icon={Clock} />;
-    case 'res_pending':   return <Placeholder title="Pending" icon={Hourglass} />;
-    case 'groupes':       return <Placeholder title="Groupes" icon={Users} />;
-    case 'res_payments':  return <Placeholder title="Suivi des paiements" icon={CreditCard} />;
-    case 'res_anomalies': return <Placeholder title="Anomalies financières" icon={AlertOctagon} />;
-    case 'res_relances':  return <Placeholder title="Relances" icon={Send} />;
+    case 'res_confirmed': return <ResFilteredView statuses={['confirmed']} title="Réservations confirmées" subtitle="Réservations validées en attente d'arrivée" icon={CheckCircle2} accentColor="#10B981" />;
+    case 'res_hold':      return <ResFilteredView statuses={['hold']} title="En option (Hold)" subtitle="Options temporaires — expiration automatique sous 48 h d'arrivée" icon={Clock} accentColor="#F59E0B" showCountdown />;
+    case 'res_pending':   return <ResFilteredView statuses={['pending']} title="En attente de confirmation" subtitle="Demandes reçues sans confirmation" icon={Hourglass} accentColor="#64748B" />;
+    case 'groupes':       return <GroupesView />;
+    case 'res_payments':  return <ResPaymentsView />;
+    case 'res_anomalies': return <ResAnomaliesView />;
+    case 'res_relances':  return <ResRelancesView />;
 
     // ── CLIENTS (routé via ClientsLayout — Wave C1) ───────────────────────────
     case 'clients':

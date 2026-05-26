@@ -11,11 +11,14 @@
 import React, { useMemo, useEffect } from 'react';
 import {
   LayoutDashboard, TrendingUp, TrendingDown, DollarSign, Users,
-  Calendar, AlertTriangle, CheckCircle, Target, Upload,
+  Calendar, AlertTriangle, CheckCircle, Target, Upload, BedDouble,
+  CreditCard, RefreshCw,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useRateCalendarStore } from '../../components/rms/store/rateCalendarStore';
+import { useReservations } from '../../domains/reservations/hooks';
+import { useRooms } from '../../domains/hotel/hooks';
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(' ');
@@ -24,6 +27,10 @@ export const RevenueDashboard: React.FC = () => {
   const lighthouseImport = useLighthouseStore(s => s.importData);
   const { roomTypes, loadData } = useRateCalendarStore();
 
+  // Real Supabase data — always fetched for the KPI fallback strip
+  const { data: resData, isLoading: resLoading } = useReservations({ limit: 500 });
+  const { data: rooms = [] } = useRooms();
+
   // Charger calendrier
   useEffect(() => {
     if (roomTypes.length === 0) loadData();
@@ -31,7 +38,37 @@ export const RevenueDashboard: React.FC = () => {
 
   const hasLighthouse = lighthouseImport !== null && lighthouseImport.days.length > 0;
 
-  // ─── Si pas de Lighthouse, on affiche un CTA + un état vide ────────────
+  // ─── Supabase KPIs (always computed) ────────────────────────────────────
+  const supabaseKpis = useMemo(() => {
+    const rows = resData?.rows ?? [];
+    const today = new Date().toISOString().slice(0, 10);
+    const totalRooms = rooms.length || 1;
+
+    const inhouse = rows.filter(r =>
+      r.check_in && r.check_out &&
+      r.check_in <= today && r.check_out > today &&
+      r.status !== 'cancelled'
+    );
+    const occupancy = Math.round((inhouse.length / totalRooms) * 100);
+    const caTotal   = rows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
+    const paid      = rows.reduce((s, r) => s + (r.paid_amount ?? 0), 0);
+    const solde     = caTotal - paid;
+    const arrivalsToday = rows.filter(r => r.check_in === today && r.status !== 'cancelled').length;
+    const departuresToday = rows.filter(r => r.check_out === today && r.status !== 'cancelled').length;
+    const overdue   = rows.filter(r => r.payment_status === 'overdue').length;
+
+    // ADR from inhouse
+    const adr = inhouse.length > 0
+      ? Math.round(inhouse.reduce((s, r) => s + ((r.total_amount ?? 0) / Math.max(1, r.nights ?? 1)), 0) / inhouse.length)
+      : 0;
+    const revpar = totalRooms > 0 ? Math.round((adr * inhouse.length) / totalRooms) : 0;
+
+    return { occupancy, caTotal, paid, solde, arrivalsToday, departuresToday, overdue, adr, revpar, inhouseCount: inhouse.length, totalRooms };
+  }, [resData, rooms]);
+
+  const fmtEUR = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+
+  // ─── Si pas de Lighthouse, afficher les KPIs Supabase + CTA ─────────────
   if (!hasLighthouse) {
     return (
       <div className="flex-1 flex flex-col bg-[#F9FAFB]">
@@ -39,27 +76,52 @@ export const RevenueDashboard: React.FC = () => {
           <RevenueHeader
             icon={LayoutDashboard}
             title="Dashboard Revenue"
-            subtitle="Pilotage temps réel basé sur les données Lighthouse"
+            subtitle="KPIs opérationnels temps réel — données Supabase"
           />
         </div>
-        <div className="flex-1 flex items-center justify-center p-12">
-          <div className="text-center max-w-md">
-            <div className="mx-auto w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4">
-              <Upload className="w-8 h-8 text-blue-600" />
+        <div className="px-6 pb-6 space-y-5">
+          {/* Real KPI strip */}
+          {resLoading ? (
+            <div className="flex items-center gap-2 text-slate-400 text-[13px]"><RefreshCw size={14} className="animate-spin" /> Chargement des données…</div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+              {[
+                { label: 'Taux occup.',   value: `${supabaseKpis.occupancy}%`,            icon: BedDouble,   color: 'text-violet-600',  alert: false },
+                { label: 'Occupées',      value: `${supabaseKpis.inhouseCount}/${supabaseKpis.totalRooms}`,icon: BedDouble,color:'text-violet-700',alert:false},
+                { label: 'ADR',           value: `${supabaseKpis.adr}€`,                   icon: DollarSign,  color: 'text-emerald-600', alert: false },
+                { label: 'RevPAR',        value: `${supabaseKpis.revpar}€`,                icon: TrendingUp,  color: 'text-emerald-700', alert: false },
+                { label: 'Arrivées',      value: supabaseKpis.arrivalsToday.toString(),    icon: Calendar,    color: 'text-blue-600',    alert: false },
+                { label: 'Départs',       value: supabaseKpis.departuresToday.toString(),  icon: Calendar,    color: 'text-blue-500',    alert: false },
+                { label: 'Solde dû',      value: fmtEUR(supabaseKpis.solde),               icon: CreditCard,  color: 'text-red-600',     alert: supabaseKpis.solde > 0 },
+                { label: 'En retard',     value: supabaseKpis.overdue.toString(),           icon: AlertTriangle,color:'text-red-700',    alert: supabaseKpis.overdue > 0 },
+              ].map(k => {
+                const Icon = k.icon;
+                return (
+                  <div key={k.label} className={cn('bg-white rounded-2xl ring-1 ring-slate-100 px-4 py-3 shadow-sm', k.alert && 'ring-red-200')}>
+                    <div className="flex items-center gap-1 mb-1">
+                      <Icon size={11} className={k.color} />
+                      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">{k.label}</p>
+                    </div>
+                    <p className={cn('text-[16px] font-bold', k.color)}>{k.value}</p>
+                  </div>
+                );
+              })}
             </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
-              Aucune donnée Lighthouse importée
-            </h2>
-            <p className="text-sm text-gray-500 mb-6">
-              Le dashboard affiche les KPIs calculés à partir des données réelles importées (Lighthouse + calendrier tarifaire RMS).
-              Importez votre fichier Excel Lighthouse depuis la page « Veille concurrentielle » pour commencer.
-            </p>
+          )}
+          {/* CTA Lighthouse */}
+          <div className="flex items-center gap-4 bg-blue-50 ring-1 ring-blue-200 rounded-2xl px-5 py-4">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+              <Upload size={18} className="text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-[13px] font-bold text-blue-900">Données Lighthouse non importées</p>
+              <p className="text-[11.5px] text-blue-700 mt-0.5">Importez votre fichier Excel depuis la veille concurrentielle pour afficher le compset, la demande marché et les recommandations yield.</p>
+            </div>
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'rev_compset' } }))}
-              className="px-5 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 inline-flex items-center gap-2 text-sm font-medium"
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[12.5px] font-semibold hover:bg-blue-700 shrink-0"
             >
-              <Target className="w-4 h-4" />
-              Aller à la veille concurrentielle
+              Importer
             </button>
           </div>
         </div>
