@@ -23,6 +23,7 @@ import {
   LIVE_CITIES,
   type LiveSearchConfig,
   type LivePeriod,
+  type DensePeriodInfo,
 } from '@/src/services/event-live-search.service';
 import { useEventsStore } from '@/src/store/eventsStore';
 import type { RMSMarketEvent, EventImpactLevel } from '@/src/types/events';
@@ -271,7 +272,7 @@ function SearchCard({
   onResults,
 }: {
   cfg: LiveSearchConfig;
-  onResults: (r: { events: RMSMarketEvent[]; city: string; errors: string[] }) => void;
+  onResults: (r: { events: RMSMarketEvent[]; city: string; errors: string[]; densePeriods: Map<string, DensePeriodInfo> }) => void;
 }) {
   const [cityInput, setCityInput] = useState(cfg.lastCity ?? 'Paris');
   const [acList, setAcList] = useState<ReturnType<typeof autocompleteCity>>([]);
@@ -322,7 +323,7 @@ function SearchCard({
         const warn = result.errors.length > 0 ? ` (${result.errors.join('; ')})` : '';
         setStatus({ type: 'ok', msg: `${result.events.length} événement${result.events.length !== 1 ? 's' : ''} trouvé${result.events.length !== 1 ? 's' : ''}${warn}` });
       }
-      onResults({ events: result.events, city: city.n, errors: result.errors });
+      onResults({ events: result.events, city: city.n, errors: result.errors, densePeriods: result.densePeriods });
     } catch (e) {
       setStatus({ type: 'error', msg: (e as Error).message });
     } finally {
@@ -512,10 +513,12 @@ function SearchCard({
 function ResultsTable({
   events,
   city,
+  densePeriods,
   onImport,
 }: {
   events: RMSMarketEvent[];
   city: string;
+  densePeriods: Map<string, DensePeriodInfo>;
   onImport: (selected: RMSMarketEvent[]) => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(
@@ -661,7 +664,17 @@ function ResultsTable({
                   </td>
                   <td className="px-3 py-2.5 max-w-[220px]">
                     <div className="font-medium text-slate-900 truncate" title={ev.name}>{ev.name}</div>
-                    <div className="text-[10.5px] text-slate-400 truncate">{ev.category}</div>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      <span className="text-[10.5px] text-slate-400 truncate">{ev.category}</span>
+                      {densePeriods.has(ev.id) && (
+                        <span
+                          className="inline-flex items-center gap-0.5 px-1.5 py-px rounded text-[9.5px] font-bold bg-orange-50 text-orange-600 ring-1 ring-orange-200 shrink-0"
+                          title={`${densePeriods.get(ev.id)!.overlapCount} événement(s) simultané(s) · ${(densePeriods.get(ev.id)!.totalAttendance / 1000).toFixed(0)}k visiteurs cumulés`}
+                        >
+                          ⚡ Période dense
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5">
                     <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset', srcStyle.cls)}>
@@ -716,7 +729,7 @@ function ResultsTable({
 
       {/* Hover tooltip */}
       {tooltip && (
-        <EventTooltip ev={tooltip.ev} x={tooltip.x} y={tooltip.y} />
+        <EventTooltip ev={tooltip.ev} x={tooltip.x} y={tooltip.y} dense={densePeriods.get(tooltip.ev.id)} />
       )}
     </div>
   );
@@ -735,7 +748,7 @@ function RmMetrics({ adr, compression }: { adr: number; compression: number }) {
   );
 }
 
-function EventTooltip({ ev, x, y }: { ev: RMSMarketEvent; x: number; y: number }) {
+function EventTooltip({ ev, x, y, dense }: { ev: RMSMarketEvent; x: number; y: number; dense?: DensePeriodInfo }) {
   const style: React.CSSProperties = {
     position: 'fixed',
     left: x + 14,
@@ -775,6 +788,13 @@ function EventTooltip({ ev, x, y }: { ev: RMSMarketEvent; x: number; y: number }
         <MetricBox label="Compr." value={`${ev.impact.compression}%`} color="text-violet-600" />
         <MetricBox label="Confiance" value={`${ev.impact.confidence}%`} color="text-emerald-600" />
       </div>
+      {dense && (
+        <div className="mt-2 pt-2 border-t border-slate-100 bg-orange-50/80 rounded-lg px-2 py-1.5 text-[10px] text-orange-700 font-medium text-center ring-1 ring-orange-100">
+          ⚡ Période dense · {dense.overlapCount} event{dense.overlapCount > 1 ? 's' : ''} simultané{dense.overlapCount > 1 ? 's' : ''}
+          <br />
+          <span className="font-bold">{(dense.totalAttendance / 1000).toFixed(0)}k</span> visiteurs cumulés sur la période
+        </div>
+      )}
       <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-500 bg-violet-50/60 rounded-lg px-2 py-1.5 text-center font-medium">
         Action RM suggérée : {ev.impact.level === 'hyper_compression' ? 'Stop-sell / max yield' : ev.impact.level === 'critical' ? 'Yield élevé' : ev.impact.level === 'high' ? 'Relever les tarifs' : 'Surveiller'}
       </div>
@@ -824,7 +844,7 @@ interface EventLiveSearchViewProps {
 
 export const EventLiveSearchView: React.FC<EventLiveSearchViewProps> = ({ onImportEvents }) => {
   const [cfg, setCfg] = useState<LiveSearchConfig>(getLiveConfig);
-  const [results, setResults] = useState<{ events: RMSMarketEvent[]; city: string } | null>(null);
+  const [results, setResults] = useState<{ events: RMSMarketEvent[]; city: string; densePeriods: Map<string, DensePeriodInfo> } | null>(null);
   const [importedCount, setImportedCount] = useState(0);
   const { setPendingValidation } = useEventsStore();
 
@@ -862,13 +882,13 @@ export const EventLiveSearchView: React.FC<EventLiveSearchViewProps> = ({ onImpo
       {/* Search */}
       <SearchCard
         cfg={cfg}
-        onResults={(r) => { setResults(r); setImportedCount(0); }}
+        onResults={(r) => { setResults({ events: r.events, city: r.city, densePeriods: r.densePeriods }); setImportedCount(0); }}
       />
 
       {/* Results */}
       {results !== null
         ? results.events.length > 0
-          ? <ResultsTable events={results.events} city={results.city} onImport={handleImport} />
+          ? <ResultsTable events={results.events} city={results.city} densePeriods={results.densePeriods} onImport={handleImport} />
           : (
             <div className="rounded-2xl ring-1 ring-slate-200 bg-white py-12 flex flex-col items-center gap-2 text-center">
               <RotateCcw className="w-8 h-8 text-slate-300" />

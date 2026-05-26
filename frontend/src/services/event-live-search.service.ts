@@ -286,6 +286,53 @@ function dedup(events: RMSMarketEvent[]): RMSMarketEvent[] {
   });
 }
 
+// ─── Affluence cumulée ────────────────────────────────────────────────────────
+// Détecte les événements qui se chevauchent et calcule la fréquentation cumulée.
+// Seuil : ≥ 2 events simultanés ET total ≥ 5 000 visiteurs → période dense.
+
+export interface DensePeriodInfo {
+  overlapCount: number;    // nombre d'events simultanés (hors lui-même)
+  totalAttendance: number; // visiteurs cumulés (lui + les overlaps)
+}
+
+const ATTENDANCE_MID: Record<string, number> = {
+  hyper_compression: 60_000,
+  critical: 30_000,
+  high: 10_000,
+  medium: 2_500,
+  low: 500,
+  very_low: 80,
+};
+
+const DENSE_THRESHOLD_TOTAL = 5_000;
+const DENSE_MIN_EVENTS      = 2;
+
+function eventVisitors(ev: RMSMarketEvent): number {
+  return ev.estimatedVisitors ?? ATTENDANCE_MID[ev.impact.level] ?? 0;
+}
+
+function overlaps(a: RMSMarketEvent, b: RMSMarketEvent): boolean {
+  return a.startDate <= b.endDate && a.endDate >= b.startDate;
+}
+
+export function computeDensePeriods(
+  events: RMSMarketEvent[],
+): Map<string, DensePeriodInfo> {
+  const result = new Map<string, DensePeriodInfo>();
+
+  for (const ev of events) {
+    const peers = events.filter((o) => o.id !== ev.id && overlaps(ev, o));
+    if (peers.length === 0) continue;
+
+    const total = eventVisitors(ev) + peers.reduce((sum, o) => sum + eventVisitors(o), 0);
+    if (peers.length + 1 >= DENSE_MIN_EVENTS && total >= DENSE_THRESHOLD_TOTAL) {
+      result.set(ev.id, { overlapCount: peers.length, totalAttendance: total });
+    }
+  }
+
+  return result;
+}
+
 // ─── Fetch Ticketmaster ───────────────────────────────────────────────────────
 
 export async function fetchTicketmaster(
@@ -346,6 +393,7 @@ export interface LiveSearchResult {
   events: RMSMarketEvent[];
   errors: string[];
   sources: { id: 'ticketmaster' | 'openagenda'; count: number; ok: boolean; error?: string }[];
+  densePeriods: Map<string, DensePeriodInfo>;
 }
 
 export async function runLiveSearch(
@@ -373,7 +421,9 @@ export async function runLiveSearch(
       : Promise.resolve(),
   ]);
 
-  return { events: dedup(all.sort((a, b) => a.startDate.localeCompare(b.startDate))), errors, sources };
+  const dedupedEvents = dedup(all.sort((a, b) => a.startDate.localeCompare(b.startDate)));
+  const densePeriods  = computeDensePeriods(dedupedEvents);
+  return { events: dedupedEvents, errors, sources, densePeriods };
 }
 
 // ─── Vacances scolaires (data.education.gouv.fr) ──────────────────────────────
