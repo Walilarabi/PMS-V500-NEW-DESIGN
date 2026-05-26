@@ -10,13 +10,14 @@ export const KpiTile: React.FC<{
   label: string;
   value: React.ReactNode;
   hint?: string;
-  tone?: 'violet' | 'rose' | 'emerald' | 'amber';
+  tone?: 'violet' | 'rose' | 'emerald' | 'amber' | 'sky';
 }> = ({ icon: Icon, label, value, hint, tone = 'violet' }) => {
   const tones = {
-    violet: { ring: 'ring-violet-100', soft: 'bg-violet-50', text: 'text-violet-600' },
-    rose: { ring: 'ring-rose-100', soft: 'bg-rose-50', text: 'text-rose-600' },
+    violet:  { ring: 'ring-violet-100',  soft: 'bg-violet-50',  text: 'text-violet-600' },
+    rose:    { ring: 'ring-rose-100',    soft: 'bg-rose-50',    text: 'text-rose-600' },
     emerald: { ring: 'ring-emerald-100', soft: 'bg-emerald-50', text: 'text-emerald-600' },
-    amber: { ring: 'ring-amber-100', soft: 'bg-amber-50', text: 'text-amber-600' },
+    amber:   { ring: 'ring-amber-100',   soft: 'bg-amber-50',   text: 'text-amber-600' },
+    sky:     { ring: 'ring-sky-100',     soft: 'bg-sky-50',     text: 'text-sky-600' },
   }[tone];
   return (
     <div className="flex items-center gap-3 bg-white rounded-2xl ring-1 ring-slate-100 px-4 py-3 shadow-sm">

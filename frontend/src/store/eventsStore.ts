@@ -363,7 +363,7 @@ export const useEventsStore = create<EventsStore>()(
             if (filters.statuses.length && !filters.statuses.includes(e.status)) return false;
             if (filters.categories.length && !filters.categories.includes(e.category)) return false;
             if (filters.cities.length && !filters.cities.includes(e.city)) return false;
-            if (filters.countries.length && !filters.countries.includes(e.country)) return false;
+            if ((filters.countries ?? []).length && !filters.countries!.includes(e.country)) return false;
             if (filters.sources.length && !e.sources.some((s) => filters.sources.includes(s))) return false;
             if (filters.fromDate && e.endDate < filters.fromDate) return false;
             if (filters.toDate && e.startDate > filters.toDate) return false;
