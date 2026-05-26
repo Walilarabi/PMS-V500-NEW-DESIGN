@@ -361,30 +361,58 @@ export async function fetchTicketmaster(
 }
 
 // ─── Fetch OpenAgenda ──────────────────────────────────────────────────────────
+// Endpoint: GET https://api.openagenda.com/v2/events
+// Auth: ?key=<public_key>
+// Pagination: cursor-based via response `after` field (not numeric offset)
+// Max 300 per page; we fetch up to 3 pages = 900 events maximum.
+
+const OA_PAGE_SIZE = 100;
+const OA_MAX_PAGES = 3;
 
 export async function fetchOpenAgenda(
   city: LiveCity,
   key: string,
   period: LivePeriod,
 ): Promise<RMSMarketEvent[]> {
-  const after  = isoToUnix(period.start, false);
-  const before = isoToUnix(period.end, true);
-  const url =
-    `https://api.openagenda.com/v2/events` +
-    `?key=${encodeURIComponent(key)}` +
-    `&size=200` +
-    `&timings[gte]=${after}&timings[lte]=${before}` +
-    `&city[]=${encodeURIComponent(city.n)}` +
-    `&lang=fr`;
+  const gte = isoToUnix(period.start, false);
+  const lte = isoToUnix(period.end, true);
 
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`OpenAgenda: HTTP ${r.status}`);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const d: any = await r.json();
-  return ((d.events ?? []) as unknown[])
+  const baseParams =
+    `key=${encodeURIComponent(key)}` +
+    `&size=${OA_PAGE_SIZE}` +
+    `&timings[gte]=${gte}&timings[lte]=${lte}` +
+    `&city[]=${encodeURIComponent(city.n)}` +
+    (city.cc ? `&countryCode[]=${encodeURIComponent(city.cc)}` : '') +
+    `&lang=fr` +
+    `&sort=timings.start.asc`;
+
+  const all: RMSMarketEvent[] = [];
+  let after: string | null = null;
+  let page = 0;
+
+  while (page < OA_MAX_PAGES) {
+    const url =
+      `https://api.openagenda.com/v2/events?${baseParams}` +
+      (after ? `&after=${encodeURIComponent(after)}` : '');
+
+    const r = await fetch(url);
+    if (r.status === 429) throw new Error('OpenAgenda: quota API atteint — réessayez dans quelques minutes.');
+    if (!r.ok) throw new Error(`OpenAgenda: HTTP ${r.status}`);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    .map((ev: any) => normOA(ev, city))
-    .filter((ev) => ev.startDate && ev.name);
+    const d: any = await r.json();
+    const events: unknown[] = d.events ?? [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    all.push(...events.map((ev: any) => normOA(ev, city)).filter((ev) => ev.startDate && ev.name));
+
+    after = (d.after as string | null | undefined) ?? null;
+    page++;
+
+    if (!after || events.length < OA_PAGE_SIZE) break;
+  }
+
+  return all;
 }
 
 // ─── Point d'entrée principal ─────────────────────────────────────────────────
