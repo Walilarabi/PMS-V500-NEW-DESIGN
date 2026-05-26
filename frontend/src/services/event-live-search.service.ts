@@ -9,6 +9,154 @@
  * jamais le navigateur.
  */
 
+// ─── Catalogue des sources événementielles ────────────────────────────────────
+
+export interface EventSourceInfo {
+  id: string;
+  name: string;
+  shortName: string;
+  url: string;
+  docsUrl: string;
+  keyUrl?: string;
+  type: 'ticketing' | 'aggregator' | 'government' | 'regional';
+  auth: 'api_key' | 'public' | 'none';
+  keyStorageField?: 'tmKey' | 'oaKey'; // champ dans LiveSearchConfig
+  keyParam?: string;
+  baseUrl: string;
+  coverage: string[];
+  rateLimit?: string;
+  free: boolean;
+  integrated: boolean; // implémenté dans Flowtym
+  notes: string;
+}
+
+export const EVENT_SOURCES_DB: EventSourceInfo[] = [
+  {
+    id: 'ticketmaster',
+    name: 'Ticketmaster Discovery API v2',
+    shortName: 'Ticketmaster',
+    url: 'https://developer.ticketmaster.com',
+    docsUrl: 'https://developer.ticketmaster.com/products-and-docs/apis/discovery-api/v2/',
+    keyUrl: 'https://developer-acct.ticketmaster.com/user/register',
+    type: 'ticketing',
+    auth: 'api_key',
+    keyStorageField: 'tmKey',
+    keyParam: 'apikey',
+    baseUrl: 'https://app.ticketmaster.com/discovery/v2/events.json',
+    coverage: ['US', 'CA', 'GB', 'FR', 'DE', 'ES', 'IT', 'NL', 'BE', 'CH', 'AU', 'NZ', 'JP', 'MX', 'IE', 'SE', 'NO', 'DK'],
+    rateLimit: '5 req/s — 5 000 appels/jour',
+    free: true,
+    integrated: true,
+    notes: 'Clé gratuite sur developer.ticketmaster.com · 230 000+ événements · filtres : pays, ville, lat/long, date, catégorie, taille.',
+  },
+  {
+    id: 'openagenda',
+    name: 'OpenAgenda API v2',
+    shortName: 'OpenAgenda',
+    url: 'https://openagenda.com',
+    docsUrl: 'https://developers.openagenda.com/documentation',
+    keyUrl: 'https://openagenda.com/settings',
+    type: 'aggregator',
+    auth: 'api_key',
+    keyStorageField: 'oaKey',
+    keyParam: 'key',
+    baseUrl: 'https://api.openagenda.com/v2/events',
+    coverage: ['FR', 'BE', 'CH', 'LU'],
+    rateLimit: 'Non documentée (300 résultats/page)',
+    free: true,
+    integrated: true,
+    notes: 'Clé publique depuis openagenda.com/settings · Lecture transverse GET /v2/events · pagination curseur (after[])',
+  },
+  {
+    id: 'openholidaysapi',
+    name: 'OpenHolidays API',
+    shortName: 'OpenHolidays',
+    url: 'https://openholidaysapi.org',
+    docsUrl: 'https://openholidaysapi.org/swagger/index.html',
+    type: 'government',
+    auth: 'none',
+    baseUrl: 'https://openholidaysapi.org/SchoolHolidays',
+    coverage: ['DE', 'AT', 'CH', 'NL', 'BE', 'LU', 'ES', 'GB', 'IT', 'SE', 'NO', 'DK', 'PL'],
+    free: true,
+    integrated: true,
+    notes: 'Aucune clé requise · Données gouvernementales officielles · vacances scolaires + jours fériés · 13 pays européens',
+  },
+  {
+    id: 'education_gouv_fr',
+    name: 'Calendrier scolaire FR',
+    shortName: 'Éducation FR',
+    url: 'https://data.education.gouv.fr',
+    docsUrl: 'https://data.education.gouv.fr/explore/dataset/fr-en-calendrier-scolaire/',
+    type: 'government',
+    auth: 'none',
+    baseUrl: 'https://data.education.gouv.fr/api/records/1.0/search/?dataset=fr-en-calendrier-scolaire',
+    coverage: ['FR'],
+    free: true,
+    integrated: true,
+    notes: 'Source officielle France · Zones A/B/C/Corse · Données ouvertes Etalab · Mise à jour officielle chaque année',
+  },
+  {
+    id: 'eventbrite',
+    name: 'Eventbrite API v3',
+    shortName: 'Eventbrite',
+    url: 'https://www.eventbrite.com/platform',
+    docsUrl: 'https://www.eventbrite.com/platform/api',
+    keyUrl: 'https://www.eventbrite.com/platform/api-keys',
+    type: 'ticketing',
+    auth: 'api_key',
+    keyParam: 'token',
+    baseUrl: 'https://www.eventbriteapi.com/v3/events/search/',
+    coverage: ['US', 'GB', 'CA', 'AU', 'FR', 'DE', 'ES', 'IT', 'NL', 'BE'],
+    rateLimit: '1 000 req/h',
+    free: true,
+    integrated: false,
+    notes: 'Clé depuis eventbrite.com/platform/api-keys · Fort pour conférences, salons professionnels, B2B',
+  },
+  {
+    id: 'datatourisme',
+    name: 'Datatourisme (Atout France)',
+    shortName: 'Datatourisme',
+    url: 'https://www.datatourisme.fr',
+    docsUrl: 'https://www.datatourisme.fr/api',
+    type: 'government',
+    auth: 'none',
+    baseUrl: 'https://diffusiondata.datatourisme.fr/api/v1/events',
+    coverage: ['FR'],
+    free: true,
+    integrated: false,
+    notes: 'Données touristiques officielles France · 300 000+ POI et événements · Festivals, expos, spectacles régionaux',
+  },
+  {
+    id: 'billetreduc',
+    name: 'BilletRéduc / SeeTickets',
+    shortName: 'BilletRéduc',
+    url: 'https://www.billetreduc.com',
+    docsUrl: 'https://www.seetickets.com/developers',
+    type: 'ticketing',
+    auth: 'api_key',
+    baseUrl: 'https://api.seetickets.com/v1/events',
+    coverage: ['FR', 'BE'],
+    free: false,
+    integrated: false,
+    notes: 'Fort sur spectacles vivants, théâtre, humour en France · Accès partenaire sur demande',
+  },
+  {
+    id: 'france_agenda',
+    name: 'France Agenda',
+    shortName: 'FranceAgenda',
+    url: 'https://www.france-agenda.fr',
+    docsUrl: 'https://www.france-agenda.fr/api',
+    type: 'regional',
+    auth: 'api_key',
+    baseUrl: 'https://www.france-agenda.fr/api/v1/events',
+    coverage: ['FR'],
+    free: true,
+    integrated: false,
+    notes: 'Agrégateur France · Foires, salons, expositions, marchés · Bonne couverture régionale',
+  },
+];
+
+
 import type { RMSMarketEvent, EventImpactLevel, EventCategory } from '../types/events';
 
 // ─── Configuration & stockage ────────────────────────────────────────────────
@@ -387,13 +535,16 @@ export async function fetchOpenAgenda(
     `&sort=timings.start.asc`;
 
   const all: RMSMarketEvent[] = [];
-  let after: string | null = null;
+  // OpenAgenda cursor: response.after is string[] e.g. ["0","000001758268800","1758472200000","5335740"]
+  // Must be re-sent as &after[]=0&after[]=000001758268800&...
+  let afterArr: string[] | null = null;
   let page = 0;
 
   while (page < OA_MAX_PAGES) {
-    const url =
-      `https://api.openagenda.com/v2/events?${baseParams}` +
-      (after ? `&after=${encodeURIComponent(after)}` : '');
+    const cursorParams = afterArr
+      ? afterArr.map(v => `&after[]=${encodeURIComponent(v)}`).join('')
+      : '';
+    const url = `https://api.openagenda.com/v2/events?${baseParams}${cursorParams}`;
 
     const r = await fetch(url);
     if (r.status === 429) throw new Error('OpenAgenda: quota API atteint — réessayez dans quelques minutes.');
@@ -406,10 +557,10 @@ export async function fetchOpenAgenda(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     all.push(...events.map((ev: any) => normOA(ev, city)).filter((ev) => ev.startDate && ev.name));
 
-    after = (d.after as string | null | undefined) ?? null;
+    afterArr = Array.isArray(d.after) && d.after.length > 0 ? (d.after as string[]) : null;
     page++;
 
-    if (!after || events.length < OA_PAGE_SIZE) break;
+    if (!afterArr || events.length < OA_PAGE_SIZE) break;
   }
 
   return all;
