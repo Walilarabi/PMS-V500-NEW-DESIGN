@@ -74,9 +74,11 @@ const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
   },
 };
 
-/** Normalise un rôle inconnu vers 'reader' (principe du moindre privilège). */
+/** Normalise un rôle inconnu vers 'admin' si null (propriétaire initial)
+ *  ou vers 'reader' pour tout rôle DB non reconnu (moindre privilège). */
 function normalizeRole(role: string | null | undefined): RoleId {
-  if (!role) return 'reader';
+  // Pas de rôle = propriétaire / compte sans profil → accès complet
+  if (!role) return 'admin';
   const r = role.toLowerCase();
   // Rôles internes RBAC
   if (r === 'admin') return 'admin';

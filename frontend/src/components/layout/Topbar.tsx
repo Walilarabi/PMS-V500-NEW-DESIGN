@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
-import { useAuth } from '@/src/domains/auth/AuthContext';
 import { useSasNavBadges } from '@/src/domains/sas/hooks';
 import { HotelSelector } from './HotelSelector';
 import { UserAvatar } from './UserAvatar';
@@ -65,7 +64,6 @@ const NAV_ITEMS = [
 ];
 
 export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
-  const { } = useAuth();
   const { data: sasBadges } = useSasNavBadges();
 
   const activeNav = activePage.startsWith('settings') ? 'settings' : PAGE_TO_NAV[activePage] ?? 'flowday';
