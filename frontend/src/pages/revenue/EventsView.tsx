@@ -349,7 +349,7 @@ export const EventsView: React.FC = () => {
               />
             )}
             {tab === 'heatmap'  && <EventsHeatmapView />}
-            {tab === 'holidays' && <EventSchoolHolidaysView onImportEvents={() => setValidationOpen(true)} />}
+            {tab === 'holidays' && <EventSchoolHolidaysView year={activeYear} onImportEvents={() => setValidationOpen(true)} />}
 
             <div className="flex items-start gap-2 text-[12px] text-slate-500 bg-white/80 ring-1 ring-slate-100 rounded-2xl px-4 py-3 shadow-sm">
               <Sparkles className="w-3.5 h-3.5 text-violet-500 mt-0.5 shrink-0" />
