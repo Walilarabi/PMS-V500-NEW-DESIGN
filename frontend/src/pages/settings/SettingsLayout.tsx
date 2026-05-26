@@ -29,6 +29,7 @@
 import React, { useMemo, useState } from 'react';
 import { Menu, X as XIcon } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
+import { DebugPanel } from '@/src/components/DebugPanel';
 import type { PageId } from '@/src/types';
 import {
   SETTINGS_NAVIGATION,
@@ -196,6 +197,9 @@ export const SettingsLayout: React.FC<SettingsLayoutProps> = ({ activePage, onNa
           <SettingsContent activePage={activePage} onNavigate={onNavigate} />
         </main>
       </div>
+
+      {/* ─── Debug panel — visible uniquement dans Paramètres ────────── */}
+      <DebugPanel />
     </div>
   );
 };

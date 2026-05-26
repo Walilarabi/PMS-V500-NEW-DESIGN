@@ -8,13 +8,21 @@
  *  - If user has 0 hotels → show nothing (session may not be ready, or no access yet)
  *  - If user has 1 hotel  → show name as static label, no dropdown
  *  - If user has 2+ hotels → render the dropdown with all options
+ *
+ * size:
+ *  - 'sm' (default) — compact, sub-label style (legacy)
+ *  - 'md'           — prominent, matches main nav font (topbar use)
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Building2, ChevronDown, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 
-export const HotelSelector: React.FC = () => {
+interface HotelSelectorProps {
+  size?: 'sm' | 'md';
+}
+
+export const HotelSelector: React.FC<HotelSelectorProps> = ({ size = 'sm' }) => {
   const { session, switchHotel, isSwitchingHotel } = useAuth();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,12 +54,22 @@ export const HotelSelector: React.FC = () => {
 
   if (hotels.length === 0) return null;
 
+  const isMd = size === 'md';
+
   // Single hotel: static display
   if (hotels.length === 1) {
     return (
       <div className="flex items-center gap-1.5 min-w-0">
-        <Building2 size={11} className="text-gray-400 shrink-0" />
-        <p className="text-[9px] text-gray-400 font-medium truncate leading-none">
+        <Building2
+          size={isMd ? 13 : 11}
+          className={cn('shrink-0', isMd ? 'text-gray-500' : 'text-gray-400')}
+        />
+        <p
+          className={cn(
+            'font-medium truncate leading-none',
+            isMd ? 'text-[13px] text-gray-700' : 'text-[9px] text-gray-400',
+          )}
+        >
           {activeHotel?.name ?? 'PMS'}
         </p>
       </div>
@@ -78,24 +96,43 @@ export const HotelSelector: React.FC = () => {
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          'flex items-center gap-1 px-1.5 py-0.5 -ml-1.5 rounded-md',
-          'text-[9px] font-medium leading-none transition-colors',
-          'hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-[#8B5CF6]/30',
+          'flex items-center gap-1.5 rounded-lg transition-colors',
+          'focus:outline-none focus:ring-1 focus:ring-[#8B5CF6]/30',
+          isMd
+            ? 'px-2.5 py-1.5 hover:bg-gray-50'
+            : 'px-1.5 py-0.5 -ml-1.5 hover:bg-gray-50',
           isSwitchingHotel && 'opacity-60 cursor-wait',
         )}
         title="Changer d'hôtel"
       >
         {isSwitchingHotel ? (
-          <Loader2 size={9} className="text-[#8B5CF6] animate-spin shrink-0" />
+          <Loader2
+            size={isMd ? 13 : 9}
+            className="text-[#8B5CF6] animate-spin shrink-0"
+          />
         ) : (
-          <Building2 size={9} className="text-gray-400 shrink-0" />
+          <Building2
+            size={isMd ? 13 : 9}
+            className={cn('shrink-0', isMd ? 'text-gray-500' : 'text-gray-400')}
+          />
         )}
-        <span className="text-gray-500 truncate max-w-[110px]">
+        <span
+          className={cn(
+            'truncate',
+            isMd
+              ? 'text-[13px] font-semibold text-gray-700 max-w-[160px]'
+              : 'text-[9px] font-medium text-gray-500 max-w-[110px]',
+          )}
+        >
           {activeHotel?.name ?? 'PMS'}
         </span>
         <ChevronDown
-          size={9}
-          className={cn('text-gray-300 transition-transform shrink-0', open && 'rotate-180')}
+          size={isMd ? 12 : 9}
+          className={cn(
+            'transition-transform shrink-0',
+            isMd ? 'text-gray-400' : 'text-gray-300',
+            open && 'rotate-180',
+          )}
         />
       </button>
 

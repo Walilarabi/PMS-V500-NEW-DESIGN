@@ -1,13 +1,14 @@
 import React from 'react';
 import {
   Zap, Calendar, Users, TrendingUp, CreditCard,
-  BarChart2, Settings, Shield, LogOut,
+  BarChart2, Settings, Shield,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 import { useSasNavBadges } from '@/src/domains/sas/hooks';
 import { HotelSelector } from './HotelSelector';
+import { UserAvatar } from './UserAvatar';
 
 interface TopbarProps {
   activePage: PageId;
@@ -53,8 +54,8 @@ const PAGE_TO_NAV: Record<string, string> = {
 };
 
 const NAV_ITEMS = [
-  { id: 'flowday',      label: 'Flowday',       icon: Zap,        defaultPage: 'flowboard' as PageId },
-  { id: 'sas',         label: 'SAS',            icon: Shield,     defaultPage: 'sas_incoming' as PageId, hasBadge: true },
+  { id: 'flowday',      label: 'Flowday',      icon: Zap,        defaultPage: 'flowboard' as PageId },
+  { id: 'sas',          label: 'SAS',           icon: Shield,     defaultPage: 'sas_incoming' as PageId, hasBadge: true },
   { id: 'reservations', label: 'Réservations',  icon: Calendar,   defaultPage: 'reservations' as PageId },
   { id: 'clients',      label: 'Clients',       icon: Users,      defaultPage: 'clients' as PageId },
   { id: 'revenue',      label: 'Revenue',       icon: TrendingUp, defaultPage: 'rev_dashboard' as PageId },
@@ -64,7 +65,7 @@ const NAV_ITEMS = [
 ];
 
 export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
-  const { logout } = useAuth();
+  const { } = useAuth();
   const { data: sasBadges } = useSasNavBadges();
 
   const activeNav = activePage.startsWith('settings') ? 'settings' : PAGE_TO_NAV[activePage] ?? 'flowday';
@@ -72,22 +73,28 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
   const anomalyCount = sasBadges?.anomaly_count ?? 0;
 
   return (
-    <header className="h-14 bg-white border-b border-gray-100 flex items-center px-4 gap-4 shrink-0 z-40">
-      {/* Logo + Hotel Selector */}
-      <div className="flex items-center gap-2.5 w-60 shrink-0">
+    <header className="h-14 bg-white border-b border-gray-100 flex items-center px-4 gap-0 shrink-0 z-40">
+
+      {/* ── Brand ─────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2.5 shrink-0">
         <div className="w-8 h-8 bg-[#8B5CF6] rounded-xl flex items-center justify-center shadow-lg shadow-[#8B5CF6]/30 shrink-0">
           <span className="text-white font-black text-sm">F</span>
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] font-black text-gray-900 leading-none tracking-tight">FLOWTYM</p>
-          <div className="mt-0.5">
-            <HotelSelector />
-          </div>
-        </div>
+        <span className="hidden sm:block text-[13px] font-black text-gray-900 tracking-tight uppercase select-none">
+          FLOWTYM
+        </span>
       </div>
 
-      {/* Navigation principale */}
-      <nav className="flex-1 flex items-center justify-center">
+      {/* ── Divider ───────────────────────────────────────────────── */}
+      <div className="h-5 w-px bg-gray-200 mx-3.5 shrink-0 hidden sm:block" aria-hidden="true" />
+
+      {/* ── Sélecteur hôtel — texte identique aux menus principaux ── */}
+      <div className="shrink-0">
+        <HotelSelector size="md" />
+      </div>
+
+      {/* ── Navigation principale — centrée ───────────────────────── */}
+      <nav className="flex-1 flex items-center justify-center" aria-label="Navigation principale">
         <div className="flex items-center gap-0.5 bg-gray-50 p-1 rounded-2xl border border-gray-100">
           {NAV_ITEMS.map((item) => {
             const isActive = activeNav === item.id;
@@ -107,7 +114,6 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
                 <item.icon size={15} />
                 {item.label}
 
-                {/* Bulles SAS dans le bouton Flowday */}
                 {isSas && (pendingCount > 0 || anomalyCount > 0) && (
                   <span className="flex items-center gap-0.5">
                     {pendingCount > 0 && (
@@ -128,16 +134,11 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
         </div>
       </nav>
 
-      {/* User menu */}
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          onClick={() => logout()}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[11px] font-bold text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
-        >
-          <LogOut size={13} />
-          Déconnexion
-        </button>
+      {/* ── Avatar utilisateur ────────────────────────────────────── */}
+      <div className="shrink-0">
+        <UserAvatar onNavigateSettings={() => setActivePage('settings')} />
       </div>
+
     </header>
   );
 };

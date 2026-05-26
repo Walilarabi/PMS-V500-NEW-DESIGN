@@ -49,7 +49,6 @@ import {
 } from '@/src/hooks/useRealtimeChannels';
 import { useSupabaseSync } from '@/src/hooks/useSupabaseSync';
 import { useCentralPricingSync } from '@/src/hooks/useCentralPricingSync';
-import { DebugPanel } from '@/src/components/DebugPanel';
 
 // Placeholder universel — icône Lucide (épuré, minimaliste)
 const Placeholder = ({ title, icon: Icon = Construction }: { title: string; icon?: LucideIcon }) => (
@@ -289,7 +288,6 @@ export default function App() {
           {renderPage(activePage, navigate)}
         </main>
       </div>
-      <DebugPanel />
     </div>
   );
 }
