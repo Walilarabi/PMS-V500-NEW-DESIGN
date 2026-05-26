@@ -18,7 +18,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertCircle, Calendar, CalendarDays, CalendarRange, Euro, FileDown, FileSpreadsheet, Filter,
-  LineChart, List, Plus, Search, Sparkles, Upload, X, Gauge, ListChecks,
+  LineChart, List, Plus, Radio, Search, Sparkles, Upload, X, Gauge, ListChecks,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
@@ -37,10 +37,11 @@ import { EventValidationModal } from './events/EventValidationModal';
 import { KpiTile } from './events/components/KpiTile';
 import { MarketIntelligenceDashboard } from './events/intelligence/MarketIntelligenceDashboard';
 import { RecommendationsInbox } from './events/intelligence/RecommendationsInbox';
+import { EventLiveSearchView } from './events/EventLiveSearchView';
 import { useEventSourcesAutoSync } from '@/src/hooks/useEventSourcesAutoSync';
 import { exportEventsToExcel, exportEventsToPDF } from '@/src/services/event-export.service';
 
-type ViewMode = 'list' | 'calendar' | 'history' | 'intelligence' | 'recos';
+type ViewMode = 'list' | 'calendar' | 'history' | 'intelligence' | 'recos' | 'livesearch';
 
 export const EventsView: React.FC = () => {
   const {
@@ -256,6 +257,16 @@ export const EventsView: React.FC = () => {
             >
               <ListChecks className="w-3.5 h-3.5" /> Recos RMS
             </button>
+            <button
+              onClick={() => setView('livesearch')}
+              className={cn(
+                'px-3 py-1.5 text-[12.5px] font-medium rounded-md flex items-center gap-1.5 relative',
+                view === 'livesearch' ? 'bg-white text-emerald-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+              )}
+              title="Recherche Live — Ticketmaster + OpenAgenda en temps réel"
+            >
+              <Radio className="w-3.5 h-3.5" /> Recherche Live
+            </button>
           </div>
 
           {/* Search */}
@@ -307,33 +318,39 @@ export const EventsView: React.FC = () => {
         )}
 
         {/* ─── BODY ──────────────────────────────────────────────────── */}
-        <div className="flex gap-4 items-start">
-          <div className="flex-1 min-w-0">
-            {view === 'list' && <EventsList onSelect={(e) => setSelected(e)} />}
-            {view === 'calendar' && (
-              <EventsCalendar
-                onSelectEvent={(e) => setSelected(e)}
-                onCreate={(date) => setEditor({ open: true, defaultDate: date })}
-              />
-            )}
-            {view === 'history' && <EventsHistory />}
-            {view === 'intelligence' && <MarketIntelligenceDashboard />}
-            {view === 'recos' && <RecommendationsInbox />}
+        {view === 'livesearch' ? (
+          <EventLiveSearchView
+            onImportEvents={() => setValidationOpen(true)}
+          />
+        ) : (
+          <div className="flex gap-4 items-start">
+            <div className="flex-1 min-w-0">
+              {view === 'list' && <EventsList onSelect={(e) => setSelected(e)} />}
+              {view === 'calendar' && (
+                <EventsCalendar
+                  onSelectEvent={(e) => setSelected(e)}
+                  onCreate={(date) => setEditor({ open: true, defaultDate: date })}
+                />
+              )}
+              {view === 'history' && <EventsHistory />}
+              {view === 'intelligence' && <MarketIntelligenceDashboard />}
+              {view === 'recos' && <RecommendationsInbox />}
 
-            {/* Footer info */}
-            <div className="mt-4 flex items-start gap-2 text-[12px] text-slate-500 bg-white/80 ring-1 ring-slate-100 rounded-2xl px-4 py-3">
-              <Sparkles className="w-3.5 h-3.5 text-violet-500 mt-0.5" />
-              <span>
-                Les événements impactent automatiquement vos recommandations tarifaires, la pression marché et vos alertes.
-              </span>
-              <a className="ml-auto text-[12px] font-medium text-violet-600 hover:underline cursor-pointer">
-                En savoir plus sur l'impact des événements →
-              </a>
+              {/* Footer info */}
+              <div className="mt-4 flex items-start gap-2 text-[12px] text-slate-500 bg-white/80 ring-1 ring-slate-100 rounded-2xl px-4 py-3">
+                <Sparkles className="w-3.5 h-3.5 text-violet-500 mt-0.5" />
+                <span>
+                  Les événements impactent automatiquement vos recommandations tarifaires, la pression marché et vos alertes.
+                </span>
+                <a className="ml-auto text-[12px] font-medium text-violet-600 hover:underline cursor-pointer">
+                  En savoir plus sur l'impact des événements →
+                </a>
+              </div>
             </div>
-          </div>
 
-          <EventSearchPanel open={searchOpen} onToggle={() => setSearchOpen((v) => !v)} />
-        </div>
+            <EventSearchPanel open={searchOpen} onToggle={() => setSearchOpen((v) => !v)} />
+          </div>
+        )}
       </div>
 
       {/* Modals & drawers */}
