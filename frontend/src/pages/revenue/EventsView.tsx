@@ -17,8 +17,8 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Activity, AlertCircle, Calendar, CalendarDays, CalendarRange, Euro, FileDown, FileSpreadsheet, Filter,
-  LineChart, List, Plus, Radio, Search, Sparkles, Upload, X, Gauge, ListChecks,
+  Activity, AlertCircle, Backpack, Calendar, CalendarDays, CalendarRange, Euro, FileDown, FileSpreadsheet,
+  Filter, LineChart, List, Plus, Radio, Search, Sparkles, Upload, X, Gauge, ListChecks,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
@@ -38,10 +38,11 @@ import { KpiTile } from './events/components/KpiTile';
 import { MarketIntelligenceDashboard } from './events/intelligence/MarketIntelligenceDashboard';
 import { RecommendationsInbox } from './events/intelligence/RecommendationsInbox';
 import { EventLiveSearchView } from './events/EventLiveSearchView';
+import { EventSchoolHolidaysView } from './events/EventSchoolHolidaysView';
 import { useEventSourcesAutoSync } from '@/src/hooks/useEventSourcesAutoSync';
 import { exportEventsToExcel, exportEventsToPDF } from '@/src/services/event-export.service';
 
-type ViewMode = 'list' | 'calendar' | 'history' | 'intelligence' | 'recos' | 'livesearch';
+type ViewMode = 'list' | 'calendar' | 'history' | 'intelligence' | 'recos' | 'livesearch' | 'holidays';
 
 export const EventsView: React.FC = () => {
   const {
@@ -267,6 +268,16 @@ export const EventsView: React.FC = () => {
             >
               <Radio className="w-3.5 h-3.5" /> Recherche Live
             </button>
+            <button
+              onClick={() => setView('holidays')}
+              className={cn(
+                'px-3 py-1.5 text-[12.5px] font-medium rounded-md flex items-center gap-1.5 relative',
+                view === 'holidays' ? 'bg-white text-rose-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+              )}
+              title="Vacances scolaires France — toutes zones, 2024 → 2027"
+            >
+              <Backpack className="w-3.5 h-3.5" /> Vacances scolaires
+            </button>
           </div>
 
           {/* Search */}
@@ -320,6 +331,10 @@ export const EventsView: React.FC = () => {
         {/* ─── BODY ──────────────────────────────────────────────────── */}
         {view === 'livesearch' ? (
           <EventLiveSearchView
+            onImportEvents={() => setValidationOpen(true)}
+          />
+        ) : view === 'holidays' ? (
+          <EventSchoolHolidaysView
             onImportEvents={() => setValidationOpen(true)}
           />
         ) : (

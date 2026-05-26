@@ -158,6 +158,49 @@ function lsInfluencePrice(level: EventImpactLevel): number {
   return map[level] ?? 0;
 }
 
+// ─── Période de recherche (rétro & prospective) ───────────────────────────────
+
+/**
+ * Plage temporelle pour la recherche live.
+ * Permet d'interroger le passé (2024, 2025), le présent (2026) et le futur (2027),
+ * ainsi que des fenêtres glissantes (3/6/12 mois à compter d'aujourd'hui).
+ */
+export interface LivePeriod {
+  start: string;   // ISO date YYYY-MM-DD inclus
+  end: string;     // ISO date YYYY-MM-DD inclus
+  label: string;   // libellé court pour l'UI
+  kind: 'year' | 'forward';
+}
+
+export function yearPeriod(year: number): LivePeriod {
+  return {
+    start: `${year}-01-01`,
+    end:   `${year}-12-31`,
+    label: String(year),
+    kind:  'year',
+  };
+}
+
+export function monthsForwardPeriod(months: number): LivePeriod {
+  const now = new Date();
+  const fut = new Date(now);
+  fut.setMonth(now.getMonth() + months);
+  return {
+    start: now.toISOString().substring(0, 10),
+    end:   fut.toISOString().substring(0, 10),
+    label: `${months} mois`,
+    kind:  'forward',
+  };
+}
+
+function isoToTmDateTime(date: string, endOfDay = false): string {
+  return `${date}T${endOfDay ? '23:59:59' : '00:00:00'}Z`;
+}
+
+function isoToUnix(date: string, endOfDay = false): number {
+  return Math.floor(new Date(`${date}T${endOfDay ? '23:59:59' : '00:00:00'}Z`).getTime() / 1000);
+}
+
 // ─── Normalisation Ticketmaster ───────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -244,20 +287,17 @@ function dedup(events: RMSMarketEvent[]): RMSMarketEvent[] {
 export async function fetchTicketmaster(
   city: LiveCity,
   key: string,
-  months: number,
+  period: LivePeriod,
 ): Promise<RMSMarketEvent[]> {
-  const now = new Date();
-  const fut = new Date(now);
-  fut.setMonth(now.getMonth() + months);
-  const sd = now.toISOString().substring(0, 19) + 'Z';
-  const ed = fut.toISOString().substring(0, 19) + 'Z';
+  const sd = isoToTmDateTime(period.start, false);
+  const ed = isoToTmDateTime(period.end, true);
   const url =
     `https://app.ticketmaster.com/discovery/v2/events.json` +
     `?apikey=${encodeURIComponent(key)}` +
     `&latlong=${city.lat},${city.lon}` +
     `&radius=30&unit=km` +
     `&startDateTime=${sd}&endDateTime=${ed}` +
-    `&size=100&sort=date,asc`;
+    `&size=200&sort=date,asc`;
 
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Ticketmaster: HTTP ${r.status}`);
@@ -274,17 +314,14 @@ export async function fetchTicketmaster(
 export async function fetchOpenAgenda(
   city: LiveCity,
   key: string,
-  months: number,
+  period: LivePeriod,
 ): Promise<RMSMarketEvent[]> {
-  const now = new Date();
-  const fut = new Date(now);
-  fut.setMonth(now.getMonth() + months);
-  const after  = Math.floor(now.getTime() / 1000);
-  const before = Math.floor(fut.getTime() / 1000);
+  const after  = isoToUnix(period.start, false);
+  const before = isoToUnix(period.end, true);
   const url =
     `https://api.openagenda.com/v2/events` +
     `?key=${encodeURIComponent(key)}` +
-    `&size=100` +
+    `&size=200` +
     `&timings[gte]=${after}&timings[lte]=${before}` +
     `&city[]=${encodeURIComponent(city.n)}` +
     `&lang=fr`;
@@ -309,7 +346,7 @@ export interface LiveSearchResult {
 
 export async function runLiveSearch(
   city: LiveCity,
-  months: number,
+  period: LivePeriod,
   useTM: boolean,
   useOA: boolean,
   tmKey: string,
@@ -321,16 +358,117 @@ export async function runLiveSearch(
 
   await Promise.allSettled([
     useTM
-      ? fetchTicketmaster(city, tmKey, months)
+      ? fetchTicketmaster(city, tmKey, period)
           .then((r) => { all.push(...r); sources.push({ id: 'ticketmaster', count: r.length, ok: true }); })
           .catch((e: Error) => { errors.push(e.message); sources.push({ id: 'ticketmaster', count: 0, ok: false, error: e.message }); })
       : Promise.resolve(),
     useOA
-      ? fetchOpenAgenda(city, oaKey, months)
+      ? fetchOpenAgenda(city, oaKey, period)
           .then((r) => { all.push(...r); sources.push({ id: 'openagenda', count: r.length, ok: true }); })
           .catch((e: Error) => { errors.push(e.message); sources.push({ id: 'openagenda', count: 0, ok: false, error: e.message }); })
       : Promise.resolve(),
   ]);
 
   return { events: dedup(all.sort((a, b) => a.startDate.localeCompare(b.startDate))), errors, sources };
+}
+
+// ─── Vacances scolaires (data.education.gouv.fr) ──────────────────────────────
+
+/**
+ * Enregistrement brut renvoyé par l'API du calendrier scolaire.
+ * Dataset officiel `fr-en-calendrier-scolaire` — pas de clé API requise.
+ */
+export interface SchoolHolidayRecord {
+  description: string;
+  startDate: string;     // ISO YYYY-MM-DD
+  endDate: string;       // ISO YYYY-MM-DD
+  zones: string;         // "Zone A" | "Zone B" | "Zone C" | "Corse" | ...
+  location: string;      // "Paris" | "Bordeaux" | ...
+  anneeScolaire: string; // "2025-2026"
+  population: string;    // "Élèves" | "Enseignants"
+}
+
+const SCHOOL_HOLIDAYS_URL =
+  'https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/records';
+
+export interface SchoolHolidaysQuery {
+  year: number;
+  zone?: string;       // "Zone A" | "Zone B" | "Zone C" | "Corse" | undefined → toutes
+  location?: string;   // ville académique
+}
+
+export async function fetchSchoolHolidays(q: SchoolHolidaysQuery): Promise<SchoolHolidayRecord[]> {
+  const whereParts = [
+    `start_date >= date'${q.year}-01-01'`,
+    `start_date <= date'${q.year}-12-31'`,
+    `population = "Élèves"`,
+  ];
+  if (q.zone)     whereParts.push(`zones = "${q.zone.replace(/"/g, '')}"`);
+  if (q.location) whereParts.push(`location = "${q.location.replace(/"/g, '')}"`);
+
+  const params = new URLSearchParams({
+    limit: '100',
+    order_by: 'start_date asc',
+    where: whereParts.join(' AND '),
+  });
+
+  const r = await fetch(`${SCHOOL_HOLIDAYS_URL}?${params.toString()}`);
+  if (!r.ok) throw new Error(`Vacances scolaires : HTTP ${r.status}`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d: any = await r.json();
+  return ((d.results ?? []) as unknown[])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((rec: any): SchoolHolidayRecord => ({
+      description:   String(rec.description ?? '').trim(),
+      startDate:     String(rec.start_date ?? '').substring(0, 10),
+      endDate:       String(rec.end_date ?? '').substring(0, 10),
+      zones:         String(rec.zones ?? '').trim(),
+      location:      String(rec.location ?? '').trim(),
+      anneeScolaire: String(rec.annee_scolaire ?? '').trim(),
+      population:    String(rec.population ?? '').trim(),
+    }))
+    .filter((h) => h.startDate && h.description);
+}
+
+/**
+ * Impact RM des vacances scolaires sur l'hôtellerie loisirs.
+ * Été = hyper-compression, Noël = critique, autres = élevé/moyen selon période.
+ */
+export function schoolHolidayImpact(description: string): EventImpactLevel {
+  const d = description.toLowerCase();
+  if (d.includes('été') || d.includes('ete'))                 return 'hyper_compression';
+  if (d.includes('noël') || d.includes('noel'))               return 'critical';
+  if (d.includes('hiver'))                                     return 'high';
+  if (d.includes('printemps') || d.includes('pâques'))         return 'high';
+  if (d.includes('toussaint'))                                 return 'high';
+  if (d.includes('ascension') || d.includes('pont'))           return 'medium';
+  return 'medium';
+}
+
+export function normalizeSchoolHoliday(h: SchoolHolidayRecord): RMSMarketEvent {
+  const level = schoolHolidayImpact(h.description);
+  const coefs = lsCoefs(level);
+  const now   = new Date().toISOString();
+  const slug  = (h.description + '_' + h.zones).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
+  const id    = `vs_${slug}_${h.startDate}`;
+
+  return {
+    id,
+    name:          `${h.description}${h.zones ? ` — ${h.zones}` : ''}`,
+    category:      'culture',
+    status:        'active',
+    city:          h.location || 'France',
+    country:       'FR',
+    startDate:     h.startDate,
+    endDate:       h.endDate || h.startDate,
+    impact:        { ...coefs, level },
+    influencePrice: lsInfluencePrice(level),
+    description:   `Vacances scolaires ${h.anneeScolaire || ''} · ${h.zones || ''} · ${h.location || ''}`.trim(),
+    sources:       ['school_holidays'],
+    primarySource: 'Calendrier scolaire',
+    rmsSynced:     false,
+    history:       [{ at: now, action: 'imported', source: 'data.education.gouv.fr' }],
+    createdAt:     now,
+    updatedAt:     now,
+  };
 }

@@ -18,8 +18,11 @@ import {
   autocompleteCity,
   findCity,
   runLiveSearch,
+  yearPeriod,
+  monthsForwardPeriod,
   LIVE_CITIES,
   type LiveSearchConfig,
+  type LivePeriod,
 } from '@/src/services/event-live-search.service';
 import { useEventsStore } from '@/src/store/eventsStore';
 import type { RMSMarketEvent, EventImpactLevel } from '@/src/types/events';
@@ -250,7 +253,7 @@ function SearchCard({
 }) {
   const [cityInput, setCityInput] = useState(cfg.lastCity ?? 'Paris');
   const [acList, setAcList] = useState<ReturnType<typeof autocompleteCity>>([]);
-  const [months, setMonths] = useState(3);
+  const [period, setPeriod] = useState<LivePeriod>(() => monthsForwardPeriod(6));
   const [useTM, setUseTM] = useState(true);
   const [useOA, setUseOA] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -284,7 +287,7 @@ function SearchCard({
 
     try {
       const result = await runLiveSearch(
-        city, months,
+        city, period,
         !!(useTM && cfg.tmKey),
         !!(useOA && cfg.oaKey),
         cfg.tmKey ?? '',
@@ -351,18 +354,59 @@ function SearchCard({
         </div>
 
         {/* Period */}
-        <div className="min-w-[110px]">
-          <label className="block text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1">Période</label>
-          <select
-            value={months}
-            onChange={(e) => setMonths(parseInt(e.target.value, 10))}
-            className="w-full px-3 py-2 text-[13px] rounded-lg ring-1 ring-slate-200 bg-white focus:ring-violet-400 outline-none"
-          >
-            <option value={1}>1 mois</option>
-            <option value={3}>3 mois</option>
-            <option value={6}>6 mois</option>
-            <option value={12}>12 mois</option>
-          </select>
+        <div className="min-w-[260px]">
+          <label className="block text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1">
+            Période <span className="text-slate-300">·</span> <span className="text-violet-600 font-semibold">{period.label}</span>
+          </label>
+          <div className="flex flex-wrap items-center gap-1">
+            {[
+              { label: '2024', tone: 'slate'   as const, year: 2024, hint: 'Passé' },
+              { label: '2025', tone: 'slate'   as const, year: 2025, hint: 'Passé' },
+              { label: '2026', tone: 'violet'  as const, year: 2026, hint: 'En cours' },
+              { label: '2027', tone: 'emerald' as const, year: 2027, hint: 'À venir' },
+            ].map((y) => {
+              const active = period.kind === 'year' && period.start.startsWith(`${y.year}-`);
+              return (
+                <button
+                  key={y.year}
+                  type="button"
+                  onClick={() => setPeriod(yearPeriod(y.year))}
+                  title={y.hint}
+                  className={cn(
+                    'px-2.5 py-1.5 text-[12px] font-semibold rounded-lg ring-1 transition-all tabular-nums',
+                    active
+                      ? y.tone === 'violet'
+                        ? 'bg-violet-600 text-white ring-violet-600 shadow-sm shadow-violet-600/20'
+                        : y.tone === 'emerald'
+                          ? 'bg-emerald-600 text-white ring-emerald-600 shadow-sm shadow-emerald-600/20'
+                          : 'bg-slate-700 text-white ring-slate-700'
+                      : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  {y.label}
+                </button>
+              );
+            })}
+            <span className="w-px h-5 bg-slate-200 mx-1" aria-hidden="true" />
+            {[3, 6, 12].map((m) => {
+              const active = period.kind === 'forward' && period.label === `${m} mois`;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setPeriod(monthsForwardPeriod(m))}
+                  className={cn(
+                    'px-2 py-1.5 text-[12px] font-medium rounded-lg ring-1 transition-all',
+                    active
+                      ? 'bg-violet-50 text-violet-700 ring-violet-200'
+                      : 'bg-white text-slate-500 ring-slate-200 hover:bg-slate-50',
+                  )}
+                >
+                  +{m}m
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Sources */}
