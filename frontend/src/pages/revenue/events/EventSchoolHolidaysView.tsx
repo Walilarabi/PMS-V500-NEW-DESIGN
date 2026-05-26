@@ -239,24 +239,6 @@ export const EventSchoolHolidaysView: React.FC<EventSchoolHolidaysViewProps> = (
         <div className="px-5 py-4 flex flex-wrap items-end gap-5">
           <div>
             <label className="block text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1.5">
-              Pays <span className="text-slate-300">·</span> <span className="text-slate-700 font-semibold">{country.flag} {country.name}</span>
-            </label>
-            <select
-              value={country.code}
-              onChange={(e) => {
-                const c = HOLIDAY_COUNTRIES.find((h) => h.code === e.target.value);
-                if (c) { setCountry(c); setZone(undefined); }
-              }}
-              className="px-3 py-1.5 text-[12.5px] font-medium rounded-lg ring-1 ring-slate-200 bg-white outline-none focus:ring-violet-400 min-w-[180px]"
-            >
-              {HOLIDAY_COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1.5">
               Année <span className="text-slate-300">·</span> <span className="text-violet-600 font-semibold tabular-nums">{year}</span>
             </label>
             <div className="flex items-center gap-1">
@@ -287,6 +269,24 @@ export const EventSchoolHolidaysView: React.FC<EventSchoolHolidaysViewProps> = (
                 );
               })}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-[10.5px] uppercase tracking-wide text-slate-400 font-medium mb-1.5">
+              Pays <span className="text-slate-300">·</span> <span className="text-slate-700 font-semibold">{country.flag} {country.name}</span>
+            </label>
+            <select
+              value={country.code}
+              onChange={(e) => {
+                const c = HOLIDAY_COUNTRIES.find((h) => h.code === e.target.value);
+                if (c) { setCountry(c); setZone(undefined); }
+              }}
+              className="px-3 py-1.5 text-[12.5px] font-medium rounded-lg ring-1 ring-slate-200 bg-white outline-none focus:ring-violet-400 min-w-[180px]"
+            >
+              {HOLIDAY_COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
+              ))}
+            </select>
           </div>
 
           {country.code === 'FR' && (
