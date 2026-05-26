@@ -22,8 +22,6 @@ import {
 } from '@/src/services/event-import-analyzer.service';
 import { integrateEventsToRMS } from '@/src/services/event-rms-integration.service';
 import { useEventsStore } from '@/src/store/eventsStore';
-import { CATEGORY_LABELS, IMPACT_LABELS } from '@/src/types/events';
-import type { EventCategory } from '@/src/types/events';
 
 type WizardStep = 'upload' | 'analyzing' | 'review' | 'done';
 type ImportSource = 'excel' | 'csv' | 'lighthouse' | 'api';
@@ -83,9 +81,17 @@ function StepUpload({
   onFile: (file: File, source: ImportSource) => void;
 }) {
   const [source, setSource] = useState<ImportSource>('excel');
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const accept = source === 'csv' ? '.csv' : '.xlsx,.xls';
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) onFile(f, source);
+  }
 
   return (
     <div className="space-y-5">
@@ -125,7 +131,15 @@ function StepUpload({
       ) : (
         <div
           onClick={() => fileRef.current?.click()}
-          className="rounded-xl ring-1 ring-dashed ring-slate-300 hover:ring-violet-400 hover:bg-violet-50/20 transition-all px-5 py-10 text-center cursor-pointer"
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          className={cn(
+            'rounded-xl ring-1 ring-dashed transition-all px-5 py-10 text-center cursor-pointer',
+            dragOver
+              ? 'ring-violet-500 bg-violet-50/40 scale-[1.01]'
+              : 'ring-slate-300 hover:ring-violet-400 hover:bg-violet-50/20',
+          )}
         >
           <input
             ref={fileRef}
@@ -137,19 +151,19 @@ function StepUpload({
               if (f) onFile(f, source);
             }}
           />
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center mb-3 ring-1 ring-violet-100">
+          <div className={cn(
+            'w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-3 ring-1 transition-colors',
+            dragOver ? 'bg-violet-100 text-violet-700 ring-violet-200' : 'bg-violet-50 text-violet-600 ring-violet-100',
+          )}>
             <Upload className="w-6 h-6" />
           </div>
           <div className="text-[13px] font-semibold text-slate-900">
-            Cliquer pour sélectionner un fichier
+            {dragOver ? 'Relâchez pour analyser…' : 'Cliquer ou glisser-déposer un fichier'}
           </div>
           <div className="text-[12px] text-slate-500 mt-1">
             {source === 'csv'
               ? 'Fichier .csv avec séparateur virgule ou point-virgule'
               : 'Fichier Excel (.xlsx / .xls) — feuilles 2024, 2025, 2026, 2027 supportées'}
-          </div>
-          <div className="mt-3 text-[11px] text-slate-400">
-            ou glissez-déposez votre fichier ici
           </div>
         </div>
       )}
@@ -277,7 +291,7 @@ function StepReview({
   }
 
   function selectByStatus(status: ImportStatus) {
-    onItemsChange(items.map((item) => item.status === status ? { ...item, selected: true } : item));
+    onItemsChange(items.map((item) => ({ ...item, selected: item.status === status })));
   }
 
   const allDisplayedSelected = displayed.length > 0 && displayed.every((i) => i.selected);
@@ -612,7 +626,7 @@ export const EventImportModal: React.FC<EventImportModalProps> = ({ open, onClos
     }
   }, [open]);
 
-  async function handleFile(file: File) {
+  async function handleFile(file: File, _source: ImportSource) {
     setFileName(file.name);
     setError(null);
     setStep('analyzing');
@@ -621,6 +635,16 @@ export const EventImportModal: React.FC<EventImportModalProps> = ({ open, onClos
       const parsed = parseEventExcel(buf, file.name);
       // Petite pause pour laisser l'animation s'afficher
       await new Promise((r) => window.setTimeout(r, parsed.events.length > 50 ? 1400 : 900));
+
+      if (parsed.events.length === 0) {
+        const hint = parsed.warnings.length > 0
+          ? ` (${parsed.warnings[0]})`
+          : ' — vérifiez que les colonnes Nom, Début et Fin sont présentes.';
+        setError(`Aucun événement détecté dans "${file.name}"${hint}`);
+        setStep('upload');
+        return;
+      }
+
       const analyzed = analyzeImport(parsed, existingEvents);
       setReport(analyzed);
       setReviewItems(analyzed.items);

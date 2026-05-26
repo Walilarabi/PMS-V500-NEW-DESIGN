@@ -70,6 +70,7 @@ export interface EventFilters {
   search: string;
   categories: EventCategory[];
   cities: string[];
+  countries: string[];
   minImpact?: EventImpactLevel;
   statuses: EventStatus[];
   sources: string[];
@@ -82,6 +83,7 @@ const DEFAULT_FILTERS: EventFilters = {
   search: '',
   categories: [],
   cities: [],
+  countries: [],
   minImpact: undefined,
   statuses: [],
   sources: [],
@@ -262,6 +264,16 @@ export const useEventsStore = create<EventsStore>()(
         const merged = Array.from(byId.values());
         const { deduped, merged: dups } = dedupEvents(merged);
         set({ events: deduped });
+        // Propagation RMS automatique — déclenche le Central Pricing Engine et
+        // le signal eventIntensity pour l'autopilote (effets de bord async).
+        const newAndUpdated = incoming.filter(
+          (ev) => ev.impact.compression >= 0, // toutes les gammes
+        );
+        if (newAndUpdated.length > 0) {
+          import('@/src/services/event-rms-integration.service')
+            .then(({ integrateEventsToRMS }) => integrateEventsToRMS(newAndUpdated))
+            .catch(() => { /* best-effort — ne bloque pas l'UI */ });
+        }
         return { added, updated, duplicates: dups };
       },
 
@@ -361,6 +373,7 @@ export const useEventsStore = create<EventsStore>()(
             if (filters.statuses.length && !filters.statuses.includes(e.status)) return false;
             if (filters.categories.length && !filters.categories.includes(e.category)) return false;
             if (filters.cities.length && !filters.cities.includes(e.city)) return false;
+            if ((filters.countries ?? []).length && !filters.countries!.includes(e.country)) return false;
             if (filters.sources.length && !e.sources.some((s) => filters.sources.includes(s))) return false;
             if (filters.fromDate && e.endDate < filters.fromDate) return false;
             if (filters.toDate && e.startDate > filters.toDate) return false;
@@ -426,7 +439,20 @@ export const useEventsStore = create<EventsStore>()(
         autoSync: s.autoSync,
         syncLogs: s.syncLogs,
         refusedEvents: s.refusedEvents,
+        // Mémorisation des filtres entre sessions (dernière vue utilisateur).
+        filters: s.filters,
       }),
+      // Merge robuste : garantit que les champs récents (countries…) ne sont
+      // jamais `undefined` même si le snapshot persistant date d'avant leur
+      // ajout. Indispensable pour éviter les crashs au démarrage.
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<EventsStore>;
+        return {
+          ...current,
+          ...p,
+          filters: { ...DEFAULT_FILTERS, ...(p.filters ?? {}) },
+        };
+      },
     },
   ),
 );

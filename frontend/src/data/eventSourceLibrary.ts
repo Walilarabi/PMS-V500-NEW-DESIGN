@@ -925,18 +925,30 @@ function impactCoefficients(level: 'low' | 'medium' | 'high' | 'critical') {
   }
 }
 
-const SEED_PARIS_SALONS: RMSMarketEvent[] = RAW_PARIS_2026.map((r) => {
+const SEED_PARIS_SALONS: RMSMarketEvent[] = RAW_PARIS_2026.map((r, idx) => {
   const sourceId = resolveSourceId(r.sourceRaw) ?? 'src_paris_je_taime';
   const source = EVENT_SOURCE_LIBRARY.find((s) => s.id === sourceId)!;
   const venue = normalizeVenue(r.venueRaw);
   const impact = impactFromBadge(r.impactBadge);
   const coefs = impactCoefficients(impact.level);
   const id = `evt_paris_${r.start}_${r.name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`.slice(0, 80);
+
+  // Statuts réalistes : passé=confirmed, imminents=active, lointain=estimated
+  const today = new Date().toISOString().slice(0, 10);
+  const isPast = r.end < today;
+  const isImminent = r.start <= today || (r.start > today && r.start <= new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10));
+  const status: import('../types/events').EventStatus =
+    isPast      ? 'confirmed' :
+    isImminent  ? 'active' :
+    idx % 7 === 0 ? 'estimated' :
+    idx % 5 === 0 ? 'new' :
+    'confirmed';
+
   return {
     id,
     name: r.name,
     category: categoryForSource(sourceId, r.name),
-    status: 'active',
+    status,
     city: 'Paris',
     country: 'FR',
     zone: venue.zone,
@@ -947,11 +959,11 @@ const SEED_PARIS_SALONS: RMSMarketEvent[] = RAW_PARIS_2026.map((r) => {
     influencePrice: impact.price,
     sources: [sourceId],
     primarySource: source.name,
-    rmsSynced: true,
-    syncedAt: '2026-05-15T08:00:00Z',
+    rmsSynced: isPast || !['new', 'estimated'].includes(status),
+    syncedAt: isPast ? '2026-05-15T08:00:00Z' : undefined,
     history: [
-      { at: '2026-03-25T00:00:00Z', action: 'imported', source: 'DATES SALONS — MISE A JOUR 25-03-2026.xlsx' },
-      { at: '2026-05-15T08:00:00Z', action: 'synced', source: source.name },
+      { at: '2026-03-25T00:00:00Z', action: 'imported' as const, source: 'DATES SALONS — MISE A JOUR 25-03-2026.xlsx' },
+      { at: '2026-05-15T08:00:00Z', action: 'synced' as const, source: source.name },
     ],
     createdAt: '2026-03-25T00:00:00Z',
     updatedAt: '2026-05-15T08:00:00Z',

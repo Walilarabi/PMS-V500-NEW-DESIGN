@@ -120,14 +120,13 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
   function acceptOne(id: string) {
     const ev = candidates.find((c) => c.id === id);
     if (!ev) return;
-    bulkUpsert([ev]);
-    // retire de la sélection ET de la liste affichée
+    const syncedAt = new Date().toISOString();
+    bulkUpsert([{ ...ev, status: 'confirmed', rmsSynced: true, syncedAt }]);
     setSelected((prev) => {
       const next = new Set(prev);
       next.delete(id);
       return next;
     });
-    // si plus rien à valider, on ferme
     if (candidates.length === 1) onClose();
   }
 
@@ -135,7 +134,8 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
     const ids = [...selected];
     const toAccept = candidates.filter((c) => ids.includes(c.id));
     if (toAccept.length === 0) return;
-    bulkUpsert(toAccept);
+    const syncedAt = new Date().toISOString();
+    bulkUpsert(toAccept.map((ev) => ({ ...ev, status: 'confirmed', rmsSynced: true, syncedAt })));
     onClose();
   }
 
