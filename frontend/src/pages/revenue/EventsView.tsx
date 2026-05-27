@@ -159,7 +159,7 @@ export const EventsView: React.FC = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
-      <div className="px-4 pt-4 pb-10 space-y-3 max-w-[1920px] mx-auto">
+      <div className="px-4 pt-4 pb-10 space-y-3">
 
         {/* ─── 1. EN-TÊTE ─────────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-start justify-between gap-3">
