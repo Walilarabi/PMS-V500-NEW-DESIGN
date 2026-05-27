@@ -136,7 +136,7 @@ function mapSupabaseReservationToContext(r: SupabaseReservation): Reservation {
     departure: `${r.check_out} 11:00`,
     source,
     sourceColor: 'bg-violet-100 text-violet-700',
-    pax: r.pax ?? (r.adults ?? 1) + (r.children ?? 0),
+    partnerRef: r.reference ?? undefined,
     payment: 'En attente',
     totalAmount: r.total_amount ?? 0,
     totalTTC: r.total_amount ?? 0,

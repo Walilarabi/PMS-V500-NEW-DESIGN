@@ -61,6 +61,8 @@ export interface Reservation {
   // ── Nouveaux champs (rétrocompatibles — tous optionnels avec valeurs par défaut) ──
   checkIn?: string;                // ISO date "YYYY-MM-DD"
   checkOut?: string;               // ISO date "YYYY-MM-DD"
+  reference?: string;              // Référence PMS interne (FLW-YYYY-NNNNNN)
+  partnerRef?: string;             // Référence partenaire / OTA (numéro de réservation externe)
   reservationStatus?: ReservationStatus;
   isOverbooking?: boolean;
   overbookingPriority?: number;    // 0–4 (calculé automatiquement)
@@ -208,6 +210,7 @@ const INITIAL_RESERVATIONS: Reservation[] = [
     pmsFeeRate: 0.15,
     cleaningFee: 45,
     email: 'sophie.dubois@gmail.com',
+    partnerRef: 'ABN-8271049',
     reservationStatus: 'confirmed',
     logs: [{ timestamp: new Date().toISOString(), action: 'Création initiale', userId: 'system' }],
   },
@@ -235,6 +238,7 @@ const INITIAL_RESERVATIONS: Reservation[] = [
     pmsFeeRate: 0.12,
     cleaningFee: 50,
     email: 'thomas.leroy@yahoo.com',
+    partnerRef: 'BK-3904872691',
     reservationStatus: 'confirmed',
     logs: [{ timestamp: new Date().toISOString(), action: 'Création initiale', userId: 'system' }],
   },
@@ -289,6 +293,7 @@ const INITIAL_RESERVATIONS: Reservation[] = [
     pmsFeeRate: 0.10,
     cleaningFee: 60,
     email: 'smith.a@company.com',
+    partnerRef: 'BK-5012784930',
     reservationStatus: 'confirmed',
     logs: [{ timestamp: new Date().toISOString(), action: 'Création initiale', userId: 'system' }],
   },
