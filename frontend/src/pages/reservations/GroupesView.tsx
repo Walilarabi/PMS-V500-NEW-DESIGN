@@ -2,6 +2,8 @@
  * FLOWTYM — Groupes.
  * Affiche les réservations de groupe, regroupées par préfixe de référence
  * ou par segment. Permet de créer / gérer des dossiers groupes.
+ *
+ * Clic sur une ligne → fiche réservation complète.
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -11,6 +13,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useReservations } from '@/src/domains/reservations/hooks';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
+import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 
 function fmt(v: string | null | undefined) {
   if (!v) return '—';
@@ -21,6 +24,43 @@ function money(v: number | null | undefined) {
   return typeof v === 'number'
     ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v)
     : '—';
+}
+
+/** Map a Supabase ReservationRow to the shape ReservationDetailsModal expects. */
+function toModalRes(r: ReservationRow): any {
+  const balance = r.solde ?? Math.max(0, (r.total_amount ?? 0) - (r.paid_amount ?? 0));
+  return {
+    id:          r.id,
+    reference:   r.reference ?? r.id.slice(0, 8).toUpperCase(),
+    client:      r.guest_name  ?? 'Client inconnu',
+    guestName:   r.guest_name  ?? 'Client inconnu',
+    email:       r.guest_email ?? '',
+    phone:       r.guest_phone ?? '',
+    room:        r.room_number ?? '',
+    roomType:    r.room_type   ?? r.room_category ?? '',
+    arrival:     r.check_in    ?? '',
+    departure:   r.check_out   ?? '',
+    checkIn:     r.check_in    ?? '',
+    checkOut:    r.check_out   ?? '',
+    source:      r.source      ?? 'DIRECT',
+    status:      r.status      ?? 'pending',
+    totalAmount: r.total_amount ?? 0,
+    montant:     r.total_amount ?? 0,
+    solde:       balance,
+    nights:      r.nights ?? 1,
+    notes:       r.notes ?? '',
+    priority:    'normal',
+    statusColor: '#10B981',
+    dotColor:    '#10B981',
+    sourceColor: '#6B7280',
+    action:      '',
+    governess:   '',
+    vip:         false,
+    payment:     balance <= 0 ? 'Payé' : 'Solde restant',
+    ownerFeeRate: 0,
+    pmsFeeRate:   0,
+    cleaningFee:  0,
+  };
 }
 
 interface Group {
@@ -34,18 +74,15 @@ interface Group {
 }
 
 function buildGroups(rows: ReservationRow[]): Group[] {
-  // Groupe par segment='groupe' ou par source='groupe*' ou par préfixe de référence identique
   const map = new Map<string, ReservationRow[]>();
 
   rows.forEach((r) => {
-    // 1) Segment explicite
     if ((r.segment ?? '').toLowerCase().includes('group')) {
       const key = r.segment ?? 'groupe';
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(r);
       return;
     }
-    // 2) Référence avec préfixe commun (ex: GRP-2025-001-A, GRP-2025-001-B → GRP-2025-001)
     const ref = r.reference ?? '';
     const match = ref.match(/^(GRP-\d{4}-\d+)/i);
     if (match) {
@@ -54,7 +91,6 @@ function buildGroups(rows: ReservationRow[]): Group[] {
       map.get(key)!.push(r);
       return;
     }
-    // 3) Source groupe
     if ((r.source ?? '').toLowerCase().includes('group')) {
       const key = r.source ?? 'groupe';
       if (!map.has(key)) map.set(key, []);
@@ -62,16 +98,14 @@ function buildGroups(rows: ReservationRow[]): Group[] {
     }
   });
 
-  // Si aucun groupe naturel, afficher toutes les réservations groupées par segment
   if (map.size === 0 && rows.length > 0) {
-    const key = 'toutes';
-    map.set(key, rows);
+    map.set('toutes', rows);
   }
 
   return Array.from(map.entries()).map(([key, grpRows]) => {
-    const checkIn  = grpRows.map((r) => r.check_in).sort()[0] ?? '';
-    const checkOut = grpRows.map((r) => r.check_out).sort().at(-1) ?? '';
-    const totalCA  = grpRows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
+    const checkIn    = grpRows.map((r) => r.check_in).sort()[0] ?? '';
+    const checkOut   = grpRows.map((r) => r.check_out).sort().at(-1) ?? '';
+    const totalCA    = grpRows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
     const totalSolde = grpRows.reduce(
       (s, r) => s + (r.solde ?? Math.max(0, (r.total_amount ?? 0) - (r.paid_amount ?? 0))),
       0,
@@ -80,16 +114,20 @@ function buildGroups(rows: ReservationRow[]): Group[] {
   }).sort((a, b) => a.checkIn.localeCompare(b.checkIn));
 }
 
-const GroupRow: React.FC<{ group: Group }> = ({ group }) => {
+const STATUS_COLOR: Record<string, string> = {
+  confirmed:   'bg-emerald-100 text-emerald-700',
+  checked_in:  'bg-violet-100 text-violet-700',
+  pending:     'bg-amber-100 text-amber-700',
+  hold:        'bg-blue-100 text-blue-700',
+  cancelled:   'bg-red-100 text-red-600',
+  checked_out: 'bg-slate-100 text-slate-500',
+};
+
+const GroupRow: React.FC<{
+  group: Group;
+  onRowClick: (r: ReservationRow) => void;
+}> = ({ group, onRowClick }) => {
   const [expanded, setExpanded] = useState(true);
-  const STATUS_COLOR: Record<string, string> = {
-    confirmed: 'bg-emerald-100 text-emerald-700',
-    checked_in: 'bg-violet-100 text-violet-700',
-    pending: 'bg-amber-100 text-amber-700',
-    hold: 'bg-blue-100 text-blue-700',
-    cancelled: 'bg-red-100 text-red-600',
-    checked_out: 'bg-slate-100 text-slate-500',
-  };
 
   return (
     <div className="rounded-2xl ring-1 ring-slate-200 overflow-hidden mb-3">
@@ -99,7 +137,9 @@ const GroupRow: React.FC<{ group: Group }> = ({ group }) => {
         className="w-full flex items-center gap-4 px-5 py-3.5 bg-white hover:bg-slate-50/60 transition-colors text-left"
       >
         <span className="flex items-center gap-2 flex-1 min-w-0">
-          {expanded ? <ChevronDown size={14} className="text-slate-400 shrink-0" /> : <ChevronRight size={14} className="text-slate-400 shrink-0" />}
+          {expanded
+            ? <ChevronDown size={14} className="text-slate-400 shrink-0" />
+            : <ChevronRight size={14} className="text-slate-400 shrink-0" />}
           <div className="w-8 h-8 rounded-lg bg-violet-50 ring-1 ring-violet-100 flex items-center justify-center shrink-0">
             <Users size={14} className="text-violet-600" />
           </div>
@@ -139,20 +179,27 @@ const GroupRow: React.FC<{ group: Group }> = ({ group }) => {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {group.rows.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-50/40 transition-colors">
-                  <td className="px-4 py-2.5 font-mono font-semibold text-violet-600 text-[11.5px]">
+                <tr
+                  key={r.id}
+                  className="hover:bg-violet-50/40 transition-colors cursor-pointer group"
+                  onClick={() => onRowClick(r)}
+                  title="Ouvrir la fiche réservation"
+                >
+                  <td className="px-4 py-2.5 font-mono font-semibold text-violet-600 text-[11.5px] group-hover:underline underline-offset-2">
                     {r.reference ?? r.id.slice(0, 8).toUpperCase()}
                   </td>
                   <td className="px-4 py-2.5 text-slate-700 max-w-[140px] truncate">{r.guest_name ?? '—'}</td>
                   <td className="px-4 py-2.5 font-semibold text-slate-700">
-                    {r.room_number ?? '—'} <span className="text-slate-400 font-normal text-[10.5px]">{r.room_type ?? ''}</span>
+                    {r.room_number ?? '—'}{' '}
+                    <span className="text-slate-400 font-normal text-[10.5px]">{r.room_type ?? ''}</span>
                   </td>
                   <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{fmt(r.check_in)}</td>
                   <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{fmt(r.check_out)}</td>
                   <td className="px-4 py-2.5 text-slate-500 text-center">{r.nights ?? '—'}</td>
                   <td className="px-4 py-2.5 font-semibold text-slate-700">{money(r.total_amount)}</td>
                   <td className="px-4 py-2.5">
-                    <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ring-inset',
+                    <span className={cn(
+                      'px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 ring-inset',
                       STATUS_COLOR[r.status ?? ''] ?? 'bg-slate-100 text-slate-500 ring-slate-200',
                     )}>
                       {r.status?.replace(/_/g, ' ').toUpperCase() ?? '—'}
@@ -182,8 +229,9 @@ const GroupRow: React.FC<{ group: Group }> = ({ group }) => {
 
 export const GroupesView: React.FC = () => {
   const { data, isLoading, refetch } = useReservations({ limit: 1000 });
-  const [search, setSearch] = useState('');
+  const [search, setSearch]       = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<ReservationRow | null>(null);
 
   const groups = useMemo(() => {
     const rows = data?.rows ?? [];
@@ -233,9 +281,9 @@ export const GroupesView: React.FC = () => {
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Groupes actifs', value: groups.length.toString(), sub: 'dossiers' },
-            { label: 'Chambres totales', value: totalRooms.toString(), sub: 'nuits de groupe' },
-            { label: 'CA groupes', value: money(totalCA), sub: 'montant total' },
+            { label: 'Groupes actifs',  value: groups.length.toString(), sub: 'dossiers' },
+            { label: 'Chambres totales', value: totalRooms.toString(),   sub: 'nuits de groupe' },
+            { label: 'CA groupes',       value: money(totalCA),          sub: 'montant total' },
             { label: 'Ratio groupe', value: isLoading ? '—' : `${Math.round((totalRooms / Math.max(1, data?.total ?? 1)) * 100)}%`, sub: 'du portefeuille' },
           ].map((k) => (
             <div key={k.label} className="bg-white rounded-2xl ring-1 ring-slate-100 px-4 py-3 shadow-sm">
@@ -270,11 +318,13 @@ export const GroupesView: React.FC = () => {
             <p className="text-[12px] mt-1">Créez un groupe ou taguez des réservations avec le segment "groupe".</p>
           </div>
         ) : (
-          groups.map((g) => <GroupRow key={g.key} group={g} />)
+          groups.map((g) => (
+            <GroupRow key={g.key} group={g} onRowClick={setSelectedRow} />
+          ))
         )}
       </div>
 
-      {/* Modal création groupe — simple prompt */}
+      {/* Modal création groupe */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200 w-full max-w-md p-6 space-y-4">
@@ -282,7 +332,8 @@ export const GroupesView: React.FC = () => {
             <p className="text-[12.5px] text-slate-500">
               Pour créer un groupe, créez des réservations individuelles avec le préfixe de référence
               <code className="mx-1 px-1.5 py-0.5 rounded bg-slate-100 font-mono text-[11px]">GRP-YYYY-XXX</code>
-              (ex: GRP-2026-001-A, GRP-2026-001-B…) ou assignez le segment <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-[11px]">groupe</code>.
+              (ex: GRP-2026-001-A, GRP-2026-001-B…) ou assignez le segment{' '}
+              <code className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-[11px]">groupe</code>.
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -294,6 +345,15 @@ export const GroupesView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Fiche réservation */}
+      {selectedRow && (
+        <ReservationDetailsModal
+          isOpen={true}
+          reservation={toModalRes(selectedRow)}
+          onClose={() => setSelectedRow(null)}
+        />
       )}
     </div>
   );

@@ -1,14 +1,16 @@
 /**
  * FLOWTYM — Suivi des paiements réservations.
+ * Clic sur une ligne → fiche réservation complète.
  */
 import React, { useMemo, useState } from 'react';
 import {
   CreditCard, Search, RefreshCw, Download, TrendingUp,
-  AlertCircle, CheckCircle2, Clock, Filter,
+  AlertCircle, CheckCircle2, Clock,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useReservations } from '@/src/domains/reservations/hooks';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
+import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 
 function fmt(v: string | null | undefined) {
   if (!v) return '—';
@@ -21,20 +23,57 @@ function money(v: number | null | undefined) {
     : '—';
 }
 
+function toModalRes(r: ReservationRow): any {
+  const balance = r.solde ?? Math.max(0, (r.total_amount ?? 0) - (r.paid_amount ?? 0));
+  return {
+    id:          r.id,
+    reference:   r.reference ?? r.id.slice(0, 8).toUpperCase(),
+    client:      r.guest_name  ?? 'Client inconnu',
+    guestName:   r.guest_name  ?? 'Client inconnu',
+    email:       r.guest_email ?? '',
+    phone:       r.guest_phone ?? '',
+    room:        r.room_number ?? '',
+    roomType:    r.room_type   ?? r.room_category ?? '',
+    arrival:     r.check_in    ?? '',
+    departure:   r.check_out   ?? '',
+    checkIn:     r.check_in    ?? '',
+    checkOut:    r.check_out   ?? '',
+    source:      r.source      ?? 'DIRECT',
+    status:      r.status      ?? 'pending',
+    totalAmount: r.total_amount ?? 0,
+    montant:     r.total_amount ?? 0,
+    solde:       balance,
+    nights:      r.nights ?? 1,
+    notes:       r.notes ?? '',
+    priority:    'normal',
+    statusColor: '#10B981',
+    dotColor:    '#10B981',
+    sourceColor: '#6B7280',
+    action:      '',
+    governess:   '',
+    vip:         false,
+    payment:     balance <= 0 ? 'Payé' : 'Solde restant',
+    ownerFeeRate: 0,
+    pmsFeeRate:   0,
+    cleaningFee:  0,
+  };
+}
+
 const PAY_CFG: Record<string, { label: string; color: string; bg: string; icon: React.FC<any> }> = {
-  paid:     { label: 'Payé',        color: 'text-emerald-700', bg: 'bg-emerald-50 ring-emerald-200', icon: CheckCircle2 },
-  partial:  { label: 'Partiel',     color: 'text-amber-700',   bg: 'bg-amber-50 ring-amber-200',     icon: Clock        },
-  pending:  { label: 'En attente',  color: 'text-slate-600',   bg: 'bg-slate-100 ring-slate-200',    icon: Clock        },
-  overdue:  { label: 'En retard',   color: 'text-red-700',     bg: 'bg-red-50 ring-red-200',         icon: AlertCircle  },
-  refunded: { label: 'Remboursé',   color: 'text-blue-700',    bg: 'bg-blue-50 ring-blue-200',       icon: RefreshCw    },
+  paid:     { label: 'Payé',       color: 'text-emerald-700', bg: 'bg-emerald-50 ring-emerald-200', icon: CheckCircle2 },
+  partial:  { label: 'Partiel',    color: 'text-amber-700',   bg: 'bg-amber-50 ring-amber-200',     icon: Clock        },
+  pending:  { label: 'En attente', color: 'text-slate-600',   bg: 'bg-slate-100 ring-slate-200',    icon: Clock        },
+  overdue:  { label: 'En retard',  color: 'text-red-700',     bg: 'bg-red-50 ring-red-200',         icon: AlertCircle  },
+  refunded: { label: 'Remboursé',  color: 'text-blue-700',    bg: 'bg-blue-50 ring-blue-200',       icon: RefreshCw    },
 };
 
 const ALL_PAY_STATUSES = ['paid', 'partial', 'pending', 'overdue', 'refunded'];
 
 export const ResPaymentsView: React.FC = () => {
   const { data, isLoading, refetch } = useReservations({ limit: 1000 });
-  const [search, setSearch]       = useState('');
-  const [payFilter, setPayFilter] = useState('ALL');
+  const [search, setSearch]         = useState('');
+  const [payFilter, setPayFilter]   = useState('ALL');
+  const [selectedRow, setSelectedRow] = useState<ReservationRow | null>(null);
 
   const rows = useMemo(() => {
     let list = data?.rows ?? [];
@@ -43,7 +82,7 @@ export const ResPaymentsView: React.FC = () => {
       list = list.filter(
         (r) =>
           (r.guest_name ?? '').toLowerCase().includes(q) ||
-          (r.reference ?? '').toLowerCase().includes(q),
+          (r.reference  ?? '').toLowerCase().includes(q),
       );
     }
     if (payFilter !== 'ALL') list = list.filter((r) => r.payment_status === payFilter);
@@ -54,7 +93,7 @@ export const ResPaymentsView: React.FC = () => {
     const all = data?.rows ?? [];
     return {
       totalCA:    all.reduce((s, r) => s + (r.total_amount ?? 0), 0),
-      totalPaid:  all.reduce((s, r) => s + (r.paid_amount ?? 0), 0),
+      totalPaid:  all.reduce((s, r) => s + (r.paid_amount  ?? 0), 0),
       totalSolde: all.reduce((s, r) => s + (r.solde ?? Math.max(0, (r.total_amount ?? 0) - (r.paid_amount ?? 0))), 0),
       overdue:    all.filter((r) => r.payment_status === 'overdue').length,
       pending:    all.filter((r) => r.payment_status === 'pending').length,
@@ -89,7 +128,7 @@ export const ResPaymentsView: React.FC = () => {
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
-            { label: 'CA total',   value: money(stats.totalCA),    icon: TrendingUp,  color: 'text-violet-600',  bg: 'bg-violet-50' },
+            { label: 'CA total',   value: money(stats.totalCA),    icon: TrendingUp,  color: 'text-violet-600',  bg: 'bg-violet-50'  },
             { label: 'Encaissé',   value: money(stats.totalPaid),  icon: CheckCircle2,color: 'text-emerald-600', bg: 'bg-emerald-50' },
             { label: 'Solde dû',   value: money(stats.totalSolde), icon: CreditCard,  color: 'text-red-600',     bg: 'bg-red-50',    alert: stats.totalSolde > 0 },
             { label: 'En retard',  value: stats.overdue.toString(),icon: AlertCircle, color: 'text-red-600',     bg: 'bg-red-50',    alert: stats.overdue > 0 },
@@ -97,14 +136,14 @@ export const ResPaymentsView: React.FC = () => {
           ].map((k) => {
             const Icon = k.icon;
             return (
-              <div key={k.label} className={cn('bg-white rounded-2xl ring-1 ring-slate-100 px-4 py-3 shadow-sm', k.alert && 'ring-red-200')}>
+              <div key={k.label} className={cn('bg-white rounded-2xl ring-1 ring-slate-100 px-4 py-3 shadow-sm', (k as any).alert && 'ring-red-200')}>
                 <div className="flex items-center gap-2 mb-1">
                   <div className={cn('w-6 h-6 rounded-lg flex items-center justify-center', k.bg)}>
                     <Icon size={12} className={k.color} />
                   </div>
                   <p className="text-[10.5px] text-slate-400 font-semibold uppercase tracking-wide">{k.label}</p>
                 </div>
-                <p className={cn('text-[16px] font-bold', k.alert ? 'text-red-600' : 'text-slate-900')}>{k.value}</p>
+                <p className={cn('text-[16px] font-bold', (k as any).alert ? 'text-red-600' : 'text-slate-900')}>{k.value}</p>
               </div>
             );
           })}
@@ -162,11 +201,16 @@ export const ResPaymentsView: React.FC = () => {
                 <tbody className="divide-y divide-slate-100">
                   {rows.map((row) => {
                     const balance = row.solde ?? Math.max(0, (row.total_amount ?? 0) - (row.paid_amount ?? 0));
-                    const payCfg = PAY_CFG[row.payment_status ?? ''] ?? PAY_CFG.pending;
+                    const payCfg  = PAY_CFG[row.payment_status ?? ''] ?? PAY_CFG.pending;
                     const PayIcon = payCfg.icon;
                     return (
-                      <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3 font-mono font-semibold text-violet-700">
+                      <tr
+                        key={row.id}
+                        className="hover:bg-violet-50/40 transition-colors cursor-pointer group"
+                        onClick={() => setSelectedRow(row)}
+                        title="Ouvrir la fiche réservation"
+                      >
+                        <td className="px-4 py-3 font-mono font-semibold text-violet-700 group-hover:underline underline-offset-2">
                           {row.reference ?? row.id.slice(0, 8).toUpperCase()}
                         </td>
                         <td className="px-4 py-3">
@@ -202,11 +246,20 @@ export const ResPaymentsView: React.FC = () => {
           )}
           {!isLoading && rows.length > 0 && (
             <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/40 text-[11px] text-slate-400">
-              {rows.length} résultat{rows.length > 1 ? 's' : ''}
+              {rows.length} résultat{rows.length > 1 ? 's' : ''} · Cliquez sur une ligne pour ouvrir la fiche
             </div>
           )}
         </div>
       </div>
+
+      {/* Fiche réservation */}
+      {selectedRow && (
+        <ReservationDetailsModal
+          isOpen={true}
+          reservation={toModalRes(selectedRow)}
+          onClose={() => setSelectedRow(null)}
+        />
+      )}
     </div>
   );
 };

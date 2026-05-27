@@ -2,12 +2,15 @@
  * FLOWTYM — Anomalies financières réservations.
  * Détecte client-side : solde négatif, données manquantes, doublons potentiels,
  * montants anormaux, dates incohérentes.
+ *
+ * Clic sur la référence / nom du client → fiche réservation complète.
  */
 import React, { useMemo, useState } from 'react';
-import { AlertOctagon, RefreshCw, Search, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { AlertOctagon, RefreshCw, Search, CheckCircle2, AlertTriangle, XCircle, ExternalLink } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useReservations, useUpdateReservationStatus } from '@/src/domains/reservations/hooks';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
+import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 
 function fmt(v: string | null | undefined) {
   if (!v) return '—';
@@ -18,6 +21,42 @@ function money(v: number | null | undefined) {
   return typeof v === 'number'
     ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v)
     : '—';
+}
+
+function toModalRes(r: ReservationRow): any {
+  const balance = r.solde ?? Math.max(0, (r.total_amount ?? 0) - (r.paid_amount ?? 0));
+  return {
+    id:          r.id,
+    reference:   r.reference ?? r.id.slice(0, 8).toUpperCase(),
+    client:      r.guest_name  ?? 'Client inconnu',
+    guestName:   r.guest_name  ?? 'Client inconnu',
+    email:       r.guest_email ?? '',
+    phone:       r.guest_phone ?? '',
+    room:        r.room_number ?? '',
+    roomType:    r.room_type   ?? r.room_category ?? '',
+    arrival:     r.check_in    ?? '',
+    departure:   r.check_out   ?? '',
+    checkIn:     r.check_in    ?? '',
+    checkOut:    r.check_out   ?? '',
+    source:      r.source      ?? 'DIRECT',
+    status:      r.status      ?? 'pending',
+    totalAmount: r.total_amount ?? 0,
+    montant:     r.total_amount ?? 0,
+    solde:       balance,
+    nights:      r.nights ?? 1,
+    notes:       r.notes ?? '',
+    priority:    'normal',
+    statusColor: '#10B981',
+    dotColor:    '#10B981',
+    sourceColor: '#6B7280',
+    action:      '',
+    governess:   '',
+    vip:         false,
+    payment:     balance <= 0 ? 'Payé' : 'Solde restant',
+    ownerFeeRate: 0,
+    pmsFeeRate:   0,
+    cleaningFee:  0,
+  };
 }
 
 type Severity = 'error' | 'warning' | 'info';
@@ -51,41 +90,33 @@ function detectAnomalies(rows: ReservationRow[]): Anomaly[] {
       anomalies.push({ id: `${r.id}-${type}`, reservationId: r.id, reference: ref, client, type, message, severity, row: r });
     };
 
-    // Dates incohérentes
     if (r.check_in && r.check_out && r.check_out <= r.check_in) {
       push('DATES_INVALIDES', `Départ (${fmt(r.check_out)}) ≤ Arrivée (${fmt(r.check_in)})`, 'error');
     }
-    // Montant négatif
     if ((r.total_amount ?? 0) < 0) {
       push('MONTANT_NEGATIF', `Montant total négatif : ${money(r.total_amount)}`, 'error');
     }
-    // Solde négatif (remboursement non enregistré)
     const balance = r.solde ?? ((r.total_amount ?? 0) - (r.paid_amount ?? 0));
     if (balance < -0.5) {
       push('SOLDE_NEGATIF', `Solde négatif : ${money(balance)} — remboursement non documenté ?`, 'warning');
     }
-    // Paiement en retard (checked_out mais solde > 0)
     if (r.status === 'checked_out' && balance > 0.5) {
       push('PAIEMENT_INCOMPLET', `Client parti avec solde dû : ${money(balance)}`, 'error');
     }
-    // Données manquantes
     if (!r.guest_name && !r.guest_email) {
       push('CLIENT_MANQUANT', 'Aucune information client (nom ni email)', 'warning');
     }
     if (!r.room_number && !r.room_id) {
       push('CHAMBRE_MANQUANTE', 'Aucune chambre attribuée', 'warning');
     }
-    // Paiement en retard (payment_status = overdue)
     if (r.payment_status === 'overdue') {
       push('PAIEMENT_RETARD', `Paiement en retard · Solde : ${money(balance)}`, 'error');
     }
-    // Doublon potentiel (même email, même période)
     const emailIds = emailMap.get((r.guest_email ?? '').toLowerCase()) ?? [];
     if (emailIds.length > 1 && emailIds[0] !== r.id) {
       const others = emailIds.filter((id) => id !== r.id);
       push('DOUBLON_POTENTIEL', `Même email utilisé dans ${others.length} autre(s) réservation(s)`, 'info');
     }
-    // Montant zéro sur réservation non annulée
     if ((r.total_amount ?? 0) === 0 && r.status !== 'cancelled') {
       push('MONTANT_ZERO', 'Montant total à 0 € sur réservation active', 'warning');
     }
@@ -95,17 +126,19 @@ function detectAnomalies(rows: ReservationRow[]): Anomaly[] {
 }
 
 const SEVERITY_CFG: Record<Severity, { label: string; color: string; bg: string; ring: string; icon: typeof AlertOctagon }> = {
-  error:   { label: 'Erreur',     color: 'text-red-700',    bg: 'bg-red-50',     ring: 'ring-red-200',    icon: XCircle      },
-  warning: { label: 'Avertissement', color: 'text-amber-700', bg: 'bg-amber-50', ring: 'ring-amber-200',  icon: AlertTriangle },
-  info:    { label: 'Info',       color: 'text-blue-700',   bg: 'bg-blue-50',    ring: 'ring-blue-200',   icon: AlertTriangle },
+  error:   { label: 'Erreur',        color: 'text-red-700',   bg: 'bg-red-50',   ring: 'ring-red-200',   icon: XCircle       },
+  warning: { label: 'Avertissement', color: 'text-amber-700', bg: 'bg-amber-50', ring: 'ring-amber-200', icon: AlertTriangle  },
+  info:    { label: 'Info',          color: 'text-blue-700',  bg: 'bg-blue-50',  ring: 'ring-blue-200',  icon: AlertTriangle  },
 };
 
 export const ResAnomaliesView: React.FC = () => {
   const { data, isLoading, refetch } = useReservations({ limit: 1000 });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const updateStatus = useUpdateReservationStatus();
-  const [search, setSearch]           = useState('');
-  const [sevFilter, setSevFilter]     = useState<Severity | 'ALL'>('ALL');
-  const [resolved, setResolved]       = useState<Set<string>>(new Set());
+  const [search, setSearch]       = useState('');
+  const [sevFilter, setSevFilter] = useState<Severity | 'ALL'>('ALL');
+  const [resolved, setResolved]   = useState<Set<string>>(new Set());
+  const [selectedRow, setSelectedRow] = useState<ReservationRow | null>(null);
 
   const allAnomalies = useMemo(() => detectAnomalies(data?.rows ?? []), [data]);
 
@@ -117,7 +150,7 @@ export const ResAnomaliesView: React.FC = () => {
       list = list.filter(
         (a) =>
           a.reference.toLowerCase().includes(q) ||
-          a.client.toLowerCase().includes(q) ||
+          a.client.toLowerCase().includes(q)    ||
           a.message.toLowerCase().includes(q),
       );
     }
@@ -157,9 +190,9 @@ export const ResAnomaliesView: React.FC = () => {
         {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Erreurs critiques', value: counts.error,   color: 'text-red-600',   bg: 'bg-red-50',   alert: counts.error > 0 },
-            { label: 'Avertissements',    value: counts.warning, color: 'text-amber-600', bg: 'bg-amber-50', alert: counts.warning > 0 },
-            { label: 'Informations',      value: counts.info,    color: 'text-blue-600',  bg: 'bg-blue-50',  alert: false },
+            { label: 'Erreurs critiques', value: counts.error,                         color: 'text-red-600',   bg: 'bg-red-50',   alert: counts.error > 0   },
+            { label: 'Avertissements',    value: counts.warning,                        color: 'text-amber-600', bg: 'bg-amber-50', alert: counts.warning > 0 },
+            { label: 'Informations',      value: counts.info,                           color: 'text-blue-600',  bg: 'bg-blue-50',  alert: false              },
             { label: 'Total détectées',   value: counts.error + counts.warning + counts.info, color: 'text-slate-700', bg: 'bg-slate-50', alert: false },
           ].map((k) => (
             <div key={k.label} className={cn('bg-white rounded-2xl ring-1 ring-slate-100 px-4 py-3 shadow-sm', k.alert && 'ring-red-200')}>
@@ -204,7 +237,7 @@ export const ResAnomaliesView: React.FC = () => {
         ) : (
           <div className="space-y-2">
             {filtered.map((anomaly) => {
-              const cfg = SEVERITY_CFG[anomaly.severity];
+              const cfg  = SEVERITY_CFG[anomaly.severity];
               const Icon = cfg.icon;
               return (
                 <div
@@ -216,8 +249,22 @@ export const ResAnomaliesView: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[11.5px] font-semibold text-violet-700">{anomaly.reference}</span>
-                      <span className="text-[11.5px] text-slate-600">{anomaly.client}</span>
+                      {/* Cliquable → fiche réservation */}
+                      <button
+                        onClick={() => setSelectedRow(anomaly.row)}
+                        className="font-mono text-[11.5px] font-semibold text-violet-700 hover:underline underline-offset-2 flex items-center gap-1"
+                        title="Ouvrir la fiche réservation"
+                      >
+                        {anomaly.reference}
+                        <ExternalLink size={10} className="opacity-60" />
+                      </button>
+                      <button
+                        onClick={() => setSelectedRow(anomaly.row)}
+                        className="text-[11.5px] text-slate-600 hover:text-violet-700 hover:underline underline-offset-2"
+                        title="Ouvrir la fiche réservation"
+                      >
+                        {anomaly.client}
+                      </button>
                       <span className={cn('text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ring-1', cfg.bg, cfg.ring, cfg.color)}>
                         {cfg.label}
                       </span>
@@ -225,19 +272,37 @@ export const ResAnomaliesView: React.FC = () => {
                     <p className="text-[12.5px] text-slate-700 mt-0.5">{anomaly.message}</p>
                     <p className="text-[10.5px] text-slate-400 mt-1">Type : {anomaly.type}</p>
                   </div>
-                  <button
-                    onClick={() => dismiss(anomaly.id)}
-                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-500 hover:bg-slate-100 shrink-0"
-                    title="Ignorer cette anomalie"
-                  >
-                    <CheckCircle2 size={12} /> Ignorer
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => setSelectedRow(anomaly.row)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-violet-600 hover:bg-violet-50 ring-1 ring-violet-200"
+                      title="Ouvrir la fiche réservation"
+                    >
+                      <ExternalLink size={11} /> Fiche
+                    </button>
+                    <button
+                      onClick={() => dismiss(anomaly.id)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-500 hover:bg-slate-100"
+                      title="Ignorer cette anomalie"
+                    >
+                      <CheckCircle2 size={12} /> Ignorer
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Fiche réservation */}
+      {selectedRow && (
+        <ReservationDetailsModal
+          isOpen={true}
+          reservation={toModalRes(selectedRow)}
+          onClose={() => setSelectedRow(null)}
+        />
+      )}
     </div>
   );
 };
