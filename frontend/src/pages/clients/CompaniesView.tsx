@@ -80,7 +80,7 @@ export const CompaniesView = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F9FAFB] p-6">
-      <div className="max-w-6xl mx-auto space-y-5">
+      <div className="space-y-5">
 
         {/* KPI strip */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -94,7 +94,7 @@ export const CompaniesView = () => {
               </div>
               <div>
                 <div className="text-lg font-bold text-gray-900 leading-none">{k.value}</div>
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">
                   {k.label}
                 </div>
               </div>
@@ -163,7 +163,7 @@ export const CompaniesView = () => {
                     {['Société', 'Type', 'Contact', 'Localisation', 'Taux négocié', 'Crédit', ''].map((h) => (
                       <th
                         key={h}
-                        className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400"
+                        className="px-4 py-3 text-left text-xs font-bold uppercase tracking-widest text-gray-400"
                       >
                         {h}
                       </th>
@@ -189,7 +189,7 @@ export const CompaniesView = () => {
           )}
         </Card>
 
-        <p className="text-[11px] text-gray-300 font-medium text-center">
+        <p className="text-xs text-gray-400 font-medium text-center">
           {filtered.length} société{filtered.length !== 1 ? 's' : ''}{' '}
           affichée{filtered.length !== 1 ? 's' : ''}
         </p>
@@ -220,9 +220,9 @@ const CompanyRow: React.FC<{
           <meta.icon size={14} className="text-[#8B5CF6]" />
         </div>
         <div>
-          <div className="text-[13px] font-bold text-gray-900">{c.name}</div>
+          <div className="text-sm font-bold text-gray-900">{c.name}</div>
           {c.website && (
-            <div className="text-[10px] text-gray-400 truncate max-w-[140px]">
+            <div className="text-xs text-gray-400 truncate max-w-[160px]">
               {c.website.replace(/^https?:\/\//, '')}
             </div>
           )}
@@ -235,31 +235,31 @@ const CompanyRow: React.FC<{
     </td>
 
     <td className="px-4 py-3">
-      <div className="text-[12px] text-gray-700">{c.email ?? '—'}</div>
-      {c.phone && <div className="text-[10px] text-gray-400">{c.phone}</div>}
+      <div className="text-sm text-gray-700">{c.email ?? '—'}</div>
+      {c.phone && <div className="text-xs text-gray-400">{c.phone}</div>}
     </td>
 
     <td className="px-4 py-3">
-      <div className="text-[12px] text-gray-700">
+      <div className="text-sm text-gray-700">
         {[c.city, c.country].filter(Boolean).join(', ') || '—'}
       </div>
     </td>
 
     <td className="px-4 py-3">
       {c.negotiated_rate > 0 ? (
-        <span className="text-[12px] font-bold text-[#8B5CF6]">{c.negotiated_rate}%</span>
+        <span className="text-sm font-bold text-[#8B5CF6]">{c.negotiated_rate}%</span>
       ) : (
-        <span className="text-[12px] text-gray-300">—</span>
+        <span className="text-sm text-gray-300">—</span>
       )}
     </td>
 
     <td className="px-4 py-3">
       {c.credit_limit > 0 ? (
-        <span className="text-[12px] font-bold text-gray-900">
+        <span className="text-sm font-bold text-gray-900">
           {c.credit_limit.toLocaleString('fr-FR')} €
         </span>
       ) : (
-        <span className="text-[12px] text-gray-300">—</span>
+        <span className="text-sm text-gray-300">—</span>
       )}
     </td>
 

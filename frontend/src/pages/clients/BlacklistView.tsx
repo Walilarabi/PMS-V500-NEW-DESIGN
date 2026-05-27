@@ -49,13 +49,13 @@ const GuestRow: React.FC<{
             {init}
           </div>
           <div>
-            <div className="text-[13px] font-bold text-gray-900">{name}</div>
-            <div className="text-[10px] text-gray-400">{g.email ?? g.phone ?? '—'}</div>
+            <div className="text-sm font-bold text-gray-900">{name}</div>
+            <div className="text-xs text-gray-400">{g.email ?? g.phone ?? '—'}</div>
           </div>
         </div>
       </td>
       <td className="px-4 py-3">
-        <div className="text-[11px] text-gray-500">
+        <div className="text-[13px] text-gray-500">
           {g.loyalty_level ?? 'Standard'}
         </div>
       </td>
@@ -96,7 +96,7 @@ export const BlacklistView = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F9FAFB] p-6">
-      <div className="max-w-5xl mx-auto space-y-5">
+      <div className="space-y-5">
 
         {/* Tab bar */}
         <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 w-fit">
@@ -181,7 +181,7 @@ const BlacklistTab = ({
     <Card className="overflow-hidden">
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
         <Ban size={14} className="text-red-500" />
-        <span className="text-[12px] font-bold text-gray-700">
+        <span className="text-sm font-bold text-gray-700">
           {guests.length} client{guests.length > 1 ? 's' : ''} blacklisté{guests.length > 1 ? 's' : ''}
         </span>
       </div>
@@ -189,7 +189,7 @@ const BlacklistTab = ({
         <thead>
           <tr className="border-b border-gray-100">
             {['Client', 'Fidélité', 'Statut', ''].map((h) => (
-              <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-widest text-gray-400">
                 {h}
               </th>
             ))}
@@ -202,8 +202,8 @@ const BlacklistTab = ({
               g={g}
               onEdit={() => onEdit(g)}
               rightSlot={
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded-full">
-                  <Ban size={10} /> Blacklisté
+                <span className="inline-flex items-center gap-1 text-xs font-bold bg-red-50 text-red-600 px-2 py-1 rounded-full">
+                  <Ban size={11} /> Blacklisté
                 </span>
               }
             />
@@ -246,7 +246,7 @@ const WatchlistTab = ({
     <Card className="overflow-hidden">
       <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
         <ShieldAlert size={14} className="text-amber-500" />
-        <span className="text-[12px] font-bold text-gray-700">
+        <span className="text-sm font-bold text-gray-700">
           {guests.length} client{guests.length > 1 ? 's' : ''} sur la watchlist
         </span>
       </div>
@@ -254,7 +254,7 @@ const WatchlistTab = ({
         <thead>
           <tr className="border-b border-gray-100">
             {['Client', 'Fidélité', 'Risque', ''].map((h) => (
-              <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-widest text-gray-400">
                 {h}
               </th>
             ))}
@@ -271,10 +271,10 @@ const WatchlistTab = ({
                 rightSlot={
                   meta ? (
                     <span
-                      className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full"
+                      className="inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full"
                       style={{ background: meta.bg, color: meta.color }}
                     >
-                      <AlertCircle size={10} /> {meta.label}
+                      <AlertCircle size={11} /> {meta.label}
                     </span>
                   ) : null
                 }
@@ -329,7 +329,7 @@ const SatisfactionTab = ({
             </div>
             <div>
               <div className="text-lg font-bold text-gray-900 leading-none">{k.value}</div>
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">
                 {k.label}
               </div>
             </div>
@@ -339,7 +339,7 @@ const SatisfactionTab = ({
 
       {/* NPS breakdown */}
       <Card className="p-5">
-        <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-4">
+        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">
           Répartition NPS
         </h3>
         <div className="flex h-4 rounded-full overflow-hidden mb-3">
@@ -364,8 +364,8 @@ const SatisfactionTab = ({
             <div key={g.label}>
               <g.icon size={20} className="mx-auto mb-1" style={{ color: g.color }} />
               <div className="text-xl font-bold text-gray-900">{g.n}</div>
-              <div className="text-[11px] font-bold text-gray-600">{g.label}</div>
-              <div className="text-[10px] text-gray-400">{g.subtitle}</div>
+              <div className="text-xs font-bold text-gray-600">{g.label}</div>
+              <div className="text-xs text-gray-400">{g.subtitle}</div>
             </div>
           ))}
         </div>
@@ -373,7 +373,7 @@ const SatisfactionTab = ({
 
       {/* Score distribution */}
       <Card className="p-5">
-        <h3 className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-4">
+        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">
           Distribution des scores
         </h3>
         <div className="space-y-2.5">
@@ -381,11 +381,11 @@ const SatisfactionTab = ({
             const pct = total_scored ? Math.round((d.count / total_scored) * 100) : 0;
             return (
               <div key={d.label} className="flex items-center gap-3">
-                <span className="text-[11px] font-bold text-gray-600 w-10">{d.label}</span>
-                <div className="flex-1 bg-gray-100 h-2 rounded-full overflow-hidden">
+                <span className="text-xs font-bold text-gray-600 w-10">{d.label}</span>
+                <div className="flex-1 bg-gray-100 h-2.5 rounded-full overflow-hidden">
                   <div className="h-full bg-[#8B5CF6] rounded-full" style={{ width: `${pct}%` }} />
                 </div>
-                <span className="text-[11px] font-bold text-gray-900 w-6 text-right">{d.count}</span>
+                <span className="text-xs font-bold text-gray-900 w-6 text-right">{d.count}</span>
               </div>
             );
           })}
@@ -413,7 +413,7 @@ const EmptyState = ({
   <Card className="p-12 text-center">
     <Icon size={32} className="mx-auto text-gray-200 mb-3" />
     <p className="text-sm font-bold text-gray-500">{title}</p>
-    <p className="text-[12px] text-gray-400 mt-1 max-w-sm mx-auto">{subtitle}</p>
+    <p className="text-sm text-gray-400 mt-1 max-w-sm mx-auto">{subtitle}</p>
   </Card>
 );
 

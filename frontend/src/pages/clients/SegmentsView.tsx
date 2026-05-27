@@ -71,7 +71,7 @@ export const SegmentsView = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F9FAFB] p-6">
-      <div className="max-w-6xl mx-auto space-y-5">
+      <div className="space-y-5">
 
         {/* Mode toggle */}
         <div className="flex items-center justify-between">
@@ -176,7 +176,7 @@ const LoyaltyPanel = ({
 
   return (
     <div className="space-y-4">
-      <p className="text-[12px] text-gray-500">
+      <p className="text-sm text-gray-500">
         <strong className="text-gray-700">{totalMembers.toLocaleString('fr-FR')}</strong>{' '}
         clients répartis sur {tiers.length} niveaux. Ajustez les seuils puis lancez un
         recalcul pour reclasser la base.
@@ -204,8 +204,8 @@ const LoyaltyPanel = ({
                       <Icon size={16} style={{ color: t.color }} />
                     </div>
                     <div>
-                      <div className="text-[13px] font-bold text-gray-900">{t.name}</div>
-                      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                      <div className="text-sm font-bold text-gray-900">{t.name}</div>
+                      <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">
                         Niveau {t.sort_order + 1}
                       </div>
                     </div>
@@ -226,7 +226,7 @@ const LoyaltyPanel = ({
                     <span className="text-2xl font-bold text-gray-900 leading-none">
                       {members.toLocaleString('fr-FR')}
                     </span>
-                    <span className="text-[11px] font-bold text-gray-400">
+                    <span className="text-xs font-bold text-gray-400">
                       client{members !== 1 ? 's' : ''} · {pct}%
                     </span>
                   </div>
@@ -242,7 +242,7 @@ const LoyaltyPanel = ({
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <div className="bg-gray-50 rounded-lg px-2.5 py-1.5">
                     <div className="text-[13px] font-bold text-gray-900">{t.min_stays}</div>
-                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">
+                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
                       Séjours min.
                     </div>
                   </div>
@@ -250,29 +250,29 @@ const LoyaltyPanel = ({
                     <div className="text-[13px] font-bold text-gray-900">
                       {Number(t.min_spent).toLocaleString('fr-FR')} €
                     </div>
-                    <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">
+                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
                       CA min.
                     </div>
                   </div>
                 </div>
 
                 {/* Multiplier */}
-                <div className="mt-2 flex items-center gap-1.5 text-[11px] font-bold text-[#8B5CF6]">
+                <div className="mt-2 flex items-center gap-1.5 text-xs font-bold text-[#8B5CF6]">
                   <Zap size={11} />
                   ×{Number(t.points_multiplier)} points / €
                 </div>
 
                 {/* Benefits */}
                 <div className="mt-3 pt-3 border-t border-gray-100 flex-1">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
                     Avantages
                   </div>
                   {t.benefits.length === 0 ? (
-                    <p className="text-[11px] text-gray-300">Aucun avantage défini.</p>
+                    <p className="text-xs text-gray-300">Aucun avantage défini.</p>
                   ) : (
                     <ul className="space-y-1">
                       {t.benefits.map((b, i) => (
-                        <li key={i} className="flex items-start gap-1.5 text-[11px] text-gray-600">
+                        <li key={i} className="flex items-start gap-1.5 text-xs text-gray-600">
                           <CheckCircle2 size={11} className="text-emerald-500 mt-0.5 shrink-0" />
                           {b}
                         </li>
@@ -322,10 +322,10 @@ const SegmentsPanel = ({
       {/* Distribution bar */}
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">
+          <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-gray-400">
             <Target size={13} className="text-[#8B5CF6]" /> Répartition de la base
           </h3>
-          <span className="text-[12px] font-bold text-gray-900">
+          <span className="text-sm font-bold text-gray-900">
             {total.toLocaleString('fr-FR')} clients
           </span>
         </div>
@@ -343,7 +343,7 @@ const SegmentsPanel = ({
         </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
           {rows.map((r) => (
-            <span key={r.key} className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500">
+            <span key={r.key} className="flex items-center gap-1.5 text-[13px] font-medium text-gray-500">
               <span
                 className="w-2.5 h-2.5 rounded-full"
                 style={{ background: r.meta.color }}
@@ -371,12 +371,12 @@ const SegmentsPanel = ({
                     <meta.icon size={18} style={{ color: meta.color }} />
                   </div>
                   <div>
-                    <div className="text-[13px] font-bold text-gray-900">{meta.label}</div>
-                    <div className="text-[10px] text-gray-400">{meta.description}</div>
+                    <div className="text-sm font-bold text-gray-900">{meta.label}</div>
+                    <div className="text-xs text-gray-400">{meta.description}</div>
                   </div>
                 </div>
                 <span
-                  className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                  className="text-xs font-bold px-2 py-1 rounded-full"
                   style={{ background: `${meta.color}1A`, color: meta.color }}
                 >
                   {pct}%
@@ -388,7 +388,7 @@ const SegmentsPanel = ({
                   <div className="text-[15px] font-bold text-gray-900 leading-none">
                     {data!.count.toLocaleString('fr-FR')}
                   </div>
-                  <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wide mt-1">
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-1">
                     Clients
                   </div>
                 </div>
@@ -396,7 +396,7 @@ const SegmentsPanel = ({
                   <div className="text-[15px] font-bold text-gray-900 leading-none">
                     {Math.round(data!.revenue).toLocaleString('fr-FR')} €
                   </div>
-                  <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wide mt-1">
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-1">
                     CA cumulé
                   </div>
                 </div>
@@ -404,7 +404,7 @@ const SegmentsPanel = ({
                   <div className="text-[15px] font-bold text-gray-900 leading-none">
                     {data!.avg_stays}
                   </div>
-                  <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wide mt-1">
+                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mt-1">
                     Séjours moy.
                   </div>
                 </div>

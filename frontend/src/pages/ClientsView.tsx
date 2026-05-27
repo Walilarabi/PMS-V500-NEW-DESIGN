@@ -142,8 +142,8 @@ export const ClientsView = () => {
             </div>
             <div className="mt-4">
               <div className="text-2xl font-bold text-gray-900 leading-none">{s.value}</div>
-              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mt-1">{s.label}</div>
-              <p className={cn('text-[10px] font-bold mt-2', s.color.includes('emerald') ? 'text-emerald-500' : 'text-gray-400')}>
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">{s.label}</div>
+              <p className={cn('text-xs font-bold mt-2', s.color.includes('emerald') ? 'text-emerald-500' : 'text-gray-400')}>
                 {s.sub}
               </p>
             </div>
@@ -234,7 +234,7 @@ export const ClientsView = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#F9FAFB] border-b border-gray-100">
-                <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                <tr className="text-xs font-bold text-gray-400 uppercase tracking-widest">
                   <th className="px-6 py-4">Client</th>
                   <th className="px-6 py-4">Contact</th>
                   <th className="px-6 py-4">Fidélité / Segment</th>
@@ -260,10 +260,10 @@ export const ClientsView = () => {
                             {guestInitials(g)}
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-bold text-gray-900 text-[13px] group-hover:text-[#8B5CF6] transition-colors">
+                            <span className="font-bold text-gray-900 text-sm group-hover:text-[#8B5CF6] transition-colors">
                               {guestFullName(g)}
                             </span>
-                            <span className="text-[10px] text-gray-400 font-medium mt-0.5">
+                            <span className="text-xs text-gray-400 font-medium mt-0.5">
                               {g.total_stays ?? 0} séjour{(g.total_stays ?? 0) !== 1 ? 's' : ''}
                             </span>
                           </div>
@@ -273,11 +273,11 @@ export const ClientsView = () => {
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2 text-gray-500">
                             <Mail size={12} className="text-[#8B5CF6]" />
-                            <span className="text-[11px] font-medium">{g.email || '—'}</span>
+                            <span className="text-[13px] font-medium">{g.email || '—'}</span>
                           </div>
                           <div className="flex items-center gap-2 text-gray-500">
                             <Phone size={12} />
-                            <span className="text-[11px] font-medium">{g.phone || '—'}</span>
+                            <span className="text-[13px] font-medium">{g.phone || '—'}</span>
                           </div>
                         </div>
                       </td>
@@ -287,10 +287,10 @@ export const ClientsView = () => {
                             {loyaltyCfg.icon}
                           </div>
                           <div className="flex flex-col gap-0.5">
-                            <span className="text-[10px] font-bold text-gray-600">{loyaltyCfg.label}</span>
+                            <span className="text-xs font-bold text-gray-600">{loyaltyCfg.label}</span>
                             <div className="flex items-center gap-1 text-gray-400">
                               {segCfg.icon}
-                              <span className="text-[10px] font-bold uppercase">{segCfg.label}</span>
+                              <span className="text-xs font-bold uppercase">{segCfg.label}</span>
                             </div>
                           </div>
                         </div>
@@ -298,17 +298,17 @@ export const ClientsView = () => {
                       <td className="px-6 py-5">
                         <div className="flex gap-1 flex-wrap">
                           {g.vip && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+                            <span className="inline-flex items-center gap-1 text-xs font-bold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
                               <Sparkles size={9} /> VIP
                             </span>
                           )}
                           {g.blacklisted && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded">
+                            <span className="inline-flex items-center gap-1 text-xs font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded">
                               <ShieldAlert size={9} /> Blacklist
                             </span>
                           )}
                           {g.gdpr_consent && (
-                            <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">
+                            <span className="text-xs font-bold bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded">
                               RGPD ✓
                             </span>
                           )}
@@ -317,10 +317,10 @@ export const ClientsView = () => {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-5 font-bold text-gray-400 text-[13px]">
+                      <td className="px-6 py-5 font-bold text-gray-400 text-sm">
                         {g.updated_at ? new Date(g.updated_at).toLocaleDateString('fr-FR') : '—'}
                       </td>
-                      <td className="px-6 py-5 text-right font-bold text-gray-900 text-[13px]">
+                      <td className="px-6 py-5 text-right font-bold text-gray-900 text-sm">
                         {(g.total_spent ?? 0).toLocaleString('fr-FR')} €
                       </td>
                       <td className="px-6 py-5 text-center">
@@ -385,7 +385,7 @@ const FilterSelect = ({
         <option key={v} value={v}>{label}</option>
       ))}
     </select>
-    <span className="text-[11px] font-bold text-gray-400">
+    <span className="text-xs font-bold text-gray-500">
       {value === 'ALL' ? placeholder : display ? display(value) : value}
     </span>
     <ArrowRight size={10} className="text-gray-300" />

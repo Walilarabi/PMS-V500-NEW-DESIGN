@@ -96,16 +96,16 @@ function findDuplicates(guests: GuestRowDto[]): DuplicatePair[] {
 function GuestCard({ guest }: { guest: GuestRowDto }) {
   const fullName = [guest.first_name, guest.last_name].filter(Boolean).join(' ');
   return (
-    <div className="bg-slate-50 ring-1 ring-slate-200 rounded-xl px-4 py-3 space-y-1">
-      <p className="text-[13px] font-bold text-slate-800">{fullName || '—'}</p>
-      <p className="text-[11.5px] text-slate-500">{guest.email ?? '—'}</p>
-      {guest.phone && <p className="text-[11.5px] text-slate-500">{guest.phone}</p>}
+    <div className="bg-slate-50 ring-1 ring-slate-200 rounded-xl px-4 py-3 space-y-1.5">
+      <p className="text-sm font-bold text-slate-800">{fullName || '—'}</p>
+      <p className="text-[13px] text-slate-500">{guest.email ?? '—'}</p>
+      {guest.phone && <p className="text-[13px] text-slate-500">{guest.phone}</p>}
       <div className="flex gap-2 flex-wrap mt-1">
-        {guest.nationality && <span className="text-[10px] bg-slate-200 px-1.5 py-0.5 rounded font-medium text-slate-600">{guest.nationality}</span>}
-        {(guest as any).loyalty_level && <span className="text-[10px] bg-violet-100 px-1.5 py-0.5 rounded font-medium text-violet-700">{(guest as any).loyalty_level}</span>}
-        {(guest as any).segment && <span className="text-[10px] bg-blue-100 px-1.5 py-0.5 rounded font-medium text-blue-700">{(guest as any).segment}</span>}
+        {guest.nationality && <span className="text-xs bg-slate-200 px-1.5 py-0.5 rounded font-medium text-slate-600">{guest.nationality}</span>}
+        {(guest as any).loyalty_level && <span className="text-xs bg-violet-100 px-1.5 py-0.5 rounded font-medium text-violet-700">{(guest as any).loyalty_level}</span>}
+        {(guest as any).segment && <span className="text-xs bg-blue-100 px-1.5 py-0.5 rounded font-medium text-blue-700">{(guest as any).segment}</span>}
       </div>
-      <p className="text-[10px] text-slate-400">ID: {guest.id.slice(0, 8).toUpperCase()}</p>
+      <p className="text-xs text-slate-400">ID: {guest.id.slice(0, 8).toUpperCase()}</p>
     </div>
   );
 }
@@ -120,16 +120,16 @@ function PairCard({ pair, onDismiss }: { pair: DuplicatePair; onDismiss: () => v
     <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className={cn('text-[11px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ring-1', color)}>
+          <span className={cn('text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full ring-1', color)}>
             {pct}% similaire
           </span>
           <div className="flex gap-1.5 flex-wrap">
             {pair.reasons.map(r => (
-              <span key={r} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">{r}</span>
+              <span key={r} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">{r}</span>
             ))}
           </div>
         </div>
-        <button onClick={onDismiss} className="text-[11px] text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100">
+        <button onClick={onDismiss} className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100">
           Ignorer
         </button>
       </div>
@@ -138,10 +138,10 @@ function PairCard({ pair, onDismiss }: { pair: DuplicatePair; onDismiss: () => v
         <GuestCard guest={pair.b} />
       </div>
       <div className="flex gap-2 mt-3">
-        <button className="flex-1 px-4 py-2 rounded-xl bg-violet-600 text-white text-[12.5px] font-semibold hover:bg-violet-700">
+        <button className="flex-1 px-4 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700">
           Fusionner →
         </button>
-        <button className="px-4 py-2 rounded-xl ring-1 ring-slate-200 text-slate-600 text-[12.5px] font-medium hover:bg-slate-50">
+        <button className="px-4 py-2 rounded-xl ring-1 ring-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50">
           Voir les fiches
         </button>
       </div>
@@ -188,9 +188,9 @@ export const ClientsMergeView: React.FC = () => {
           <h1 className="text-[17px] font-bold text-gray-900 flex items-center gap-2">
             <GitMerge size={18} className="text-violet-600" /> Fusion / Dédoublonnage
           </h1>
-          <p className="text-[12px] text-gray-400 mt-0.5">Détection automatique par similarité de nom, email et téléphone</p>
+          <p className="text-sm text-gray-400 mt-0.5">Détection automatique par similarité de nom, email et téléphone</p>
         </div>
-        <button onClick={() => refetch()} className="flex items-center gap-1.5 px-3 py-2 rounded-xl ring-1 ring-slate-200 bg-white text-[12.5px] font-medium text-slate-600 hover:bg-slate-50">
+        <button onClick={() => refetch()} className="flex items-center gap-1.5 px-3 py-2 rounded-xl ring-1 ring-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50">
           <RefreshCw size={13} /> Actualiser
         </button>
       </div>
@@ -204,7 +204,7 @@ export const ClientsMergeView: React.FC = () => {
           { label: 'Risque modéré',    value: medium,              color: 'text-amber-600',  alert: false               },
         ].map(k => (
           <div key={k.label} className={cn('bg-white rounded-2xl ring-1 ring-slate-100 px-4 py-3 shadow-sm', k.alert && 'ring-red-200')}>
-            <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">{k.label}</p>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">{k.label}</p>
             <p className={cn('text-[22px] font-bold mt-0.5', k.color)}>{k.value}</p>
           </div>
         ))}
@@ -214,13 +214,13 @@ export const ClientsMergeView: React.FC = () => {
       <div className="relative max-w-sm">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input type="text" placeholder="Nom, email…" value={search} onChange={e => setSearch(e.target.value)}
-          className="w-full pl-8 pr-3 py-2 rounded-xl ring-1 ring-slate-200 bg-white text-[12.5px] outline-none focus:ring-violet-400" />
+          className="w-full pl-8 pr-3 py-2 rounded-xl ring-1 ring-slate-200 bg-white text-sm outline-none focus:ring-violet-400" />
       </div>
 
       {/* Info banner */}
       <div className="flex items-center gap-3 bg-blue-50 ring-1 ring-blue-200 rounded-xl px-4 py-3">
         <AlertCircle size={14} className="text-blue-600 shrink-0" />
-        <p className="text-[12px] text-blue-700">
+        <p className="text-sm text-blue-700">
           La fusion n'est pas irréversible — elle crée un enregistrement maître et archive les doublons.
           Toutes les réservations et transactions sont redirigées vers le profil maître.
         </p>
@@ -234,8 +234,8 @@ export const ClientsMergeView: React.FC = () => {
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 bg-white rounded-2xl ring-1 ring-slate-200">
           <CheckCircle2 size={32} className="mb-3 text-emerald-400 opacity-70" />
-          <p className="text-[13px] font-medium">Aucun doublon détecté</p>
-          <p className="text-[11.5px] mt-1">{guests.length} clients analysés</p>
+          <p className="text-sm font-medium">Aucun doublon détecté</p>
+          <p className="text-[13px] text-slate-400 mt-1">{guests.length} clients analysés</p>
         </div>
       ) : (
         <div className="space-y-3">

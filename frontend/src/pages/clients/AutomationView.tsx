@@ -56,7 +56,7 @@ export const AutomationView = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F9FAFB] p-6">
-      <div className="max-w-5xl mx-auto space-y-5">
+      <div className="space-y-5">
 
         {/* KPI strip */}
         <div className="grid grid-cols-3 gap-4">
@@ -67,7 +67,7 @@ export const AutomationView = () => {
               </div>
               <div>
                 <div className="text-lg font-bold text-gray-900 leading-none">{k.value}</div>
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">
                   {k.label}
                 </div>
               </div>
@@ -77,7 +77,7 @@ export const AutomationView = () => {
 
         {/* Toolbar */}
         <div className="flex items-center justify-between">
-          <p className="text-[12px] text-gray-500">
+          <p className="text-sm text-gray-500">
             Déclenchez des actions automatiques selon le comportement des clients.
           </p>
           <Button size="sm" onClick={() => setModal('new')}>
@@ -92,7 +92,7 @@ export const AutomationView = () => {
           <Card className="p-12 text-center">
             <Zap size={32} className="mx-auto text-gray-200 mb-3" />
             <p className="text-sm font-bold text-gray-500">Aucune automatisation</p>
-            <p className="text-[12px] text-gray-400 mt-1 max-w-sm mx-auto">
+            <p className="text-sm text-gray-400 mt-1 max-w-sm mx-auto">
               Créez votre première règle pour automatiser les relances, les
               messages d'anniversaire ou le suivi des clients à risque.
             </p>
@@ -153,9 +153,9 @@ const AutomationCard: React.FC<{ automation: Automation; onEdit: () => void }> =
               <Zap size={16} className="text-[#8B5CF6]" />
             </div>
             <div className="min-w-0">
-              <div className="text-[13px] font-bold text-gray-900">{a.name}</div>
+              <div className="text-sm font-bold text-gray-900">{a.name}</div>
               {a.description && (
-                <div className="text-[11px] text-gray-400 truncate">{a.description}</div>
+                <div className="text-xs text-gray-400 truncate">{a.description}</div>
               )}
             </div>
           </div>
@@ -180,17 +180,17 @@ const AutomationCard: React.FC<{ automation: Automation; onEdit: () => void }> =
 
         {/* Trigger → action flow */}
         <div className="flex items-center gap-2 mt-3 flex-wrap">
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-[#8B5CF6]/10 text-[#8B5CF6] px-2.5 py-1 rounded-lg">
-            <TIcon size={12} /> {tMeta?.label ?? a.trigger_type}
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold bg-[#8B5CF6]/10 text-[#8B5CF6] px-2.5 py-1 rounded-lg">
+            <TIcon size={13} /> {tMeta?.label ?? a.trigger_type}
           </span>
           <ArrowRight size={13} className="text-gray-300" />
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-lg">
-            <AIcon size={12} /> {aMeta?.label ?? a.action_type}
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-lg">
+            <AIcon size={13} /> {aMeta?.label ?? a.action_type}
           </span>
         </div>
 
         {/* Stats */}
-        <div className="flex items-center gap-4 mt-3 text-[11px] text-gray-400">
+        <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
           <span className="flex items-center gap-1">
             <Play size={11} /> {a.run_count} exécution{a.run_count !== 1 ? 's' : ''}
           </span>
@@ -206,7 +206,7 @@ const AutomationCard: React.FC<{ automation: Automation; onEdit: () => void }> =
         {run.isSuccess && run.variables === a.id && (
           <div className="mt-3 flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-xl">
             <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-            <span className="text-[11px] font-medium text-emerald-700">
+            <span className="text-xs font-medium text-emerald-700">
               {run.data.matched === 0
                 ? 'Aucun nouveau client à traiter.'
                 : `${run.data.matched} client${run.data.matched > 1 ? 's' : ''} traité${run.data.matched > 1 ? 's' : ''} — ${run.data.applied} appliqué${run.data.applied > 1 ? 's' : ''}, ${run.data.queued} en file.`}
@@ -214,7 +214,7 @@ const AutomationCard: React.FC<{ automation: Automation; onEdit: () => void }> =
           </div>
         )}
         {run.isError && run.variables === a.id && (
-          <div className="mt-3 px-3 py-2 bg-red-50 border border-red-100 rounded-xl text-[11px] font-medium text-red-600">
+          <div className="mt-3 px-3 py-2 bg-red-50 border border-red-100 rounded-xl text-xs font-medium text-red-600">
             Échec de l'exécution.
           </div>
         )}

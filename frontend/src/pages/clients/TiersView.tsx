@@ -49,7 +49,7 @@ export const TiersView = () => {
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F9FAFB] p-6">
-      <div className="max-w-5xl mx-auto space-y-5">
+      <div className="space-y-5">
 
         {/* KPI strip */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -60,7 +60,7 @@ export const TiersView = () => {
               </div>
               <div>
                 <div className="text-lg font-bold text-gray-900 leading-none">{k.value}</div>
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1">
+                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">
                   {k.label}
                 </div>
               </div>
@@ -73,8 +73,8 @@ export const TiersView = () => {
           <div className="flex items-start gap-3">
             <Handshake size={15} className="text-[#8B5CF6] mt-0.5 shrink-0" />
             <div>
-              <p className="text-[12px] font-bold text-gray-800">Tiers & Prescripteurs</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">
+              <p className="text-sm font-bold text-gray-800">Tiers & Prescripteurs</p>
+              <p className="text-[13px] text-gray-500 mt-0.5">
                 Agences de voyage et tour-opérateurs partenaires qui prescrivent l'hôtel à leurs
                 clients. Gérez ici les taux négociés, plafonds de crédit et contacts commerciaux.
               </p>
@@ -154,7 +154,7 @@ const TierCard: React.FC<{ company: Company; onEdit: () => void }> = ({ company:
             <Icon size={18} style={{ color }} />
           </div>
           <div>
-            <div className="text-[13px] font-bold text-gray-900 leading-tight">{c.name}</div>
+            <div className="text-sm font-bold text-gray-900 leading-tight">{c.name}</div>
             <div className="mt-0.5">
               <Badge variant={isAgency ? 'info' : 'warning'}>
                 {isAgency ? 'Agence' : 'Tour-opérateur'}
@@ -175,25 +175,25 @@ const TierCard: React.FC<{ company: Company; onEdit: () => void }> = ({ company:
       {/* Details */}
       <div className="space-y-1.5 border-t border-gray-100 pt-3">
         {c.email && (
-          <div className="flex items-center gap-2 text-[11px] text-gray-500">
+          <div className="flex items-center gap-2 text-[13px] text-gray-500">
             <Building size={10} className="shrink-0 text-gray-400" />
             <span className="truncate">{c.email}</span>
           </div>
         )}
         {(c.city || c.country) && (
-          <div className="flex items-center gap-2 text-[11px] text-gray-500">
+          <div className="flex items-center gap-2 text-[13px] text-gray-500">
             <Globe size={10} className="shrink-0 text-gray-400" />
             {[c.city, c.country].filter(Boolean).join(', ')}
           </div>
         )}
         {c.contract_type && (
-          <div className="flex items-center gap-2 text-[11px] text-gray-500">
+          <div className="flex items-center gap-2 text-[13px] text-gray-500">
             <Star size={10} className="shrink-0 text-gray-400" />
             Contrat : {c.contract_type}
           </div>
         )}
         {c.phone && (
-          <div className="text-[11px] text-gray-400 pl-4">{c.phone}</div>
+          <div className="text-[13px] text-gray-400 pl-4">{c.phone}</div>
         )}
       </div>
 
@@ -203,7 +203,7 @@ const TierCard: React.FC<{ company: Company; onEdit: () => void }> = ({ company:
           {c.negotiated_rate > 0 && (
             <div>
               <div className="text-[15px] font-bold text-[#8B5CF6]">{c.negotiated_rate}%</div>
-              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Taux</div>
+              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Taux</div>
             </div>
           )}
           {c.credit_limit > 0 && (
@@ -211,7 +211,7 @@ const TierCard: React.FC<{ company: Company; onEdit: () => void }> = ({ company:
               <div className="text-[15px] font-bold text-gray-900">
                 {c.credit_limit.toLocaleString('fr-FR')} €
               </div>
-              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Crédit</div>
+              <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Crédit</div>
             </div>
           )}
         </div>
