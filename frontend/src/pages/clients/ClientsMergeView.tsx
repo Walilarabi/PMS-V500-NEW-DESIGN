@@ -180,6 +180,7 @@ export const ClientsMergeView: React.FC = () => {
   const medium   = allPairs.filter(p => p.score >= 0.7 && p.score < 0.9 && !dismissed.has(`${p.a.id}-${p.b.id}`)).length;
 
   return (
+    <div className="flex-1 overflow-y-auto bg-[#F9FAFB] p-6">
     <div className="space-y-5">
 
       {/* Header */}
@@ -244,6 +245,7 @@ export const ClientsMergeView: React.FC = () => {
           ))}
         </div>
       )}
+    </div>
     </div>
   );
 };

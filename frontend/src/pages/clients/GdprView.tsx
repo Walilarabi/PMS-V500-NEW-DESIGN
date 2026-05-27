@@ -63,7 +63,7 @@ export const GdprView = () => {
             type="button"
             onClick={() => setTab(key)}
             className={cn(
-              'flex items-center gap-1.5 px-4 py-2 rounded-t-xl text-[12px] font-bold transition-colors border-b-2',
+              'flex items-center gap-1.5 px-4 py-2 rounded-t-xl text-sm font-bold transition-colors border-b-2',
               tab === key
                 ? 'bg-white text-[#8B5CF6] border-[#8B5CF6]'
                 : 'text-gray-400 hover:text-gray-600 border-transparent hover:bg-white/60',
@@ -106,7 +106,7 @@ const ConsentsTab = () => {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
+    <div className="space-y-5">
       {/* KPI strip */}
       <div className="grid grid-cols-4 gap-4">
         {overviewQ.isLoading ? (
@@ -148,10 +148,10 @@ const ConsentsTab = () => {
       {ov && ov.total > 0 && (
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
               Répartition du consentement
             </span>
-            <span className="text-[12px] font-bold text-gray-700">
+            <span className="text-sm font-bold text-gray-700">
               {ov.consent_rate != null ? `${ov.consent_rate}% taux de consentement` : '—'}
             </span>
           </div>
@@ -177,7 +177,7 @@ const ConsentsTab = () => {
             ].map(({ label, color }) => (
               <div key={label} className="flex items-center gap-1.5">
                 <div className={`w-2 h-2 rounded-full ${color}`} />
-                <span className="text-[10px] text-gray-400">{label}</span>
+                <span className="text-xs text-gray-400">{label}</span>
               </div>
             ))}
           </div>
@@ -192,7 +192,7 @@ const ConsentsTab = () => {
             type="button"
             onClick={() => setFilter(key)}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all',
               filter === key
                 ? 'text-white'
                 : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300',
@@ -208,29 +208,29 @@ const ConsentsTab = () => {
       {/* Guest consent list */}
       <Card className="overflow-hidden">
         {guestsQ.isLoading ? (
-          <div className="p-8 text-center text-[12px] text-gray-400">Chargement…</div>
+          <div className="p-8 text-center text-sm text-gray-400">Chargement…</div>
         ) : (guestsQ.data ?? []).length === 0 ? (
           <div className="p-12 text-center">
             <ShieldCheck size={28} className="mx-auto text-gray-200 mb-3" />
-            <p className="text-[12px] font-bold text-gray-500">Aucun client dans cette catégorie</p>
+            <p className="text-sm font-bold text-gray-500">Aucun client dans cette catégorie</p>
           </div>
         ) : (
-          <table className="w-full text-[12px]">
+          <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/60">
-                <th className="text-left px-4 py-2.5 font-bold text-[10px] text-gray-400 uppercase tracking-wider">
+                <th className="text-left px-4 py-2.5 font-bold text-xs text-gray-400 uppercase tracking-wider">
                   Client
                 </th>
-                <th className="text-left px-4 py-2.5 font-bold text-[10px] text-gray-400 uppercase tracking-wider">
+                <th className="text-left px-4 py-2.5 font-bold text-xs text-gray-400 uppercase tracking-wider">
                   Email
                 </th>
-                <th className="text-center px-4 py-2.5 font-bold text-[10px] text-gray-400 uppercase tracking-wider">
+                <th className="text-center px-4 py-2.5 font-bold text-xs text-gray-400 uppercase tracking-wider">
                   Consentement
                 </th>
-                <th className="text-left px-4 py-2.5 font-bold text-[10px] text-gray-400 uppercase tracking-wider">
+                <th className="text-left px-4 py-2.5 font-bold text-xs text-gray-400 uppercase tracking-wider">
                   Date
                 </th>
-                <th className="text-center px-4 py-2.5 font-bold text-[10px] text-gray-400 uppercase tracking-wider">
+                <th className="text-center px-4 py-2.5 font-bold text-xs text-gray-400 uppercase tracking-wider">
                   Action
                 </th>
               </tr>
@@ -263,25 +263,25 @@ const ConsentRow: React.FC<{
     <tr className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
       <td className="px-4 py-3">
         <div className="font-bold text-gray-900">{g.full_name || '—'}</div>
-        <div className="text-[10px] text-gray-400">{g.total_stays ?? 0} séjour{(g.total_stays ?? 0) !== 1 ? 's' : ''}</div>
+        <div className="text-xs text-gray-400">{g.total_stays ?? 0} séjour{(g.total_stays ?? 0) !== 1 ? 's' : ''}</div>
       </td>
       <td className="px-4 py-3 text-gray-500">{g.email ?? '—'}</td>
       <td className="px-4 py-3 text-center">
         {g.gdpr_consent === true ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-bold">
-            <CheckCircle2 size={10} /> Consenti
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-xs font-bold">
+            <CheckCircle2 size={11} /> Consenti
           </span>
         ) : g.gdpr_consent === false ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-500 rounded-lg text-[10px] font-bold">
-            <XCircle size={10} /> Refusé
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-50 text-red-500 rounded-lg text-xs font-bold">
+            <XCircle size={11} /> Refusé
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-bold">
-            <HelpCircle size={10} /> Inconnu
+          <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-600 rounded-lg text-xs font-bold">
+            <HelpCircle size={11} /> Inconnu
           </span>
         )}
       </td>
-      <td className="px-4 py-3 text-gray-400 text-[11px]">
+      <td className="px-4 py-3 text-gray-400 text-xs">
         {fmtDate(g.gdpr_date)}
       </td>
       <td className="px-4 py-3">
@@ -337,7 +337,7 @@ const RequestsTab = () => {
   const openResolve = (r: GdprRequest) => { setEditRequest(r); setShowModal(true); };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-1.5">
@@ -347,7 +347,7 @@ const RequestsTab = () => {
               type="button"
               onClick={() => setStatusFilter(key as any)}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-[11px] font-bold transition-colors',
+                'px-3 py-1.5 rounded-xl text-xs font-bold transition-colors',
                 statusFilter === key
                   ? 'bg-[#8B5CF6]/10 text-[#8B5CF6]'
                   : 'text-gray-400 hover:text-gray-600 hover:bg-white',
@@ -364,12 +364,12 @@ const RequestsTab = () => {
 
       {/* Request list */}
       {requestsQ.isLoading ? (
-        <div className="text-center py-12 text-[12px] text-gray-400">Chargement…</div>
+        <div className="text-center py-12 text-sm text-gray-400">Chargement…</div>
       ) : (requestsQ.data ?? []).length === 0 ? (
         <Card className="p-12 text-center">
           <FileText size={28} className="mx-auto text-gray-200 mb-3" />
-          <p className="text-[12px] font-bold text-gray-500">Aucune demande RGPD</p>
-          <p className="text-[11px] text-gray-400 mt-1 max-w-xs mx-auto">
+          <p className="text-sm font-bold text-gray-500">Aucune demande RGPD</p>
+          <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
             Enregistrez ici les demandes d'accès, d'effacement ou de portabilité reçues de vos clients.
           </p>
           <Button size="sm" className="mt-4" onClick={openNew}>
@@ -411,39 +411,39 @@ const RequestCard: React.FC<{ request: GdprRequest; onResolve: () => void }> = (
           />
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[13px] font-bold text-gray-900">
+              <span className="text-sm font-bold text-gray-900">
                 {r.guest_name ?? 'Client supprimé'}
               </span>
               <span
-                className="px-2 py-0.5 rounded-lg text-[10px] font-bold"
+                className="px-2 py-1 rounded-lg text-xs font-bold"
                 style={{ color: typeMeta?.color, background: typeMeta?.color + '15' }}
               >
                 {typeMeta?.label ?? r.request_type}
               </span>
               <span
-                className="px-2 py-0.5 rounded-lg text-[10px] font-bold"
+                className="px-2 py-1 rounded-lg text-xs font-bold"
                 style={{ color: statusMeta?.color, background: statusMeta?.bg }}
               >
                 {statusMeta?.label ?? r.status}
               </span>
             </div>
             {r.guest_email && (
-              <div className="text-[11px] text-gray-400 mt-0.5">{r.guest_email}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{r.guest_email}</div>
             )}
             {r.notes && (
-              <div className="text-[11px] text-gray-500 mt-1.5 px-2.5 py-1.5 bg-gray-50 rounded-lg">
+              <div className="text-xs text-gray-500 mt-1.5 px-2.5 py-1.5 bg-gray-50 rounded-lg">
                 {r.notes}
               </div>
             )}
             {r.resolution && (
-              <div className="text-[11px] text-emerald-600 mt-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-lg">
+              <div className="text-xs text-emerald-600 mt-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-lg">
                 Résolution : {r.resolution}
               </div>
             )}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2 shrink-0">
-          <div className="flex items-center gap-1 text-[10px] text-gray-400">
+          <div className="flex items-center gap-1 text-xs text-gray-400">
             <Clock size={10} />
             {fmtDate(r.created_at)}
           </div>
@@ -453,7 +453,7 @@ const RequestCard: React.FC<{ request: GdprRequest; onResolve: () => void }> = (
             </Button>
           )}
           {r.resolved_at && (
-            <div className="text-[10px] text-gray-400">
+            <div className="text-xs text-gray-400">
               Résolu {fmtDate(r.resolved_at)}
             </div>
           )}
@@ -497,13 +497,13 @@ const EraseTab = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5">
+    <div className="space-y-5">
       {/* Warning banner */}
       <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
         <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
         <div>
-          <p className="text-[12px] font-bold text-amber-800">Opérations irréversibles</p>
-          <p className="text-[11px] text-amber-700 mt-0.5">
+          <p className="text-sm font-bold text-amber-800">Opérations irréversibles</p>
+          <p className="text-xs text-amber-700 mt-0.5">
             L'anonymisation efface définitivement toutes les données personnelles identifiantes
             (nom, email, téléphone, passeport…). Les réservations et les statistiques sont conservées.
           </p>
@@ -512,21 +512,21 @@ const EraseTab = () => {
 
       {/* Search */}
       <Card className="p-5">
-        <h3 className="text-[12px] font-bold text-gray-700 mb-3">Rechercher un client</h3>
+        <h3 className="text-sm font-bold text-gray-700 mb-3">Rechercher un client</h3>
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Nom, email…"
-          className="w-full text-[12px] border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#8B5CF6]"
+          className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#8B5CF6]"
         />
 
         {search.length > 1 && (
           <div className="mt-3 space-y-1">
             {guestsQ.isLoading ? (
-              <p className="text-[11px] text-gray-400 text-center py-3">Recherche…</p>
+              <p className="text-xs text-gray-400 text-center py-3">Recherche…</p>
             ) : (guestsQ.data?.rows ?? []).length === 0 ? (
-              <p className="text-[11px] text-gray-400 text-center py-3">Aucun résultat</p>
+              <p className="text-xs text-gray-400 text-center py-3">Aucun résultat</p>
             ) : (
               (guestsQ.data?.rows ?? []).map((g) => {
                 const name = [g.first_name, g.last_name].filter(Boolean).join(' ');
@@ -537,15 +537,15 @@ const EraseTab = () => {
                     className="flex items-center justify-between gap-3 px-3 py-3 rounded-xl border border-gray-100 hover:border-gray-200 bg-white transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-[#8B5CF6]/10 flex items-center justify-center text-[11px] font-bold text-[#8B5CF6] shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-[#8B5CF6]/10 flex items-center justify-center text-xs font-bold text-[#8B5CF6] shrink-0">
                         {(g.first_name?.[0] ?? g.last_name?.[0] ?? '?').toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-[12px] font-bold text-gray-900 truncate">{name}</div>
-                        <div className="text-[10px] text-gray-400">{g.email ?? '—'}</div>
+                        <div className="text-sm font-bold text-gray-900 truncate">{name}</div>
+                        <div className="text-xs text-gray-400">{g.email ?? '—'}</div>
                       </div>
                       {isAnon && (
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[9px] font-bold uppercase">
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-[11px] font-bold uppercase">
                           Déjà anonymisé
                         </span>
                       )}
@@ -590,18 +590,18 @@ const EraseTab = () => {
                 <Eraser size={18} className="text-red-600" />
               </div>
               <div>
-                <h3 className="text-[14px] font-bold text-gray-900">Confirmer l'anonymisation</h3>
-                <p className="text-[11px] text-gray-400">{confirmGuest.name}</p>
+                <h3 className="text-sm font-bold text-gray-900">Confirmer l'anonymisation</h3>
+                <p className="text-xs text-gray-400">{confirmGuest.name}</p>
               </div>
             </div>
 
-            <p className="text-[12px] text-gray-600 mb-4">
+            <p className="text-sm text-gray-600 mb-4">
               Cette action est <strong>irréversible</strong>. Toutes les données personnelles
               identifiantes seront effacées. Les données financières et statistiques sont conservées.
             </p>
 
             <div className="mb-4">
-              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
                 Motif (facultatif)
               </label>
               <input
@@ -609,7 +609,7 @@ const EraseTab = () => {
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="Ex: Demande écrite du 20/05/2026…"
-                className="w-full text-[12px] border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-red-400"
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-red-400"
               />
             </div>
 
@@ -654,9 +654,9 @@ const KpiCard: React.FC<{
     <div className="min-w-0">
       <div className="text-lg font-bold text-gray-900 leading-none">
         {value}
-        {suffix && <span className="text-[11px] font-bold text-gray-400 ml-1.5">{suffix}</span>}
+        {suffix && <span className="text-xs font-bold text-gray-400 ml-1.5">{suffix}</span>}
       </div>
-      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-1 truncate">
+      <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1 truncate">
         {label}
       </div>
     </div>
