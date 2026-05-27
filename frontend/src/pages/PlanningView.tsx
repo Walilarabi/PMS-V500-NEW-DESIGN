@@ -42,6 +42,12 @@ import { useAuth } from '@/src/domains/auth/AuthContext';
 import { useConfigStore, HotelEvent } from '@/src/store/configStore';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
+import { RevenueCalendar } from '@/src/pages/planning/RevenueCalendar';
+import type { DayCell } from '@/src/pages/planning/RevenueCalendar';
+import type { RevenueSubView } from '@/src/pages/planning/types';
+import { DayDetailModal } from '@/src/components/modals/DayDetailModal';
+import { useRevenueCalendarData } from '@/src/hooks/useRevenueCalendarData';
+import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 
 // ─── Type interne du Gantt — découplé de ReservationRow et du mock context ───
 interface GanttReservation {
@@ -165,7 +171,15 @@ export const PlanningView = () => {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState<'7J' | '15J' | 'Mois'>('15J');
   const [displayMode, setDisplayMode] = useState<'Gantt' | 'Calendar'>('Gantt');
+  const [subView, setSubView] = useState<RevenueSubView>('KPI');
+  const [selectedDay, setSelectedDay] = useState<DayCell | null>(null);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
+
+  // Revenue Calendar data (pickup, cancellations, real-time sync)
+  const { pickupByDate, cancellationsByDate } = useRevenueCalendarData();
+
+  // Rate panel for "Modifier les tarifs" action
+  const { openRatePanel } = useRateCalendarStore();
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -251,14 +265,18 @@ export const PlanningView = () => {
       date.setDate(currentDate.getDate() + i);
       const dateStr = date.toISOString().split('T')[0];
       
-      const occupiedCount = ganttReservations.filter(res => {
+      const dayOccRes = ganttReservations.filter(res => {
         try {
           const start = new Date(res.arrival).getTime();
           const end = new Date(res.departure).getTime();
           const current = date.getTime();
           return !isNaN(start) && current >= start && current < end;
         } catch { return false; }
-      }).length;
+      });
+      const occupiedCount = dayOccRes.length;
+      // Real ADR: total revenue of occupied reservations / number of occupied rooms
+      const dayRevenue = dayOccRes.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
+      const realAdr = occupiedCount > 0 ? Math.round(dayRevenue / occupiedCount) : 0;
 
       const blockedCount = rooms.filter(r => r.status === 'out_of_order' || r.status === 'maintenance').length;
       const availableTotal = rooms.length - occupiedCount - blockedCount;
@@ -277,7 +295,7 @@ export const PlanningView = () => {
         occ: rooms.length > 0 ? Math.round((occupiedCount / rooms.length) * 100) : 0,
         available: Math.max(0, availableTotal),
         events: dayEvents,
-        adr: 120 + Math.floor(Math.random() * 40)
+        adr: realAdr,
       };
     });
   }, [ganttReservations, storeEvents, rooms, currentDate, viewLength]);
@@ -489,8 +507,24 @@ export const PlanningView = () => {
         </div>
       </div>
 
-      {/* Legend Bar */}
-      <div className="h-12 shrink-0 border-b border-gray-100 bg-white/80 backdrop-blur-md flex items-center justify-between px-8 z-50">
+      {/* ── Revenue Calendar (replaces Gantt when Calendar mode active) ── */}
+      {displayMode === 'Calendar' && (
+        <RevenueCalendar
+          monthDate={currentDate}
+          startDate={currentDate}
+          reservations={supabaseData?.rows ?? []}
+          rooms={supabaseRooms}
+          events={storeEvents}
+          subView={subView}
+          setSubView={setSubView}
+          onDayClick={(day) => setSelectedDay(day)}
+          pickupByDate={pickupByDate}
+          cancellationsByDate={cancellationsByDate}
+        />
+      )}
+
+      {/* Legend Bar — Gantt mode only */}
+      <div className={cn("h-12 shrink-0 border-b border-gray-100 bg-white/80 backdrop-blur-md flex items-center justify-between px-8 z-50", displayMode === 'Calendar' && "hidden")}>
         <div className="flex items-center gap-6">
            {[
              { label: 'Direct', color: 'bg-indigo-200' },
@@ -526,7 +560,8 @@ export const PlanningView = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden relative">
+      {/* Gantt flex area — hidden when Calendar mode active */}
+      <div className={cn("flex-1 flex overflow-hidden relative", displayMode === 'Calendar' && "hidden")}>
         {/* Left Unit Sidebar */}
         <div className="w-[170px] flex flex-col bg-white border-r border-gray-100 shrink-0 z-40">
            <div className="flex flex-col border-b border-gray-100">
@@ -1038,7 +1073,43 @@ export const PlanningView = () => {
         )}
       </AnimatePresence>
 
-      <ReservationFormModal 
+      {/* ── Day Detail Modal (Revenue Calendar → click on day cell) ── */}
+      <DayDetailModal
+        isOpen={!!selectedDay}
+        day={selectedDay}
+        totalRooms={supabaseRooms.length || effectiveRooms.length}
+        pickup={selectedDay ? (pickupByDate.get(selectedDay.dateStr) ?? 0) : 0}
+        cancellations={selectedDay ? (cancellationsByDate.get(selectedDay.dateStr) ?? 0) : 0}
+        onClose={() => setSelectedDay(null)}
+        onNewReservation={(dateStr) => {
+          setSelectedDay(null);
+          setSelectedEventDate(dateStr);
+          setIsModalOpen(true);
+        }}
+        onBlockRooms={(_dateStr) => {
+          setSelectedDay(null);
+          // TODO: open block rooms modal when implemented
+        }}
+        onEditRates={(_dateStr) => {
+          setSelectedDay(null);
+          openRatePanel(null);
+        }}
+        onAddRestriction={(_dateStr) => {
+          setSelectedDay(null);
+          // TODO: open restrictions modal when implemented
+        }}
+        onViewInGantt={(_dateStr) => {
+          setSelectedDay(null);
+          setDisplayMode('Gantt');
+        }}
+        onAddEvent={(dateStr) => {
+          setSelectedDay(null);
+          setSelectedEventDate(dateStr);
+          setIsEventModalOpen(true);
+        }}
+      />
+
+      <ReservationFormModal
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         onSave={async (data: ReservationFormData) => {

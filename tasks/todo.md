@@ -1,60 +1,106 @@
-# TODO — Câblage RMS Enterprise
+# TODO — Revenue Calendar Rebuild
 
+**Branche :** `claude/amazing-sagan-NZbfi`  
 Légende : [ ] à faire · [x] fait · [~] partiel · [!] bloqué
 
-## Phase 1 — Bus & contrats
-- [x] T1.1 Étendre `RmsEventMap` avec les nouveaux événements
-- [x] T1.2 Émission depuis tacticalRulesEngine / guardrailsEngine / priorityConflictEngine / rmsRuleEvaluator / rmsAuditLogger
+---
 
-## Phase 2 — Connexions cross-module
-- [x] T2.1 `market-data:imported` → re-évalue le contexte marché
-- [x] T2.2 `strategy:activated` → met à jour le contexte (store)
-- [x] T2.3 `promotion:status-changed` → ré-évalue anti_cannibalization
-- [x] T2.4 `tactical-rule:triggered` → consommé via RmsEnterpriseFeed
-- [x] T2.5 `guardrail:blocked` → AlertsPage affiche via RmsEnterpriseFeed
+## T1 — pmsLogic.ts : computeDayMetrics + computeMonthlyKPIs
+- [ ] Ajouter interface `DayMetric` exportée dans `pmsLogic.ts`
+- [ ] Ajouter interface `MonthMetric` exportée dans `pmsLogic.ts`
+- [ ] Implémenter `computeDayMetrics(reservations, dateStr, totalRoomsCount): DayMetric`
+- [ ] Implémenter `computeMonthlyKPIs(reservations, year, month, totalRoomsCount): MonthMetric`
+- [ ] ADR = CA_total_jour / max(1, nb_réservations_présentes)
+- [ ] `npx tsc --noEmit` → 0 erreur dans `usePlanningMetrics.ts`
+- [ ] ✅ CHECKPOINT A-1
 
-## Phase 3 — Modals
-- [x] T3.1 Modal « Nouvelle règle »
-- [x] T3.2 Modal « Configurer les priorités »
-- [x] T3.3 Garde-fou : upsert/remove persistés
-- [x] T3.4 Conflit : `resolveConflict` réel + emit
+## T2 — PlanningView : wirer RevenueCalendar + supprimer ADR aléatoire
+- [ ] Importer `RevenueCalendar` depuis `./planning/RevenueCalendar`
+- [ ] Importer `RevenueSubView` depuis `./planning/types`
+- [ ] Ajouter state `subView: RevenueSubView` avec useState
+- [ ] Ajouter rendering conditionnel : `displayMode === 'Calendar'` → `<RevenueCalendar .../>`
+- [ ] Passer props : `monthDate={currentDate}` `startDate={currentDate}` `reservations` `rooms` `events` `subView` `setSubView`
+- [ ] Remplacer ligne 280 `adr: 120 + Math.floor(Math.random() * 40)` par calcul réel
+- [ ] `npm run build` → succès
+- [ ] Tester basculement Gantt ↔ Calendrier manuellement
+- [ ] ✅ CHECKPOINT A-2
 
-## Phase 4 — Boutons
-- [x] T4.1 Menu kebab (voir / dupliquer / supprimer / historique)
-- [x] T4.2 Export historique CSV
-- [x] T4.5 Bouton « Simuler avant activation » (via menu kebab)
+## T3 — RevenueCalendar : fix ADR + période + filtres
+- [ ] Fix ADR : `adr = Math.round(ca / Math.max(1, occRes.length))` dans le useMemo
+- [ ] Ajouter state `periodDays: 7|14|30|60|90|null` (null = mode mois)
+- [ ] Ajouter props `startDate: Date` pour mode range
+- [ ] Ajouter header boutons 7J/14J/30J/60J/90J
+- [ ] Adapter `days` useMemo : si `periodDays` → calculer N jours depuis `startDate`, sinon mode mois
+- [ ] Ajouter state `roomTypeFilter: string` (défaut 'all')
+- [ ] Ajouter state `partnerFilter: string` (défaut 'all')
+- [ ] Ajouter dropdowns "Tous les types" + "Tous les canaux" dans le header
+- [ ] Filtrer les réservations dans le useMemo selon les filtres actifs
+- [ ] ✅ CHECKPOINT B-1
 
-## Phase 5 — Autopilot
-- [x] T5.1 Pipeline complet via rmsRuleEvaluator + widget injectable
-- [x] T5.2 Push effectif vers Channel Manager (pushToAllChannels)
-- [x] T5.3 Rollback → emit autopilot:rollback
+## T4 — Hook useRevenueCalendarData
+- [ ] Créer `frontend/src/hooks/useRevenueCalendarData.ts`
+- [ ] Importer `useReservations` depuis le domaine reservations
+- [ ] Calculer `pickupByDate` : Map<dateStr, number> — réservations créées dans les 7 derniers jours pour chaque date future
+- [ ] Filtrer `cancellations` : reservations avec `status = 'cancelled'`
+- [ ] Ajouter subscription Supabase temps-réel sur table `reservations`
+- [ ] Nettoyer la subscription dans le cleanup `useEffect`
+- [ ] Exporter `UseRevenueCalendarDataReturn` interface
+- [ ] Aucune erreur TS
+- [ ] ✅ CHECKPOINT B-2
 
-## Phase 6 — Stratégie
-- [x] T6.1 setActiveStrategy emit strategy:activated → met à jour le moteur
+## T5 — DayDetailModal
+- [ ] Créer `frontend/src/components/modals/DayDetailModal.tsx`
+- [ ] Afficher : date, occ (N/M chambres, P%), ADR, RevPAR, CA du jour
+- [ ] Afficher : liste des réservations présentes (nom, chambre, canal)
+- [ ] Afficher : pickup du jour (nouvelles resas N-7)
+- [ ] Afficher : événements hôtel du jour
+- [ ] Bouton 1 : "Nouvelle réservation" → callback `onNewReservation(dateStr)`
+- [ ] Bouton 2 : "Bloquer des chambres" → callback `onBlockRooms(dateStr)` (ou placeholder)
+- [ ] Bouton 3 : "Modifier les tarifs" → callback `onEditRates(dateStr)`
+- [ ] Bouton 4 : "Ajouter une restriction" → callback `onAddRestriction(dateStr)` (ou placeholder)
+- [ ] Bouton 5 : "Voir dans le Gantt" → callback `onViewInGantt(dateStr)`
+- [ ] Bouton 6 : "Ajouter un événement" → callback `onAddEvent(dateStr)`
+- [ ] Bouton 7 : "Copier les tarifs" → disabled + tooltip "Bientôt disponible"
+- [ ] Fermeture Escape + clic overlay
+- [ ] Focus trap basique (focus sur bouton fermeture à l'ouverture)
+- [ ] ✅ CHECKPOINT C-1
 
-## Phase 7 — Simulation
-- [x] T7.1 TacticalEngineWidget injecté dans SimulationPage
+## T6 — Wirer click handlers RevenueCalendar → DayDetailModal
+- [ ] Ajouter prop `onDayClick?: (day: DayCell) => void` à `RevenueCalendar`
+- [ ] Ajouter `onClick`, `role="button"`, `tabIndex={0}` sur chaque cellule non-vide dans `KpiCalendar`
+- [ ] Dans `PlanningView`, ajouter state `selectedDay: DayCell | null`
+- [ ] Importer et rendre `<DayDetailModal>` dans PlanningView
+- [ ] Passer callbacks : `onNewReservation → setIsModalOpen + préfill date`, `onAddEvent → setIsEventModalOpen + date`
+- [ ] `onEditRates` → `useRateCalendarStore.getState().openRatePanel(null)`
+- [ ] `onViewInGantt` → `setDisplayMode('Gantt')`
+- [ ] ✅ CHECKPOINT C-2
 
-## Phase 8 — Alertes
-- [x] T8.1 RmsEnterpriseFeed en haut de AlertsPage
+## T7 — Centraliser seuils + polish UX
+- [ ] Créer `frontend/src/pages/planning/revenueThresholds.ts`
+- [ ] Exporter `OCC_THRESHOLDS` avec 5 niveaux (CRITICAL, HIGH, NORMAL, LOW, EMPTY)
+- [ ] Remplacer `heatmapTone()` dans `RevenueCalendar.tsx` pour utiliser `OCC_THRESHOLDS`
+- [ ] Afficher mini-badge "Compression" dans cellules ≥90%
+- [ ] Afficher indicateur ↑ pickup si `pickupByDate.get(dateStr) > 0`
+- [ ] Afficher badge annulations rouges si > 0 pour ce jour
+- [ ] ✅ CHECKPOINT D-1
 
-## Phase 9 — Decision History
-- [x] T9.1 Écoute autopilot:pushed / rollback / tactical-rule:triggered
-- [x] T9.1 RmsEnterpriseFeed en haut de DecisionHistoryPage
+## T8 — Build verify + commit + push
+- [ ] `npx tsc --noEmit` → 0 erreur dans les fichiers modifiés/créés
+- [ ] `npm run build` → succès complet
+- [ ] `git checkout -b claude/amazing-sagan-NZbfi` (si pas déjà sur la branche)
+- [ ] `git add -A && git commit -m "feat(planning): Revenue Calendar rebuild — fix dead toggle, broken imports, real data, modals, filters, pickup"`
+- [ ] `git push -u origin claude/amazing-sagan-NZbfi`
+- [ ] ✅ LIVRAISON COMPLÈTE
 
-## Phase 10 — Tests
-- [x] T10.1 Widget Moteur tactique = panneau dev/inspection
-- [x] T10.2 4 scénarios pipeline + add/remove + reorder validés via tasks/manual-test-script.mjs
+---
 
-## Bugs corrigés en cours de route
-- [x] BUG1 : magnitudes d'actions non-prix (min_stay=2) cumulaient au prix → filtré sur PRICE_ACTION_TYPES
+## Ancienne TODO (Formulaires + Partners) — COMPLÉTÉE
 
-## Améliorations recommandées — implémentées
-- [x] #1 Persistance Supabase : migration 20260520_rms_enterprise.sql + service rmsEnterprisePersistence + hydrate dans 4 engines
-- [x] #2 AutopilotPage refondu : AutopilotForecastPanel = 30 jours via rmsRuleEvaluator + events Paris + push/rollback
-- [x] #3 Conflits dynamiques : priorityConflictEngine.recordRuntimeConflict + déduplication signature + emit conflict:detected
-- [x] #4 Tests Vitest : 48 tests / 7 fichiers (initial)
-- [x] #5 Recherche/tri/pagination via useDataTable + TablePagination + SortableHeader sur RuleTable et GuardrailTable
-- [x] #6 Drag&drop HTML5 dans ConfigurePrioritiesModal (garde-fous verrouillés)
-- [x] #7 i18n léger (fr/en) : useT hook, LocaleSwitcher, catalogues FR/EN structurés
-- **Final : 61 tests / 9 fichiers ✅**
+- [x] T1 — constants/partners.ts (34 partenaires)
+- [x] T2 — Store + Supabase persistence
+- [x] T3 — RoomManagerPanel : formulaire + harmonisation
+- [x] T4 — RateManagerPanel : fix submit + harmonisation
+- [x] T5 — RoomTypesPage : CRUD physique
+- [x] T6 — RatePlansPage : édition inline + filtre partenaire
+- [x] T7 — ReservationFormModal : sélecteur partenaire + filtrage plans
+- [x] T8 — Synchronisation & contrôles finaux
