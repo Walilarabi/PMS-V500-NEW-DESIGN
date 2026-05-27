@@ -48,6 +48,7 @@ import type { RevenueSubView } from '@/src/pages/planning/types';
 import { DayDetailModal } from '@/src/components/modals/DayDetailModal';
 import { useRevenueCalendarData } from '@/src/hooks/useRevenueCalendarData';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
+import { useRMSPricingRecommendations } from '@/src/hooks/useRMSData';
 
 // ─── Type interne du Gantt — découplé de ReservationRow et du mock context ───
 interface GanttReservation {
@@ -180,6 +181,13 @@ export const PlanningView = () => {
 
   // Rate panel for "Modifier les tarifs" action
   const { openRatePanel } = useRateCalendarStore();
+
+  // RMS pricing recommendations for the current month (used in DayDetailModal)
+  const rmsStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    .toISOString().slice(0, 10);
+  const rmsEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+    .toISOString().slice(0, 10);
+  const { data: rmsRecommendations = [] } = useRMSPricingRecommendations(rmsStartDate, rmsEndDate);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -1080,6 +1088,7 @@ export const PlanningView = () => {
         totalRooms={supabaseRooms.length || effectiveRooms.length}
         pickup={selectedDay ? (pickupByDate.get(selectedDay.dateStr) ?? 0) : 0}
         cancellations={selectedDay ? (cancellationsByDate.get(selectedDay.dateStr) ?? 0) : 0}
+        rmsRecommendations={rmsRecommendations}
         onClose={() => setSelectedDay(null)}
         onNewReservation={(dateStr) => {
           setSelectedDay(null);
