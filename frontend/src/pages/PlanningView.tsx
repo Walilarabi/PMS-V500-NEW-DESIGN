@@ -42,6 +42,13 @@ import { useAuth } from '@/src/domains/auth/AuthContext';
 import { useConfigStore, HotelEvent } from '@/src/store/configStore';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
+import { RevenueCalendar } from '@/src/pages/planning/RevenueCalendar';
+import type { DayCell } from '@/src/pages/planning/RevenueCalendar';
+import type { RevenueSubView } from '@/src/pages/planning/types';
+import { DayDetailModal } from '@/src/components/modals/DayDetailModal';
+import { useRevenueCalendarData } from '@/src/hooks/useRevenueCalendarData';
+import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
+import { useRMSPricingRecommendations } from '@/src/hooks/useRMSData';
 
 // ─── Type interne du Gantt — découplé de ReservationRow et du mock context ───
 interface GanttReservation {
@@ -165,7 +172,22 @@ export const PlanningView = () => {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState<'7J' | '15J' | 'Mois'>('15J');
   const [displayMode, setDisplayMode] = useState<'Gantt' | 'Calendar'>('Gantt');
-  const [showRightSidebar, setShowRightSidebar] = useState(false);
+  const [subView, setSubView] = useState<RevenueSubView>('KPI');
+  const [selectedDay, setSelectedDay] = useState<DayCell | null>(null);
+  const [showRightSidebar, setShowRightSidebar] = useState(true);
+
+  // Revenue Calendar data (pickup, cancellations, real-time sync)
+  const { pickupByDate, cancellationsByDate } = useRevenueCalendarData();
+
+  // Rate panel for "Modifier les tarifs" action
+  const { openRatePanel } = useRateCalendarStore();
+
+  // RMS pricing recommendations for the current month (used in DayDetailModal)
+  const rmsStartDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    .toISOString().slice(0, 10);
+  const rmsEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+    .toISOString().slice(0, 10);
+  const { data: rmsRecommendations = [] } = useRMSPricingRecommendations(rmsStartDate, rmsEndDate);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -251,14 +273,18 @@ export const PlanningView = () => {
       date.setDate(currentDate.getDate() + i);
       const dateStr = date.toISOString().split('T')[0];
       
-      const occupiedCount = ganttReservations.filter(res => {
+      const dayOccRes = ganttReservations.filter(res => {
         try {
           const start = new Date(res.arrival).getTime();
           const end = new Date(res.departure).getTime();
           const current = date.getTime();
           return !isNaN(start) && current >= start && current < end;
         } catch { return false; }
-      }).length;
+      });
+      const occupiedCount = dayOccRes.length;
+      // Real ADR: total revenue of occupied reservations / number of occupied rooms
+      const dayRevenue = dayOccRes.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
+      const realAdr = occupiedCount > 0 ? Math.round(dayRevenue / occupiedCount) : 0;
 
       const blockedCount = rooms.filter(r => r.status === 'out_of_order' || r.status === 'maintenance').length;
       const availableTotal = rooms.length - occupiedCount - blockedCount;
@@ -277,7 +303,7 @@ export const PlanningView = () => {
         occ: rooms.length > 0 ? Math.round((occupiedCount / rooms.length) * 100) : 0,
         available: Math.max(0, availableTotal),
         events: dayEvents,
-        adr: 120 + Math.floor(Math.random() * 40)
+        adr: realAdr,
       };
     });
   }, [ganttReservations, storeEvents, rooms, currentDate, viewLength]);
@@ -471,6 +497,12 @@ export const PlanningView = () => {
           </div>
 
           <div className="flex items-center gap-1">
+             <button 
+               onClick={() => setShowRightSidebar(!showRightSidebar)}
+               className={cn("p-2.5 rounded-xl transition-all", showRightSidebar ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
+             >
+               <Eye size={18} />
+             </button>
              <button className="p-2.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Settings2 size={18} /></button>
           </div>
 
@@ -483,8 +515,24 @@ export const PlanningView = () => {
         </div>
       </div>
 
-      {/* Legend Bar */}
-      <div className="h-12 shrink-0 border-b border-gray-100 bg-white/80 backdrop-blur-md flex items-center justify-between px-8 z-50">
+      {/* ── Revenue Calendar (replaces Gantt when Calendar mode active) ── */}
+      {displayMode === 'Calendar' && (
+        <RevenueCalendar
+          monthDate={currentDate}
+          startDate={currentDate}
+          reservations={supabaseData?.rows ?? []}
+          rooms={supabaseRooms}
+          events={storeEvents}
+          subView={subView}
+          setSubView={setSubView}
+          onDayClick={(day) => setSelectedDay(day)}
+          pickupByDate={pickupByDate}
+          cancellationsByDate={cancellationsByDate}
+        />
+      )}
+
+      {/* Legend Bar — Gantt mode only */}
+      <div className={cn("h-12 shrink-0 border-b border-gray-100 bg-white/80 backdrop-blur-md flex items-center justify-between px-8 z-50", displayMode === 'Calendar' && "hidden")}>
         <div className="flex items-center gap-6">
            {[
              { label: 'Direct', color: 'bg-indigo-200' },
@@ -520,7 +568,8 @@ export const PlanningView = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden relative">
+      {/* Gantt flex area — hidden when Calendar mode active */}
+      <div className={cn("flex-1 flex overflow-hidden relative", displayMode === 'Calendar' && "hidden")}>
         {/* Left Unit Sidebar */}
         <div className="w-[170px] flex flex-col bg-white border-r border-gray-100 shrink-0 z-40">
            <div className="flex flex-col border-b border-gray-100">
@@ -813,6 +862,93 @@ export const PlanningView = () => {
            </div>
         </div>
 
+        {/* Right Status Panel */}
+        <AnimatePresence>
+          {showRightSidebar && (
+            <motion.div 
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 300, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              className="flex flex-col bg-white border-l border-gray-100 shrink-0 z-40 p-6 overflow-y-auto custom-scrollbar shadow-[-10px_0_30px_rgba(0,0,0,0.02)]"
+            >
+               <div className="flex items-center justify-between mb-8">
+                  <h3 className="text-[13px] font-black text-gray-900 uppercase tracking-widest">Détails Chambres</h3>
+                  <button onClick={() => setShowRightSidebar(false)} className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:text-rose-500 transition-colors">
+                     <Plus className="rotate-45" size={16} />
+                  </button>
+               </div>
+
+               <div className="flex flex-wrap gap-x-4 gap-y-2 mb-8">
+                  {[
+                    { label: 'Occupée', color: 'bg-blue-300' },
+                    { label: 'Propre', color: 'bg-emerald-300' },
+                    { label: 'En cours', color: 'bg-orange-200' },
+                    { label: 'À nettoyer', color: 'bg-rose-200' },
+                    { label: 'Hors service', color: 'bg-gray-200' }
+                  ].map(item => (
+                    <div key={item.label} className="flex items-center gap-2">
+                       <div className={cn("w-2 h-2 rounded-full", item.color)} />
+                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{item.label}</span>
+                    </div>
+                  ))}
+               </div>
+
+               <div className="space-y-4">
+                  {rooms.slice(0, 4).map((room, i) => (
+                    <div 
+                      key={`stat-card-${room.id}`} 
+                      className={cn(
+                        "p-5 rounded-[24px] border transition-all hover:scale-[1.02] cursor-pointer",
+                        i % 2 === 0 ? "bg-indigo-50/20 border-indigo-100" : "bg-white border-gray-100 shadow-sm"
+                      )}
+                    >
+                       <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                             <div className={cn(
+                               "w-10 h-10 rounded-2xl flex items-center justify-center text-[13px] font-black",
+                               i % 2 === 0 ? "bg-white text-indigo-400 shadow-sm" : 
+                               i === 1 ? "bg-rose-50 text-rose-400" : "bg-emerald-50 text-emerald-400"
+                             )}>
+                                {room.number}
+                             </div>
+                             <div>
+                                <h4 className="text-[14px] font-black text-gray-900">{room.type}</h4>
+                                <div className="flex items-center gap-1.5">
+                                   {i % 2 === 0 ? <Users size={10} className="text-violet-300" /> : <CheckCircle2 size={10} className="text-emerald-300" />}
+                                   <span className="text-[10px] font-bold text-gray-400 italic">
+                                      {i % 2 === 0 ? 'Occupée' : 'Propre / Libre'}
+                                   </span>
+                                </div>
+                             </div>
+                          </div>
+                          <div className="text-right">
+                             <div className="text-[14px] font-black text-gray-900">€</div>
+                             <div className="text-[8px] font-black text-gray-200 uppercase italic">/ Nuit</div>
+                          </div>
+                       </div>
+                    </div>
+                  ))}
+               </div>
+
+               <div className="mt-8 pt-8 border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-6">
+                     <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Total Chambres</span>
+                     <span className="text-base font-black text-gray-900">{rooms.length}</span>
+                  </div>
+                  <div className="bg-orange-50/30 rounded-2xl p-4 border border-orange-100/50">
+                     <div className="flex items-center gap-3 mb-2">
+                        <div className="w-8 h-8 rounded-xl bg-orange-100/50 flex items-center justify-center text-orange-400">
+                           <Clock3 size={16} />
+                        </div>
+                        <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Rappel Hygiène</span>
+                     </div>
+                     <p className="text-[11px] font-bold text-orange-600/70 italic leading-snug">1 chambres en attente de ménage.</p>
+                  </div>
+               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
     {/* Tooltip Overlay */}
       <AnimatePresence>
         {hoveredRes && (
@@ -945,7 +1081,44 @@ export const PlanningView = () => {
         )}
       </AnimatePresence>
 
-      <ReservationFormModal 
+      {/* ── Day Detail Modal (Revenue Calendar → click on day cell) ── */}
+      <DayDetailModal
+        isOpen={!!selectedDay}
+        day={selectedDay}
+        totalRooms={supabaseRooms.length || effectiveRooms.length}
+        pickup={selectedDay ? (pickupByDate.get(selectedDay.dateStr) ?? 0) : 0}
+        cancellations={selectedDay ? (cancellationsByDate.get(selectedDay.dateStr) ?? 0) : 0}
+        rmsRecommendations={rmsRecommendations}
+        onClose={() => setSelectedDay(null)}
+        onNewReservation={(dateStr) => {
+          setSelectedDay(null);
+          setSelectedEventDate(dateStr);
+          setIsModalOpen(true);
+        }}
+        onBlockRooms={(_dateStr) => {
+          setSelectedDay(null);
+          // TODO: open block rooms modal when implemented
+        }}
+        onEditRates={(_dateStr) => {
+          setSelectedDay(null);
+          openRatePanel(null);
+        }}
+        onAddRestriction={(_dateStr) => {
+          setSelectedDay(null);
+          // TODO: open restrictions modal when implemented
+        }}
+        onViewInGantt={(_dateStr) => {
+          setSelectedDay(null);
+          setDisplayMode('Gantt');
+        }}
+        onAddEvent={(dateStr) => {
+          setSelectedDay(null);
+          setSelectedEventDate(dateStr);
+          setIsEventModalOpen(true);
+        }}
+      />
+
+      <ReservationFormModal
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
         onSave={async (data: ReservationFormData) => {
