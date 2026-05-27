@@ -11,7 +11,7 @@ import {
   ChevronRight, PanelLeftClose, PanelLeftOpen, Sparkles,
   Cpu, Bell, ShieldCheck, Upload, ClipboardList, HardDrive,
   Hotel, Globe, Tag, Coffee, KeyRound, Star, FolderOpen, FileCode2, Send, Landmark,
-  Fingerprint, Plane,
+  Fingerprint, Plane, Headphones,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -236,6 +236,12 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
         { id: 'settings_backups',        label: 'Sauvegardes',        icon: HardDrive },
       ],
     },
+    {
+      label: 'Support',
+      items: [
+        { id: 'support', label: 'Support technique', icon: Headphones },
+      ],
+    },
   ],
 };
 
@@ -287,6 +293,7 @@ const PAGE_TO_CATEGORY: Record<string, string> = {
   settings_users: 'settings', settings_automations: 'settings', settings_notifications: 'settings',
   settings_rgpd: 'settings', settings_import_export: 'settings',
   settings_audit: 'settings', settings_backups: 'settings',
+  support: 'support',
 };
 
 // Hash icon manquant

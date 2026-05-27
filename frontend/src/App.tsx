@@ -39,6 +39,7 @@ import { AuditLogView }     from '@/src/pages/finance/AuditLogView';
 import { ReconciliationView } from '@/src/pages/finance/ReconciliationView';
 import { RevenueIntegrityView } from '@/src/pages/finance/RevenueIntegrityView';
 import { OdmsView }         from '@/src/pages/sas/OdmsView';
+import { SupportView }      from '@/src/pages/support/SupportView';
 
 // Realtime hooks
 import {
@@ -237,6 +238,8 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'settings_audit':
     case 'settings_backups':
     default:                         return <SettingsView activePage={page} onNavigate={setActivePage} />;
+
+    case 'support': return <SupportView />;
   }
 }
 
