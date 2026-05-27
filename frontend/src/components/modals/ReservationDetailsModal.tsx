@@ -947,7 +947,7 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
         <div style={{ display: 'flex', gap: 32 }}>
           <div>
             <span style={S_LABEL}>Réservation</span>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#8B5CF6' }}>{res.id}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#8B5CF6' }}>{(res as any).reference || res.id}</div>
           </div>
           <div>
             <span style={S_LABEL}>Dates</span>
@@ -1315,7 +1315,7 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
                   <div style={{ fontSize: 14 }}>
                     <strong>N° Facture :</strong> FAC-{TODAY.replace(/-/g, '')}-{folio.id.toUpperCase()}<br/>
                     <strong>Date :</strong> {fmtDate(TODAY)}<br/>
-                    <strong>Réservation :</strong> {res.id}
+                    <strong>Réservation :</strong> {(res as any).reference || res.id}
                   </div>
                 </div>
               </div>
@@ -2258,14 +2258,16 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
     return { 
       ...r, 
       status,
-      guestName: r.client || r.guestName, 
+      guestName: r.client || r.guestName,
+      /** Numéro lisible (référence partenaire / OTA) — priorité sur l'UUID Supabase */
+      reference: r.reference || r.ref || r.partnerRef || r.id,
       arrival: cin, checkIn: cin, checkin: cin,
       departure: cout, checkOut: cout, checkout: cout,
       room: roomNum,
       roomType: rType || 'Double Classique',
       mealPlan: r.mealPlan || r.pension || 'Room Only',
-      montant: r.totalAmount || r.montant || 0, 
-      solde: r.solde ?? 0, 
+      montant: r.totalAmount || r.montant || 0,
+      solde: r.solde ?? 0,
       nights: Math.max(1, Math.ceil((new Date(cout).getTime() - new Date(cin).getTime()) / 86400000)) 
     };
   };
@@ -2368,7 +2370,7 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: 'white', marginBottom: 4 }}>{reservation.guestName || 'Client'}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgba(255,255,255,.6)' }}>{reservation.id}</span>
+              <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgba(255,255,255,.6)' }}>{(reservation as any).reference || reservation.id}</span>
               <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 10px', borderRadius: 100, background: st.bg, color: st.color }}>
                 {reservation.status.replace('_', ' ')}
               </span>

@@ -311,6 +311,8 @@ export const ReservationsView = () => {
     if (!selectedDetail) return null;
     return {
       id:          selectedDetail.id || selectedDetail.ref,
+      /** Référence partenaire / OTA — affichée dans la fiche (facturation, en-tête) */
+      reference:   selectedDetail.ref,
       client:      selectedDetail.client,
       guestName:   selectedDetail.client,
       email:       selectedDetail.email,
