@@ -9,13 +9,15 @@
  * unique de vérité).
  */
 import React, { useMemo, useState } from 'react';
-import { Tag, Search, ExternalLink, Bed, Users, ChevronRight, Layers, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Tag, Search, ExternalLink, Bed, Users, ChevronRight, Layers, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { RoomManagerPanel } from '@/src/components/rms/calendar/RoomManagerPanel';
 import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 import { deleteVirtualRoomFromSupabase } from '@/src/services/settings/settingsPersistence';
+import { deleteRoomTypeFromSupabase } from '@/src/services/rms/rmsSupabasePersistence';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
+import { PARTNERS_BY_ID } from '@/src/constants/partners';
 import type { PageId } from '@/src/types';
 import { VirtualRoomModal } from './VirtualRoomModal';
 
@@ -33,12 +35,26 @@ interface RoomTypesPageProps {
 }
 
 export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
-  const { roomTypes, loadData, deleteRoomType } = useRateCalendarStore();
+  const { roomTypes, loadData, deleteRoomType, openRoomPanel } = useRateCalendarStore();
   const [search, setSearch] = useState('');
   const [virtualOpen, setVirtualOpen] = useState(false);
   const virtualCount = roomTypes.filter((rt) => rt.isVirtual).length;
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rooms');
   const audit = useAuditLogger();
+
+  /** Suppression d'une chambre physique avec persist Supabase */
+  function handleDeletePhysical(rt: { roomTypeId: string; roomTypeName: string; roomTypeCode: string }) {
+    if (!canWrite) return;
+    if (!window.confirm(`Supprimer la chambre "${rt.roomTypeName}" ? Cette action est irréversible.`)) return;
+    deleteRoomType(rt.roomTypeId);
+    void deleteRoomTypeFromSupabase(rt.roomTypeCode);
+    audit({
+      action: 'room_type_deleted',
+      module: 'inventory_planning',
+      detail: `${rt.roomTypeName} (${rt.roomTypeCode})`,
+      meta: { roomTypeId: rt.roomTypeId, roomTypeCode: rt.roomTypeCode },
+    });
+  }
 
   function handleDeleteVirtual(rt: { roomTypeId: string; roomTypeName: string; roomTypeCode: string }) {
     if (!canWrite) return;
@@ -53,10 +69,8 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
     });
   }
 
-  function handleEditVirtual(roomTypeId: string) {
-    // L'édition complète passe par RoomManagerPanel via le store.
-    // Ouvrir le panel pré-chargé sur cette chambre :
-    useRateCalendarStore.getState().openRoomPanel(roomTypeId);
+  function handleEditRoom(roomTypeId: string) {
+    openRoomPanel(roomTypeId);
   }
 
   React.useEffect(() => { if (roomTypes.length === 0) loadData(); }, []); // eslint-disable-line
@@ -91,6 +105,14 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
+              onClick={() => canWrite && openRoomPanel(null)}
+              disabled={!canWrite}
+              title={!canWrite ? 'Permission requise : set_rooms (write)' : 'Créer un nouveau type de chambre'}
+              className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+            >
+              <Bed className="w-3.5 h-3.5" /> Créer une chambre
+            </button>
+            <button
               onClick={() => canWrite && setVirtualOpen(true)}
               disabled={!canWrite}
               title={!canWrite ? 'Permission requise : set_rooms (write)' : 'Créer une chambre virtuelle (adjacentes, communicantes, suite composée…)'}
@@ -98,9 +120,7 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
             >
               <Layers className="w-3.5 h-3.5" /> Créer une chambre virtuelle
             </button>
-            {/* Phase 4 — éditeur CRUD complet (anciennement dans le calendrier).
-                Source unique de vérité : useRateCalendarStore. */}
-            {canWrite && <RoomManagerPanel />}
+            <RoomManagerPanel />
             <button
               onClick={() => onNavigate('rev_calendar' as PageId)}
               className="px-3 py-2 rounded-lg bg-white ring-1 ring-slate-200 text-slate-700 text-[13px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
@@ -177,28 +197,43 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
                           </span>
                         )}
                       </div>
+                      {/* Partner chips */}
+                      {(rt.partnerIds ?? rt.distributionChannels ?? []).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {(rt.partnerIds ?? rt.distributionChannels ?? []).slice(0, 5).map((pid) => {
+                            const partner = PARTNERS_BY_ID.get(pid);
+                            return (
+                              <span key={pid} className="text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">
+                                {partner?.label ?? pid}
+                              </span>
+                            );
+                          })}
+                          {(rt.partnerIds ?? rt.distributionChannels ?? []).length > 5 && (
+                            <span className="text-[10px] text-slate-400">
+                              +{(rt.partnerIds ?? rt.distributionChannels ?? []).length - 5}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-1">
-                      {rt.isVirtual && (
-                        <>
-                          <button
-                            onClick={() => handleEditVirtual(rt.roomTypeId)}
-                            disabled={!canWrite}
-                            className={cn('p-1.5 rounded-md text-slate-500', canWrite ? 'hover:bg-slate-100 hover:text-slate-700' : 'opacity-30 cursor-not-allowed')}
-                            title={canWrite ? 'Modifier cette chambre virtuelle' : 'Permission requise : set_rooms (write)'}
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteVirtual(rt)}
-                            disabled={!canWrite}
-                            className={cn('p-1.5 rounded-md', canWrite ? 'hover:bg-rose-50 text-rose-600' : 'text-rose-300 opacity-40 cursor-not-allowed')}
-                            title={canWrite ? 'Supprimer cette chambre virtuelle' : 'Permission requise : set_rooms (write)'}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
+                      {/* Boutons Modifier / Supprimer pour toutes les chambres */}
+                      <button
+                        onClick={() => handleEditRoom(rt.roomTypeId)}
+                        disabled={!canWrite}
+                        className={cn('p-1.5 rounded-md text-slate-500', canWrite ? 'hover:bg-slate-100 hover:text-slate-700' : 'opacity-30 cursor-not-allowed')}
+                        title={canWrite ? 'Modifier cette chambre' : 'Permission requise : set_rooms (write)'}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => rt.isVirtual ? handleDeleteVirtual(rt) : handleDeletePhysical(rt)}
+                        disabled={!canWrite}
+                        className={cn('p-1.5 rounded-md', canWrite ? 'hover:bg-rose-50 text-rose-600' : 'text-rose-300 opacity-40 cursor-not-allowed')}
+                        title={canWrite ? 'Supprimer cette chambre' : 'Permission requise : set_rooms (write)'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => onNavigate('rev_calendar' as PageId)}
                         className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400"
@@ -216,7 +251,7 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
 
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-xl ring-1 ring-violet-100 bg-violet-50/40 px-4 py-3 text-[11.5px] text-violet-800">
-            <strong>Édition complète :</strong> création / modification fine des typologies (équipements, capacités, photos, descriptions) dans le <strong>Calendrier tarifaire</strong> via le panneau <em>RoomManagerPanel</em>.
+            <strong>Édition complète :</strong> cliquez sur le crayon pour modifier une chambre (équipements, capacité, partenaires, description) via le panneau de configuration.
           </div>
           <div className="rounded-xl ring-1 ring-sky-100 bg-sky-50/40 px-4 py-3 text-[11.5px] text-sky-800 flex items-start gap-2">
             <Layers className="w-3.5 h-3.5 mt-0.5 shrink-0" />
