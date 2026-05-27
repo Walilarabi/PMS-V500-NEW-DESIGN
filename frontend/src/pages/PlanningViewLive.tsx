@@ -1566,82 +1566,152 @@ export const PlanningView = () => {
 
     {/* Tooltip Overlay */}
       <AnimatePresence>
-        {hoveredRes && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 10 }}
-            style={{ 
-              position: 'fixed', 
-              left: tooltipPos.x, 
-              top: tooltipPos.y,
-            }}
-            className="z-[9999] pointer-events-none w-80 bg-white rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-gray-100 p-6 space-y-4"
-          >
-             <div className="flex items-center justify-between gap-3 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
-                <div className="flex items-center gap-3">
-                   <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-indigo-100">{hoveredRes.client[0]}</div>
-                   <div>
-                      <h4 className="text-[15px] font-black text-gray-900 leading-tight">{hoveredRes.client}</h4>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="neutral" className="text-[9px] font-black py-0 px-2 bg-white/80">{hoveredRes.source}</Badge>
-                        <span className="text-[10px] font-bold text-gray-400 italic">#{hoveredRes.id}</span>
+        {hoveredRes && (() => {
+          const resStatus = (hoveredRes as any).reservationStatus ?? 'confirmed';
+          const nights = (() => {
+            const s = new Date(hoveredRes.arrival);
+            const e = new Date(hoveredRes.departure);
+            const n = Math.ceil((e.getTime() - s.getTime()) / 86400000);
+            return isNaN(n) || n < 1 ? 1 : n;
+          })();
+          const balance = hoveredRes.totalAmount - (hoveredRes.payment === 'Payé' ? hoveredRes.totalAmount : hoveredRes.payment === 'Partiel' ? hoveredRes.totalAmount * 0.5 : 0);
+          const statusMeta: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+            confirmed:  { label: 'Confirmée',   bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
+            pending:    { label: 'En attente',  bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-500' },
+            option:     { label: 'Option',      bg: 'bg-yellow-50',   text: 'text-yellow-700',  dot: 'bg-yellow-400' },
+            cancelled:  { label: 'Annulée',     bg: 'bg-gray-100',    text: 'text-gray-500',    dot: 'bg-gray-400' },
+            noshow:     { label: 'No-show',     bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500' },
+          };
+          const sm = statusMeta[resStatus] ?? statusMeta.confirmed;
+          // Smart tooltip positioning: flip if near bottom/right edge
+          const vpW = window.innerWidth;
+          const vpH = window.innerHeight;
+          const TW = 320, TH = 310;
+          const left = tooltipPos.x + TW + 20 > vpW ? tooltipPos.x - TW - 8 : tooltipPos.x + 14;
+          const top  = tooltipPos.y + TH + 20 > vpH ? tooltipPos.y - TH - 8 : tooltipPos.y + 14;
+
+          return (
+            <motion.div
+              key="res-tooltip"
+              initial={{ opacity: 0, scale: 0.95, y: 6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 6 }}
+              transition={{ duration: 0.12, ease: 'easeOut' }}
+              style={{ position: 'fixed', left, top, width: TW }}
+              className="z-[9999] pointer-events-none bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-gray-100 overflow-hidden"
+            >
+              {/* Header strip — accent by status */}
+              <div className="h-1 w-full" style={{ background: resStatus === 'confirmed' ? 'linear-gradient(90deg,#6366f1,#8b5cf6)' : resStatus === 'pending' ? '#f59e0b' : resStatus === 'option' ? '#fde047' : resStatus === 'noshow' ? '#ef4444' : '#9ca3af' }} />
+
+              {/* Main content */}
+              <div className="px-4 pt-3 pb-4 space-y-3">
+
+                {/* Row 1 — Client + amount */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center text-white text-[13px] font-black shadow-sm"
+                         style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
+                      {(hoveredRes.client || '?')[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[13px] font-bold text-gray-900 truncate leading-tight">{hoveredRes.client}</span>
+                        {hoveredRes.vip && (
+                          <span className="shrink-0 text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-600 border border-amber-200">VIP</span>
+                        )}
                       </div>
-                   </div>
+                      {/* Chambre */}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[11px] text-gray-400">Ch.</span>
+                        <span className="text-[11px] font-semibold text-gray-700">{hoveredRes.room}</span>
+                        <span className="text-gray-300">·</span>
+                        <span className="text-[10px] text-gray-400 uppercase tracking-wide truncate">{hoveredRes.roomType}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-[15px] font-black text-gray-900 leading-tight">{(hoveredRes.totalAmount || 0).toLocaleString('fr-FR')}€</div>
+                    <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide leading-none mt-0.5">Total TTC</div>
+                  </div>
                 </div>
-                <div className="text-right">
-                   <div className="text-[16px] font-black text-indigo-600">{(hoveredRes.totalAmount || 0).toLocaleString()}€</div>
-                   <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none">Total TTC</div>
-                </div>
-             </div>
 
-             <div className="grid grid-cols-2 gap-4 py-1">
-                <div className="p-3 bg-indigo-50/30 rounded-2xl border border-indigo-50">
-                   <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">Arrivée</p>
-                   <p className="text-[12px] font-bold text-indigo-900">{hoveredRes.arrival.split(' ')[0]}</p>
-                </div>
-                <div className="p-3 bg-orange-50/30 rounded-2xl border border-orange-50">
-                   <p className="text-[9px] font-black text-orange-400 uppercase tracking-widest mb-1">Départ</p>
-                   <p className="text-[12px] font-bold text-orange-900">{hoveredRes.departure.split(' ')[0]}</p>
-                </div>
-             </div>
+                {/* Divider */}
+                <div className="border-t border-gray-100" />
 
-             <div className="space-y-2.5">
-                <div className="flex items-center justify-between px-1">
-                   <div className="flex items-center gap-2 text-gray-500">
-                      <Users size={12} className="text-indigo-400" />
-                      <span className="text-[11px] font-bold">Occupants</span>
-                   </div>
-                   <span className="text-[11px] font-black text-gray-900">
-                      {hoveredRes.guests?.adults || 2} Adultes, {hoveredRes.guests?.children || 0} Enfants
-                   </span>
+                {/* Row 2 — Dates + nights */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-1 bg-indigo-50/60 rounded-xl px-2.5 py-2">
+                    <p className="text-[8px] font-black text-indigo-400 uppercase tracking-wider mb-0.5">Arrivée</p>
+                    <p className="text-[12px] font-bold text-indigo-900 tabular-nums">{(hoveredRes.checkIn ?? hoveredRes.arrival.split(' ')[0])}</p>
+                  </div>
+                  <div className="col-span-1 bg-orange-50/60 rounded-xl px-2.5 py-2">
+                    <p className="text-[8px] font-black text-orange-400 uppercase tracking-wider mb-0.5">Départ</p>
+                    <p className="text-[12px] font-bold text-orange-900 tabular-nums">{(hoveredRes.checkOut ?? hoveredRes.departure.split(' ')[0])}</p>
+                  </div>
+                  <div className="col-span-1 bg-violet-50/60 rounded-xl px-2.5 py-2 flex flex-col items-center justify-center">
+                    <p className="text-[18px] font-black text-violet-700 leading-none">{nights}</p>
+                    <p className="text-[8px] font-black text-violet-400 uppercase tracking-wide mt-0.5">nuit{nights > 1 ? 's' : ''}</p>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between px-1">
-                   <div className="flex items-center gap-2 text-gray-500">
-                      <CreditCard size={12} className="text-emerald-400" />
-                      <span className="text-[11px] font-bold">Paiement</span>
-                   </div>
-                   <Badge variant={hoveredRes.payment === 'Payé' ? 'success' : 'warning'} className="text-[9px] font-black">
-                      {hoveredRes.payment || 'En attente'}
-                   </Badge>
+
+                {/* Row 3 — References + status */}
+                <div className="space-y-1.5">
+                  {/* Canal + statut */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-wide px-2 py-0.5 rounded-md bg-gray-50 border border-gray-100">{hoveredRes.source}</span>
+                      {hoveredRes.mealPlan && (
+                        <span className="text-[9px] font-semibold text-gray-500 px-1.5 py-0.5 rounded-md bg-gray-50 border border-gray-100 uppercase">{hoveredRes.mealPlan}</span>
+                      )}
+                    </div>
+                    <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full ${sm.bg}`}>
+                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${sm.dot}`} />
+                      <span className={`text-[10px] font-bold ${sm.text}`}>{sm.label}</span>
+                    </div>
+                  </div>
+
+                  {/* Partner ref */}
+                  {hoveredRes.partnerRef && (
+                    <div className="flex items-center justify-between px-0.5">
+                      <span className="text-[10px] text-gray-400">Réf. partenaire</span>
+                      <span className="text-[10px] font-bold text-gray-700 font-mono tracking-wide">{hoveredRes.partnerRef}</span>
+                    </div>
+                  )}
+
+                  {/* Paiement + solde */}
+                  <div className="flex items-center justify-between px-0.5">
+                    <span className="text-[10px] text-gray-400">Paiement</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold ${hoveredRes.payment === 'Payé' ? 'text-emerald-600' : hoveredRes.payment === 'Partiel' ? 'text-amber-600' : 'text-rose-600'}`}>
+                        {hoveredRes.payment || 'En attente'}
+                      </span>
+                      {balance > 0 && hoveredRes.payment !== 'Payé' && (
+                        <span className="text-[9px] text-rose-500 font-semibold">Solde {balance.toFixed(0)}€</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Occupants */}
+                  <div className="flex items-center justify-between px-0.5">
+                    <span className="text-[10px] text-gray-400">Occupants</span>
+                    <span className="text-[10px] font-semibold text-gray-700">
+                      {hoveredRes.guests?.adults ?? 2} adultes{(hoveredRes.guests?.children ?? 0) > 0 ? `, ${hoveredRes.guests!.children} enfant${hoveredRes.guests!.children! > 1 ? 's' : ''}` : ''}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between px-1">
-                   <div className="flex items-center gap-2 text-gray-500">
-                      <Clock size={12} className="text-indigo-400" />
-                      <span className="text-[11px] font-bold">Séjour</span>
-                   </div>
-                   <span className="text-[11px] font-black text-gray-900">
-                      {(() => {
-                        const start = new Date(hoveredRes.arrival);
-                        const end = new Date(hoveredRes.departure);
-                        const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                        return isNaN(diff) ? '3' : diff;
-                      })()} Nuitées
-                   </span>
-                </div>
-             </div>
-          </motion.div>
-        )}
+
+                {/* Notes — only if present */}
+                {hoveredRes.notes && (
+                  <div className="flex items-start gap-2 bg-amber-50/50 rounded-xl px-3 py-2 border border-amber-100/60">
+                    <AlertCircle size={11} className="text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-amber-800 leading-relaxed line-clamp-2">{hoveredRes.notes}</p>
+                  </div>
+                )}
+
+              </div>
+            </motion.div>
+          );
+        })()}
 
         {hoveredEvents && (
           <motion.div 
