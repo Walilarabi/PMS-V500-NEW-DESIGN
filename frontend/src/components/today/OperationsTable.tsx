@@ -227,31 +227,39 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
   };
 
   const handleQuickReservation = () => {
-    const nextId = Math.max(...rooms.map((row) => row.id)) + 1;
+    const nextId = (rooms.length > 0 ? Math.max(...rooms.map((row) => row.id)) : 0) + 1;
     const nextRoom = `${300 + nextId}`;
-    setRooms((current) => [
-      ...current,
-      {
-        ...roomsData[0],
-        id: nextId,
-        priority: 'Moyenne',
-        room: nextRoom,
-        status: 'Arrivée < 1h',
-        guest: `Walk-in ${nextId}`,
-        initials: 'WI',
-        reservationId: `R-10${430 + nextId}`,
-        etaTime: '18:20',
-        movement: 'arrival',
-        nights: 1,
-        stayAmount: '210 €',
-        vip: null,
-        payment: 'En attente',
-        source: 'DIRECT',
-        action: 'Inspection',
-        taskStatus: 'À faire',
-        badges: ['nouveau'],
-      }
-    ]);
+    const today = new Date();
+    const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const tomorrow = new Date(today.getTime() + 86_400_000);
+    const isoTomorrow = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+
+    const newRow: RoomRow = {
+      id: nextId,
+      priority: 'Moyenne',
+      room: nextRoom,
+      type: 'DBL',
+      status: 'Arrivée < 1h',
+      guest: `Walk-in ${nextId}`,
+      initials: 'WI',
+      reservationId: `R-10${430 + nextId}`,
+      guestCount: 1,
+      etaTime: '18:20',
+      etaNote: '',
+      movement: 'arrival',
+      arrival: `${isoToday} 14:00`,
+      departure: `${isoTomorrow} 11:00`,
+      nights: 1,
+      stayAmount: '210 €',
+      vip: null,
+      payment: 'En attente',
+      source: 'DIRECT',
+      action: 'Inspection',
+      taskStatus: 'À faire',
+      badges: ['nouveau'],
+    };
+
+    setRooms((current) => [...current, newRow]);
     showToast(`Nouvelle réservation créée en chambre ${nextRoom}`);
   };
 

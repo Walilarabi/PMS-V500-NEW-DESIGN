@@ -324,7 +324,29 @@ export function RoomManagerPanel() {
 
   const submit = useCallback(async () => {
     setTouched({ name: true, code: true });
-    if (!form.name.trim() || !form.code.trim()) return;
+
+    // Surface validation errors visually (instead of silent return)
+    const missing: string[] = [];
+    if (!form.name.trim()) missing.push('nom');
+    if (!form.code.trim()) missing.push('code');
+    if (missing.length > 0) {
+      setToast({
+        type: 'error',
+        msg: `Champ${missing.length > 1 ? 's' : ''} obligatoire${missing.length > 1 ? 's' : ''} : ${missing.join(', ')}`,
+      });
+      window.setTimeout(() => setToast(null), 3500);
+      return;
+    }
+
+    // Duplicate code guard
+    const existing = roomTypes.find(
+      r => r.roomTypeCode === form.code.trim().toUpperCase() && r.roomTypeId !== editingId
+    );
+    if (existing) {
+      setToast({ type: 'error', msg: `Le code "${form.code.trim().toUpperCase()}" est déjà utilisé` });
+      window.setTimeout(() => setToast(null), 3500);
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -350,6 +372,16 @@ export function RoomManagerPanel() {
         addRoomType(payload);
       }
 
+      // Toast global pour notifier le reste de l'app (Planning, Calendrier tarifaire)
+      window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: {
+          message: editingId
+            ? `Chambre "${form.name.trim()}" mise à jour`
+            : `Chambre "${form.name.trim()}" créée avec succès`,
+          type: 'success',
+        },
+      }));
+
       setToast({
         type: "success",
         msg: editingId ? `"${form.name.trim()}" mise à jour` : `"${form.name.trim()}" créée avec succès`,
@@ -360,12 +392,16 @@ export function RoomManagerPanel() {
         setEditingId(null);
         setTouched({ name: false, code: false });
       }, 1000);
-    } catch {
+    } catch (err) {
+      console.error('[RoomManagerPanel] save failed:', err);
       setToast({ type: "error", msg: "Erreur lors de la sauvegarde" });
+      window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: 'Erreur lors de la sauvegarde de la chambre', type: 'error' },
+      }));
     } finally {
       setIsSaving(false);
     }
-  }, [form, editingId, addRoomType, updateRoomType]);
+  }, [form, editingId, addRoomType, updateRoomType, roomTypes]);
 
   const handleDelete = useCallback(
     async (room: RoomTypeData) => {

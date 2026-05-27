@@ -39,8 +39,10 @@ import {
   BedDouble,
   ShieldCheck,
   Info,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/src/lib/utils';
 import { Badge } from '@/src/components/ui/Badge';
 import type { Reservation } from '@/src/contexts/ReservationContext';
@@ -166,6 +168,9 @@ export const RevenueDetailsModal: React.FC<RevenueDetailsModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => { setActiveTab(initialTab); }, [initialTab, isOpen]);
   useEffect(() => {
@@ -363,6 +368,143 @@ export const RevenueDetailsModal: React.FC<RevenueDetailsModalProps> = ({
   // ── Insight (for Score tab) ────────────────────────────────────────────────
   const insight = selectedDate ? insightsByDate[selectedDate] : undefined;
 
+  // ── Refresh handler ────────────────────────────────────────────────────────
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      // Invalidate all data sources used by the modal
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['reservations'] }),
+        queryClient.invalidateQueries({ queryKey: ['rooms'] }),
+        queryClient.invalidateQueries({ queryKey: ['rms-events'] }),
+        queryClient.invalidateQueries({ queryKey: ['rms-pricing-reco'] }),
+        queryClient.invalidateQueries({ queryKey: ['operational-data'] }),
+      ]);
+      setRefreshTick(t => t + 1);
+      window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: 'Données actualisées', type: 'success' },
+      }));
+    } catch (err) {
+      console.error('[RevenueDetailsModal] refresh failed:', err);
+      window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: 'Erreur lors de l\'actualisation', type: 'error' },
+      }));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // ── Export handler (CSV download) ──────────────────────────────────────────
+  const handleExport = () => {
+    if (isExporting || !dayData || !selectedDate) {
+      window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: 'Aucune donnée à exporter', type: 'error' },
+      }));
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const lines: string[] = [];
+      const sep = ';';
+
+      // Header section
+      lines.push(`Rapport Revenue - ${selectedDate}`);
+      lines.push(`Genere le${sep}${new Date().toISOString()}`);
+      lines.push('');
+
+      // KPIs
+      lines.push('KPI');
+      lines.push(`Metric${sep}Valeur`);
+      lines.push(`Taux d'occupation${sep}${dayData.occ}%`);
+      lines.push(`ADR${sep}${dayData.adr} EUR`);
+      lines.push(`RevPAR${sep}${dayData.revpar} EUR`);
+      lines.push(`CA total${sep}${dayData.ca} EUR`);
+      lines.push(`Chambres vendues${sep}${dayData.occupiedCount}`);
+      lines.push(`Chambres disponibles${sep}${dayData.availableCount}`);
+      lines.push(`Capacite totale${sep}${dayData.totalRooms}`);
+      lines.push(`Arrivees${sep}${dayData.arrivalsRes.length}`);
+      lines.push(`Departs${sep}${dayData.departuresRes.length}`);
+      lines.push(`No-show${sep}${dayData.noShowRes.length}`);
+      lines.push('');
+
+      // Channels
+      if (channelStats.length > 0) {
+        lines.push('CANAUX');
+        lines.push(`Canal${sep}Reservations${sep}Part${sep}CA${sep}ADR canal`);
+        for (const ch of channelStats) {
+          lines.push(`${ch.label}${sep}${ch.count}${sep}${ch.share}%${sep}${ch.revenue} EUR${sep}${ch.adr} EUR`);
+        }
+        lines.push('');
+      }
+
+      // Room types
+      if (roomTypeStats.length > 0) {
+        lines.push('TYPES DE CHAMBRE');
+        lines.push(`Type${sep}Occupees${sep}Capacite${sep}Taux${sep}CA`);
+        for (const rt of roomTypeStats) {
+          lines.push(`${rt.type}${sep}${rt.occupied}${sep}${rt.capacity}${sep}${rt.occRate}%${sep}${rt.revenue} EUR`);
+        }
+        lines.push('');
+      }
+
+      // Reservations
+      if (dayData.inHouseRes.length > 0) {
+        lines.push('RESERVATIONS PRESENTES');
+        lines.push(`ID${sep}Client${sep}Chambre${sep}Type${sep}Canal${sep}Montant`);
+        for (const r of dayData.inHouseRes) {
+          const safe = (s: string) => (s ?? '').replace(/[;\n\r]/g, ' ');
+          lines.push(`${safe(r.id)}${sep}${safe(r.client)}${sep}${safe(r.room)}${sep}${safe(r.roomType)}${sep}${safe(r.source)}${sep}${r.totalAmount ?? 0} EUR`);
+        }
+        lines.push('');
+      }
+
+      // Events
+      if (dayData.dayEvents.length > 0) {
+        lines.push('EVENEMENTS');
+        lines.push(`Nom${sep}Debut${sep}Fin${sep}Impact${sep}Source`);
+        for (const e of dayData.dayEvents) {
+          const safe = (s: string | undefined) => (s ?? '').replace(/[;\n\r]/g, ' ');
+          lines.push(`${safe(e.name)}${sep}${safe(e.startDate)}${sep}${safe(e.endDate)}${sep}${safe(e.impact)}${sep}${safe(e.source)}`);
+        }
+        lines.push('');
+      }
+
+      // Alerts
+      if (alerts.length > 0) {
+        lines.push('ALERTES');
+        lines.push(`Niveau${sep}Titre${sep}Message${sep}Source`);
+        for (const a of alerts) {
+          const safe = (s: string) => (s ?? '').replace(/[;\n\r]/g, ' ');
+          lines.push(`${safe(a.kind)}${sep}${safe(a.title)}${sep}${safe(a.message)}${sep}${safe(a.source)}`);
+        }
+      }
+
+      // Trigger download with BOM for Excel UTF-8 compat
+      const csv = '﻿' + lines.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `revenue-report-${selectedDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: `Rapport exporte (revenue-report-${selectedDate}.csv)`, type: 'success' },
+      }));
+    } catch (err) {
+      console.error('[RevenueDetailsModal] export failed:', err);
+      window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: 'Erreur lors de l\'export', type: 'error' },
+      }));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const tabs = [
@@ -406,17 +548,23 @@ export const RevenueDetailsModal: React.FC<RevenueDetailsModalProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Export rapport (à implémenter)' } }))}
-              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-gray-50 transition-all shadow-sm"
+              onClick={handleExport}
+              disabled={isExporting || !dayData}
+              title={!dayData ? 'Aucune donnée' : 'Exporter le rapport en CSV'}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Download size={14} /> Exporter
+              {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+              {isExporting ? 'Export…' : 'Exporter'}
             </button>
             <button
               type="button"
-              onClick={() => setRefreshTick(t => t + 1)}
-              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-gray-50 transition-all shadow-sm"
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title="Recharger les données depuis le serveur"
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:text-indigo-600 hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <RefreshCw size={14} /> Actualiser
+              {isRefreshing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              {isRefreshing ? 'Actualisation…' : 'Actualiser'}
             </button>
             <button
               onClick={onClose}
