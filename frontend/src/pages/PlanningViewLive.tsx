@@ -118,7 +118,7 @@ export const PlanningView = () => {
   const [displayMode, setDisplayMode] = useState<'Gantt' | 'Revenue'>('Gantt');
   const [showRightSidebar, setShowRightSidebar] = useState(true);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
-  const [revenueSubView, setRevenueSubView] = useState<'KPI' | 'Heatmap' | 'Forecast' | 'Graphiques'>('KPI');
+  const [revenueSubView, setRevenueSubView] = useState<'KPI' | 'Graphiques'>('KPI');
   const [isRevenueDetailsOpen, setIsRevenueDetailsOpen] = useState(false);
   const [revenueDetailsTab, setRevenueDetailsTab] = useState<'day' | 'events' | 'channels' | 'forecast' | 'alerts' | 'score'>('day');
   const [editReservation, setEditReservation] = useState<Reservation | null>(null);
@@ -1365,16 +1365,19 @@ export const PlanningView = () => {
                 <div className="px-8 py-4 border-b border-gray-100 bg-white flex items-center justify-between shrink-0">
                    <div className="flex items-center gap-6">
                       <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-100">
-                         {['KPI', 'Heatmap', 'Forecast', 'Graphiques'].map((v) => (
-                           <button 
-                             key={v}
-                             onClick={() => setRevenueSubView(v as any)}
+                         {([
+                           { id: 'KPI', label: 'KPI · Forecast · Heatmap' },
+                           { id: 'Graphiques', label: 'Graphiques' },
+                         ] as const).map((v) => (
+                           <button
+                             key={v.id}
+                             onClick={() => setRevenueSubView(v.id)}
                              className={cn(
-                               "px-6 py-1.5 text-[11px] font-black uppercase tracking-widest rounded-lg transition-all",
-                               revenueSubView === v ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "text-gray-400 hover:text-gray-600"
+                               "px-5 py-1.5 text-[11px] font-black uppercase tracking-widest rounded-lg transition-all",
+                               revenueSubView === v.id ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" : "text-gray-400 hover:text-gray-600"
                              )}
                            >
-                             {v}
+                             {v.label}
                            </button>
                          ))}
                       </div>
@@ -1522,23 +1525,32 @@ export const PlanningView = () => {
                                       </div>
                                    </div>
 
+                                   {/* ── KPI · Forecast · Heatmap fusionnés ── */}
                                    <div className="space-y-2 border-t border-gray-50 pt-4">
-                                     {revenueSubView === 'Heatmap' ? (
-                                       <div className="text-[10px] font-bold text-gray-500 leading-relaxed">
-                                         Heatmap RMS: TO {d.occ}% · RevPAR {Math.round(d.revpar)}€ · Événements {d.events.length}
+                                     {/* Forecast: action recommandée du RMS */}
+                                     {insight?.recommendedAction && (
+                                       <div className="flex items-start gap-2">
+                                         <Zap size={10} className="text-indigo-500 shrink-0 mt-0.5" />
+                                         <span className="text-[10px] font-bold text-indigo-600 leading-snug line-clamp-2">
+                                           {insight.recommendedAction}
+                                         </span>
                                        </div>
-                                     ) : revenueSubView === 'Forecast' ? (
-                                       <div className="text-[10px] font-bold text-indigo-600 leading-relaxed">
-                                         Forecast RMS: {insight?.recommendedAction}
-                                       </div>
-                                     ) : (
-                                       d.events.slice(0, 2).map((evt, idx) => (
-                                         <div key={idx} className="flex items-center gap-2">
-                                            <div className={cn("w-2 h-2 rounded-full", evt.impact === 'critical' ? 'bg-rose-500' : 'bg-indigo-500')} />
-                                            <span className="text-[10px] font-bold text-gray-500 truncate uppercase tracking-tighter">{evt.name}</span>
-                                         </div>
-                                       ))
                                      )}
+                                     {/* Heatmap: TO et événements en chiffres */}
+                                     <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-tight text-gray-400">
+                                       <span>TO {d.occ}%</span>
+                                       <span>RevPAR {Math.round(d.revpar)}€</span>
+                                       {d.events.length > 0 && (
+                                         <span className="text-indigo-500">{d.events.length} évt</span>
+                                       )}
+                                     </div>
+                                     {/* KPI: événements liés (max 2) */}
+                                     {d.events.slice(0, 2).map((evt, idx) => (
+                                       <div key={idx} className="flex items-center gap-2">
+                                          <div className={cn("w-2 h-2 rounded-full", evt.impact === 'critical' ? 'bg-rose-500' : evt.impact === 'high' ? 'bg-orange-500' : 'bg-indigo-500')} />
+                                          <span className="text-[10px] font-bold text-gray-500 truncate uppercase tracking-tighter">{evt.name}</span>
+                                       </div>
+                                     ))}
                                    </div>
                                 </div>
                               );
@@ -1913,11 +1925,18 @@ export const PlanningView = () => {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #EEF2F7; border-radius: 10px; border: 2px solid white; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #E2E8F0; }
       `}} />
-      <RevenueDetailsModal 
-        isOpen={isRevenueDetailsOpen} 
-        onClose={() => setIsRevenueDetailsOpen(false)} 
+      <RevenueDetailsModal
+        isOpen={isRevenueDetailsOpen}
+        onClose={() => setIsRevenueDetailsOpen(false)}
         initialTab={revenueDetailsTab}
         selectedDate={selectedCalendarDate || undefined}
+        reservations={contextReservations}
+        rooms={rooms}
+        events={storeEvents}
+        rmsEvents={rmsEvents}
+        channels={storeChannels}
+        calendarDays={calendarDays}
+        insightsByDate={revenueInsightsByDate}
       />
       <ChannelColorModal 
         isOpen={isChannelModalOpen} 
