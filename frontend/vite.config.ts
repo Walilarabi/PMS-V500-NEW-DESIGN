@@ -42,12 +42,20 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            'vendor-query': ['@tanstack/react-query'],
+            // Core vendor libs — loaded on every session
+            'vendor-react':    ['react', 'react-dom'],
+            'vendor-query':    ['@tanstack/react-query'],
             'vendor-supabase': ['@supabase/supabase-js'],
-            'vendor-charts': ['recharts', 'chart.js', 'react-chartjs-2'],
-            'vendor-motion': ['motion'],
-            'vendor-ui': ['lucide-react', 'clsx', 'tailwind-merge'],
-            'vendor-forms': ['react-hook-form', 'zod'],
+            'vendor-motion':   ['motion'],
+            'vendor-ui':       ['lucide-react', 'clsx', 'tailwind-merge'],
+            'vendor-forms':    ['react-hook-form', 'zod'],
+            'vendor-table':    ['@tanstack/react-table'],
+            // Heavy libs — only needed on specific pages; keep separate for async loading
+            'vendor-charts':   ['recharts', 'chart.js', 'react-chartjs-2'],
+            'vendor-xlsx':     ['xlsx'],
+            'vendor-pdf':      ['html2pdf.js', 'jspdf-autotable'],
+            'vendor-dnd':      ['@dnd-kit/core', '@dnd-kit/utilities'],
+            'vendor-ai':       ['@google/genai'],
           },
         },
       },

@@ -149,33 +149,33 @@ export const PlanningView = () => {
   const [hoveredEvents, setHoveredEvents] = useState<HotelEvent[] | null>(null);
 
   // Constants for filters
-  const roomTypes = Array.from(new Set(storeRooms.map(r => r.type))).sort();
-  const roomScales = Array.from(new Set(storeRooms.map(r => r.category))).sort();
-  const channels = storeChannels.map(c => c.name);
-  const floors = Array.from(new Set(storeRooms.map(r => r.floor))).sort();
+  const roomTypes  = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.type))).sort(),   [storeRooms]);
+  const roomScales = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.category))).sort(),[storeRooms]);
+  const channels   = React.useMemo(() => storeChannels.map(c => c.name),                             [storeChannels]);
+  const floors     = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.floor))).sort(),   [storeRooms]);
   const statuses = ['Arrivées', 'Départs', 'Occupées', 'Libres', 'Ménage'];
 
   // Filter Rooms
-  const rooms = storeRooms.filter(r => {
+  const rooms = React.useMemo(() => storeRooms.filter(r => {
     const passFloor = floorFilter === 'Tous' || r.floor.toString() === floorFilter;
     const passType = typeFilter === 'Tous Types' || r.type === typeFilter || r.category === typeFilter;
-    const passSearch = searchQuery === '' || 
-      r.number.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const passSearch = searchQuery === '' ||
+      r.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.type.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     // Status filter for rooms
     let passStatus = true;
     if (statusFilter === 'Libres') passStatus = r.status === 'clean';
     if (statusFilter === 'Ménage') passStatus = r.status === 'dirty';
     if (statusFilter === 'Occupées') {
       const todayStr = toLocalISODate(new Date());
-       passStatus = contextReservations.some(res => 
+       passStatus = contextReservations.some(res =>
          res.room === r.number && todayStr >= res.arrival.split(' ')[0] && todayStr < res.departure.split(' ')[0]
        );
     }
-    
+
     return passFloor && passType && passSearch && passStatus;
-  });
+  }), [storeRooms, floorFilter, typeFilter, statusFilter, searchQuery, contextReservations]);
 
   const [monthDate, setMonthDate] = React.useState(new Date());
   const [showMonthPicker, setShowMonthPicker] = React.useState(false);

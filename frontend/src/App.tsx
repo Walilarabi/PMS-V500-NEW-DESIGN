@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import {
   Bed, Wrench, Inbox, AlertTriangle, Lock, Settings, CheckCircle2, Clock,
   Hourglass, Users, CreditCard, AlertOctagon, Send, Construction,
@@ -7,55 +7,81 @@ import type { LucideIcon } from 'lucide-react';
 import { Topbar } from '@/src/components/layout/Topbar';
 import { Sidebar } from '@/src/components/layout/Sidebar';
 import { PageId } from '@/src/types';
+import type { ClientsPage } from '@/src/pages/clients/ClientsLayout';
 
-// Pages existantes
-import { TodayView }        from '@/src/pages/TodayView';
-import { PlanningView }     from '@/src/pages/PlanningViewLive';
-import { ReservationsView } from '@/src/pages/ReservationsView';
-import { ClientsLayout }    from '@/src/pages/clients/ClientsLayout';
-import type { ClientsPage }  from '@/src/pages/clients/ClientsLayout';
-import { RevenueDashboard }    from '@/src/pages/revenue/RevenueDashboard';
-import { PricingCalendar }     from '@/src/pages/revenue/PricingCalendar';
-import { EventsView }          from '@/src/pages/revenue/EventsView';
+// ── Lazy-loaded pages ──────────────────────────────────────────────────────
+// Each module is a separate async chunk. Vite splits them at build time.
+// The helper below handles named-export modules gracefully.
+const lz = <T extends Record<string, unknown>>(loader: () => Promise<T>, key: keyof T) =>
+  lazy(() => loader().then(m => ({ default: m[key] as React.ComponentType<any> })));
 
-// RMS ENTERPRISE ULTIMATE
-import { DecisionHistoryPage } from '@/src/pages/revenue/DecisionHistoryPage';
-import { CompetitiveWatchPage } from '@/src/pages/rms/CompetitiveWatchPage';
-import { PromotionsCompact }   from '@/src/pages/revenue/PromotionsCompact';
-import { DistributionAnalytics } from '@/src/pages/revenue/DistributionAnalytics';
-import { YieldAndRules }       from '@/src/pages/revenue/YieldAndRules';
-import { RMSTableauPro }       from '@/src/pages/revenue/RMSTableauPro';
-import { StrategiesPage }      from '@/src/pages/revenue/StrategiesPage';
-import { AutopilotPage }       from '@/src/pages/revenue/AutopilotPage';
-import { SimulationPage }      from '@/src/pages/revenue/SimulationPage';
-import { AlertsPage }          from '@/src/pages/revenue/AlertsPage';
-import { FinanceView }      from '@/src/pages/FinanceView';
-import { FinanceLayout }    from '@/src/pages/finance/FinanceLayout';
-import { AnalysisLayout }   from '@/src/pages/analysis/AnalysisLayout';
-import { FlowboardView }    from '@/src/pages/FlowboardView';
-import { SettingsView }     from '@/src/pages/SettingsView';
-import { FacturationView }  from '@/src/pages/finance/FacturationView';
-import { AuditLogView }     from '@/src/pages/finance/AuditLogView';
-import { ReconciliationView } from '@/src/pages/finance/ReconciliationView';
-import { RevenueIntegrityView } from '@/src/pages/finance/RevenueIntegrityView';
-import { OdmsView }         from '@/src/pages/sas/OdmsView';
+// Core pages (most frequently visited — loaded first by browser hint)
+const FlowboardView    = lz(() => import('@/src/pages/FlowboardView'),              'FlowboardView');
+const TodayView        = lz(() => import('@/src/pages/TodayView'),                  'TodayView');
+const PlanningView     = lz(() => import('@/src/pages/PlanningViewLive'),            'PlanningView');
+const ReservationsView = lz(() => import('@/src/pages/ReservationsView'),            'ReservationsView');
 
 // Réservations sub-pages
-import { ResFilteredView }  from '@/src/pages/reservations/ResFilteredView';
-import { GroupesView }      from '@/src/pages/reservations/GroupesView';
-import { ResPaymentsView }  from '@/src/pages/reservations/ResPaymentsView';
-import { ResAnomaliesView } from '@/src/pages/reservations/ResAnomaliesView';
-import { ResRelancesView }  from '@/src/pages/reservations/ResRelancesView';
+const ResFilteredView  = lz(() => import('@/src/pages/reservations/ResFilteredView'), 'ResFilteredView');
+const GroupesView      = lz(() => import('@/src/pages/reservations/GroupesView'),      'GroupesView');
+const ResPaymentsView  = lz(() => import('@/src/pages/reservations/ResPaymentsView'),  'ResPaymentsView');
+const ResAnomaliesView = lz(() => import('@/src/pages/reservations/ResAnomaliesView'), 'ResAnomaliesView');
+const ResRelancesView  = lz(() => import('@/src/pages/reservations/ResRelancesView'),  'ResRelancesView');
 
-// Flowday ops
-import { HousekeepingView } from '@/src/pages/flowday/HousekeepingView';
-import { MaintenanceView }  from '@/src/pages/flowday/MaintenanceView';
+// Clients
+const ClientsLayout    = lz(() => import('@/src/pages/clients/ClientsLayout'),       'ClientsLayout');
 
-// SAS sub-pages
-import { SasIncomingView }   from '@/src/pages/sas/SasIncomingView';
-import { SasAnomaliesView }  from '@/src/pages/sas/SasAnomaliesView';
-import { SasQuarantineView } from '@/src/pages/sas/SasQuarantineView';
-import { SasPartnersView }   from '@/src/pages/sas/SasPartnersView';
+// Revenue / RMS
+const RevenueDashboard    = lz(() => import('@/src/pages/revenue/RevenueDashboard'),       'RevenueDashboard');
+const PricingCalendar     = lz(() => import('@/src/pages/revenue/PricingCalendar'),        'PricingCalendar');
+const EventsView          = lz(() => import('@/src/pages/revenue/EventsView'),             'EventsView');
+const DecisionHistoryPage = lz(() => import('@/src/pages/revenue/DecisionHistoryPage'),    'DecisionHistoryPage');
+const CompetitiveWatchPage= lz(() => import('@/src/pages/rms/CompetitiveWatchPage'),       'CompetitiveWatchPage');
+const PromotionsCompact   = lz(() => import('@/src/pages/revenue/PromotionsCompact'),      'PromotionsCompact');
+const DistributionAnalytics=lz(() => import('@/src/pages/revenue/DistributionAnalytics'),  'DistributionAnalytics');
+const YieldAndRules       = lz(() => import('@/src/pages/revenue/YieldAndRules'),          'YieldAndRules');
+const RMSTableauPro       = lz(() => import('@/src/pages/revenue/RMSTableauPro'),          'RMSTableauPro');
+const StrategiesPage      = lz(() => import('@/src/pages/revenue/StrategiesPage'),         'StrategiesPage');
+const AutopilotPage       = lz(() => import('@/src/pages/revenue/AutopilotPage'),          'AutopilotPage');
+const SimulationPage      = lz(() => import('@/src/pages/revenue/SimulationPage'),         'SimulationPage');
+const AlertsPage          = lz(() => import('@/src/pages/revenue/AlertsPage'),             'AlertsPage');
+
+// Finance
+const FinanceLayout       = lz(() => import('@/src/pages/finance/FinanceLayout'),          'FinanceLayout');
+const FinanceView         = lz(() => import('@/src/pages/FinanceView'),                    'FinanceView');
+const FacturationView     = lz(() => import('@/src/pages/finance/FacturationView'),        'FacturationView');
+const AuditLogView        = lz(() => import('@/src/pages/finance/AuditLogView'),           'AuditLogView');
+const ReconciliationView  = lz(() => import('@/src/pages/finance/ReconciliationView'),     'ReconciliationView');
+const RevenueIntegrityView= lz(() => import('@/src/pages/finance/RevenueIntegrityView'),   'RevenueIntegrityView');
+
+// Analysis
+const AnalysisLayout      = lz(() => import('@/src/pages/analysis/AnalysisLayout'),        'AnalysisLayout');
+
+// Flowday
+const HousekeepingView    = lz(() => import('@/src/pages/flowday/HousekeepingView'),       'HousekeepingView');
+const MaintenanceView     = lz(() => import('@/src/pages/flowday/MaintenanceView'),        'MaintenanceView');
+
+// SAS
+const OdmsView            = lz(() => import('@/src/pages/sas/OdmsView'),                  'OdmsView');
+const SasIncomingView     = lz(() => import('@/src/pages/sas/SasIncomingView'),            'SasIncomingView');
+const SasAnomaliesView    = lz(() => import('@/src/pages/sas/SasAnomaliesView'),           'SasAnomaliesView');
+const SasQuarantineView   = lz(() => import('@/src/pages/sas/SasQuarantineView'),          'SasQuarantineView');
+const SasPartnersView     = lz(() => import('@/src/pages/sas/SasPartnersView'),            'SasPartnersView');
+
+// Settings
+const SettingsView        = lz(() => import('@/src/pages/SettingsView'),                   'SettingsView');
+
+// ── Page-transition skeleton ───────────────────────────────────────────────
+const PageSkeleton = () => (
+  <div className="flex-1 flex flex-col p-6 gap-4 bg-[#F9FAFB] animate-pulse">
+    <div className="h-8 w-48 bg-gray-200 rounded-xl" />
+    <div className="h-4 w-80 bg-gray-100 rounded-lg" />
+    <div className="flex gap-4 mt-2">
+      {[1,2,3,4].map(i => <div key={i} className="h-24 flex-1 bg-gray-100 rounded-2xl" />)}
+    </div>
+    <div className="flex-1 bg-gray-100 rounded-2xl mt-2" />
+  </div>
+);
 
 // Realtime hooks
 import {
@@ -302,7 +328,9 @@ export default function App() {
           />
         )}
         <main className="flex-1 overflow-hidden flex flex-col">
-          {renderPage(activePage, navigate)}
+          <Suspense fallback={<PageSkeleton />}>
+            {renderPage(activePage, navigate)}
+          </Suspense>
         </main>
       </div>
     </div>
