@@ -10,6 +10,8 @@ import {
   type TicketPriority,
   type CreateTicketInput,
 } from '@/src/services/support/support.service';
+import { buildRiskAnalysis, computeRiskScore } from '@/src/services/support/risk';
+import { DiagnosticPanel } from './DiagnosticPanel';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -70,11 +72,13 @@ interface TicketFormProps {
   currentModule?: string;
   currentPage?: string;
   relatedEntityId?: string;
+  diagnosticContext?: { externalFactorsChecked: string[]; externalCheckResult?: string };
   onSuccess?: () => void;
 }
 
 export const TicketForm: React.FC<TicketFormProps> = ({
-  hotelId, userEmail, userRole, currentModule, currentPage, relatedEntityId, onSuccess,
+  hotelId, userEmail, userRole, currentModule, currentPage, relatedEntityId,
+  diagnosticContext, onSuccess,
 }) => {
   const createMutation = useCreateTicket();
   const [submitted, setSubmitted] = useState(false);
@@ -104,23 +108,34 @@ export const TicketForm: React.FC<TicketFormProps> = ({
     e.preventDefault();
     if (!validate()) return;
 
+    const riskScore      = computeRiskScore(module, priority);
+    const riskAnalysis   = buildRiskAnalysis(module, feature.trim(), priority);
+
     const input: CreateTicketInput = {
-      hotel_id:          hotelId,
+      hotel_id:           hotelId,
       module,
-      feature:           feature.trim(),
-      problem_type:      problemType,
-      description:       description.trim(),
-      steps:             steps.filter(s => s.trim()),
-      expected_result:   expectedResult.trim() || undefined,
-      actual_result:     actualResult.trim() || undefined,
+      feature:            feature.trim(),
+      problem_type:       problemType,
+      description:        description.trim(),
+      steps:              steps.filter(s => s.trim()),
+      expected_result:    expectedResult.trim() || undefined,
+      actual_result:      actualResult.trim() || undefined,
       priority,
-      attachment_url:    attachmentUrl.trim() || undefined,
-      user_email:        userEmail,
-      user_role:         userRole,
-      current_module:    currentModule,
-      current_page:      currentPage,
-      browser_info:      collectBrowserInfo(),
-      related_entity_id: relatedEntityId,
+      attachment_url:     attachmentUrl.trim() || undefined,
+      user_email:         userEmail,
+      user_role:          userRole,
+      current_module:     currentModule,
+      current_page:       currentPage,
+      browser_info:       collectBrowserInfo(),
+      related_entity_id:  relatedEntityId,
+      risk_score:         riskScore,
+      diagnostic_details: {
+        externalCheckResult:    diagnosticContext?.externalCheckResult,
+        externalFactorsChecked: diagnosticContext?.externalFactorsChecked,
+        riskAnalysis,
+        correctionStrategy:     riskAnalysis.strategy,
+        affectedModules:        riskAnalysis.affectedModules,
+      },
     };
 
     await createMutation.mutateAsync(input);
@@ -213,6 +228,11 @@ export const TicketForm: React.FC<TicketFormProps> = ({
           </div>
         </Field>
       </div>
+
+      {/* Diagnostic panel — appears when module + priority are set */}
+      {module && priority && (
+        <DiagnosticPanel module={module} feature={feature} priority={priority} />
+      )}
 
       {/* Description */}
       <Field label="Description courte" required hint={`${description.length}/500`}>

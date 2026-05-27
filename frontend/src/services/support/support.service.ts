@@ -1,4 +1,5 @@
 import { supabase } from '@/src/lib/supabase';
+import type { RiskScore, RiskAnalysis } from './risk';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,17 @@ export type TicketStatus =
 
 export type TicketPriority = 'bloquant' | 'eleve' | 'moyen' | 'faible';
 export type TicketClassification = 'bug' | 'amelioration' | 'question';
+
+export interface DiagnosticDetails {
+  externalCheckResult?: string;
+  externalFactorsChecked?: string[];
+  riskAnalysis?: RiskAnalysis;
+  correctionStrategy?: string;
+  affectedModules?: string[];
+  testChecklist?: string[];
+}
+
+export type { RiskScore, RiskAnalysis };
 
 export interface BrowserInfo {
   userAgent: string;
@@ -44,6 +56,8 @@ export interface SupportTicket {
   assigned_to: string | null;
   claude_response: string | null;
   classification: TicketClassification | null;
+  risk_score: RiskScore | null;
+  diagnostic_details: DiagnosticDetails | null;
   created_at: string;
   updated_at: string;
 }
@@ -66,6 +80,9 @@ export interface CreateTicketInput {
   current_page?: string;
   browser_info?: BrowserInfo;
   related_entity_id?: string;
+  // diagnostic
+  risk_score?: RiskScore;
+  diagnostic_details?: DiagnosticDetails;
 }
 
 // ─── Repository ───────────────────────────────────────────────────────────────
@@ -85,22 +102,24 @@ export async function listTickets(hotelId: string): Promise<SupportTicket[]> {
 export async function createTicket(input: CreateTicketInput): Promise<SupportTicket> {
   const { data, error } = await table()
     .insert({
-      hotel_id:          input.hotel_id,
-      module:            input.module,
-      feature:           input.feature,
-      problem_type:      input.problem_type,
-      description:       input.description,
-      steps:             input.steps,
-      expected_result:   input.expected_result ?? null,
-      actual_result:     input.actual_result ?? null,
-      priority:          input.priority,
-      attachment_url:    input.attachment_url ?? null,
-      user_email:        input.user_email ?? null,
-      user_role:         input.user_role ?? null,
-      current_module:    input.current_module ?? null,
-      current_page:      input.current_page ?? null,
-      browser_info:      input.browser_info ?? null,
-      related_entity_id: input.related_entity_id ?? null,
+      hotel_id:           input.hotel_id,
+      module:             input.module,
+      feature:            input.feature,
+      problem_type:       input.problem_type,
+      description:        input.description,
+      steps:              input.steps,
+      expected_result:    input.expected_result ?? null,
+      actual_result:      input.actual_result ?? null,
+      priority:           input.priority,
+      attachment_url:     input.attachment_url ?? null,
+      user_email:         input.user_email ?? null,
+      user_role:          input.user_role ?? null,
+      current_module:     input.current_module ?? null,
+      current_page:       input.current_page ?? null,
+      browser_info:       input.browser_info ?? null,
+      related_entity_id:  input.related_entity_id ?? null,
+      risk_score:         input.risk_score ?? null,
+      diagnostic_details: input.diagnostic_details ?? null,
     })
     .select('*')
     .single();
