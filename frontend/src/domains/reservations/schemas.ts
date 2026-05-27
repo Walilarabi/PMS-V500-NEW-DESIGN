@@ -40,6 +40,8 @@ export const reservationRowSchema = z
     room_category: z.string().nullable(),
     created_at: z.string().nullable(),
     updated_at: z.string().nullable(),
+    // OTA / partner booking reference (e.g. "S6TPM3" from Booking.com)
+    external_ref: z.string().nullable().optional(),
   })
   .passthrough();
 
