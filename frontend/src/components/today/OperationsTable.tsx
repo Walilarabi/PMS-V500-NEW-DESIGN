@@ -16,6 +16,7 @@ import {
 
 import { ReservationModal } from '@/src/components/today/modals/ReservationModal';
 import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
+import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
 import { HousekeepingAssignmentModal } from '@/src/components/today/modals/HousekeepingAssignmentModal';
 import { RoomChangeModal } from '@/src/components/today/modals/RoomChangeModal';
 import { CommunicationModal } from '@/src/components/today/modals/CommunicationModal';
@@ -136,9 +137,14 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
   const [openMenuRowId, setOpenMenuRowId] = useState<number | null>(null);
   const [isExtendedView, setIsExtendedView] = useState(false);
   const [detailsRow, setDetailsRow] = useState<RoomRow | null>(null);
+  const [newReservationOpen, setNewReservationOpen] = useState(false);
 
+  /**
+   * Ouvre la fiche réservation partagée (même composant que Planning + Réservations).
+   * Une seule fiche pour toute l'app : cohérence totale.
+   */
   const openReservation = (row: RoomRow) => {
-    setReservationModal({ row, mode: row.movement === 'departure' ? 'departure' : 'arrival' });
+    setDetailsRow(row);
   };
 
   const closeMenu = () => setOpenMenuRowId(null);
@@ -226,42 +232,22 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
     showToast(`Action mise à jour pour la chambre ${row.room}`);
   };
 
+  /**
+   * Ouvre le formulaire de création de réservation avec la date du jour préremplie.
+   * Ne crée AUCUNE réservation automatiquement : l'utilisateur doit compléter et valider.
+   */
   const handleQuickReservation = () => {
-    const nextId = (rooms.length > 0 ? Math.max(...rooms.map((row) => row.id)) : 0) + 1;
-    const nextRoom = `${300 + nextId}`;
-    const today = new Date();
-    const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const tomorrow = new Date(today.getTime() + 86_400_000);
-    const isoTomorrow = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
-
-    const newRow: RoomRow = {
-      id: nextId,
-      priority: 'Moyenne',
-      room: nextRoom,
-      type: 'DBL',
-      status: 'Arrivée < 1h',
-      guest: `Walk-in ${nextId}`,
-      initials: 'WI',
-      reservationId: `R-10${430 + nextId}`,
-      guestCount: 1,
-      etaTime: '18:20',
-      etaNote: '',
-      movement: 'arrival',
-      arrival: `${isoToday} 14:00`,
-      departure: `${isoTomorrow} 11:00`,
-      nights: 1,
-      stayAmount: '210 €',
-      vip: null,
-      payment: 'En attente',
-      source: 'DIRECT',
-      action: 'Inspection',
-      taskStatus: 'À faire',
-      badges: ['nouveau'],
-    };
-
-    setRooms((current) => [...current, newRow]);
-    showToast(`Nouvelle réservation créée en chambre ${nextRoom}`);
+    setNewReservationOpen(true);
   };
+
+  // Dates préremplies dans NewReservationModal : aujourd'hui → demain (J+1)
+  const todayPrefill = (() => {
+    const t = new Date();
+    const iso = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    const tomorrow = new Date(t.getTime() + 86_400_000);
+    const isoTomorrow = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+    return { checkIn: iso, checkOut: isoTomorrow };
+  })();
 
   const arrivalCount = rooms.filter((row) => row.movement === 'arrival').length;
   const departureCount = rooms.filter((row) => row.movement === 'departure').length;
@@ -561,10 +547,10 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
                           </td>
                         </>
                       )}
-                      <td className="px-2 py-3 text-center relative">
-                        <button onClick={(e) => { e.stopPropagation(); setOpenMenuRowId(openMenuRowId === row.id ? null : row.id); }} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-gray-300 hover:bg-gray-100 hover:text-gray-600 transition-colors"><MoreHorizontal size={18} /></button>
+                      <td className="px-0 py-3 text-left relative w-10">
+                        <button onClick={(e) => { e.stopPropagation(); setOpenMenuRowId(openMenuRowId === row.id ? null : row.id); }} className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"><MoreHorizontal size={18} /></button>
                         {openMenuRowId === row.id && (
-                          <div className="absolute right-0 top-full z-[120] mt-1 w-56 rounded-2xl border border-gray-100 bg-white py-2 shadow-2xl">
+                          <div className="absolute left-0 top-full z-[120] mt-1 w-60 rounded-2xl border border-gray-100 bg-white py-2 shadow-2xl">
                             <button onClick={() => { setRoomChangeModal(row); closeMenu(); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-violet-50 hover:text-violet-600 transition-colors"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-violet-600"><ArrowRightLeft size={16} /></div><div><div className="font-semibold">Changement de chambre</div><div className="text-xs text-gray-400">Déloger le client</div></div></button>
                             <button onClick={() => { setCommunicationModal(row); closeMenu(); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><Send size={16} /></div><div><div className="font-semibold">Communication client</div><div className="text-xs text-gray-400">Email / WhatsApp</div></div></button>
                             <button onClick={() => { setBadgesModal(row); closeMenu(); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition-colors"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><Tag size={16} /></div><div><div className="font-semibold">Gérer les badges</div><div className="text-xs text-gray-400">VIP, Fidèle, etc.</div></div></button>
@@ -790,6 +776,18 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
       {roomChangeModal && <RoomChangeModal row={roomChangeModal} onClose={() => setRoomChangeModal(null)} onSave={handleRoomChange} />}
       {communicationModal && <CommunicationModal row={communicationModal} onClose={() => setCommunicationModal(null)} onSend={handleMessageSent} />}
       {badgesModal && <BadgesModal row={badgesModal} onClose={() => setBadgesModal(null)} onSave={handleBadgesSave} />}
+      <NewReservationModal
+        isOpen={newReservationOpen}
+        onClose={() => setNewReservationOpen(false)}
+        prefill={todayPrefill}
+        onSave={async () => {
+          setNewReservationOpen(false);
+          showToast('Réservation créée');
+          window.dispatchEvent(new CustomEvent('app-toast', {
+            detail: { message: 'Réservation créée — synchronisée avec Planning et Réservations', type: 'success' },
+          }));
+        }}
+      />
     </>
   );
 };

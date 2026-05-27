@@ -87,6 +87,8 @@ export interface RevenueDetailsModalProps {
   channels?: ChannelConfig[];
   calendarDays: RevenueCalendarDay[];
   insightsByDate?: Record<string, RevenueInsight>;
+  /** Optional refresh callback — parent triggers data refetch from its sources */
+  onRefresh?: () => Promise<void> | void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,6 +167,7 @@ export const RevenueDetailsModal: React.FC<RevenueDetailsModalProps> = ({
   channels = [],
   calendarDays,
   insightsByDate = {},
+  onRefresh,
 }) => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -373,7 +376,7 @@ export const RevenueDetailsModal: React.FC<RevenueDetailsModalProps> = ({
     if (isRefreshing) return;
     setIsRefreshing(true);
     try {
-      // Invalidate all data sources used by the modal
+      // 1. Invalidate React Query caches used by parent hooks (useRMS*, useOperational*, etc.)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['reservations'] }),
         queryClient.invalidateQueries({ queryKey: ['rooms'] }),
@@ -381,6 +384,11 @@ export const RevenueDetailsModal: React.FC<RevenueDetailsModalProps> = ({
         queryClient.invalidateQueries({ queryKey: ['rms-pricing-reco'] }),
         queryClient.invalidateQueries({ queryKey: ['operational-data'] }),
       ]);
+      // 2. Ask the parent to refetch its own sources (context, Zustand stores)
+      if (onRefresh) {
+        await onRefresh();
+      }
+      // 3. Force-recompute internal memos (dayData, channelStats, etc.)
       setRefreshTick(t => t + 1);
       window.dispatchEvent(new CustomEvent('app-toast', {
         detail: { message: 'Données actualisées', type: 'success' },

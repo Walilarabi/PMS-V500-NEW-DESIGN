@@ -72,6 +72,20 @@ const toLocalISODate = (date: Date) => {
 };
 
 /**
+ * Format ISO date or "YYYY-MM-DD HH:mm" → "JJ/MM/AA" (French short format).
+ * Resilient to undefined / invalid input → returns '—'.
+ */
+const formatShortDate = (input: string | null | undefined): string => {
+  if (!input || typeof input !== 'string') return '—';
+  const datePart = input.split(' ')[0]?.split('T')[0] ?? '';
+  const parts = datePart.split('-');
+  if (parts.length < 3) return '—';
+  const [year, month, day] = parts;
+  if (!year || !month || !day) return '—';
+  return `${day}/${month}/${year.slice(-2)}`;
+};
+
+/**
  * Convertit un type de chambre long vers son code court.
  * Ex: "Twin Classique" → "TWN CL"
  */
@@ -1654,11 +1668,11 @@ export const PlanningView = () => {
                 <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-1 bg-indigo-50/60 rounded-xl px-2.5 py-2">
                     <p className="text-[8px] font-black text-indigo-400 uppercase tracking-wider mb-0.5">Arrivée</p>
-                    <p className="text-[12px] font-bold text-indigo-900 tabular-nums">{(hoveredRes.checkIn ?? hoveredRes.arrival.split(' ')[0])}</p>
+                    <p className="text-[12px] font-bold text-indigo-900 tabular-nums">{formatShortDate(hoveredRes.checkIn ?? hoveredRes.arrival)}</p>
                   </div>
                   <div className="col-span-1 bg-orange-50/60 rounded-xl px-2.5 py-2">
                     <p className="text-[8px] font-black text-orange-400 uppercase tracking-wider mb-0.5">Départ</p>
-                    <p className="text-[12px] font-bold text-orange-900 tabular-nums">{(hoveredRes.checkOut ?? hoveredRes.departure.split(' ')[0])}</p>
+                    <p className="text-[12px] font-bold text-orange-900 tabular-nums">{formatShortDate(hoveredRes.checkOut ?? hoveredRes.departure)}</p>
                   </div>
                   <div className="col-span-1 bg-violet-50/60 rounded-xl px-2.5 py-2 flex flex-col items-center justify-center">
                     <p className="text-[18px] font-black text-violet-700 leading-none">{nights}</p>
@@ -1856,6 +1870,12 @@ export const PlanningView = () => {
         channels={storeChannels}
         calendarDays={calendarDays}
         insightsByDate={revenueInsightsByDate}
+        onRefresh={async () => {
+          // Force re-evaluation of derived data; React Query invalidations are
+          // already handled inside the modal. We just need to bump local state
+          // so memos re-compute against the freshest store snapshots.
+          setMonthDate((d) => new Date(d.getFullYear(), d.getMonth(), 1));
+        }}
       />
       <ChannelColorModal 
         isOpen={isChannelModalOpen} 

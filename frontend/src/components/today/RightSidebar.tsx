@@ -1,8 +1,10 @@
 /**
- * FLOWTYM — RightSidebar (Flowday KPIs & Quick Actions).
+ * FLOWTYM — RightSidebar (Flowday KPIs).
+ * Les actions rapides ont été retirées : seul le bouton "+" principal de la page
+ * permet d'ajouter une réservation (évite les doublons d'action).
  */
 import {
-  ArrowDownRight, ArrowUpRight, BedDouble, FileText, Plus, User, X, Zap,
+  ArrowDownRight, ArrowUpRight, BedDouble, FileText, X, Zap,
 } from 'lucide-react';
 
 // Simple target icon helper since Lucide's target might differ slightly
@@ -122,20 +124,6 @@ export const RightSidebar = ({ onHide }: { onHide: () => void }) => {
         </button>
       </div>
 
-      {/* Actions Rapides */}
-      <div>
-        <h3 className="text-gray-500 font-medium text-sm mb-4">Actions Rapides</h3>
-        <div className="space-y-3">
-          <button className="w-full bg-white border border-gray-100 rounded-xl p-4 flex items-center hover:shadow-sm transition-shadow group">
-            <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mr-3 group-hover:bg-blue-100 transition-colors"><Plus size={16} /></div>
-            <span className="font-semibold text-gray-700 text-sm">Nouvelle réservation</span>
-          </button>
-          <button className="w-full bg-white border border-gray-100 rounded-xl p-4 flex items-center hover:shadow-sm transition-shadow group">
-            <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center mr-3 group-hover:bg-purple-100 transition-colors"><User size={16} /></div>
-            <span className="font-semibold text-gray-700 text-sm">Walk-in</span>
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
