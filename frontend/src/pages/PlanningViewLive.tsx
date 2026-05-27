@@ -1366,7 +1366,7 @@ export const PlanningView = () => {
                    <div className="flex items-center gap-6">
                       <div className="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-100">
                          {([
-                           { id: 'KPI', label: 'KPI · Forecast · Heatmap' },
+                           { id: 'KPI', label: 'Revenue Intelligence' },
                            { id: 'Graphiques', label: 'Graphiques' },
                          ] as const).map((v) => (
                            <button
