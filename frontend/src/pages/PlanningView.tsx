@@ -165,7 +165,7 @@ export const PlanningView = () => {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState<'7J' | '15J' | 'Mois'>('15J');
   const [displayMode, setDisplayMode] = useState<'Gantt' | 'Calendar'>('Gantt');
-  const [showRightSidebar, setShowRightSidebar] = useState(true);
+  const [showRightSidebar, setShowRightSidebar] = useState(false);
 
   const sidebarRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -471,12 +471,6 @@ export const PlanningView = () => {
           </div>
 
           <div className="flex items-center gap-1">
-             <button 
-               onClick={() => setShowRightSidebar(!showRightSidebar)}
-               className={cn("p-2.5 rounded-xl transition-all", showRightSidebar ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
-             >
-               <Eye size={18} />
-             </button>
              <button className="p-2.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Settings2 size={18} /></button>
           </div>
 
@@ -818,93 +812,6 @@ export const PlanningView = () => {
               </div>
            </div>
         </div>
-
-        {/* Right Status Panel */}
-        <AnimatePresence>
-          {showRightSidebar && (
-            <motion.div 
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 300, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              className="flex flex-col bg-white border-l border-gray-100 shrink-0 z-40 p-6 overflow-y-auto custom-scrollbar shadow-[-10px_0_30px_rgba(0,0,0,0.02)]"
-            >
-               <div className="flex items-center justify-between mb-8">
-                  <h3 className="text-[13px] font-black text-gray-900 uppercase tracking-widest">Détails Chambres</h3>
-                  <button onClick={() => setShowRightSidebar(false)} className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:text-rose-500 transition-colors">
-                     <Plus className="rotate-45" size={16} />
-                  </button>
-               </div>
-
-               <div className="flex flex-wrap gap-x-4 gap-y-2 mb-8">
-                  {[
-                    { label: 'Occupée', color: 'bg-blue-300' },
-                    { label: 'Propre', color: 'bg-emerald-300' },
-                    { label: 'En cours', color: 'bg-orange-200' },
-                    { label: 'À nettoyer', color: 'bg-rose-200' },
-                    { label: 'Hors service', color: 'bg-gray-200' }
-                  ].map(item => (
-                    <div key={item.label} className="flex items-center gap-2">
-                       <div className={cn("w-2 h-2 rounded-full", item.color)} />
-                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{item.label}</span>
-                    </div>
-                  ))}
-               </div>
-
-               <div className="space-y-4">
-                  {rooms.slice(0, 4).map((room, i) => (
-                    <div 
-                      key={`stat-card-${room.id}`} 
-                      className={cn(
-                        "p-5 rounded-[24px] border transition-all hover:scale-[1.02] cursor-pointer",
-                        i % 2 === 0 ? "bg-indigo-50/20 border-indigo-100" : "bg-white border-gray-100 shadow-sm"
-                      )}
-                    >
-                       <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                             <div className={cn(
-                               "w-10 h-10 rounded-2xl flex items-center justify-center text-[13px] font-black",
-                               i % 2 === 0 ? "bg-white text-indigo-400 shadow-sm" : 
-                               i === 1 ? "bg-rose-50 text-rose-400" : "bg-emerald-50 text-emerald-400"
-                             )}>
-                                {room.number}
-                             </div>
-                             <div>
-                                <h4 className="text-[14px] font-black text-gray-900">{room.type}</h4>
-                                <div className="flex items-center gap-1.5">
-                                   {i % 2 === 0 ? <Users size={10} className="text-violet-300" /> : <CheckCircle2 size={10} className="text-emerald-300" />}
-                                   <span className="text-[10px] font-bold text-gray-400 italic">
-                                      {i % 2 === 0 ? 'Occupée' : 'Propre / Libre'}
-                                   </span>
-                                </div>
-                             </div>
-                          </div>
-                          <div className="text-right">
-                             <div className="text-[14px] font-black text-gray-900">€</div>
-                             <div className="text-[8px] font-black text-gray-200 uppercase italic">/ Nuit</div>
-                          </div>
-                       </div>
-                    </div>
-                  ))}
-               </div>
-
-               <div className="mt-8 pt-8 border-t border-gray-100">
-                  <div className="flex items-center justify-between mb-6">
-                     <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Total Chambres</span>
-                     <span className="text-base font-black text-gray-900">{rooms.length}</span>
-                  </div>
-                  <div className="bg-orange-50/30 rounded-2xl p-4 border border-orange-100/50">
-                     <div className="flex items-center gap-3 mb-2">
-                        <div className="w-8 h-8 rounded-xl bg-orange-100/50 flex items-center justify-center text-orange-400">
-                           <Clock3 size={16} />
-                        </div>
-                        <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest">Rappel Hygiène</span>
-                     </div>
-                     <p className="text-[11px] font-bold text-orange-600/70 italic leading-snug">1 chambres en attente de ménage.</p>
-                  </div>
-               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
     {/* Tooltip Overlay */}
       <AnimatePresence>

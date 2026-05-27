@@ -99,14 +99,40 @@ export const SEGMENTS = [
 ];
 
 export const RATE_PLANS = [
-  { id: 'RACK-RO', label: 'Rack — Room Only',        mult: 1.00 },
-  { id: 'RACK-BB', label: 'Rack — Petit-déjeuner',   mult: 1.15 },
-  { id: 'FLEX',    label: 'Flexible — Room Only',     mult: 1.00 },
-  { id: 'NANR',    label: 'Non-remboursable (−10%)', mult: 0.90 },
-  { id: 'EARLY',   label: 'Early Bird (−15%)',        mult: 0.85 },
-  { id: 'LAST',    label: 'Last Minute (−20%)',       mult: 0.80 },
-  { id: 'CORP',    label: 'Corporatif',               mult: 1.10 },
+  { id: 'RACK-RO',  label: 'Rack — Room Only',            mult: 1.00 },
+  { id: 'RACK-BB',  label: 'Rack — Petit-déjeuner',        mult: 1.15 },
+  { id: 'FLEX',     label: 'Flexible — Room Only',          mult: 1.00 },
+  { id: 'NANR',     label: 'Non-remboursable (−10%)',       mult: 0.90 },
+  { id: 'EARLY',    label: 'Early Bird (−15%)',              mult: 0.85 },
+  { id: 'LAST',     label: 'Last Minute (−20%)',             mult: 0.80 },
+  { id: 'CORP',     label: 'Corporatif',                     mult: 1.10 },
 ];
+
+// Plans tarifaires enrichis avec filtrage dynamique (canal, pension, politique)
+export const ENHANCED_RATE_PLANS: { id: string; label: string; mult: number; boards: string[]; policies: string[]; channels: string[] }[] = [
+  { id: 'RACK-RO',  label: 'Rack — Room Only',            mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible','modere','stricte','non_remboursable'], channels: ['DIRECT','WALK_IN'] },
+  { id: 'RACK-BB',  label: 'Rack — Petit-déjeuner',        mult: 1.15, boards: ['Petit-déjeuner'],                           policies: ['flexible','modere','stricte'],                     channels: ['DIRECT','WALK_IN'] },
+  { id: 'FLEX',     label: 'Flexible — Room Only',          mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible'],                                       channels: ['DIRECT','BOOKING','EXPEDIA','AIRBNB','WALK_IN'] },
+  { id: 'NANR',     label: 'Non-remboursable (−10%)',       mult: 0.90, boards: ['Room Only','Petit-déjeuner'],               policies: ['non_remboursable'],                               channels: ['DIRECT','BOOKING','EXPEDIA','AIRBNB'] },
+  { id: 'EARLY',    label: 'Early Bird (−15%)',              mult: 0.85, boards: ['Room Only'],                                 policies: ['non_remboursable','stricte'],                     channels: ['DIRECT','BOOKING','EXPEDIA'] },
+  { id: 'LAST',     label: 'Last Minute (−20%)',             mult: 0.80, boards: ['Room Only'],                                 policies: ['non_remboursable'],                               channels: ['DIRECT','WALK_IN'] },
+  { id: 'CORP',     label: 'Corporatif',                     mult: 1.10, boards: ['Room Only','Petit-déjeuner','Demi-pension'], policies: ['flexible','modere'],                              channels: ['DIRECT'] },
+  { id: 'BKG-FLEX', label: 'Booking — Flexible',             mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible'],                                       channels: ['BOOKING'] },
+  { id: 'BKG-NANR', label: 'Booking — Non remboursable',     mult: 0.90, boards: ['Room Only','Petit-déjeuner'],               policies: ['non_remboursable'],                               channels: ['BOOKING'] },
+  { id: 'BKG-BB',   label: 'Booking — Petit-déjeuner',       mult: 1.15, boards: ['Petit-déjeuner'],                           policies: ['flexible','modere'],                              channels: ['BOOKING'] },
+  { id: 'EXP-FLEX', label: 'Expedia — Flexible',              mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible'],                                       channels: ['EXPEDIA'] },
+  { id: 'EXP-NANR', label: 'Expedia — Non remboursable',      mult: 0.88, boards: ['Room Only'],                                 policies: ['non_remboursable'],                               channels: ['EXPEDIA'] },
+  { id: 'AIR-FLEX', label: 'Airbnb — Flexible',               mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible','modere','stricte'],                    channels: ['AIRBNB'] },
+  { id: 'DP-FLEX',  label: 'Demi-pension — Flexible',          mult: 1.30, boards: ['Demi-pension'],                             policies: ['flexible','modere'],                              channels: ['DIRECT','WALK_IN'] },
+  { id: 'PC-FLEX',  label: 'Pension complète',                  mult: 1.60, boards: ['Pension complète'],                         policies: ['flexible','modere'],                              channels: ['DIRECT','WALK_IN'] },
+];
+
+// Génère une référence PMS unique au format FLW-YYYY-NNNNNN
+const generatePMSRef = (): string => {
+  const year = new Date().getFullYear();
+  const num = Math.floor(Math.random() * 900000 + 100000);
+  return `FLW-${year}-${num}`;
+};
 
 export const GUAR_CFG: Record<string, { color: string; bg: string; border: string; lbl: string }> = {
   pending:      { color: '#f97316', bg: '#FFF7ED', border: '#FED7AA', lbl: 'En attente' },
@@ -314,7 +340,7 @@ const ReservationFormModal: React.FC<Props> = ({
     guestName: '', email: '', phone: '',
     nationality: 'FR', nationalityLabel: 'France',
     adults: 2, children: 0, company: '',
-    reference: `RES-${Math.floor(Math.random() * 9000 + 1000)}`,
+    reference: generatePMSRef(),
     partnerRef: '', partnerName: '',
     segment: 'Loisir',
     checkIn: todayISO(), checkOut: tomorrowISO(),
@@ -337,6 +363,8 @@ const ReservationFormModal: React.FC<Props> = ({
   const [reservationStatus, setReservationStatus] = useState<ReservationStatus>('confirmed');
   const [confirmOverbooking, setConfirmOverbooking] = useState(false);
   const [showDynPricing, setShowDynPricing] = useState(false);
+  const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>('percent');
+  const [discountValue, setDiscountValue] = useState<number>(0);
 
   // Hook Revenue Engine
   const { getPriceForStay, canOverbook } = useRevenueEngine();
@@ -369,6 +397,8 @@ const ReservationFormModal: React.FC<Props> = ({
       setReservationStatus((initialData as any)?.reservationStatus ?? 'confirmed');
       setConfirmOverbooking(false);
       setShowDynPricing(false);
+      setDiscountMode('percent');
+      setDiscountValue(0);
     }
   }, [isOpen]);
 
@@ -439,6 +469,26 @@ const ReservationFormModal: React.FC<Props> = ({
   const set = <K extends keyof ReservationFormData>(k: K, v: ReservationFormData[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
+  // ── Plans tarifaires filtrés dynamiquement selon canal / pension / politique ──
+  const filteredRatePlans = useMemo(() => {
+    const ch = (form.channel || 'DIRECT').toUpperCase();
+    const bd = form.board || 'Room Only';
+    const cp = form.cancelPolicy || 'flexible';
+    return ENHANCED_RATE_PLANS.filter(p => {
+      const channelOk = p.channels.some(c => c === ch);
+      const boardOk   = p.boards.includes(bd);
+      const policyOk  = p.policies.includes(cp);
+      return channelOk && boardOk && policyOk;
+    });
+  }, [form.channel, form.board, form.cancelPolicy]);
+
+  // Reset ratePlanId if no longer available after filter change
+  useEffect(() => {
+    if (form.ratePlanId && !filteredRatePlans.find(p => p.id === form.ratePlanId)) {
+      set('ratePlanId', filteredRatePlans[0]?.id ?? '');
+    }
+  }, [filteredRatePlans]);
+
   // ── Calculs ──
   // On essaie d'abord de récupérer les tarifs exacts depuis le Calendrier
   // Tarifaire (nuit par nuit). Sinon fallback sur prix de base × multiplicateur.
@@ -455,7 +505,7 @@ const ReservationFormModal: React.FC<Props> = ({
         checkIn: form.checkIn,
         checkOut: form.checkOut,
         roomQuery: room.type,
-        planQuery: plan?.name || form.ratePlanId,
+        planQuery: plan?.label || form.ratePlanId,
         fallbackPrice: fallbackPerNight,
       });
     }
@@ -466,7 +516,12 @@ const ReservationFormModal: React.FC<Props> = ({
       : pn * nights;
     const tva = ht * (form.vatRate / 100);
     const tax = 2.5 * (form.adults + form.children) * nights;
-    const ttc = ht + tva + tax;
+    const baseTtc = ht + tva + tax;
+    // Remise
+    const discountAmt = discountMode === 'percent'
+      ? Math.min(baseTtc, (baseTtc * discountValue) / 100)
+      : Math.min(baseTtc, discountValue);
+    const ttc = Math.max(0, baseTtc - discountAmt);
     return {
       nights,
       pn,
@@ -474,11 +529,13 @@ const ReservationFormModal: React.FC<Props> = ({
       tva,
       tax,
       ttc,
+      baseTtc,
+      discountAmt,
       breakdown: calendarBreakdown,
       fromCalendar: !!calendarBreakdown && calendarBreakdown.allFromCalendar,
       anyClosed: !!calendarBreakdown && calendarBreakdown.anyClosed,
     };
-  }, [form.checkIn, form.checkOut, form.roomNumber, form.adults, form.children, form.vatRate, form.ratePlanId, baseRooms]);
+  }, [form.checkIn, form.checkOut, form.roomNumber, form.adults, form.children, form.vatRate, form.ratePlanId, baseRooms, discountMode, discountValue]);
 
   // ── Préautorisation ──
   const isNanr = form.cancelPolicy === 'non_remboursable';
@@ -514,6 +571,9 @@ const ReservationFormModal: React.FC<Props> = ({
       preauthAmount: paAmount,
       nights: calc.nights,
       totalTTC: calc.ttc,
+      discountMode,
+      discountValue,
+      discountAmount: calc.discountAmt,
       // Nouveaux champs
       reservationStatus,
       isOverbooking: overbookingInfo?.isOver && confirmOverbooking,
@@ -633,16 +693,16 @@ const ReservationFormModal: React.FC<Props> = ({
     <>
       <AnimatePresence>
         {isOpen && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '20px 16px', overflowY: 'auto' }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 20px' }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={onClose}
-              style={{ position: 'fixed', inset: 0, background: 'rgba(44,42,74,.6)', backdropFilter: 'blur(4px)' }} />
+              style={{ position: 'fixed', inset: 0, background: 'rgba(30,25,60,.50)', backdropFilter: 'blur(6px)' }} />
 
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 20 }}
               transition={{ type: 'spring', damping: 28, stiffness: 360 }}
-              style={{ position: 'relative', width: '100%', maxWidth: 1000, background: '#fff', borderRadius: 26, boxShadow: '0 28px 80px rgba(139,92,246,.15)', overflow: 'hidden', zIndex: 1 }}
+              style={{ position: 'relative', width: '100%', maxWidth: 1060, maxHeight: 'calc(100vh - 32px)', background: '#fff', borderRadius: 22, boxShadow: '0 28px 80px rgba(139,92,246,.18)', overflow: 'hidden', zIndex: 1, display: 'flex', flexDirection: 'column' }}
             >
               {/* HEADER */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 28px', background: 'linear-gradient(130deg,#8B5CF6,#6D28D9)' }}>
@@ -655,7 +715,7 @@ const ReservationFormModal: React.FC<Props> = ({
               </div>
 
               {/* ── CONTENU DU MODAL (AVEC SCROLL) ── */}
-              <div style={{ flex: 1, padding: '24px 32px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ flex: 1, padding: '20px 28px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 
                 {/* ── STATUT DE RÉSERVATION ── */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -841,11 +901,14 @@ const ReservationFormModal: React.FC<Props> = ({
                   </Sel>
                 </div>
 
-                {/* Référence + Type chambre + Numéro */}
+                {/* Référence PMS + Type chambre + Numéro */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                   <div style={Fst('reference')} {...foc('reference')}>
                     <Ico d="M9 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3m-1-4H9a1 1 0 0 0-1 1v4h8V4a1 1 0 0 0-1-1z" />
-                    <input style={{ ...inp, color: '#7C3AED', fontWeight: 700, fontFamily: 'monospace' }} type="text" placeholder="Référence" value={form.reference} onChange={e => set('reference', e.target.value)} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 1 }}>Réf. PMS</div>
+                      <input style={{ ...inp, color: '#7C3AED', fontWeight: 700, fontFamily: 'monospace', fontSize: 12 }} type="text" placeholder="FLW-2026-XXXXXX" value={form.reference} onChange={e => set('reference', e.target.value)} />
+                    </div>
                   </div>
                   <Sel icon={<Ico d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />}
                     value={form.category} onChange={v => set('category', v)} placeholder="Type Chambre">
@@ -921,7 +984,10 @@ const ReservationFormModal: React.FC<Props> = ({
                   </Sel>
                   <Sel icon={<Ico d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01" />}
                     value={form.ratePlanId} onChange={v => set('ratePlanId', v)} placeholder="Plan tarifaire">
-                    {RATE_PLANS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+                    {filteredRatePlans.length > 0
+                      ? filteredRatePlans.map(p => <option key={p.id} value={p.id}>{p.label}</option>)
+                      : RATE_PLANS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)
+                    }
                   </Sel>
                 </div>
 
@@ -992,13 +1058,71 @@ const ReservationFormModal: React.FC<Props> = ({
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{fmtEur(calc.tva)}</span>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F3F4F6' }}>
                       <span style={{ fontSize: 12, fontWeight: 500, color: '#6B7280' }}>Taxe séjour</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{fmtEur(calc.tax)}</span>
                     </div>
                   </div>
+
+                  {/* ── REMISE ── */}
+                  <div style={{ padding: '10px 16px', borderBottom: '1px solid #F3F4F6', background: '#FFFBEB' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#92400E', textTransform: 'uppercase', letterSpacing: '.5px' }}>Remise</span>
+                      <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+                        <button onClick={() => setDiscountMode('percent')}
+                          style={{ padding: '3px 10px', borderRadius: 8, border: `1.5px solid ${discountMode === 'percent' ? '#F59E0B' : '#FDE68A'}`, background: discountMode === 'percent' ? '#FEF3C7' : '#fff', color: discountMode === 'percent' ? '#92400E' : '#D97706', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                          %
+                        </button>
+                        <button onClick={() => setDiscountMode('amount')}
+                          style={{ padding: '3px 10px', borderRadius: 8, border: `1.5px solid ${discountMode === 'amount' ? '#F59E0B' : '#FDE68A'}`, background: discountMode === 'amount' ? '#FEF3C7' : '#fff', color: discountMode === 'amount' ? '#92400E' : '#D97706', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                          €
+                        </button>
+                      </div>
+                    </div>
+                    {discountMode === 'percent' ? (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {[0, 5, 10, 15, 20, 25, 30, 50].map(pct => (
+                          <button key={pct} onClick={() => setDiscountValue(pct)}
+                            style={{ padding: '5px 12px', borderRadius: 10, border: `1.5px solid ${discountValue === pct ? '#F59E0B' : '#FDE68A'}`, background: discountValue === pct ? '#FEF3C7' : '#fff', color: discountValue === pct ? '#92400E' : '#9CA3AF', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                            {pct === 0 ? 'Aucune' : `${pct}%`}
+                          </button>
+                        ))}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', border: '1.5px solid #FDE68A', borderRadius: 10, background: '#fff' }}>
+                          <input type="number" min={0} max={100} value={discountValue} onChange={e => setDiscountValue(Math.min(100, Math.max(0, +e.target.value)))}
+                            style={{ width: 42, border: 'none', outline: 'none', fontSize: 12, fontWeight: 700, color: '#92400E', background: 'transparent', textAlign: 'right' }} />
+                          <span style={{ fontSize: 12, color: '#D97706', fontWeight: 700 }}>%</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', border: '1.5px solid #FDE68A', borderRadius: 12, background: '#fff', flex: 1 }}>
+                          <span style={{ fontSize: 12, color: '#D97706', fontWeight: 700 }}>€</span>
+                          <input type="number" min={0} value={discountValue} onChange={e => setDiscountValue(Math.max(0, +e.target.value))}
+                            style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, fontWeight: 700, color: '#92400E', background: 'transparent' }} placeholder="0.00" />
+                        </div>
+                        {discountValue > 0 && (
+                          <span style={{ fontSize: 11, color: '#6B7280', fontStyle: 'italic' }}>
+                            ≈ {calc.baseTtc > 0 ? ((discountValue / calc.baseTtc) * 100).toFixed(1) : 0}% du total
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {discountValue > 0 && calc.discountAmt > 0 && (
+                      <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#059669', fontWeight: 700 }}>
+                        <span>Remise appliquée</span>
+                        <span>−{fmtEur(calc.discountAmt)}</span>
+                      </div>
+                    )}
+                  </div>
+
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 16px', background: '#F5F3FF' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700 }}>Total TTC</span>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700 }}>Total TTC</div>
+                      {calc.discountAmt > 0 && (
+                        <div style={{ fontSize: 11, color: '#9CA3AF', textDecoration: 'line-through' }}>{fmtEur(calc.baseTtc)}</div>
+                      )}
+                    </div>
                     <span style={{ fontSize: 22, fontWeight: 800, color: '#8B5CF6', letterSpacing: '-.5px' }}>{fmtEur(calc.ttc)}</span>
                   </div>
                 </div>

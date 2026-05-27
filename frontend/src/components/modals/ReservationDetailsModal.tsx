@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Reservation, useReservations, CardexDocument } from '../../contexts/ReservationContext';
 import { FileText, CreditCard, Users, AlertCircle, Search, Star, Award, X, Edit, Plus, Check, Printer, Mail, Save, ChevronDown, Bed, Wine, Package, PlusCircle, Trash2, UploadCloud, Link as LinkIcon, History, TrendingUp, MapPin, Phone, Globe, Briefcase, Hash, Calendar, Shirt, Smartphone, File, Gem, MessageSquare, Reply, Share2, Tag, Box, Zap, Gift, Info, LogOut } from 'lucide-react';
@@ -1296,8 +1297,8 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
         </div>
       </div>
 
-      {/* Print View Layer (hidden in screen, visible in print) */}
-      <div className="print-only">
+      {/* Print View Layer — portal vers document.body pour largeur pleine page */}
+      {ReactDOM.createPortal(<div className="print-only">
         {folios.filter(f => selectedFolioIds.includes(f.id)).map(folio => {
           const totals = calculateTotals(folio.lines);
           if (folio.lines.length === 0 && folio.payments === 0) return null; // Ne pas imprimer les folios vides
@@ -1410,7 +1411,7 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
             </div>
           );
         })}
-      </div>
+      </div>, document.body)}
 
     </div>
   );
@@ -2337,13 +2338,14 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
           
           /* Show only print-only content */
           .print-only, .print-only * { visibility: visible !important; }
-          .print-only { 
-            display: block !important; 
-            position: absolute !important; 
-            left: 0 !important; 
-            top: 0 !important; 
-            width: 100% !important; 
+          .print-only {
+            display: block !important;
+            position: static !important;
+            width: 100% !important;
             z-index: 9999 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
           }
           
           /* Hide everything else marked print-hide */
@@ -2353,12 +2355,13 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>
-      <div id="flowtym-modal-root" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.65)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(4px)' }}>
+      <div id="flowtym-modal-root" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.40)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 24px', backdropFilter: 'blur(8px)' }}>
         <motion.div
-          initial={{ opacity: 0, scale: .96, y: 20 }}
+          initial={{ opacity: 0, scale: .97, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: .96, y: 20 }}
-          style={{ width: '100%', maxWidth: 1100, height: '90vh', background: '#F8FAFC', borderRadius: 24, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 40px 100px rgba(0,0,0,.3)' }}
+          exit={{ opacity: 0, scale: .97, y: 16 }}
+          transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+          style={{ width: '100%', maxWidth: 1280, height: '92vh', background: '#F8FAFC', borderRadius: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,.22), 0 0 0 1px rgba(255,255,255,.08)' }}
         >
           {/* ── HEADER ── */}
           <div className="print-hide" style={{ background: '#8B5CF6', padding: '18px 28px', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
@@ -2387,45 +2390,10 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
             </div>
           </div>
 
-          {/* QUICK STATUS BUTTON */}
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            {reservation.status === 'confirmed' && (
-              <button 
-                onClick={() => {
-                  setShowCheckinScanModal(true);
-                }}
-                style={{ ...BTN('primary'), background: '#10B981', color: 'white', height: 36, padding: '0 16px', boxShadow: '0 4px 12px rgba(16,185,129,0.3)', border: 'none' }}
-              >
-                <Check size={16} strokeWidth={3} /> Quick Check-in
-              </button>
-            )}
-
-            {reservation.status === 'checked_in' && (
-              <button 
-                onClick={() => {
-                  if (onUpdate) {
-                    onUpdate({ 
-                      ...reservation, 
-                      status: 'Check-out fait',
-                      statusColor: 'text-gray-500',
-                      dotColor: 'bg-gray-400',
-                      action: 'Archivé',
-                      reservationStatus: 'confirmed'
-                    });
-                  }
-                  window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Check-out réussi pour ${reservation.guestName}.` } }));
-                }}
-                style={{ ...BTN('primary'), background: '#64748B', color: 'white', height: 36, padding: '0 16px', boxShadow: '0 4px 12px rgba(100,116,139,0.3)', border: 'none' }}
-              >
-                <LogOut size={16} strokeWidth={3} /> Quick Check-out
-              </button>
-            )}
-
-            {/* Fermer */}
-            <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(255,255,255,.12)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {Ico.close}
-            </button>
-          </div>
+          {/* Fermer */}
+          <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(255,255,255,.12)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {Ico.close}
+          </button>
         </div>
 
         {/* ── ONGLETS ── */}
@@ -2457,6 +2425,45 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
             </motion.div>
           </AnimatePresence>
         </div>
+
+        {/* ── BARRE D'ACTIONS OPÉRATIONNELLES (bas de fiche) ── */}
+        {(reservation.status === 'confirmed' || reservation.status === 'checked_in') && (
+          <div className="print-hide" style={{ borderTop: '1px solid #F1F5F9', background: 'white', padding: '12px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8' }}>
+              Actions opérationnelles
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {reservation.status === 'confirmed' && (
+                <button
+                  onClick={() => setShowCheckinScanModal(true)}
+                  style={{ ...BTN('primary'), background: 'linear-gradient(135deg,#10B981,#059669)', color: 'white', height: 40, padding: '0 20px', boxShadow: '0 4px 14px rgba(16,185,129,0.30)', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13 }}
+                >
+                  <Check size={15} strokeWidth={2.5} /> Check-in
+                </button>
+              )}
+              {reservation.status === 'checked_in' && (
+                <button
+                  onClick={() => {
+                    if (onUpdate) {
+                      onUpdate({
+                        ...reservation,
+                        status: 'Check-out fait',
+                        statusColor: 'text-gray-500',
+                        dotColor: 'bg-gray-400',
+                        action: 'Archivé',
+                        reservationStatus: 'confirmed'
+                      });
+                    }
+                    window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Check-out réussi pour ${reservation.guestName}.` } }));
+                  }}
+                  style={{ ...BTN('primary'), background: 'linear-gradient(135deg,#64748B,#475569)', color: 'white', height: 40, padding: '0 20px', boxShadow: '0 4px 14px rgba(100,116,139,0.28)', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: 13 }}
+                >
+                  <LogOut size={15} strokeWidth={2.5} /> Check-out
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </motion.div>
       </div>
       {showCheckinScanModal && (
