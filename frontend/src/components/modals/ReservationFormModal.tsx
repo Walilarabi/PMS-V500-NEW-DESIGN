@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { X, AlertTriangle, TrendingUp, Clock, CheckCircle2, XCircle, Loader2, Search, Moon, Banknote } from 'lucide-react';
-import { CHANNELS } from '@/src/constants/channels';
+import { PARTNER_CATEGORIES, PARTNER_CATEGORY_ORDER } from '@/src/constants/partners';
+import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { useRevenueEngine } from '@/src/hooks/useRevenueEngine';
 import type { ReservationStatus } from '@/src/contexts/ReservationContext';
 import { getStayBreakdown } from '@/src/services/calendar-pricing.service';
@@ -335,6 +336,7 @@ const ReservationFormModal: React.FC<Props> = ({
   initialData, availableRooms, editId, allReservations
 }) => {
   const baseRooms = (availableRooms && availableRooms.length > 0) ? availableRooms : ROOMS_DEFAULT;
+  const { roomTypes: storeRoomTypes } = useRateCalendarStore();
 
   const defaultForm: ReservationFormData = {
     guestName: '', email: '', phone: '',
@@ -347,7 +349,7 @@ const ReservationFormModal: React.FC<Props> = ({
     category: '', roomNumber: '', board: 'Room Only',
     roomSelections: [{ roomNumber: '', roomType: '', adults: 2, children: 0 }],
     roomNumbers: [],
-    cancelPolicy: 'flexible', ratePlanId: '', channel: 'Direct',
+    cancelPolicy: 'flexible', ratePlanId: '', channel: 'direct',
     vatRate: 10, paymentMode: 'Carte bancaire', paymentStatus: 'En attente',
     guaranteeType: 'cb', guaranteeStatus: 'pending',
     preauthRule: 'first_night', preauthAmount: 0,
@@ -469,18 +471,54 @@ const ReservationFormModal: React.FC<Props> = ({
   const set = <K extends keyof ReservationFormData>(k: K, v: ReservationFormData[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  // ── Plans tarifaires filtrés dynamiquement selon canal / pension / politique ──
+  // ── Plans depuis le store (dédupliqués) ──────────────────────────────────────
+  const storePlans = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          storeRoomTypes.flatMap((rt) =>
+            rt.ratePlans.map((rp) => [rp.planId, rp])
+          )
+        ).values()
+      ),
+    [storeRoomTypes]
+  );
+
+  // ── Plans tarifaires filtrés dynamiquement selon partenaire (channel) ─────────
+  // Priorité : plans du store filtrés par partenaire (partnerIds)
+  // Fallback : ENHANCED_RATE_PLANS filtrés par canal/pension/politique (mock data)
   const filteredRatePlans = useMemo(() => {
-    const ch = (form.channel || 'DIRECT').toUpperCase();
+    const partnerId = form.channel; // now a stable slug like "booking-com"
+
+    if (storePlans.length > 0) {
+      const byPartner = partnerId && partnerId !== 'direct'
+        ? storePlans.filter((p) => {
+            const ids = p.partnerIds ?? p.distributionChannels ?? [];
+            return ids.length === 0 || ids.includes(partnerId);
+          })
+        : storePlans;
+      const result = byPartner.length > 0 ? byPartner : storePlans;
+      return result.map((p) => ({
+        id:    p.planId,
+        label: p.planName,
+        mult:  1.0,
+        // carry through extra fields needed for calc below
+        boards: [], policies: [], channels: [],
+      }));
+    }
+
+    // ─ Fallback : plans statiques (ENHANCED_RATE_PLANS) ─
+    const ch = (partnerId || 'DIRECT').toUpperCase().replace(/-/g, '_').replace('BOOKING_COM', 'BOOKING').replace('TRIP_COM', 'TRIP');
     const bd = form.board || 'Room Only';
     const cp = form.cancelPolicy || 'flexible';
-    return ENHANCED_RATE_PLANS.filter(p => {
-      const channelOk = p.channels.some(c => c === ch);
+    const fromEnhanced = ENHANCED_RATE_PLANS.filter(p => {
+      const channelOk = p.channels.some(c => c === ch) || p.channels.includes('DIRECT');
       const boardOk   = p.boards.includes(bd);
       const policyOk  = p.policies.includes(cp);
       return channelOk && boardOk && policyOk;
     });
-  }, [form.channel, form.board, form.cancelPolicy]);
+    return fromEnhanced.length > 0 ? fromEnhanced : ENHANCED_RATE_PLANS;
+  }, [storePlans, form.channel, form.board, form.cancelPolicy]);
 
   // Reset ratePlanId if no longer available after filter change
   useEffect(() => {
@@ -896,8 +934,18 @@ const ReservationFormModal: React.FC<Props> = ({
                     </div>
                   </div>
                   <Sel icon={<Ico d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />}
-                    value={form.channel} onChange={v => set('channel', v)} placeholder="Canal">
-                    {CHANNELS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    value={form.channel} onChange={v => set('channel', v)} placeholder="Partenaire / Source">
+                    {PARTNER_CATEGORY_ORDER.map((catKey) => {
+                      const cat = PARTNER_CATEGORIES[catKey];
+                      if (!cat) return null;
+                      return (
+                        <optgroup key={catKey} label={cat.label}>
+                          {cat.partners.map((p) => (
+                            <option key={p.id} value={p.id}>{p.label}</option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
                   </Sel>
                 </div>
 
