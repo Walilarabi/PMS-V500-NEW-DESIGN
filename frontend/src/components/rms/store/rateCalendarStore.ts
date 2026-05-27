@@ -12,6 +12,10 @@ import { CascadePricingEngine } from "../engines/CascadePricingEngine";
 import { propagateVirtualRoomCascade, rebuildAllVirtualInventories } from "../engines/VirtualRoomCascadeEngine";
 import { dedupRoomTypes } from "../engines/RateCalendarDedupEngine";
 import { supabase } from "@/src/lib/supabase";
+import {
+  upsertRoomTypeToSupabase, deleteRoomTypeFromSupabase,
+  upsertRatePlanToSupabase, deleteRatePlanFromSupabase,
+} from "@/src/services/rms/rmsSupabasePersistence";
 
 // ─── Supabase persistence helper ──────────────────────────────────────────
 async function persistReferencePriceCascade(
@@ -552,30 +556,54 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       get().loadData();
     },
 
-    addRoomType: (payload) => set((state) => {
+    addRoomType: (payload) => {
       const roomTypeId = `rt_${payload.roomCode.toLowerCase()}`;
-      const statuses = state.dateColumns.map(dc => ({
-        date: dc.date, status: "open" as const, label: "Disponible", capacity: payload.capacity,
-        inventory: payload.capacity, sold: 0, override: null, minStay: null, maxStay: null, cta: false, ctd: false,
+      let newRoom!: RoomTypeData;
+      set((state) => {
+        const statuses = state.dateColumns.map(dc => ({
+          date: dc.date, status: "open" as const, label: "Disponible", capacity: payload.capacity,
+          inventory: payload.capacity, sold: 0, override: null, minStay: null, maxStay: null, cta: false, ctd: false,
+        }));
+        newRoom = {
+          internalId: nextInternalId(), roomTypeId, roomTypeName: payload.roomName, roomTypeCode: payload.roomCode,
+          capacity: payload.capacity, bathroom: payload.bathroom, equipment: payload.equipment, view: payload.view,
+          description: payload.description, isReference: payload.isReference, isActive: true,
+          assignedRatePlanIds: payload.assignedRatePlanIds,
+          distributionChannels: payload.partnerIds ?? payload.distributionChannels,
+          partnerIds: payload.partnerIds ?? payload.distributionChannels,
+          diffFromRef: payload.diffFromRef, diffType: payload.diffType, statuses, ratePlans: [],
+          isVirtual: payload.isVirtual,
+          virtualKind: payload.virtualKind,
+          virtualComposition: payload.virtualComposition,
+        };
+        return { roomTypes: [...state.roomTypes, newRoom], expandedRooms: { ...state.expandedRooms, [roomTypeId]: true } };
+      });
+      // Persistance Supabase best-effort (non bloquant)
+      if (newRoom) void upsertRoomTypeToSupabase(newRoom);
+    },
+
+    updateRoomType: (payload) => {
+      set((state) => ({
+        roomTypes: state.roomTypes.map(r => {
+          if (r.roomTypeId !== payload.roomTypeId) return r;
+          const updated = {
+            ...r, ...payload,
+            partnerIds: payload.partnerIds ?? payload.distributionChannels ?? r.partnerIds,
+            distributionChannels: payload.partnerIds ?? payload.distributionChannels ?? r.distributionChannels,
+          };
+          return updated;
+        }),
       }));
-      const newRoom: RoomTypeData = {
-        internalId: nextInternalId(), roomTypeId, roomTypeName: payload.roomName, roomTypeCode: payload.roomCode,
-        capacity: payload.capacity, bathroom: payload.bathroom, equipment: payload.equipment, view: payload.view,
-        description: payload.description, isReference: payload.isReference, isActive: true,
-        assignedRatePlanIds: payload.assignedRatePlanIds, distributionChannels: payload.distributionChannels,
-        diffFromRef: payload.diffFromRef, diffType: payload.diffType, statuses, ratePlans: [],
-        isVirtual: payload.isVirtual,
-        virtualKind: payload.virtualKind,
-        virtualComposition: payload.virtualComposition,
-      };
-      return { roomTypes: [...state.roomTypes, newRoom], expandedRooms: { ...state.expandedRooms, [roomTypeId]: true } };
-    }),
+      // Persistance Supabase best-effort
+      const updated = get().roomTypes.find(r => r.roomTypeId === payload.roomTypeId);
+      if (updated) void upsertRoomTypeToSupabase(updated);
+    },
 
-    updateRoomType: (payload) => set((state) => ({
-      roomTypes: state.roomTypes.map(r => r.roomTypeId === payload.roomTypeId ? { ...r, ...payload } : r),
-    })),
-
-    deleteRoomType: (roomTypeId) => set((s) => ({ roomTypes: s.roomTypes.filter(r => r.roomTypeId !== roomTypeId) })),
+    deleteRoomType: (roomTypeId) => {
+      const room = get().roomTypes.find(r => r.roomTypeId === roomTypeId);
+      set((s) => ({ roomTypes: s.roomTypes.filter(r => r.roomTypeId !== roomTypeId) }));
+      if (room) void deleteRoomTypeFromSupabase(room.roomTypeCode);
+    },
     toggleRoomActive: (roomTypeId) => set((s) => ({ roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, isActive: !r.isActive } : r) })),
     setRoomAsReference: (roomTypeId) => set((s) => {
       const next = s.roomTypes.map(r => ({ ...r, isReference: r.roomTypeId === roomTypeId }));
@@ -591,33 +619,88 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       return { roomTypes: next };
     }),
 
-    addRatePlan: (payload) => set((state) => {
+    addRatePlan: (payload) => {
       const planId = `plan_${payload.planCode.toLowerCase()}`;
-      const newPlan: RatePlanData = {
-        internalId: nextInternalId(), planId, planName: payload.planName, planCode: payload.planCode,
-        pensionType: payload.pensionType, channelType: payload.channelType, calcMode: payload.calcMode,
-        calcValue: payload.calcValue, referencePlanId: payload.referencePlanId, isReference: false,
-        isActive: true, connectivityType: payload.connectivityType, isConnectivityLocked: false,
-        assignedRoomTypeIds: payload.assignedRoomTypeIds, distributionChannels: payload.distributionChannels, prices: [],
-      };
-      (newPlan as any).calcPercent = (payload as any).calcPercent || 0;
-      return { roomTypes: state.roomTypes.map(r => payload.assignedRoomTypeIds.includes(r.roomTypeId) ? { ...r, ratePlans: [...r.ratePlans, newPlan] } : r) };
-    }),
+      let newPlan!: RatePlanData;
+      set((state) => {
+        newPlan = {
+          internalId: nextInternalId(), planId, planName: payload.planName, planCode: payload.planCode,
+          pensionType: payload.pensionType, channelType: payload.channelType, calcMode: payload.calcMode,
+          calcValue: payload.calcValue, referencePlanId: payload.referencePlanId, isReference: false,
+          isActive: true, connectivityType: payload.connectivityType, isConnectivityLocked: false,
+          assignedRoomTypeIds: payload.assignedRoomTypeIds,
+          distributionChannels: payload.partnerIds ?? payload.distributionChannels,
+          partnerIds: payload.partnerIds ?? payload.distributionChannels,
+          primaryPartnerId: payload.primaryPartnerId,
+          prices: [],
+        };
+        (newPlan as any).calcPercent = (payload as any).calcPercent || 0;
+        return { roomTypes: state.roomTypes.map(r => payload.assignedRoomTypeIds.includes(r.roomTypeId) ? { ...r, ratePlans: [...r.ratePlans, newPlan] } : r) };
+      });
+      if (newPlan) void upsertRatePlanToSupabase(newPlan);
+    },
 
-    updateRatePlan: (payload) => set((state) => ({
-      roomTypes: state.roomTypes.map(r => ({
-        ...r,
-        ratePlans: r.ratePlans.map(rp => rp.planId === payload.planId ? { ...rp, ...payload } : rp),
-      })),
-    })),
+    updateRatePlan: (payload) => {
+      set((state) => ({
+        roomTypes: state.roomTypes.map(r => ({
+          ...r,
+          ratePlans: r.ratePlans.map(rp => {
+            if (rp.planId !== payload.planId) return rp;
+            return {
+              ...rp, ...payload,
+              partnerIds: payload.partnerIds ?? payload.distributionChannels ?? rp.partnerIds,
+              distributionChannels: payload.partnerIds ?? payload.distributionChannels ?? rp.distributionChannels,
+              primaryPartnerId: payload.primaryPartnerId ?? rp.primaryPartnerId,
+            };
+          }),
+        })),
+      }));
+      // Trouver le plan mis à jour pour la persistance
+      for (const rt of get().roomTypes) {
+        const updated = rt.ratePlans.find(rp => rp.planId === payload.planId);
+        if (updated) { void upsertRatePlanToSupabase(updated); break; }
+      }
+    },
 
-    deleteRatePlan: (roomTypeId, planId) => set((s) => ({
-      roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, ratePlans: r.ratePlans.filter(p => p.planId !== planId) } : r)
-    })),
+    deleteRatePlan: (roomTypeId, planId) => {
+      const plan = get().roomTypes.find(r => r.roomTypeId === roomTypeId)?.ratePlans.find(p => p.planId === planId);
+      set((s) => ({
+        roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, ratePlans: r.ratePlans.filter(p => p.planId !== planId) } : r)
+      }));
+      if (plan) void deleteRatePlanFromSupabase(plan.planCode);
+    },
 
-    toggleRatePlanActive: (roomTypeId, planId) => set((s) => ({
-      roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, ratePlans: r.ratePlans.map(p => p.planId === planId ? { ...p, isActive: !p.isActive } : p) } : r)
-    })),
+    toggleRatePlanActive: (roomTypeId, planId) => {
+      set((s) => ({
+        roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, ratePlans: r.ratePlans.map(p => p.planId === planId ? { ...p, isActive: !p.isActive } : p) } : r)
+      }));
+      // Persistance de l'état actif
+      const updated = get().roomTypes.find(r => r.roomTypeId === roomTypeId)?.ratePlans.find(p => p.planId === planId);
+      if (updated) void upsertRatePlanToSupabase(updated);
+    },
+
+    duplicateRatePlan: (roomTypeId, planId) => {
+      const source = get().roomTypes.find(r => r.roomTypeId === roomTypeId)?.ratePlans.find(p => p.planId === planId);
+      if (!source) return;
+      const newCode = `${source.planCode}-COPY`;
+      const newId = `plan_${newCode.toLowerCase()}`;
+      let copy!: RatePlanData;
+      set((s) => {
+        copy = {
+          ...source,
+          internalId: nextInternalId(),
+          planId: newId,
+          planCode: newCode,
+          planName: `${source.planName} (copie)`,
+          isReference: false,
+          prices: [],
+        };
+        return {
+          roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, ratePlans: [...r.ratePlans, copy] } : r),
+        };
+      });
+      if (copy) void upsertRatePlanToSupabase(copy);
+    },
 
     getCellKey: (ri, pi, d) => `${ri}:${pi}:${d}`,
     addAuditLog: (entry) => {

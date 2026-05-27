@@ -56,7 +56,10 @@ export interface RoomTypeData {
   isReference: boolean;
   isActive: boolean;
   assignedRatePlanIds: string[];
+  /** @deprecated Utiliser `partnerIds` — conservé pour rétro-compat */
   distributionChannels: string[];
+  /** IDs stables des partenaires assignés (slugs depuis constants/partners.ts) */
+  partnerIds?: string[];
   diffFromRef: number;
   diffType: "fixed" | "percent";
   statuses: RoomStatus[];
@@ -101,7 +104,12 @@ export interface RatePlanData {
   connectivityType: ConnectivityType;
   isConnectivityLocked: boolean;
   assignedRoomTypeIds: string[];
+  /** @deprecated Utiliser `partnerIds` — conservé pour rétro-compat */
   distributionChannels: string[];
+  /** IDs stables des partenaires liés à ce plan (slugs depuis constants/partners.ts) */
+  partnerIds?: string[];
+  /** Partenaire principal (OTA propriétaire de ce plan) */
+  primaryPartnerId?: string;
   prices: RatePrice[];
 }
 
@@ -201,6 +209,7 @@ export interface NewRoomPayload {
   isReference: boolean;
   assignedRatePlanIds: string[];
   distributionChannels: string[];
+  partnerIds?: string[];
   diffFromRef: number;
   diffType: "fixed" | "percent";
   // Création optionnelle d'une chambre virtuelle
@@ -220,6 +229,8 @@ export interface NewRatePlanPayload {
   connectivityType: ConnectivityType;
   assignedRoomTypeIds: string[];
   distributionChannels: string[];
+  partnerIds?: string[];
+  primaryPartnerId?: string;
   minStay: number | null;
   maxStay: number | null;
   cancellationPolicy: string;
@@ -238,6 +249,7 @@ export interface UpdateRoomPayload {
   isReference: boolean;
   assignedRatePlanIds: string[];
   distributionChannels: string[];
+  partnerIds?: string[];
   diffFromRef: number;
   diffType: "fixed" | "percent";
 }
@@ -254,4 +266,6 @@ export interface UpdateRatePlanPayload {
   connectivityType: ConnectivityType;
   assignedRoomTypeIds: string[];
   distributionChannels: string[];
+  partnerIds?: string[];
+  primaryPartnerId?: string;
 }
