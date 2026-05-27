@@ -3,31 +3,21 @@
 
 /* ── Design tokens ──────────────────────────────────────────────────────────
    Single source of truth for the Flowtym PMS design system.
-   All modules reference these variables — never hardcode raw values.
    ────────────────────────────────────────────────────────────────────────── */
 @theme {
-  /* Brand colours */
   --color-violet-50:  #f5f3ff;
   --color-violet-100: #ede9fe;
   --color-violet-200: #ddd6fe;
   --color-violet-500: #8b5cf6;
   --color-violet-600: #7c3aed;
-
-  /* Typography */
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
-/* ── Base layer ─────────────────────────────────────────────────────────────
-   Applied to every element. Sets the Inter foundation with consistent
-   anti-aliasing — prevents any module from inheriting browser defaults.
-   ────────────────────────────────────────────────────────────────────────── */
 @layer base {
   body {
     @apply bg-[#F9FAFB] text-gray-900 font-sans antialiased;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";  /* Inter's alternate numerals */
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
-
-  /* Headings inherit font-family and gain consistent leading */
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-sans);
     line-height: 1.25;
@@ -35,9 +25,6 @@
   }
 }
 
-/* ── Component layer ────────────────────────────────────────────────────────
-   Reusable cross-module primitives.
-   ────────────────────────────────────────────────────────────────────────── */
 @layer components {
 
   /* ── Scrollbar ── */
@@ -46,171 +33,139 @@
   .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #D1D5DB; }
 
-  /* ── Flowtym Typography Scale ─────────────────────────────────────────────
-     Semantic classes for the full UI. Use these everywhere in place of
-     ad-hoc text-[Npx] font-* combos so all modules stay in sync.
+  /* ── Typography scale ────────────────────────────────────────────────────
+     NOTE: Tailwind v4 forbids @apply-ing custom classes.
+     Every class below uses only core utility names.
      ────────────────────────────────────────────────────────────────────── */
 
-  /* Page titles — one per route (h1 semantic) */
-  .ft-page-title {
-    @apply text-[22px] font-black text-gray-900 tracking-tight leading-tight;
-  }
+  .ft-page-title    { @apply text-[22px] font-black   text-gray-900 tracking-tight  leading-tight; }
+  .ft-section-title { @apply text-[16px] font-bold    text-gray-900 tracking-tight  leading-snug; }
+  .ft-card-title    { @apply text-[13px] font-bold    text-gray-800                 leading-snug; }
+  .ft-body          { @apply text-[13px] font-normal  text-gray-700                 leading-relaxed; }
+  .ft-secondary     { @apply text-[12px] font-normal  text-gray-500                 leading-normal; }
+  .ft-label         { @apply text-[11px] font-semibold text-gray-500 uppercase tracking-widest leading-none; }
+  .ft-nav-label     { @apply text-[13px] font-semibold text-gray-500                leading-none; }
+  .ft-micro         { @apply text-[10px] font-bold    text-gray-400 uppercase tracking-wider   leading-none; }
+  .ft-metric        { @apply text-[15px] font-black   text-gray-900 tabular-nums    leading-none; }
+  .ft-metric-lg     { @apply text-[24px] font-black   text-gray-900 tabular-nums    leading-none tracking-tight; }
+  .ft-data-critical { @apply text-[13px] font-bold    tabular-nums                  leading-none; }
 
-  /* Section titles — h2 level */
-  .ft-section-title {
-    @apply text-[16px] font-bold text-gray-900 tracking-tight leading-snug;
-  }
-
-  /* Card / panel header */
-  .ft-card-title {
-    @apply text-[13px] font-bold text-gray-800 leading-snug;
-  }
-
-  /* Body copy — default reading text */
-  .ft-body {
-    @apply text-[13px] font-normal text-gray-700 leading-relaxed;
-  }
-
-  /* Secondary / helper text */
-  .ft-secondary {
-    @apply text-[12px] font-normal text-gray-500 leading-normal;
-  }
-
-  /* Labels above inputs, table headers */
-  .ft-label {
-    @apply text-[11px] font-semibold text-gray-500 uppercase tracking-widest leading-none;
-  }
-
-  /* Navigation labels — topbar + sidebar items */
-  .ft-nav-label {
-    @apply text-[13px] font-semibold text-gray-500 tracking-normal leading-none;
-  }
-
-  /* Micro-labels: badge text, chip text */
-  .ft-micro {
-    @apply text-[10px] font-bold text-gray-400 uppercase tracking-wider leading-none;
-  }
-
-  /* Financial / metric numbers — must be tabular */
-  .ft-metric {
-    @apply text-[15px] font-black text-gray-900 tabular-nums leading-none;
-  }
-  .ft-metric-lg {
-    @apply text-[24px] font-black text-gray-900 tabular-nums leading-none tracking-tight;
-  }
-
-  /* Critical data — revenue figures, KPIs */
-  .ft-data-critical {
-    @apply text-[13px] font-bold tabular-nums leading-none;
-  }
-
-  /* ── Navigation bar uniform item ─────────────────────────────────────────
-     Guarantees every topbar/sidebar item has identical font treatment
-     regardless of which module renders it.
-     ────────────────────────────────────────────────────────────────────── */
+  /* ── Navigation ── */
   .ft-nav-item {
     @apply flex items-center gap-2 text-[13px] font-semibold tracking-normal leading-none transition-colors duration-150;
   }
 
-  /* ── Table primitives ────────────────────────────────────────────────────
-     Row-level classes keep all data tables visually consistent.
-     ────────────────────────────────────────────────────────────────────── */
-  .ft-table-header {
-    @apply text-[11px] font-bold text-gray-400 uppercase tracking-widest leading-none;
-  }
-  .ft-table-cell {
-    @apply text-[13px] font-medium text-gray-700 leading-none;
-  }
-  .ft-table-cell-mono {
-    @apply text-[12px] font-semibold text-gray-800 tabular-nums leading-none;
-  }
+  /* ── Table primitives ── */
+  .ft-table-header    { @apply text-[11px] font-bold    text-gray-400 uppercase tracking-widest leading-none; }
+  .ft-table-cell      { @apply text-[13px] font-medium  text-gray-700 leading-none; }
+  .ft-table-cell-mono { @apply text-[12px] font-semibold text-gray-800 tabular-nums leading-none; }
 
-  /* ── Badge variants (status) ─────────────────────────────────────────────
-     Semantic status indicators. All badges share the same size / shape.
-     ────────────────────────────────────────────────────────────────────── */
+  /* ── Badge — base shape (no colour) ── */
   .ft-badge {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold leading-none;
   }
-  .ft-badge-confirmed { @apply ft-badge bg-emerald-50 text-emerald-700 border border-emerald-200; }
-  .ft-badge-pending   { @apply ft-badge bg-amber-50   text-amber-700   border border-amber-200; }
-  .ft-badge-option    { @apply ft-badge bg-yellow-50  text-yellow-700  border border-yellow-200; }
-  .ft-badge-cancelled { @apply ft-badge bg-gray-100   text-gray-500    border border-gray-200; }
-  .ft-badge-noshow    { @apply ft-badge bg-red-50     text-red-700     border border-red-200; }
-  .ft-badge-checkin   { @apply ft-badge bg-blue-50    text-blue-700    border border-blue-200; }
-  .ft-badge-vip       { @apply ft-badge bg-amber-50   text-amber-600   border border-amber-200; }
 
-  /* ── KPI card ────────────────────────────────────────────────────────────
-     Consistent metric card used in FlowboardView, PlanningView, Dashboards.
-     ────────────────────────────────────────────────────────────────────── */
-  .ft-kpi-card {
-    @apply bg-white rounded-2xl border border-gray-100 p-4 flex flex-col gap-2;
+  /* ── Badge variants — all styles inlined (no @apply custom-class) ── */
+  .ft-badge-confirmed {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold leading-none
+           bg-emerald-50 text-emerald-700 border border-emerald-200;
   }
-  .ft-kpi-label  { @apply ft-label text-gray-400; }
-  .ft-kpi-value  { @apply ft-metric-lg; }
-  .ft-kpi-delta  { @apply text-[11px] font-semibold tabular-nums; }
+  .ft-badge-pending {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold leading-none
+           bg-amber-50 text-amber-700 border border-amber-200;
+  }
+  .ft-badge-option {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold leading-none
+           bg-yellow-50 text-yellow-700 border border-yellow-200;
+  }
+  .ft-badge-cancelled {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold leading-none
+           bg-gray-100 text-gray-500 border border-gray-200;
+  }
+  .ft-badge-noshow {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold leading-none
+           bg-red-50 text-red-700 border border-red-200;
+  }
+  .ft-badge-checkin {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold leading-none
+           bg-blue-50 text-blue-700 border border-blue-200;
+  }
+  .ft-badge-vip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold leading-none
+           bg-amber-50 text-amber-600 border border-amber-200;
+  }
 
-  /* ── Form primitives ─────────────────────────────────────────────────────
-     All form controls across modules share these base classes.
-     ────────────────────────────────────────────────────────────────────── */
+  /* ── KPI card ── */
+  .ft-kpi-card  { @apply bg-white rounded-2xl border border-gray-100 p-4 flex flex-col gap-2; }
+  .ft-kpi-label { @apply text-[11px] font-semibold text-gray-400 uppercase tracking-widest leading-none; }
+  .ft-kpi-value { @apply text-[24px] font-black text-gray-900 tabular-nums leading-none tracking-tight; }
+  .ft-kpi-delta { @apply text-[11px] font-semibold tabular-nums; }
+
+  /* ── Form ── */
   .ft-input {
     @apply w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5
            text-[13px] font-medium text-gray-800 placeholder-gray-400
            focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400
            transition-shadow duration-150;
   }
+  /* ft-select: same as ft-input + extras — inlined to avoid cross-apply */
   .ft-select {
-    @apply ft-input appearance-none cursor-pointer;
+    @apply w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5
+           text-[13px] font-medium text-gray-800 placeholder-gray-400
+           focus:outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-400
+           transition-shadow duration-150 appearance-none cursor-pointer;
   }
   .ft-input-label {
-    @apply ft-label mb-1.5 block;
+    @apply text-[11px] font-semibold text-gray-500 uppercase tracking-widest leading-none mb-1.5 block;
   }
 
-  /* ── Button primitives ───────────────────────────────────────────────────
-     Matches the action buttons used in modals and page toolbars.
-     ────────────────────────────────────────────────────────────────────── */
+  /* ── Buttons — base + variants (all inlined) ── */
   .ft-btn {
     @apply inline-flex items-center justify-center gap-2
            px-4 py-2 rounded-xl text-[13px] font-semibold
            transition-all duration-150 cursor-pointer select-none;
   }
-  .ft-btn-primary   { @apply ft-btn bg-violet-600 text-white hover:bg-violet-700 active:scale-[0.98]; }
-  .ft-btn-secondary { @apply ft-btn bg-gray-100   text-gray-700 hover:bg-gray-200 active:scale-[0.98]; }
-  .ft-btn-ghost     { @apply ft-btn bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700; }
-  .ft-btn-danger    { @apply ft-btn bg-red-50 text-red-600 hover:bg-red-100 border border-red-100; }
+  .ft-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold
+           transition-all duration-150 cursor-pointer select-none
+           bg-violet-600 text-white hover:bg-violet-700 active:scale-[0.98];
+  }
+  .ft-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold
+           transition-all duration-150 cursor-pointer select-none
+           bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-[0.98];
+  }
+  .ft-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold
+           transition-all duration-150 cursor-pointer select-none
+           bg-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700;
+  }
+  .ft-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold
+           transition-all duration-150 cursor-pointer select-none
+           bg-red-50 text-red-600 hover:bg-red-100 border border-red-100;
+  }
 
-  /* ── Sidebar group label ─────────────────────────────────────────────────
-     Group headers inside the sidebar (FLOWDAY, RÉSERVATIONS, etc.)
-     are already styled correctly in Sidebar.tsx — this class formalises
-     the spec so other modules can reference it.
-     ────────────────────────────────────────────────────────────────────── */
+  /* ── Layout primitives ── */
   .ft-sidebar-group-label {
     @apply text-[11px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-1.5;
   }
-
-  /* ── Page header area ────────────────────────────────────────────────────
-     Consistent top zone for every page view.
-     ────────────────────────────────────────────────────────────────────── */
   .ft-page-header {
     @apply px-6 py-5 border-b border-gray-100 bg-white shrink-0 flex items-center justify-between gap-4;
   }
-
-  /* ── Dropdown / popover card ─────────────────────────────────────────────
-     Tooltips, context menus, date pickers — all get the same shadow level.
-     ────────────────────────────────────────────────────────────────────── */
   .ft-popover {
     @apply bg-white rounded-2xl border border-gray-100
            shadow-[0_8px_32px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.04)];
   }
-
-  /* ── Divider ─────────────────────────────────────────────────────────── */
   .ft-divider { @apply border-t border-gray-100; }
 
-  /* ── Pagination ──────────────────────────────────────────────────────── */
+  /* ── Pagination ── */
   .ft-pagination-btn {
     @apply w-8 h-8 rounded-lg flex items-center justify-center text-[12px] font-semibold
            text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors;
   }
   .ft-pagination-btn-active {
-    @apply ft-pagination-btn bg-violet-50 text-violet-700 font-bold;
+    @apply w-8 h-8 rounded-lg flex items-center justify-center text-[12px] font-semibold
+           transition-colors bg-violet-50 text-violet-700 font-bold;
   }
 }
