@@ -1,6 +1,90 @@
-# TODO — Câblage RMS Enterprise
+# TODO — Formulaires typologies & plans tarifaires + Sélecteur partenaire
 
 Légende : [ ] à faire · [x] fait · [~] partiel · [!] bloqué
+
+---
+
+## TASK 1 — constants/partners.ts (34 partenaires)
+- [ ] Créer `frontend/src/constants/partners.ts` avec 34 entrées `{id, label, category}`
+- [ ] Catégories : `direct`, `ota_global`, `ota_fr`, `gds`, `to`, `other`
+- [ ] Exporter `PARTNERS`, `PARTNERS_BY_ID` (Map<id, Partner>), `PARTNER_CATEGORIES`
+- [ ] Mettre à jour `constants/channels.ts` → ré-exporter `CHANNELS` depuis `partners.ts`
+- [ ] Vérifier `npx tsc --noEmit` sans erreur sur les fichiers constants
+
+## TASK 2 — Store + Supabase persistence
+- [ ] Ajouter `partnerIds: string[]` à `RoomTypeData` dans `types/index.ts`
+- [ ] Ajouter `partnerIds: string[]` à `RatePlanData` dans `types/index.ts`
+- [ ] Créer `services/rms/rmsSupabasePersistence.ts` avec 4 helpers upsert/delete
+- [ ] Câbler `addRoomType` → `upsertRoomTypeToSupabase` dans le store
+- [ ] Câbler `updateRoomType` → `upsertRoomTypeToSupabase` dans le store
+- [ ] Câbler `deleteRoomType` → `deleteRoomTypeFromSupabase` dans le store
+- [ ] Câbler `addRatePlan` → `upsertRatePlanToSupabase` dans le store
+- [ ] Câbler `updateRatePlan` → `upsertRatePlanToSupabase` dans le store
+- [ ] Câbler `deleteRatePlan` → `deleteRatePlanFromSupabase` dans le store
+- [ ] Fix `updateRatePlan` : conditionner sur `planId` dans payload, pas `editingPlanId`
+- [ ] ✅ CHECKPOINT A : build propre, test create chambre → Supabase
+
+## TASK 3 — RoomManagerPanel : formulaire + harmonisation
+- [ ] Remplacer `DIST_CHANNELS` (8) par `PARTNERS` complet (34) avec groupes catégorie
+- [ ] Ajouter validation inline : bordure rouge si `name` ou `code` vide
+- [ ] Ajouter `isSaving` state + spinner sur bouton submit
+- [ ] Ajouter toast succès/erreur (composant inline)
+- [ ] Fermeture auto du formulaire après succès (délai 300ms)
+- [ ] Bouton Supprimer : confirmation + spinner pendant suppression
+- [ ] Harmoniser : `max-w-2xl`, `h-10`, labels `text-xs font-bold uppercase tracking-wider`
+- [ ] Tester : créer → annuler → modifier → supprimer
+
+## TASK 4 — RateManagerPanel : fix submit + harmonisation
+- [ ] Fix critique : `submit()` utilise `selectedPlanKey` pour update (pas `editingPlanId`)
+- [ ] Brancher champ recherche (state `query` → filtre `flatPlans`)
+- [ ] Remplacer `DIST_CHANNELS` par `PARTNERS` complet avec groupes
+- [ ] Ajouter `primaryPartnerId` dropdown dans le formulaire (obligatoire)
+- [ ] Ajouter validation inline (name + code)
+- [ ] Ajouter `isSaving` + toast succès/erreur
+- [ ] Fermeture auto après succès
+- [ ] Vérifier Toggle Actif/Inactif fonctionne dans la liste
+- [ ] Vérifier Dupliquer fonctionne + visible dans liste
+- [ ] Harmoniser visuellement avec RoomManagerPanel
+- [ ] ✅ CHECKPOINT B : les deux panels create/edit/delete fonctionnels
+
+## TASK 5 — RoomTypesPage : CRUD physique
+- [ ] Ajouter bouton `+ Nouvelle chambre` → `openRoomPanel()` en mode création
+- [ ] Ajouter bouton `Modifier` sur chaque ligne physique → `openRoomPanel(roomTypeId)`
+- [ ] Ajouter bouton `Supprimer` sur chaque ligne physique avec confirmation
+- [ ] Afficher chips partenaires sur chaque ligne
+- [ ] Message CTA si liste vide
+- [ ] ✅ CHECKPOINT C partiel : RoomTypesPage CRUD complet
+
+## TASK 6 — RatePlansPage : édition inline + filtre partenaire
+- [ ] Bouton `Modifier` sur chaque ligne → `openRatePanel(roomTypeId, planId)`
+- [ ] Toggle Actif/Inactif inline → `toggleRatePlanActive()`
+- [ ] Ajouter filtre partenaire (dropdown) à côté du filtre chambre
+- [ ] Ajouter colonne "Partenaire" dans le tableau
+- [ ] Supprimer notes "Phase 1" et "Édition dans le Calendrier" obsolètes
+- [ ] ✅ CHECKPOINT C : pages Paramètres 100% opérationnelles
+
+## TASK 7 — ReservationFormModal : sélecteur partenaire + filtrage plans
+- [ ] Remplacer `channel` select (5 options) par `partner` select (34 groupés)
+- [ ] Auto-renseigner `channel` et `partnerName` à partir du partenaire choisi
+- [ ] Construire liste plans : `allPlans.filter(p => p.partnerIds.includes(partnerId))`
+- [ ] Afficher message si aucun plan disponible pour ce partenaire
+- [ ] Brancher `getStayBreakdown()` quand plan + dates → afficher montant calculé
+- [ ] Ajouter warning (non bloquant) si partenaire ou plan manquant
+- [ ] ✅ CHECKPOINT D partiel : filtrage partenaire→plan opérationnel
+
+## TASK 8 — Synchronisation & contrôles finaux
+- [ ] Vérifier `useSupabaseSync` recharge `partner_ids` dans les mappings
+- [ ] Vérifier Planning affiche nouvelles typologies
+- [ ] Vérifier Calendrier tarifaire affiche nouveaux plans
+- [ ] `npx tsc --noEmit` → 0 erreur dans les fichiers touchés
+- [ ] `npm run build` → succès
+- [ ] Commit `feat(forms): room types + rate plans overhaul, 34 partners, Supabase persistence`
+- [ ] Push `main`
+- [ ] ✅ CHECKPOINT D : livraison complète
+
+---
+
+## Ancienne TODO (Câblage RMS Enterprise)
 
 ## Phase 1 — Bus & contrats
 - [x] T1.1 Étendre `RmsEventMap` avec les nouveaux événements
