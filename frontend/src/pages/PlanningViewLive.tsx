@@ -933,25 +933,25 @@ export const PlanningView = () => {
         {displayMode === 'Gantt' && (
           <div className="w-[170px] flex flex-col bg-white border-r border-gray-100 shrink-0 z-40">
            <div className="flex flex-col border-b border-gray-100">
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Détails TO %' } }))} className='h-10 flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <TrendingUp size={14} className='group-hover:text-indigo-400 transition-colors' />
+               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Détails TO %' } }))} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+                  <TrendingUp size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>TO %</span>
                </button>
-               <button onClick={() => setIsAvailabilityModalOpen(true)} className='h-10 flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <Lock size={14} className='group-hover:text-indigo-400 transition-colors' />
+               <button onClick={() => setIsAvailabilityModalOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+                  <Lock size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Ch. libres</span>
                </button>
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Détails ADR' } }))} className='h-10 flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <Euro size={14} className='group-hover:text-indigo-400 transition-colors' />
+               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Détails ADR' } }))} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+                  <Euro size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>ADR</span>
                </button>
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Liste des Événements' } }))} className='h-10 flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <Zap size={14} className='group-hover:text-indigo-400 transition-colors' />
+               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Liste des Événements' } }))} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+                  <Zap size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Événements</span>
                </button>
            </div>
 
-           <div className="h-20 flex items-center px-4 bg-gray-50/30">
+           <div className="h-[56px] flex items-center px-4 bg-gray-50/30">
               <div className="relative w-full">
                  <select 
                    value={floorFilter}
@@ -976,7 +976,7 @@ export const PlanningView = () => {
                 });
 
                 return (
-                  <div key={room.id} className="h-[38px] flex items-center px-4 border-b border-gray-100 group">
+                  <div key={room.id} className="h-[32px] flex items-center px-4 border-b border-gray-100 group">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                        <span 
                          className="text-[14px] font-semibold text-gray-900 cursor-help" 
@@ -1011,21 +1011,21 @@ export const PlanningView = () => {
                <div className="sticky top-0 z-30 bg-white border-b border-gray-100 w-full overflow-hidden">
                   <div className="flex text-center flex-nowrap w-full">
                      {days.map(d => (
-                       <div key={`occ-${d.id}`} className={cn("h-10 border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
+                       <div key={`occ-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
                           <span className={cn("text-[11px] font-black", d.occ > 80 ? "text-emerald-400" : d.occ > 50 ? "text-orange-300" : "text-gray-400")}>{d.occ}%</span>
                        </div>
                      ))}
                   </div>
                   <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
                      {days.map(d => (
-                       <div key={`avail-${d.id}`} className={cn("h-10 border-r border-b border-gray-50 flex items-center justify-center transition-colors font-sans shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
+                       <div key={`avail-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors font-sans shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
                           <span className="text-[13px] font-black text-indigo-400">{d.available}</span>
                        </div>
                      ))}
                   </div>
                   <div className="flex text-center w-full flex-nowrap">
                      {days.map(d => (
-                       <div key={`adr-${d.id}`} className={cn("h-10 border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
+                       <div key={`adr-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
                           <span className="text-[11px] font-black text-violet-300">{d.adr}€</span>
                        </div>
                      ))}
@@ -1061,7 +1061,7 @@ export const PlanningView = () => {
                            }}
                            onMouseLeave={() => setHoveredEvents(null)}
                            className={cn(
-                             'h-10 border-r border-b border-gray-50 flex items-center justify-center transition-colors cursor-pointer hover:bg-indigo-50/50 shrink-0',
+                             'h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors cursor-pointer hover:bg-indigo-50/50 shrink-0',
                              d.isWeekend && 'bg-gray-50/10',
                            )}
                            style={{ width: `${colWidth}%` }}
@@ -1086,7 +1086,7 @@ export const PlanningView = () => {
                   </div>
                   <div className="flex bg-white w-full flex-nowrap">
                      {days.map((d, i) => (
-                       <div key={`date-${d.id}`} className={cn("shrink-0 h-16 flex flex-col items-center justify-center border-r border-gray-100 transition-all", d.isWeekend ? "bg-[#FFF9F5]/50" : "bg-white", i === 0 && "bg-indigo-50/30 ring-2 ring-inset ring-indigo-100/50")} style={{ width: `${colWidth}%` }}>
+                       <div key={`date-${d.id}`} className={cn("shrink-0 h-[56px] flex flex-col items-center justify-center border-r border-gray-100 transition-all", d.isWeekend ? "bg-[#FFF9F5]/50" : "bg-white", i === 0 && "bg-indigo-50/30 ring-2 ring-inset ring-indigo-100/50")} style={{ width: `${colWidth}%` }}>
                          <span className={cn("text-[10px] font-black uppercase tracking-widest mb-1", d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.dayName}</span>
                          <div className="flex items-baseline gap-1.5 leading-none">
                             <span className={cn("text-[17px] font-black", i === 0 ? "text-indigo-400" : d.isWeekend ? "text-orange-400" : "text-gray-900")}>{d.dateNum}</span>
@@ -1108,7 +1108,7 @@ export const PlanningView = () => {
                      {rooms.map((room) => (
                       <div 
                          key={`row-${room.id}`} 
-                         className="h-[38px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
+                         className="h-[32px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
                          onDragOver={handleDragOver}
                          onDrop={(e) => handleDrop(e, room)}
                        >
@@ -1299,7 +1299,7 @@ export const PlanningView = () => {
                                  setIsDetailsModalOpen(true);
                                }}
                                className={cn(
-                                 'absolute h-[30px] top-1 rounded-lg border flex items-center px-2 gap-1.5 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden text-xs',
+                                 'absolute h-[26px] top-[3px] rounded-lg border flex items-center px-2 gap-1.5 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden text-xs',
                                  opacityClass
                                )}
                                style={{ 
