@@ -191,6 +191,7 @@ function TodayView() {
   const [showRightPanel, setShowRightPanel] = useState(false);
   const [showRealtimeIndicators, setShowRealtimeIndicators] = useState(true);
   const [showTimeline, setShowTimeline] = useState(true);
+  const [showOptimizePanel, setShowOptimizePanel] = useState(false);
   const flowday = useFlowdayDataset();
   const hotelQ = useActiveHotel();
   const kpis: FlowdayKpis = flowday.kpis;
@@ -239,7 +240,10 @@ function TodayView() {
                 <BarChart2 size={18} className="mr-2 text-purple-500" />
                 {showRightPanel ? 'Masquer le volet' : 'Afficher KPIs'}
               </button>
-              <button className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-sm shadow-purple-600/20 flex items-center transition-all hover:scale-[1.02] active:scale-[0.98]">
+              <button
+                onClick={() => setShowOptimizePanel(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-sm shadow-purple-600/20 flex items-center transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
                 <Zap size={18} className="mr-2" />
                 Optimiser la journée
               </button>
@@ -303,9 +307,59 @@ function TodayView() {
 
             {/* Right Sidebar */}
             {showRightPanel && <RightSidebar onHide={() => setShowRightPanel(false)} />}
-            
+
           </div>
         </main>
+
+        {/* ── Optimiser la journée — panel ──────────────────────────── */}
+        {showOptimizePanel && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center">
+                    <Zap size={16} className="text-purple-600" />
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-[15px]">Priorités du jour</h3>
+                </div>
+                <button onClick={() => setShowOptimizePanel(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="p-5 space-y-3">
+                {[
+                  { icon: LogIn,       color: 'text-emerald-600 bg-emerald-50', label: 'Arrivées aujourd\'hui',   value: kpis.arrivalsToday, unit: 'check-in(s) à traiter' },
+                  { icon: LogOut,      color: 'text-blue-600 bg-blue-50',       label: 'Départs aujourd\'hui',    value: liveRows.filter(r => (r as any).movement === 'departure').length, unit: 'check-out(s) à finaliser' },
+                  { icon: Moon,        color: 'text-violet-600 bg-violet-50',   label: 'Chambres en séjour',      value: kpis.occupancy,   unit: `sur ${kpis.totalRooms} chambres` },
+                  { icon: CreditCard,  color: 'text-red-600 bg-red-50',         label: 'Soldes débiteurs',        value: kpis.unpaidCount, unit: 'paiements à régulariser' },
+                ].map(({ icon: Icon, color, label, value, unit }) => (
+                  <div key={label} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
+                      <Icon size={16} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-gray-500">{label}</p>
+                      <p className="text-[13px] font-bold text-gray-900">
+                        {flowday.isLoading ? '…' : <><span className="text-[18px]">{value ?? 0}</span> <span className="text-[12px] text-gray-400 font-medium">{unit}</span></>}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 pb-4 flex gap-2">
+                <button
+                  onClick={() => { setShowOptimizePanel(false); setShowRightPanel(true); }}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-[13px] font-semibold px-4 py-2.5 rounded-xl transition-colors"
+                >
+                  Voir le tableau de bord
+                </button>
+                <button onClick={() => setShowOptimizePanel(false)} className="px-4 py-2.5 rounded-xl text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }
