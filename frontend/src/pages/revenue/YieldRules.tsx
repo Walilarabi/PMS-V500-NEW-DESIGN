@@ -5,7 +5,7 @@
  * Version simplifiée Phase 1
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Zap,
   Plus,
@@ -19,6 +19,12 @@ import {
   Clock,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
+import {
+  syncConfigBlobToSupabase,
+  fetchConfigBlobFromSupabase,
+} from '../../services/settings/settingsPersistence';
+
+const YIELD_NS = 'yield_rules';
 
 const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
 
@@ -166,24 +172,23 @@ function generateYieldRules(): YieldRule[] {
 }
 
 export function YieldRules() {
-  const [rules, setRulesRaw] = useState<YieldRule[]>(() => {
-    try {
-      const raw = localStorage.getItem('flowtym_yield_rules');
-      if (!raw) return generateYieldRules();
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : generateYieldRules();
-    } catch {
-      return generateYieldRules();
-    }
-  });
-  const setRules: typeof setRulesRaw = (updater) => {
-    setRulesRaw((prev) => {
-      const next = typeof updater === 'function' ? (updater as (p: YieldRule[]) => YieldRule[])(prev) : updater;
-      try { localStorage.setItem('flowtym_yield_rules', JSON.stringify(next)); } catch { /* ignore */ }
+  const [rules, setRulesRaw] = useState<YieldRule[]>(generateYieldRules);
+  const [selectedRule, setSelectedRule] = useState<YieldRule | null>(null);
+
+  // Load from Supabase on mount
+  useEffect(() => {
+    fetchConfigBlobFromSupabase<YieldRule[]>(YIELD_NS).then(saved => {
+      if (Array.isArray(saved) && saved.length > 0) setRulesRaw(saved);
+    });
+  }, []);
+
+  const setRules = (updater: YieldRule[] | ((prev: YieldRule[]) => YieldRule[])) => {
+    setRulesRaw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      void syncConfigBlobToSupabase(YIELD_NS, next);
       return next;
     });
   };
-  const [selectedRule, setSelectedRule] = useState<YieldRule | null>(null);
 
   // KPIs
   const activeCount = rules.filter(r => r.active).length;

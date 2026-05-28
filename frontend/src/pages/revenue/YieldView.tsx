@@ -7,7 +7,7 @@
  * Statut : fonctionnel — extrait de l'ancien RevenueView. Le moteur
  * "Little Yielder" branche les déclencheurs ci-dessous sur les prix réels.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   TrendingUp, XCircle, BarChart2, Zap, MoreVertical, Info,
 } from 'lucide-react';
@@ -17,6 +17,10 @@ import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
 import { cn } from '@/src/lib/utils';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
+import {
+  syncConfigBlobToSupabase,
+  fetchConfigBlobFromSupabase,
+} from '@/src/services/settings/settingsPersistence';
 
 interface YieldRule {
   title: string;
@@ -25,7 +29,7 @@ interface YieldRule {
   active: boolean;
 }
 
-const STORAGE_KEY = 'flowtym_yield_view_rules';
+const YIELD_VIEW_NS = 'yield_view_rules';
 
 const DEFAULT_YIELD_RULES: YieldRule[] = [
   { title: 'R1 — Forte demande (volume)',  trigger: 'Volume de ventes > 4 paliers',  desc: 'Augmente les prix lorsque les ventes dépassent des seuils de capacité.', active: true },
@@ -42,19 +46,18 @@ const RULE_ICONS = [TrendingUp, XCircle, BarChart2, Zap];
 
 export const YieldView: React.FC = () => {
   const [selectedRule, setSelectedRule] = useState<YieldRule | null>(null);
-  const [rules, setRulesRaw] = useState<YieldRule[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return DEFAULT_YIELD_RULES;
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_YIELD_RULES;
-    } catch {
-      return DEFAULT_YIELD_RULES;
-    }
-  });
+  const [rules, setRulesRaw] = useState<YieldRule[]>(DEFAULT_YIELD_RULES);
+
+  // Load from Supabase on mount
+  useEffect(() => {
+    fetchConfigBlobFromSupabase<YieldRule[]>(YIELD_VIEW_NS).then(saved => {
+      if (Array.isArray(saved) && saved.length > 0) setRulesRaw(saved);
+    });
+  }, []);
+
   const setRules = (next: YieldRule[]) => {
     setRulesRaw(next);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    void syncConfigBlobToSupabase(YIELD_VIEW_NS, next);
   };
   const toggleRule = (title: string) => {
     setRules(rules.map((r) => (r.title === title ? { ...r, active: !r.active } : r)));
