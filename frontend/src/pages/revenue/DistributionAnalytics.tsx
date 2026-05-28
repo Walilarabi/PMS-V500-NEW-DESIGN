@@ -71,6 +71,7 @@ import {
   getDataSourceStatus,
 } from '@/src/lib/rms/distributionFromData';
 import { Database, Info } from 'lucide-react';
+import { useDistributionChannels } from '@/src/hooks/useDistributionChannels';
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* TYPES                                                                      */
@@ -376,7 +377,8 @@ export function DistributionAnalytics() {
   >('revenue');
   const [compare, setCompare] = useState<'prev' | 'lastYear' | 'budget'>('prev');
 
-  const channelData = CHANNELS;
+  const { data: liveChannels, isSuccess: hasLiveChannels } = useDistributionChannels(period);
+  const channelData = (hasLiveChannels && liveChannels && liveChannels.length > 0) ? liveChannels : CHANNELS;
 
   // Cross-module : promotions actives par canal, lu en temps réel depuis le
   // store. Mis à jour automatiquement à chaque toggle/edit côté Promotions.
@@ -594,7 +596,18 @@ export function DistributionAnalytics() {
         />
 
         {/* Bannière source de données */}
-        <DataSourceBanner status={dataStatus} />
+        {hasLiveChannels && liveChannels && liveChannels.length > 0 ? (
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 rounded-2xl border border-emerald-200/70 bg-emerald-50/60 p-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600"><Database className="h-4 w-4" /></div>
+            <div>
+              <p className="text-sm font-semibold text-emerald-900">Données réelles · {liveChannels.length} canaux actifs</p>
+              <p className="text-xs text-emerald-700/70 mt-0.5">Répartition calculée depuis vos réservations Supabase ({PERIOD_LABELS[period]?.toLowerCase()})</p>
+            </div>
+          </motion.div>
+        ) : (
+          <DataSourceBanner status={dataStatus} />
+        )}
 
         {/* KPI ROW */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
