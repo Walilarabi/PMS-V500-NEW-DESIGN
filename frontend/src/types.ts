@@ -167,7 +167,9 @@ export type PageId =
   | 'settings_distribution_logs'
   | 'settings_roles'
   | 'settings_sessions'
-  | 'settings_system_health';
+  | 'settings_system_health'
+  // ── 9. SUPPORT ─────────────────────────────────────────────────────────────
+  | 'support';
 
 export interface Reservation {
   id: string;

@@ -71,6 +71,9 @@ const SasPartnersView     = lz(() => import('@/src/pages/sas/SasPartnersView'), 
 // Settings
 const SettingsView        = lz(() => import('@/src/pages/SettingsView'),                   'SettingsView');
 
+// Support / Aide
+const SupportView         = lz(() => import('@/src/pages/support/SupportView'),            'SupportView');
+
 // ── Page-transition skeleton ───────────────────────────────────────────────
 const PageSkeleton = () => (
   <div className="flex-1 flex flex-col p-6 gap-4 bg-[#F9FAFB] animate-pulse">
@@ -240,6 +243,10 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'rapports_revenue':
     case 'rapports_housekeeping':
       return <AnalysisLayout activePage="analysis" onNavigateSubPage={(p) => setActivePage(p)} />;
+
+    // ── PARAMÈTRES ────────────────────────────────────────────────────────────
+    // ── AIDE & SUPPORT ────────────────────────────────────────────────────────
+    case 'support': return <SupportView />;
 
     // ── PARAMÈTRES ────────────────────────────────────────────────────────────
     case 'settings':
