@@ -37,10 +37,13 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const { data: admin = null, isLoading } = useQuery<AdminSession | null>({
     queryKey: ['platform-admin-me'],
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from('platform_admins')
         .select('id, email, full_name, role')
+        .eq('user_id', user.id)
         .eq('is_active', true)
         .maybeSingle();
       if (error) throw error;
