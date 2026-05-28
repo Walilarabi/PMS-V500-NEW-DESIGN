@@ -21,6 +21,7 @@ interface Hotel {
   phone: string | null; siret: string | null; tva_number: string | null;
   currency: string | null; timezone: string | null; active: boolean; created_at: string;
   website: string | null; stars: number | null; total_rooms: number | null; description: string | null;
+  internal_notes: string | null;
 }
 
 interface HotelSub {
@@ -46,7 +47,7 @@ const EMPTY: Omit<Hotel, 'id' | 'created_at'> = {
   name: '', city: '', country: 'France', address: '', zip: '',
   email: '', phone: '', siret: '', tva_number: '', website: '',
   currency: 'EUR', timezone: 'Europe/Paris', active: true,
-  stars: null, total_rooms: null, description: null,
+  stars: null, total_rooms: null, description: null, internal_notes: null,
 };
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
@@ -65,7 +66,7 @@ function useHotels() {
     queryKey: ['admin-hotels-v3'],
     queryFn: async () => {
       const { data, error } = await db.from('hotels')
-        .select('id,name,city,country,address,zip,email,phone,siret,tva_number,currency,timezone,active,created_at,website,stars,total_rooms,description')
+        .select('id,name,city,country,address,zip,email,phone,siret,tva_number,currency,timezone,active,created_at,website,stars,total_rooms,description,internal_notes')
         .order('name');
       if (error) throw error;
       return data ?? [];
@@ -201,7 +202,7 @@ export const AdminHotels: React.FC = () => {
   };
 
   const openEdit = (h: Hotel) => {
-    setForm({ name: h.name, city: h.city ?? '', country: h.country ?? 'France', address: h.address ?? '', zip: h.zip ?? '', email: h.email ?? '', phone: h.phone ?? '', siret: h.siret ?? '', tva_number: h.tva_number ?? '', currency: h.currency ?? 'EUR', timezone: h.timezone ?? 'Europe/Paris', active: h.active, website: h.website ?? '', stars: h.stars, total_rooms: h.total_rooms, description: h.description });
+    setForm({ name: h.name, city: h.city ?? '', country: h.country ?? 'France', address: h.address ?? '', zip: h.zip ?? '', email: h.email ?? '', phone: h.phone ?? '', siret: h.siret ?? '', tva_number: h.tva_number ?? '', currency: h.currency ?? 'EUR', timezone: h.timezone ?? 'Europe/Paris', active: h.active, website: h.website ?? '', stars: h.stars, total_rooms: h.total_rooms, description: h.description, internal_notes: h.internal_notes });
     setDrawerHotel(h); setEditMode(true); setDrawerTab('general');
   };
 
@@ -481,12 +482,53 @@ const HotelContactView: React.FC<{ hotel: Hotel }> = ({ hotel }) => (
   </div>
 );
 
-const HotelNotesView: React.FC<{ hotel: Hotel }> = ({ hotel: _ }) => (
-  <div className="text-[13px] text-gray-400 text-center py-8">
-    <FileText size={24} className="mx-auto mb-2 text-gray-200" />
-    Notes internes à venir.
-  </div>
-);
+const HotelNotesView: React.FC<{ hotel: Hotel }> = ({ hotel }) => {
+  const qc = useQueryClient();
+  const [text, setText] = useState(hotel.internal_notes ?? '');
+  const [dirty, setDirty] = useState(false);
+
+  const saveMut = useMutation({
+    mutationFn: async (notes: string) => {
+      const { error } = await db.from('hotels').update({ internal_notes: notes || null }).eq('id', hotel.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-hotels-v3'] });
+      toast.success('Notes enregistrées.'); setDirty(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const handleChange = (v: string) => { setText(v); setDirty(v !== (hotel.internal_notes ?? '')); };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Notes internes</p>
+        {dirty && (
+          <button
+            onClick={() => saveMut.mutate(text)}
+            disabled={saveMut.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-[#8B5CF6] text-white rounded-xl text-[11px] font-bold hover:bg-[#7C3AED] disabled:opacity-60">
+            <Save size={11} />{saveMut.isPending ? '…' : 'Enregistrer'}
+          </button>
+        )}
+      </div>
+      <textarea
+        value={text}
+        onChange={e => handleChange(e.target.value)}
+        rows={12}
+        placeholder="Historique des échanges, conditions particulières, contacts clés, observations commerciales…"
+        className="w-full px-3.5 py-3 rounded-xl border border-gray-200 text-[12px] text-gray-800 outline-none focus:ring-2 focus:ring-[#8B5CF6]/30 focus:border-[#8B5CF6] resize-none leading-relaxed placeholder:text-gray-300"
+      />
+      {hotel.internal_notes && (
+        <p className="text-[10px] text-gray-300">
+          Dernière modification · {new Date(hotel.created_at).toLocaleDateString('fr-FR')}
+        </p>
+      )}
+    </div>
+  );
+};
 
 const HotelSubscriptionTab: React.FC<{ hotelId: string; hotelName: string }> = ({ hotelId, hotelName }) => {
   const qc = useQueryClient();

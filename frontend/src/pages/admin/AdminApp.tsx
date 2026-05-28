@@ -20,6 +20,7 @@ import { AdminContracts }    from './AdminContracts';
 import { AdminSupportMode }  from './AdminSupportMode';
 import { AdminLogs }         from './AdminLogs';
 import { AdminSettings }     from './AdminSettings';
+import { AdminTeam }         from './AdminTeam';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ export type AdminPage =
   | 'dashboard' | 'hotels' | 'users'
   | 'subscriptions' | 'billing' | 'contracts'
   | 'support_mode' | 'support' | 'articles'
-  | 'logs' | 'settings';
+  | 'logs' | 'settings' | 'team';
 
 interface NavGroup {
   label: string;
@@ -78,6 +79,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'logs',     label: 'Logs & Activité',  icon: Activity,  requiredRole: 'super_admin' },
       { id: 'settings', label: 'Paramètres',        icon: Settings,  requiredRole: 'super_admin' },
+      { id: 'team',     label: 'Équipe admin',      icon: Shield,    requiredRole: 'super_admin' },
     ],
   },
 ];
@@ -211,6 +213,7 @@ export const AdminApp: React.FC = () => {
           {page === 'articles'      && <AdminArticles />}
           {page === 'logs'          && <AdminLogs />}
           {page === 'settings'      && <AdminSettings />}
+          {page === 'team'          && <AdminTeam />}
         </div>
       </main>
 
