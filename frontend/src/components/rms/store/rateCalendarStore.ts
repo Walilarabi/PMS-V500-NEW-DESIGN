@@ -4,9 +4,7 @@ import {
   NewRoomPayload, NewRatePlanPayload, UpdateRoomPayload, UpdateRatePlanPayload,
   CalcMode, RatePlanData
 } from "../types";
-import { pricingRules } from "../data/mockData";
 import { fetchCalendarDataFromSupabase as fetchCalendarData } from "../data/supabaseAdapter";
-import { fetchCalendarData as fetchCalendarDataMock } from "../data/mockData";
 import { PricingRulesEngine } from "../engines/PricingRulesEngine";
 import { CascadePricingEngine } from "../engines/CascadePricingEngine";
 import { propagateVirtualRoomCascade, rebuildAllVirtualInventories } from "../engines/VirtualRoomCascadeEngine";
@@ -147,8 +145,15 @@ const initialStartDate = (() => {
   return today;
 })();
 
+const DEFAULT_PRICING_RULES: PricingRules = {
+  referenceRoomTypeId: '',
+  referencePlanId: '',
+  roomRules: [],
+  planRules: [],
+};
+
 export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
-  const rulesEngine = new PricingRulesEngine(pricingRules);
+  const rulesEngine = new PricingRulesEngine(DEFAULT_PRICING_RULES);
   const cascadeEngine = new CascadePricingEngine(rulesEngine);
 
   // Phase 8 — garde-fou universel : intercepte TOUS les `set({ roomTypes: ... })`
@@ -181,7 +186,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
     dateColumns: [],
     roomTypes: [],
     channels: [],
-    pricingRules: pricingRules,
+    pricingRules: DEFAULT_PRICING_RULES,
     isLoading: false,
     loadError: null,
     isSaving: false,
@@ -304,25 +309,9 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         const roomTypesWithVirtual = rebuildAllVirtualInventories(roomTypes);
         set({ roomTypes: roomTypesWithVirtual, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
       } catch (err) {
-        // En cas de timeout ou erreur Supabase, fallback immédiat sur le mock
-        // au lieu de bloquer l'utilisateur sur un fallback erreur. C'est ce
-        // qu'attend un utilisateur du PMS : voir DES données (mocks) plutôt
-        // qu'un message d'erreur opaque.
         const message = err instanceof Error ? err.message : 'Erreur inconnue lors du chargement';
-        console.warn('[rateCalendarStore] loadData failed, falling back to mock:', message);
-        try {
-          const mockData = await fetchCalendarDataMock(startDate, viewMode);
-          const dateColumns = mockData.dateColumns;
-          const cleanRoomTypes = rebuildAllVirtualInventories(dedupRoomTypes(mockData.roomTypes));
-          const expandedRooms: Record<string, boolean> = {};
-          cleanRoomTypes.forEach((rt) => { expandedRooms[rt.roomTypeId] = true; });
-          const roomIds = cleanRoomTypes.map((r) => r.roomTypeId);
-          const planNames = Array.from(new Set(cleanRoomTypes.flatMap((r) => r.ratePlans.map((p) => p.planName))));
-          set({ roomTypes: cleanRoomTypes, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
-        } catch (mockErr) {
-          console.error('[rateCalendarStore] mock fallback failed:', mockErr);
-          set({ isLoading: false, loadError: message });
-        }
+        console.error('[rateCalendarStore] loadData failed:', message);
+        set({ isLoading: false, loadError: message });
       }
     },
 

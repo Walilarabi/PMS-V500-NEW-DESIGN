@@ -14,7 +14,7 @@ import {
   Activity, Monitor, Smartphone, Tablet, MapPin, Clock, ShieldOff, RefreshCw, AlertCircle, CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { useConfigStore } from '@/src/store/configStore';
+import { useAuth } from '@/src/domains/auth/AuthContext';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
 import { revokeOtherSessions } from '@/src/services/settings/settingsBackends';
@@ -77,63 +77,37 @@ function detectCurrent(): { device: DeviceKind; browser: string; os: string } {
   return { device, browser, os };
 }
 
-/** Génère une session démo pour un user donné. */
-function makeSampleSession(userId: string, userName: string, opts: Partial<SessionEntry> = {}): SessionEntry {
-  const devices: DeviceKind[] = ['desktop', 'mobile', 'tablet'];
-  const browsers = ['Chrome', 'Safari', 'Firefox', 'Edge'];
-  const os = ['Windows', 'macOS', 'iOS', 'Android'];
-  const cities = ['Paris', 'Lyon', 'Marseille', 'Nice', 'Bordeaux'];
-  return {
-    id: `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    userId,
-    userName,
-    device: devices[Math.floor(Math.random() * 3)],
-    browser: browsers[Math.floor(Math.random() * browsers.length)],
-    os: os[Math.floor(Math.random() * os.length)],
-    ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-    city: cities[Math.floor(Math.random() * cities.length)],
-    country: 'FR',
-    openedAt: new Date(Date.now() - Math.random() * 48 * 3600_000).toISOString(),
-    lastActiveAt: new Date(Date.now() - Math.random() * 30 * 60_000).toISOString(),
-    isCurrent: false,
-    ...opts,
-  };
-}
 
 export const SessionsPage: React.FC = () => {
-  const users = useConfigStore((s) => s.users);
+  const { session } = useAuth();
   const [sessions, setSessions] = useState<SessionEntry[]>(() => loadSessions());
   const [toast, setToast] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | DeviceKind>('all');
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_users');
 
-  // Bootstrap : si pas de sessions stockées OU pas de "current", on hydrate
+  // Bootstrap : crée la session courante réelle si absente
   useEffect(() => {
+    if (!session) return;
     if (sessions.find((s) => s.isCurrent)) return;
     const stored = loadSessions();
     const currentInfo = detectCurrent();
-    const adminUser = users.find((u) => u.role === 'admin' && u.active) ?? users[0];
-    if (!adminUser) return;
     const current: SessionEntry = {
-      ...makeSampleSession(adminUser.id, adminUser.name),
+      id: `sess_${session.userId}`,
+      userId: session.userId,
+      userName: session.fullName ?? session.email,
       ...currentInfo,
-      city: 'Paris',
-      country: 'FR',
-      ip: 'session locale',
+      city: '',
+      country: '',
+      ip: 'session courante',
       openedAt: new Date(Date.now() - 25 * 60_000).toISOString(),
       lastActiveAt: new Date().toISOString(),
       isCurrent: true,
     };
-    // Ajoute aussi 2-3 sessions historiques sur d'autres users pour la démo
-    const samples: SessionEntry[] = users
-      .filter((u) => u.active && u.id !== adminUser.id)
-      .slice(0, 3)
-      .map((u) => makeSampleSession(u.id, u.name));
-    const next = [current, ...samples, ...stored.filter((s) => !s.isCurrent)];
+    const next = [current, ...stored.filter((s) => !s.isCurrent)];
     setSessions(next);
     saveSessions(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [users.length]);
+  }, [session?.userId]);
 
   useEffect(() => { saveSessions(sessions); }, [sessions]);
 

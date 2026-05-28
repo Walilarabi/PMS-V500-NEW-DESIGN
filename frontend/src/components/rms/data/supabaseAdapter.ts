@@ -17,7 +17,6 @@
  *   - Errors are caught and logged; mock fallback returned to avoid breaking UI
  */
 import { supabase } from '@/src/lib/supabase';
-import { fetchCalendarData as fetchCalendarDataMock } from '../data/mockData';
 import type {
   RoomTypeData,
   DateColumn,
@@ -97,8 +96,7 @@ export async function fetchCalendarDataFromSupabase(
   const hotelId = await getCurrentHotelId();
 
   if (!hotelId) {
-    // Not authenticated or RPC unavailable → return mocks
-    return fetchCalendarDataMock(startDate, viewMode);
+    return { roomTypes: [], dateColumns: buildDateColumns(startDate, viewMode) };
   }
 
   const from = toISO(startDate);
@@ -146,8 +144,7 @@ export async function fetchCalendarDataFromSupabase(
     ]);
 
     if (roomsRes.error || plansRes.error) {
-      console.warn('[rms-adapter] supabase error, falling back to mocks:', roomsRes.error || plansRes.error);
-      return fetchCalendarDataMock(startDate, viewMode);
+      throw new Error((roomsRes.error || plansRes.error)?.message ?? 'Supabase fetch failed');
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -314,7 +311,6 @@ export async function fetchCalendarDataFromSupabase(
 
     return { roomTypes, dateColumns };
   } catch (err) {
-    console.warn('[rms-adapter] unexpected error, falling back to mocks:', err);
-    return fetchCalendarDataMock(startDate, viewMode);
+    throw err;
   }
 }

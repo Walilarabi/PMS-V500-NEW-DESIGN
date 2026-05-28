@@ -30,14 +30,12 @@ interface ConnectorMeta {
   /** Statut courant — persisté localement. */
   status: ConnectorStatus;
   lastSyncAt?: string;
-  inventoryShare?: number;     // % de chambres distribuées (mock)
-  bookingsLast30d?: number;    // nb réservations 30 derniers jours (mock)
 }
 
 const STORAGE_KEY = 'flowtym.connectors';
 const CUSTOM_KEY = 'flowtym.connectors.custom';
 
-const CATALOG: Omit<ConnectorMeta, 'status' | 'lastSyncAt' | 'inventoryShare' | 'bookingsLast30d'>[] = [
+const CATALOG: Omit<ConnectorMeta, 'status' | 'lastSyncAt'>[] = [
   { id: 'booking',     name: 'Booking.com',    category: 'ota', url: 'https://www.booking.com' },
   { id: 'expedia',     name: 'Expedia Group',  category: 'ota', url: 'https://www.expedia.fr' },
   { id: 'airbnb',      name: 'Airbnb',         category: 'ota', url: 'https://www.airbnb.fr' },
@@ -80,7 +78,7 @@ function saveStored(m: Record<string, Partial<ConnectorMeta>>) {
 }
 
 /** Partenaires personnalisés ajoutés par l'utilisateur (non présents dans le catalogue). */
-type CustomCatalogEntry = Omit<ConnectorMeta, 'status' | 'lastSyncAt' | 'inventoryShare' | 'bookingsLast30d'>;
+type CustomCatalogEntry = Omit<ConnectorMeta, 'status' | 'lastSyncAt'>;
 
 function loadCustom(): CustomCatalogEntry[] {
   if (typeof window === 'undefined') return [];
@@ -111,8 +109,6 @@ function buildConnectors(channels: ChannelConfig[]): ConnectorMeta[] {
       ...c,
       status: (override.status ?? (inStore ? 'connected' : 'disabled')) as ConnectorStatus,
       lastSyncAt: override.lastSyncAt,
-      inventoryShare: override.inventoryShare,
-      bookingsLast30d: override.bookingsLast30d,
     };
   });
 }
@@ -188,8 +184,6 @@ export const ConnectorsPage: React.FC = () => {
       [c.id]: {
         status: 'connected',
         lastSyncAt: new Date().toISOString(),
-        inventoryShare: 100,
-        bookingsLast30d: 12 + Math.floor(Math.random() * 50),
       },
     });
     logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Connecteur ${c.name} activé` });
@@ -198,7 +192,7 @@ export const ConnectorsPage: React.FC = () => {
 
   function disconnect(c: ConnectorMeta) {
     updateChannels(channels.filter((ch) => ch.id !== c.id));
-    persist({ [c.id]: { status: 'disabled', inventoryShare: 0, bookingsLast30d: 0 } });
+    persist({ [c.id]: { status: 'disabled' } });
     logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Connecteur ${c.name} désactivé` });
     notify(`${c.name} désactivé`);
   }
@@ -206,18 +200,9 @@ export const ConnectorsPage: React.FC = () => {
   async function syncNow(c: ConnectorMeta) {
     setSyncing(c.id);
     await new Promise((r) => setTimeout(r, 900));
-    const success = Math.random() > 0.1;
-    persist({
-      [c.id]: {
-        status: success ? 'connected' : 'error',
-        lastSyncAt: new Date().toISOString(),
-      },
-    });
-    logAudit({
-      action: 'module_inspected', module: 'channel_manager',
-      detail: `Sync ${c.name} ${success ? 'OK' : 'échouée'}`,
-    });
-    notify(success ? `${c.name} synchronisé` : `Erreur sync ${c.name}`);
+    persist({ [c.id]: { status: 'connected', lastSyncAt: new Date().toISOString() } });
+    logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Sync ${c.name} OK` });
+    notify(`${c.name} synchronisé`);
     setSyncing(null);
   }
 
@@ -309,18 +294,7 @@ export const ConnectorsPage: React.FC = () => {
                   </span>
                 </div>
 
-                {c.status === 'connected' && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-lg bg-slate-50 px-2.5 py-1.5">
-                      <div className="text-[10px] uppercase tracking-wide font-semibold text-slate-400">Inventaire</div>
-                      <div className="text-[13px] font-bold text-slate-900 tabular-nums">{c.inventoryShare ?? 100}%</div>
-                    </div>
-                    <div className="rounded-lg bg-slate-50 px-2.5 py-1.5">
-                      <div className="text-[10px] uppercase tracking-wide font-semibold text-slate-400">Réservations 30j</div>
-                      <div className="text-[13px] font-bold text-slate-900 tabular-nums">{c.bookingsLast30d ?? 0}</div>
-                    </div>
-                  </div>
-                )}
+
 
                 {c.lastSyncAt && (
                   <div className="text-[11px] text-slate-500 inline-flex items-center gap-1.5">
