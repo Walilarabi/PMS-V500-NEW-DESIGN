@@ -66,11 +66,14 @@ import {
 } from '@/src/store/promotionsStore';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { useLighthouseStore } from '@/src/store/lighthouseStore';
+import { useConfigStore } from '@/src/store/configStore';
 import {
   computeRealTotals,
   getDataSourceStatus,
 } from '@/src/lib/rms/distributionFromData';
 import { Database, Info } from 'lucide-react';
+import { useReservations } from '@/src/domains/reservations/hooks';
+import type { ReservationRow } from '@/src/domains/reservations/schemas';
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* TYPES                                                                      */
@@ -113,224 +116,140 @@ const spark = (n: number, base = 50, jitter = 25) =>
     Math.max(2, Math.round(base + Math.sin(i / 1.4) * jitter + Math.sin(i * 3.7 + base) * jitter * 0.3))
   );
 
-const CHANNELS: Channel[] = [
-  {
-    id: 'booking',
-    name: 'Booking.com',
-    shortName: 'B',
-    color: '#003580',
-    iconBg: 'bg-[#003580]',
-    iconText: 'text-white',
-    commissionRate: 10,
-    bookings: 412,
-    bookingsDelta: 4.2,
-    roomNights: 1068,
-    adr: 243,
-    revenue: 260000,
-    netRevenue: 234000,
-    commissionCost: 26000,
-    revpar: 86,
-    conversion: 13.7,
-    cancellationRate: 14.2,
-    leadTime: 18,
-    avgLOS: 2.6,
-    topSegment: 'Loisir',
-    topNationality: '🇫🇷 France',
-    topRoom: 'Supérieure',
-    performanceScore: 92,
-    trend: spark(14, 250, 60),
-    trendDelta: 6.4,
-  },
-  {
-    id: 'airbnb',
-    name: 'Airbnb',
-    shortName: 'A',
-    color: '#FF5A5F',
-    iconBg: 'bg-[#FF5A5F]',
-    iconText: 'text-white',
-    commissionRate: 15,
-    bookings: 189,
-    bookingsDelta: 11.8,
-    roomNights: 445,
-    adr: 283,
-    revenue: 126000,
-    netRevenue: 107000,
-    commissionCost: 19000,
-    revpar: 42,
-    conversion: 19.2,
-    cancellationRate: 8.1,
-    leadTime: 24,
-    avgLOS: 2.4,
-    topSegment: 'Loisir',
-    topNationality: '🇺🇸 USA',
-    topRoom: 'Suite',
-    performanceScore: 84,
-    trend: spark(14, 120, 35),
-    trendDelta: 8.1,
-  },
-  {
-    id: 'expedia',
-    name: 'Expedia',
-    shortName: 'E',
-    color: '#FBBC05',
-    iconBg: 'bg-amber-100',
-    iconText: 'text-amber-700',
-    commissionRate: 18,
-    bookings: 165,
-    bookingsDelta: -2.4,
-    roomNights: 389,
-    adr: 238,
-    revenue: 93000,
-    netRevenue: 76000,
-    commissionCost: 17000,
-    revpar: 31,
-    conversion: 9.7,
-    cancellationRate: 18.3,
-    leadTime: 21,
-    avgLOS: 2.3,
-    topSegment: 'Loisir',
-    topNationality: '🇬🇧 UK',
-    topRoom: 'Classique',
-    performanceScore: 71,
-    trend: spark(14, 95, 22),
-    trendDelta: -3.1,
-  },
-  {
-    id: 'hrs',
-    name: 'HRS',
-    shortName: 'H',
-    color: '#1F2937',
-    iconBg: 'bg-slate-800',
-    iconText: 'text-white',
-    commissionRate: 15,
-    bookings: 186,
-    bookingsDelta: 6.1,
-    roomNights: 345,
-    adr: 267,
-    revenue: 92000,
-    netRevenue: 78000,
-    commissionCost: 14000,
-    revpar: 31,
-    conversion: 18.5,
-    cancellationRate: 10.4,
-    leadTime: 12,
-    avgLOS: 1.8,
-    topSegment: 'Affaires',
-    topNationality: '🇩🇪 Allemagne',
-    topRoom: 'Standard',
-    performanceScore: 80,
-    trend: spark(14, 90, 18),
-    trendDelta: 4.7,
-  },
-  {
-    id: 'direct',
-    name: 'Direct',
-    shortName: 'D',
-    color: '#8B5CF6',
-    iconBg: 'bg-violet-100',
-    iconText: 'text-violet-700',
-    commissionRate: 0,
-    bookings: 145,
-    bookingsDelta: 9.3,
-    roomNights: 363,
-    adr: 230,
-    revenue: 83000,
-    netRevenue: 83000,
-    commissionCost: 0,
-    revpar: 28,
-    conversion: 17.5,
-    cancellationRate: 6.2,
-    leadTime: 10,
-    avgLOS: 2.5,
-    topSegment: 'Fidèle',
-    topNationality: '🇫🇷 France',
-    topRoom: 'Deluxe',
-    performanceScore: 95,
-    trend: spark(14, 82, 18),
-    trendDelta: 11.2,
-  },
-  {
-    id: 'tbo',
-    name: 'TBO.com',
-    shortName: 'T',
-    color: '#0EA5E9',
-    iconBg: 'bg-sky-100',
-    iconText: 'text-sky-700',
-    commissionRate: 20,
-    bookings: 122,
-    bookingsDelta: -4.6,
-    roomNights: 247,
-    adr: 288,
-    revenue: 71000,
-    netRevenue: 57000,
-    commissionCost: 14000,
-    revpar: 23,
-    conversion: 17.7,
-    cancellationRate: 12.9,
-    leadTime: 16,
-    avgLOS: 2.0,
-    topSegment: 'Affaires',
-    topNationality: '🇮🇳 Inde',
-    topRoom: 'Standard',
-    performanceScore: 64,
-    trend: spark(14, 70, 16),
-    trendDelta: -2.4,
-  },
-  {
-    id: 'agoda',
-    name: 'Agoda',
-    shortName: 'AG',
-    color: '#5BA8FF',
-    iconBg: 'bg-blue-100',
-    iconText: 'text-blue-700',
-    commissionRate: 14.5,
-    bookings: 114,
-    bookingsDelta: -7.9,
-    roomNights: 237,
-    adr: 276,
-    revenue: 65000,
-    netRevenue: 56000,
-    commissionCost: 9000,
-    revpar: 21,
-    conversion: 8.2,
-    cancellationRate: 22.4,
-    leadTime: 28,
-    avgLOS: 2.1,
-    topSegment: 'Loisir',
-    topNationality: '🇰🇷 Corée',
-    topRoom: 'Standard',
-    performanceScore: 58,
-    trend: spark(14, 60, 18),
-    trendDelta: -6.8,
-  },
-  {
-    id: 'lastminute',
-    name: 'Lastminute',
-    shortName: 'LM',
-    color: '#EC4899',
-    iconBg: 'bg-pink-100',
-    iconText: 'text-pink-700',
-    commissionRate: 18,
-    bookings: 126,
-    bookingsDelta: 3.2,
-    roomNights: 305,
-    adr: 190,
-    revenue: 58000,
-    netRevenue: 48000,
-    commissionCost: 10000,
-    revpar: 19,
-    conversion: 18.4,
-    cancellationRate: 11.7,
-    leadTime: 5,
-    avgLOS: 1.7,
-    topSegment: 'Loisir',
-    topNationality: '🇮🇹 Italie',
-    topRoom: 'Classique',
-    performanceScore: 72,
-    trend: spark(14, 55, 14),
-    trendDelta: 3.6,
-  },
-];
+/* Static visual metadata per normalized source key. Commission rates are
+   industry-standard estimates used only when no PMS-level override exists. */
+const CHANNEL_META: Record<string, { name: string; shortName: string; color: string; iconBg: string; iconText: string; commissionRate: number }> = {
+  BOOKING:     { name: 'Booking.com',  shortName: 'B',  color: '#003580', iconBg: 'bg-[#003580]', iconText: 'text-white',       commissionRate: 10   },
+  AIRBNB:      { name: 'Airbnb',       shortName: 'A',  color: '#FF5A5F', iconBg: 'bg-[#FF5A5F]', iconText: 'text-white',       commissionRate: 15   },
+  EXPEDIA:     { name: 'Expedia',      shortName: 'E',  color: '#FBBC05', iconBg: 'bg-amber-100',  iconText: 'text-amber-700',  commissionRate: 18   },
+  HRS:         { name: 'HRS',          shortName: 'H',  color: '#1F2937', iconBg: 'bg-slate-800',  iconText: 'text-white',       commissionRate: 15   },
+  DIRECT:      { name: 'Direct',       shortName: 'D',  color: '#8B5CF6', iconBg: 'bg-violet-100', iconText: 'text-violet-700', commissionRate: 0    },
+  TBO:         { name: 'TBO.com',      shortName: 'T',  color: '#0EA5E9', iconBg: 'bg-sky-100',    iconText: 'text-sky-700',    commissionRate: 20   },
+  AGODA:       { name: 'Agoda',        shortName: 'AG', color: '#5BA8FF', iconBg: 'bg-blue-100',   iconText: 'text-blue-700',   commissionRate: 14.5 },
+  LASTMINUTE:  { name: 'Lastminute',   shortName: 'LM', color: '#EC4899', iconBg: 'bg-pink-100',   iconText: 'text-pink-700',   commissionRate: 18   },
+  TRIPADVISOR: { name: 'TripAdvisor',  shortName: 'TA', color: '#34C759', iconBg: 'bg-green-100',  iconText: 'text-green-700',  commissionRate: 12   },
+  GOOGLE:      { name: 'Google Hotel', shortName: 'G',  color: '#4285F4', iconBg: 'bg-blue-50',    iconText: 'text-blue-700',   commissionRate: 10   },
+};
+
+function defaultChannelMeta(src: string) {
+  const upper = src.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return {
+    name: src.charAt(0).toUpperCase() + src.slice(1).toLowerCase(),
+    shortName: upper.slice(0, 2),
+    color: '#6B7280',
+    iconBg: 'bg-slate-100',
+    iconText: 'text-slate-700',
+    commissionRate: 12,
+  };
+}
+
+function computeChannelData(rows: ReservationRow[], roomCount: number): Channel[] {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Group by normalized source
+  const groups: Record<string, ReservationRow[]> = {};
+  for (const r of rows) {
+    const key = (r.source ?? 'direct').toUpperCase().trim();
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  }
+
+  return Object.entries(groups)
+    .map(([srcKey, srcRows]) => {
+      const meta = CHANNEL_META[srcKey] ?? defaultChannelMeta(srcKey);
+      const cancelled = srcRows.filter((r) => (r.status ?? '').toLowerCase() === 'cancelled');
+      const active = srcRows.filter((r) => (r.status ?? '').toLowerCase() !== 'cancelled');
+
+      const totalNights = active.reduce((s, r) => s + (r.nights ?? 0), 0);
+      const revenue = active.reduce((s, r) => s + (r.total_amount ?? 0), 0);
+      const netRevenue = Math.round(revenue * (1 - meta.commissionRate / 100));
+      const commissionCost = revenue - netRevenue;
+      const adr = totalNights > 0 ? Math.round(revenue / totalNights) : 0;
+      const revpar = roomCount > 0 ? Math.round(revenue / roomCount) : 0;
+      const cancellationRate = srcRows.length > 0
+        ? Math.round((cancelled.length / srcRows.length) * 1000) / 10
+        : 0;
+      const avgLOS = active.length > 0
+        ? Math.round((totalNights / active.length) * 10) / 10
+        : 0;
+
+      // Lead time: days between created_at and check_in
+      const validLeadTimes = active
+        .filter((r) => r.created_at && r.check_in)
+        .map((r) => Math.max(0, (new Date(r.check_in).getTime() - new Date(r.created_at!).getTime()) / 86_400_000));
+      const leadTime = validLeadTimes.length > 0
+        ? Math.round(validLeadTimes.reduce((s, v) => s + v, 0) / validLeadTimes.length)
+        : 0;
+
+      // Top segment
+      const segCount: Record<string, number> = {};
+      for (const r of active) { const s = r.segment ?? 'Loisir'; segCount[s] = (segCount[s] ?? 0) + 1; }
+      const topSegment = Object.entries(segCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'N/A';
+
+      // Top room type
+      const rtCount: Record<string, number> = {};
+      for (const r of active) { const t = r.room_type ?? 'Standard'; rtCount[t] = (rtCount[t] ?? 0) + 1; }
+      const topRoom = Object.entries(rtCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'N/A';
+
+      // Daily revenue sparkline — last 14 days
+      const trend: number[] = [];
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const ds = d.toISOString().slice(0, 10);
+        const dayRev = active.filter((r) => r.check_in === ds).reduce((s, r) => s + (r.total_amount ?? 0), 0);
+        trend.push(Math.round(dayRev));
+      }
+
+      // trendDelta: last 7 vs prior 7
+      const last7rev = trend.slice(7).reduce((s, v) => s + v, 0);
+      const prior7rev = trend.slice(0, 7).reduce((s, v) => s + v, 0);
+      const trendDelta = prior7rev > 0
+        ? Math.round(((last7rev - prior7rev) / prior7rev) * 1000) / 10
+        : 0;
+      const bookingsDelta = trendDelta;
+
+      // Performance score — heuristic composite
+      const performanceScore = Math.round(
+        Math.min(100, Math.max(0,
+          60 +
+          (adr > 150 ? 10 : adr > 80 ? 5 : 0) +
+          (cancellationRate < 10 ? 15 : cancellationRate < 20 ? 5 : -5) +
+          (meta.commissionRate === 0 ? 15 : meta.commissionRate < 12 ? 8 : 0)
+        ))
+      );
+
+      return {
+        id: srcKey.toLowerCase(),
+        name: meta.name,
+        shortName: meta.shortName,
+        color: meta.color,
+        iconBg: meta.iconBg,
+        iconText: meta.iconText,
+        commissionRate: meta.commissionRate,
+        bookings: srcRows.length,
+        bookingsDelta,
+        roomNights: totalNights,
+        adr,
+        revenue,
+        netRevenue,
+        commissionCost,
+        revpar,
+        conversion: 0,
+        cancellationRate,
+        leadTime,
+        avgLOS,
+        topSegment,
+        topNationality: 'N/A',
+        topRoom,
+        performanceScore,
+        trend: trend.some((v) => v > 0) ? trend : spark(14, Math.max(10, adr / 10), 5),
+        trendDelta,
+      } satisfies Channel;
+    })
+    .filter((c) => c.bookings > 0)
+    .sort((a, b) => b.revenue - a.revenue);
+}
 
 /* ────────────────────────────────────────────────────────────────────────── */
 /* UTILS                                                                      */
@@ -376,7 +295,13 @@ export function DistributionAnalytics() {
   >('revenue');
   const [compare, setCompare] = useState<'prev' | 'lastYear' | 'budget'>('prev');
 
-  const channelData = CHANNELS;
+  const reservationsQ = useReservations({ limit: 2000 });
+  const roomCount = useConfigStore((s) => s.rooms.length) || 1;
+
+  const channelData = useMemo(
+    () => computeChannelData(reservationsQ.data?.rows ?? [], roomCount),
+    [reservationsQ.data, roomCount],
+  );
 
   // Cross-module : promotions actives par canal, lu en temps réel depuis le
   // store. Mis à jour automatiquement à chaque toggle/edit côté Promotions.

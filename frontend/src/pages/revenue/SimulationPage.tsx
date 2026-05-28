@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
 import { TacticalEngineWidget } from '@/src/components/revenue/automation/TacticalEngineWidget';
+import { useReservations } from '@/src/domains/reservations/hooks';
+import { useConfigStore } from '@/src/store/configStore';
 
 interface Scenario {
   id: string;
@@ -38,7 +40,7 @@ const SCENARIOS: Scenario[] = [
   { id: 'aggressive', label: 'Stratégie agressive', hint: 'Intensité du yield agressif', icon: Swords, accent: '#DC2626', adrMax: 0.22, occMax: -9, roomNightsMax: 0 },
 ];
 
-const BASE = { adr: 326, occ: 78, roomNights: 1800 };
+const BASE_FALLBACK = { adr: 150, occ: 65, roomNights: 500 };
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
@@ -57,6 +59,20 @@ interface Kpi {
 export const SimulationPage: React.FC = () => {
   const [scenarioId, setScenarioId] = useState<string>('raise');
   const [intensity, setIntensity] = useState<number>(60);
+
+  const reservationsQ = useReservations({ limit: 500 });
+  const roomCount = useConfigStore((s) => s.rooms.length) || 1;
+
+  const BASE = useMemo(() => {
+    const rows = reservationsQ.data?.rows ?? [];
+    if (rows.length === 0) return BASE_FALLBACK;
+    const active = rows.filter((r) => (r.status ?? '').toLowerCase() !== 'cancelled');
+    const totalNights = active.reduce((s, r) => s + (r.nights ?? 0), 0);
+    const totalRevenue = active.reduce((s, r) => s + (r.total_amount ?? 0), 0);
+    const adr = totalNights > 0 ? Math.round(totalRevenue / totalNights) : BASE_FALLBACK.adr;
+    const occ = roomCount > 0 ? Math.min(100, Math.round((totalNights / (roomCount * 365)) * 100)) : BASE_FALLBACK.occ;
+    return { adr: Math.max(10, adr), occ: Math.max(5, occ), roomNights: Math.max(1, totalNights) };
+  }, [reservationsQ.data, roomCount]);
 
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) ?? SCENARIOS[0];
 
@@ -84,7 +100,7 @@ export const SimulationPage: React.FC = () => {
 
     const revparDelta = pctDelta(revpar, baseRevpar);
     return { kpis, revparDelta, caDelta: pctDelta(ca, baseCa) };
-  }, [scenario, intensity]);
+  }, [scenario, intensity, BASE]);
 
   const verdict =
     result.revparDelta > 1.5
