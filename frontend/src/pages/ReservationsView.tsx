@@ -26,6 +26,7 @@ import { TableSkeleton } from '@/src/components/ui/TableSkeleton';
 import { cn } from '@/src/lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useReservations as useContextReservations } from '@/src/contexts/ReservationContext';
 import { useReservations, useCreateReservation, useDeleteReservation } from '@/src/domains/reservations/hooks';
 import ReservationFormModal from '@/src/components/modals/ReservationFormModal';
@@ -315,6 +316,20 @@ export const ReservationsView = () => {
   }, [tableData, roomTypeFilter]);
 
   const totalPages = Math.max(1, Math.ceil((tableData?.total ?? 0) / perPage));
+
+  // ── Virtualizer for the table body
+  const tableContainerRef = React.useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count:          tableRows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize:   () => 52,
+    overscan:       5,
+  });
+  const virtualItems    = rowVirtualizer.getVirtualItems();
+  const paddingTop      = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom   = virtualItems.length > 0
+    ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
+    : 0;
 
   // ── KPI metrics from wide unfiltered data
   const kpis = React.useMemo(() => {
@@ -617,9 +632,13 @@ export const ReservationsView = () => {
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
+            <div
+              ref={tableContainerRef}
+              className="overflow-x-auto overflow-y-auto"
+              style={{ maxHeight: 'calc(100vh - 460px)', minHeight: '320px' }}
+            >
               <table className="w-full text-left border-collapse">
-                <thead className="bg-gray-50/80 border-b border-gray-100">
+                <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0 z-10">
                   <tr className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
                     <th className="px-4 py-3">Réf. partenaire</th>
                     <th className="px-4 py-3 text-center">Statut</th>
@@ -667,16 +686,23 @@ export const ReservationsView = () => {
                       </td>
                     </tr>
                   ) : (
-                    tableRows.map((row, idx) => (
-                      <ResRow
-                        key={`${row.id}-${idx}`}
-                        row={row}
-                        onView={() => openDetail(row)}
-                        onEdit={() => openEdit(row)}
-                        onDelete={() => setConfirmDelete({ id: row.id, ref: row.ref })}
-                        onCopy={() => copyRef(row.ref)}
-                      />
-                    ))
+                    <>
+                      {paddingTop > 0 && <tr style={{ height: paddingTop }}><td /></tr>}
+                      {virtualItems.map((vRow) => {
+                        const row = tableRows[vRow.index];
+                        return (
+                          <ResRow
+                            key={row.id}
+                            row={row}
+                            onView={() => openDetail(row)}
+                            onEdit={() => openEdit(row)}
+                            onDelete={() => setConfirmDelete({ id: row.id, ref: row.ref })}
+                            onCopy={() => copyRef(row.ref)}
+                          />
+                        );
+                      })}
+                      {paddingBottom > 0 && <tr style={{ height: paddingBottom }}><td /></tr>}
+                    </>
                   )}
                 </tbody>
               </table>
