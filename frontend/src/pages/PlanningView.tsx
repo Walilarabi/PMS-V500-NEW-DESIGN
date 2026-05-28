@@ -261,7 +261,7 @@ export const PlanningView = () => {
     setCurrentDate(next);
   };
   const handleToday = () => {
-    setCurrentDate(new Date(2026, 4, 1)); // Anchor at May 1st 2026 for demo data visibility
+    const today = new Date(); today.setHours(0, 0, 0, 0); setCurrentDate(today);
   };
 
   const viewLength = activeView === '7J' ? 7 : activeView === '15J' ? 15 : 31;

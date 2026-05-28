@@ -350,8 +350,9 @@ export const PlanningView = () => {
     setIsCustomizingMove(false);
   };
   const handleToday = () => {
-    setCurrentDate(new Date(2026, 4, 1));
-    setMonthDate(new Date(2026, 4, 1));
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    setCurrentDate(today);
+    setMonthDate(today);
   };
 
   const viewLength = activeView === '7J' ? 7 : activeView === '15J' ? 15 : 31;

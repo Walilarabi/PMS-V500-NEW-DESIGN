@@ -72,6 +72,7 @@ import { centralPricingEngine } from '../../services/revenue/centralPricingEngin
 import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 import { toast } from '../../hooks/use-toast';
+import { useAuth } from '@/src/domains/auth/AuthContext';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -351,6 +352,7 @@ function generateSkeletonRMSData(startDate: Date, days: number): DayRMSData[] {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function RMSTableauPro() {
+  const { session } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [viewPeriod, setViewPeriod] = useState<ViewPeriod>('15days');
 
@@ -980,8 +982,8 @@ export function RMSTableauPro() {
 
       const result = await RMSPropagationService.propagateWithProgress(
         validations,
-        'tenant_demo',
-        'user_demo',
+        session?.tenantId ?? '',
+        session?.userId ?? '',
         (progress, message) => {
           setPropagationProgress(progress);
           setPropagationMessage(message);

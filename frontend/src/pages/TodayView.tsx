@@ -69,19 +69,23 @@ const KpiCard = ({ title, subtitle, highlight, icon: Icon, colorClass, bgColorCl
   </div>
 );
 
-const timelineArrivals = [
-  { left: '20%', count: 2, items: ['101 - Sophie Dubois', '105 - Thomas Leroy'] },
-  { left: '50%', count: 3, items: ['107 - Claire Martin', '203 - Laura Chen', '204 - Pierre Moreau'] },
-  { left: '80%', count: 2, items: ['301 - Marco Rinaldi', '302 - Karim Haddad'] },
-  { left: '95%', count: 1, items: ['305 - Yuki Tanaka'] },
-];
-
-const timelineDepartures = [
-  { left: '15%', count: 3, items: ['102 - Arathew Smith', '202 - Nathalie B.', '208 - Emma Petit'] },
-  { left: '45%', count: 2, items: ['110 - Robert King', '210 - Ines Morel'] },
-  { left: '65%', count: 1, items: ['117 - Luca Rossi'] },
-  { left: '80%', count: 2, items: ['401 - Amelia Green', '402 - Hugo Blanc'] },
-];
+function buildTimelineBubbles(rows: { room: string; guest: string }[]): { left: string; count: number; items: string[] }[] {
+  if (rows.length === 0) return [];
+  const SLOTS = Math.min(rows.length, 5);
+  const step = 80 / SLOTS;
+  const perSlot = Math.ceil(rows.length / SLOTS);
+  const bubbles: { left: string; count: number; items: string[] }[] = [];
+  for (let i = 0; i < SLOTS; i++) {
+    const chunk = rows.slice(i * perSlot, (i + 1) * perSlot);
+    if (chunk.length === 0) break;
+    bubbles.push({
+      left: `${10 + i * step}%`,
+      count: chunk.length,
+      items: chunk.map((r) => `${r.room} - ${r.guest}`),
+    });
+  }
+  return bubbles;
+}
 
 const TimelineBubble: React.FC<{ event: { left: string; count: number; items: string[] }; tone: 'arrival' | 'departure' }> = ({ event, tone }) => (
   <div className="group absolute top-1/2 z-20 -translate-y-1/2" style={{ left: event.left }}>
@@ -108,7 +112,8 @@ const TimelineBubble: React.FC<{ event: { left: string; count: number; items: st
   </div>
 );
 
-const Timeline = ({ onHide }: { onHide: () => void }) => {
+type TimelineBubbleData = { left: string; count: number; items: string[] };
+const Timeline = ({ onHide, timelineArrivals, timelineDepartures }: { onHide: () => void; timelineArrivals: TimelineBubbleData[]; timelineDepartures: TimelineBubbleData[] }) => {
   const hours = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
   
   return (
@@ -196,6 +201,22 @@ function TodayView() {
   const hotelQ = useActiveHotel();
   const kpis: FlowdayKpis = flowday.kpis;
   const liveRows = flowday.rows as unknown as RoomRow[];
+
+  const timelineArrivals = React.useMemo(
+    () => buildTimelineBubbles(
+      (flowday.rows as { room: string; guest: string; movement?: string }[])
+        .filter((r) => r.movement === 'arrival')
+    ),
+    [flowday.rows],
+  );
+  const timelineDepartures = React.useMemo(
+    () => buildTimelineBubbles(
+      (flowday.rows as { room: string; guest: string; movement?: string }[])
+        .filter((r) => r.movement === 'departure')
+    ),
+    [flowday.rows],
+  );
+
   const fmtEUR0 = (n: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 
@@ -298,7 +319,7 @@ function TodayView() {
               </div>}
 
               {/* Timeline */}
-              {showTimeline && <Timeline onHide={() => setShowTimeline(false)} />}
+              {showTimeline && <Timeline onHide={() => setShowTimeline(false)} timelineArrivals={timelineArrivals} timelineDepartures={timelineDepartures} />}
 
               {/* Operations Table */}
               <OperationsTable initialRooms={liveRows} />
