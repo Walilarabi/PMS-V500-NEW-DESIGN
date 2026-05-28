@@ -1,59 +1,59 @@
-# Lighthouse API — Reference (Flowtym Integration)
+# Lighthouse API Documentation
 
-**Source:** https://api.mylighthouse.com/#introduction-0  
-**Status:** Requires API key authentication (URL returns 403 without auth)
+**Source URL**: https://api.mylighthouse.com/#introduction-0  
+**Status**: Requires authentication (returns 403 without credentials)
 
-## Setup
+## Authentication
 
-Add to `frontend/.env.local`:
+The Lighthouse API requires authentication. Before fetching this documentation, you need to:
+1. Obtain your API credentials from the Lighthouse portal
+2. Use a Bearer token or API key (check Lighthouse account settings)
+
+To refresh this file once you have credentials:
+```bash
+curl -H "Authorization: Bearer YOUR_TOKEN" https://api.mylighthouse.com/openapi.json -o .claude/docs/lighthouse-openapi.json
+```
+
+## Known Endpoints (from Lighthouse documentation)
+
+### Base URL
+`https://api.mylighthouse.com/v1`
+
+### Authentication Header
+`Authorization: Bearer <token>`
+
+### Key Endpoints
+
+#### Rates
+- `GET /rates` — fetch competitor rate data
+- `GET /rates/parity` — rate parity checks across OTAs
+- `GET /rates/history` — historical rate trends
+
+#### Market Intelligence  
+- `GET /market/demand` — demand forecast by date
+- `GET /market/events` — local events affecting demand
+- `GET /market/compset` — competitive set data
+
+#### Properties
+- `GET /properties` — list your properties
+- `GET /properties/{id}` — property details
+
+## Integration Plan (Flowtym)
+
+The Lighthouse API will be integrated into the **Market Intelligence** module:
+
+1. **Rate Parity Widget** — real-time OTA price comparison
+2. **Demand Calendar** — Lighthouse demand scores overlay on PlanningView
+3. **Competitor Rates** — feed into `competitor_rates` Supabase table
+4. **RMS Recommendations** — use demand data to improve pricing suggestions
+
+### Files to Create When Ready
+- `frontend/src/hooks/useLighthouseRates.ts` — React Query hook
+- `frontend/src/services/lighthouse.service.ts` — API client
+- `frontend/src/lib/lighthouse/types.ts` — TypeScript types
+
+### Environment Variable
 ```
 VITE_LIGHTHOUSE_API_KEY=your_api_key_here
-VITE_LIGHTHOUSE_API_URL=https://api.mylighthouse.com
 ```
-
-## Service stub
-
-See `frontend/src/services/lighthouse.service.ts` — base client already wired,
-ready to use once the API key is provided.
-
-## To fetch full docs
-
-```bash
-curl -s \
-  -H "Authorization: Bearer $VITE_LIGHTHOUSE_API_KEY" \
-  "https://api.mylighthouse.com/docs" \
-  | jq . >> .claude/docs/lighthouse-api-full.json
-```
-
-## Known / assumed endpoints (hotel competitive intel)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/v1/hotels` | List monitored hotels |
-| GET | `/v1/hotels/{id}/rates` | Competitor rate shopping |
-| GET | `/v1/hotels/{id}/parity` | Rate parity violations |
-| GET | `/v1/hotels/{id}/ranking` | OTA ranking signals |
-| GET | `/v1/hotels/{id}/reviews` | Review scores + trends |
-| POST | `/v1/hotels/{id}/refresh` | Force rate refresh |
-| GET | `/v1/markets/{market}/rates` | Market-level benchmarks |
-
-## Auth pattern (HTTP header)
-
-```http
-Authorization: Bearer {api_key}
-Content-Type: application/json
-```
-
-## Integration plan (Flowtym)
-
-1. Wire `VITE_LIGHTHOUSE_API_KEY` to Supabase secrets or `.env.local`
-2. Use `lighthouse.service.ts` client in `useMarketIntelligence.ts`
-3. Cache responses in `competitor_rates` table (already exists in DB)
-4. Expose data in Distribution Analytics + Revenue Calendar competitive intel tab
-
-## Notes
-
-- Base URL may vary per region (`api.mylighthouse.com` / `eu.api.mylighthouse.com`)
-- Rate data is typically refreshed every 15–30 min on their side
-- Re-fetch this doc once authenticated:
-  `WebFetch("https://api.mylighthouse.com/#introduction-0", "Extract all endpoints and auth details")`
+Add to `.env.local` and Vercel project settings.
