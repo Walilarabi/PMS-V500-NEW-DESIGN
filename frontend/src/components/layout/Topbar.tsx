@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Zap, Calendar, Users, TrendingUp, CreditCard,
-  BarChart2, Settings, Shield,
+  BarChart2, Settings, Shield, Headphones,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
@@ -50,6 +50,8 @@ const PAGE_TO_NAV: Record<string, string> = {
   forecast: 'analysis', rapports: 'analysis',
   // Paramètres
   settings: 'settings',
+  // Aide & Support
+  support: 'support',
 };
 
 const NAV_ITEMS = [
@@ -61,6 +63,7 @@ const NAV_ITEMS = [
   { id: 'finance',      label: 'Finance',       icon: CreditCard, defaultPage: 'facturation' as PageId },
   { id: 'analysis',     label: 'Analyse',       icon: BarChart2,  defaultPage: 'analysis' as PageId },
   { id: 'settings',     label: 'Paramètres',    icon: Settings,   defaultPage: 'settings' as PageId },
+  { id: 'support',      label: 'Support',       icon: Headphones, defaultPage: 'support' as PageId },
 ];
 
 export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {

@@ -236,10 +236,13 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
         { id: 'settings_backups',        label: 'Sauvegardes',        icon: HardDrive },
       ],
     },
+  ],
+
+  support: [
     {
       label: 'Aide & Support',
       items: [
-        { id: 'support', label: 'Aide & Support',    icon: Headphones },
+        { id: 'support', label: 'Aide & Support', icon: Headphones },
       ],
     },
   ],
