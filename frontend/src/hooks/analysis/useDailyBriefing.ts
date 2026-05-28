@@ -14,7 +14,15 @@ import { computeInsightsFor } from '../../services/analysis/insights-registry';
 import { countUnacknowledged } from '../../services/analysis/alerts.service';
 import type { Insight } from '../../components/analysis/insights/types';
 
-const KEY_REPORT_IDS = ['54001', '21008', '21013', '54004'];
+const KEY_REPORT_IDS = ['54001', '21008', '21013', '54004'] as const;
+type ReportId = typeof KEY_REPORT_IDS[number];
+
+const ALLOWED_RPC_NAMES: ReadonlyMap<ReportId, string> = new Map([
+  ['54001', 'analytics_54001'],
+  ['21008', 'analytics_21008'],
+  ['21013', 'analytics_21013'],
+  ['54004', 'analytics_54004'],
+]);
 
 export interface DailyBriefing {
   generatedAt: string;
@@ -38,8 +46,9 @@ export interface DailyBriefing {
   sourceCount: { supabase: number; mock: number };
 }
 
-async function loadReport(reportId: string, p_start_date: string, p_end_date: string): Promise<{ rows: any[]; source: 'supabase' | 'mock' }> {
-  const rpcName = `analytics_${reportId.replace(/\./g, '_')}`;
+async function loadReport(reportId: ReportId, p_start_date: string, p_end_date: string): Promise<{ rows: any[]; source: 'supabase' | 'mock' }> {
+  const rpcName = ALLOWED_RPC_NAMES.get(reportId);
+  if (!rpcName) return { rows: [], source: 'mock' };
   try {
     const { data, error } = await (supabase.rpc as any)(rpcName, {
       p_start_date,
@@ -71,7 +80,7 @@ export function useDailyBriefing() {
       const p_end_date = today.toISOString().slice(0, 10);
 
       // Appels parallèles
-      const results = await Promise.all(KEY_REPORT_IDS.map(id => loadReport(id, p_start_date, p_end_date)));
+      const results = await Promise.all(KEY_REPORT_IDS.map(id => loadReport(id as ReportId, p_start_date, p_end_date)));
 
       // Agrégation insights par rapport
       const allInsights: Insight[] = [];
