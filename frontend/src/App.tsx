@@ -29,7 +29,6 @@ import { StrategiesPage }      from '@/src/pages/revenue/StrategiesPage';
 import { AutopilotPage }       from '@/src/pages/revenue/AutopilotPage';
 import { SimulationPage }      from '@/src/pages/revenue/SimulationPage';
 import { AlertsPage }          from '@/src/pages/revenue/AlertsPage';
-import { FinanceView }      from '@/src/pages/FinanceView';
 import { FinanceLayout }    from '@/src/pages/finance/FinanceLayout';
 import { AnalysisLayout }   from '@/src/pages/analysis/AnalysisLayout';
 import { FlowboardView }    from '@/src/pages/FlowboardView';

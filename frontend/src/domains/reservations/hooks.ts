@@ -137,6 +137,21 @@ export function useCancelReservation() {
   });
 }
 
+export function useDeleteReservation() {
+  const qc = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (id) => repo.deleteReservation(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+      void qc.invalidateQueries({ queryKey: ['rooms'] });
+      void qc.invalidateQueries({ queryKey: ['audit-logs'] });
+    },
+    onError: (err) => {
+      console.error('[useDeleteReservation]', err);
+    },
+  });
+}
+
 // ============================================================================
 // PLANNING HOOKS — ajoutés pour PlanningViewLive
 // ============================================================================

@@ -24,7 +24,7 @@ import { cn } from '@/src/lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 import { useReservations as useContextReservations } from '@/src/contexts/ReservationContext';
-import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
+import { useReservations, useCreateReservation, useDeleteReservation } from '@/src/domains/reservations/hooks';
 import ReservationFormModal from '@/src/components/modals/ReservationFormModal';
 import { LiveReservationsBanner } from '@/src/domains/reservations/LiveReservationsBanner';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
@@ -216,12 +216,13 @@ export const ReservationsView = () => {
   const { reservations: _ctxReservations } = useContextReservations(); // kept for potential write-back
   const { data: supabaseData }             = useReservations({ limit: 500 });
   const createReservation                  = useCreateReservation();
+  const deleteReservation                  = useDeleteReservation();
 
   // Modal state
-  const [isFormOpen,        setIsFormOpen]        = React.useState(false);
-  const [selectedDetail,    setSelectedDetail]    = React.useState<ResTableRow | null>(null);
-  const [editRow,           setEditRow]           = React.useState<ResTableRow | null>(null);
-  const [confirmDeleteRef,  setConfirmDeleteRef]  = React.useState<string | null>(null);
+  const [isFormOpen,     setIsFormOpen]     = React.useState(false);
+  const [selectedDetail, setSelectedDetail] = React.useState<ResTableRow | null>(null);
+  const [editRow,        setEditRow]        = React.useState<ResTableRow | null>(null);
+  const [confirmDelete,  setConfirmDelete]  = React.useState<{ id: string; ref: string } | null>(null);
 
   // Filter state
   const [searchQuery,    setSearchQuery]    = React.useState('');
@@ -561,7 +562,7 @@ export const ReservationsView = () => {
                         row={row}
                         onView={() => openDetail(row)}
                         onEdit={() => openEdit(row)}
-                        onDelete={() => setConfirmDeleteRef(row.ref)}
+                        onDelete={() => setConfirmDelete({ id: row.id, ref: row.ref })}
                         onCopy={() => copyRef(row.ref)}
                       />
                     ))
@@ -658,7 +659,7 @@ export const ReservationsView = () => {
           />
         )}
 
-        {confirmDeleteRef && (
+        {confirmDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
               <div className="flex items-center gap-3 mb-4">
@@ -667,23 +668,30 @@ export const ReservationsView = () => {
                 </div>
                 <div>
                   <h3 className="text-[13px] font-bold text-gray-900">Supprimer la réservation</h3>
-                  <p className="text-[12px] text-gray-400 font-mono">{confirmDeleteRef}</p>
+                  <p className="text-[12px] text-gray-400 font-mono">{confirmDelete.ref}</p>
                 </div>
               </div>
               <p className="text-[13px] text-gray-600 mb-5">
                 Cette action est irréversible. La réservation sera définitivement supprimée.
               </p>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => setConfirmDeleteRef(null)}>Annuler</Button>
+                <Button variant="outline" size="sm" onClick={() => setConfirmDelete(null)} disabled={deleteReservation.isPending}>Annuler</Button>
                 <Button
                   size="sm"
-                  className="!bg-red-500 hover:!bg-red-600 !text-white"
-                  onClick={() => {
-                    console.warn('[ReservationsView] Delete not yet wired:', confirmDeleteRef);
-                    setConfirmDeleteRef(null);
+                  className="!bg-red-500 hover:!bg-red-600 !text-white gap-1.5"
+                  disabled={deleteReservation.isPending}
+                  onClick={async () => {
+                    try {
+                      await deleteReservation.mutateAsync(confirmDelete.id);
+                      setConfirmDelete(null);
+                    } catch (err) {
+                      console.error('[ReservationsView] delete failed:', err);
+                    }
                   }}
                 >
-                  Supprimer
+                  {deleteReservation.isPending ? (
+                    <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Suppression…</>
+                  ) : 'Supprimer'}
                 </Button>
               </div>
             </div>
