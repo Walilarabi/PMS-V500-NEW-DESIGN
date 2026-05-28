@@ -315,6 +315,7 @@ const AuditLogView: React.FC = () => {
             <header className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
               <h2 className="text-sm font-bold text-gray-900">Événements ({filtered.length})</h2>
               {logsQ.isLoading && <span className="text-[11px] text-gray-400">Chargement…</span>}
+              {logsQ.isError && <span className="text-[11px] text-rose-500">Erreur de chargement</span>}
             </header>
             <div className="overflow-x-auto max-h-[600px]">
               <table className="min-w-full text-sm">
