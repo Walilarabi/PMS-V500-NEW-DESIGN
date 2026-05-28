@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings, Save, Shield, Bell, Globe, CreditCard } from 'lucide-react';
+import { Settings, Save, Shield, Bell, Globe, CreditCard, TrendingUp } from 'lucide-react';
 import { supabase } from '@/src/lib/supabase';
 import { cn } from '@/src/lib/utils';
 import toast from 'react-hot-toast';
@@ -25,6 +25,11 @@ const SETTING_GROUPS: { title: string; icon: React.ElementType; keys: string[] }
     title: 'Relances',
     icon: Bell,
     keys: ['dunning_days_before', 'max_trial_extensions'],
+  },
+  {
+    title: 'Performance financière',
+    icon: TrendingUp,
+    keys: ['mrr_target', 'arr_target', 'churn_alert_rate', 'min_trial_days', 'max_trial_days', 'default_commitment'],
   },
 ];
 

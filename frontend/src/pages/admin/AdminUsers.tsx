@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Users, Search, Plus, Edit2, UserX, UserCheck,
+  Users, Search, Plus, UserX, UserCheck,
   Send, X, Save, Mail, Hotel,
 } from 'lucide-react';
 import { supabase } from '@/src/lib/supabase';

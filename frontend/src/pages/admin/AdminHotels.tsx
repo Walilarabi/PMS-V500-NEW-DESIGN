@@ -32,6 +32,13 @@ interface HotelSub {
 
 interface Plan { id: string; name: string; color: string; price_monthly: number; price_annual: number; is_active: boolean; }
 
+interface AddonSub {
+  id: string; hotel_id: string; addon_id: string; status: string;
+  quantity: number; custom_price: number | null; notes: string | null; started_at: string;
+  addon?: { id: string; name: string; slug: string; price: number; billing_type: string };
+}
+interface AddOnItem { id: string; name: string; slug: string; price: number; billing_type: string; is_active: boolean; }
+
 type FilterStatus = 'all' | 'active' | 'inactive';
 type DrawerTab = 'general' | 'contact' | 'subscription' | 'notes';
 
@@ -90,6 +97,41 @@ function usePlans() {
     queryKey: ['admin-plans-v2'],
     queryFn: async () => {
       const { data } = await db.from('subscription_plans').select('id,name,color,price_monthly,price_annual,is_active').order('sort_order');
+      return data ?? [];
+    },
+    staleTime: 60_000,
+  });
+}
+
+function useHotelAddons(hotelId: string | null) {
+  return useQuery<AddonSub[]>({
+    queryKey: ['admin-hotel-addons', hotelId],
+    enabled: !!hotelId,
+    queryFn: async () => {
+      const { data: rows, error } = await db
+        .from('hotel_addon_subscriptions')
+        .select('id, hotel_id, addon_id, status, quantity, custom_price, notes, started_at')
+        .eq('hotel_id', hotelId)
+        .neq('status', 'cancelled')
+        .order('created_at');
+      if (error) throw error;
+      if (!rows?.length) return [];
+      const addonIds = [...new Set(rows.map((r: AddonSub) => r.addon_id))];
+      const { data: addonData } = await db
+        .from('add_ons').select('id,name,slug,price,billing_type').in('id', addonIds);
+      const addonMap: Record<string, AddOnItem> = {};
+      (addonData ?? []).forEach((a: AddOnItem) => { addonMap[a.id] = a; });
+      return rows.map((r: AddonSub) => ({ ...r, addon: addonMap[r.addon_id] }));
+    },
+    staleTime: 30_000,
+  });
+}
+
+function useAddOnsCatalog() {
+  return useQuery<AddOnItem[]>({
+    queryKey: ['admin-addons-v2'],
+    queryFn: async () => {
+      const { data } = await db.from('add_ons').select('id,name,slug,price,billing_type,is_active').eq('is_active', true).order('sort_order');
       return data ?? [];
     },
     staleTime: 60_000,
@@ -495,22 +537,6 @@ const HotelSubscriptionTab: React.FC<{ hotelId: string; hotelName: string }> = (
 
   if (isLoading) return <div className="text-center py-8 text-sm text-gray-400">Chargement…</div>;
 
-  if (!sub && !assigning) {
-    return (
-      <div className="text-center py-10">
-        <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto mb-4">
-          <Package size={24} className="text-amber-500" />
-        </div>
-        <h3 className="text-[14px] font-black text-gray-900 mb-1">Sans abonnement</h3>
-        <p className="text-[12px] text-gray-400 mb-5">Cet hôtel n'a pas encore d'abonnement actif.</p>
-        <button onClick={() => setAssigning(true)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#8B5CF6] text-white rounded-xl text-[13px] font-bold hover:bg-[#7C3AED]">
-          <Plus size={14} /> Assigner un abonnement
-        </button>
-      </div>
-    );
-  }
-
   if (assigning) {
     const selectedPlan = plans.find(p => p.id === form.plan_id);
     const basePrice = form.billing_cycle === 'annual' ? selectedPlan?.price_annual : selectedPlan?.price_monthly;
@@ -560,6 +586,27 @@ const HotelSubscriptionTab: React.FC<{ hotelId: string; hotelName: string }> = (
           className="w-full py-2.5 rounded-xl bg-[#8B5CF6] text-white text-[13px] font-bold disabled:opacity-60 flex items-center justify-center gap-2 hover:bg-[#7C3AED]">
           <Save size={13} />{assign.isPending ? 'Enregistrement…' : 'Créer l\'abonnement'}
         </button>
+      </div>
+    );
+  }
+
+  if (!sub && !assigning) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-10">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto mb-4">
+            <Package size={24} className="text-amber-500" />
+          </div>
+          <h3 className="text-[14px] font-black text-gray-900 mb-1">Sans abonnement</h3>
+          <p className="text-[12px] text-gray-400 mb-5">Cet hôtel n'a pas encore d'abonnement actif.</p>
+          <button onClick={() => setAssigning(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#8B5CF6] text-white rounded-xl text-[13px] font-bold hover:bg-[#7C3AED]">
+            <Plus size={14} /> Assigner un abonnement
+          </button>
+        </div>
+        <div className="border-t border-gray-100 pt-4">
+          <AddOnsSection hotelId={hotelId} />
+        </div>
       </div>
     );
   }
@@ -637,6 +684,121 @@ const HotelSubscriptionTab: React.FC<{ hotelId: string; hotelName: string }> = (
         <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
           <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Notes internes</p>
           <p className="text-[12px] text-gray-600">{sub.notes}</p>
+        </div>
+      )}
+
+      <div className="border-t border-gray-100 pt-4">
+        <AddOnsSection hotelId={hotelId} />
+      </div>
+    </div>
+  );
+};
+
+// ─── Add-ons section ──────────────────────────────────────────────────────────
+
+const AddOnsSection: React.FC<{ hotelId: string }> = ({ hotelId }) => {
+  const qc = useQueryClient();
+  const { data: addons = [] } = useHotelAddons(hotelId);
+  const { data: catalog = [] } = useAddOnsCatalog();
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ addon_id: '', quantity: '1', custom_price: '', notes: '' });
+  const s = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const addMut = useMutation({
+    mutationFn: async () => {
+      const { error } = await db.from('hotel_addon_subscriptions').insert({
+        hotel_id: hotelId, addon_id: form.addon_id,
+        quantity: Number(form.quantity) || 1,
+        custom_price: form.custom_price ? Number(form.custom_price) : null,
+        notes: form.notes || null, status: 'active',
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-hotel-addons', hotelId] });
+      toast.success('Add-on ajouté.');
+      setAdding(false);
+      setForm({ addon_id: '', quantity: '1', custom_price: '', notes: '' });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removeMut = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await db.from('hotel_addon_subscriptions').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-hotel-addons', hotelId] }); toast.success('Add-on retiré.'); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const selectedAddon = catalog.find(a => a.id === form.addon_id);
+  const effectivePrice = form.custom_price ? Number(form.custom_price) : selectedAddon?.price;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Add-ons actifs</p>
+        {!adding && (
+          <button onClick={() => setAdding(true)} className="flex items-center gap-1 text-[11px] font-bold text-[#8B5CF6] hover:underline">
+            <Plus size={11} /> Ajouter
+          </button>
+        )}
+      </div>
+
+      {addons.length === 0 && !adding && (
+        <p className="text-[12px] text-gray-400 text-center py-3 bg-gray-50 rounded-xl">Aucun add-on actif.</p>
+      )}
+
+      {addons.map(a => {
+        const unit = a.addon?.billing_type === 'once' ? 'unique' : 'mois';
+        const unitPrice = a.custom_price ?? a.addon?.price ?? 0;
+        const total = unitPrice * a.quantity;
+        return (
+          <div key={a.id} className="flex items-center justify-between p-2.5 rounded-xl border border-gray-100 bg-gray-50">
+            <div>
+              <div className="text-[12px] font-bold text-gray-800">{a.addon?.name ?? a.addon_id.slice(0, 8)}</div>
+              <div className="text-[11px] text-gray-400">
+                {a.quantity > 1 ? `×${a.quantity} · ` : ''}{total > 0 ? `${total} €/${unit}` : 'Inclus'}
+              </div>
+            </div>
+            <button onClick={() => removeMut.mutate(a.id)} disabled={removeMut.isPending}
+              className="p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors" title="Retirer">
+              <X size={12} />
+            </button>
+          </div>
+        );
+      })}
+
+      {adding && (
+        <div className="p-3 rounded-xl border border-[#8B5CF6]/20 bg-[#8B5CF6]/5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <p className="text-[12px] font-black text-gray-700">Ajouter un add-on</p>
+            <button onClick={() => setAdding(false)} className="text-gray-400 hover:text-gray-600"><X size={13} /></button>
+          </div>
+          <FRow label="Add-on">
+            <select value={form.addon_id} onChange={e => s('addon_id', e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 text-[12px] outline-none focus:ring-2 focus:ring-[#8B5CF6]/30">
+              <option value="">Choisir un add-on…</option>
+              {catalog.map(a => <option key={a.id} value={a.id}>{a.name} — {a.price} €/{a.billing_type === 'once' ? 'unique' : 'mois'}</option>)}
+            </select>
+          </FRow>
+          <div className="grid grid-cols-2 gap-2">
+            <FRow label="Quantité"><FInp value={form.quantity} onChange={v => s('quantity', v)} placeholder="1" /></FRow>
+            <FRow label="Prix perso. (€)"><FInp value={form.custom_price} onChange={v => s('custom_price', v)} placeholder="Catalogue" /></FRow>
+          </div>
+          {selectedAddon && effectivePrice != null && (
+            <div className="text-[11px] text-[#8B5CF6] font-semibold px-1">
+              Total : {effectivePrice * (Number(form.quantity) || 1)} €/{selectedAddon.billing_type === 'once' ? 'unique' : 'mois'}
+            </div>
+          )}
+          <FRow label="Notes"><FInp value={form.notes} onChange={v => s('notes', v)} placeholder="Notes internes…" /></FRow>
+          <button
+            onClick={() => { if (!form.addon_id) { toast.error('Sélectionnez un add-on.'); return; } addMut.mutate(); }}
+            disabled={addMut.isPending}
+            className="w-full py-2 rounded-xl bg-[#8B5CF6] text-white text-[12px] font-bold disabled:opacity-60 flex items-center justify-center gap-1.5 hover:bg-[#7C3AED]">
+            <Plus size={12} />{addMut.isPending ? 'Ajout…' : "Ajouter l'add-on"}
+          </button>
         </div>
       )}
     </div>
