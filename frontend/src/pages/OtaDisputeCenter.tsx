@@ -508,7 +508,10 @@ const DisputeDrawer: React.FC<{
                     : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                 }`}
               >
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${dispute.auto_send_paused ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                {togglePause.isPending
+                  ? <span className="w-2.5 h-2.5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                  : <span className={`inline-block h-1.5 w-1.5 rounded-full ${dispute.auto_send_paused ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                }
                 {dispute.auto_send_paused ? 'Mode brouillon (auto-pause)' : 'Auto-relances actives'}
               </button>
             </div>
@@ -610,10 +613,17 @@ const DisputeDrawer: React.FC<{
                         : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                     }`}
                   >
-                    {to === 'SENT' && <Send size={11} />}
-                    {to === 'CORRECTED' && <CheckCircle2 size={11} />}
-                    {to === 'REJECTED' && <XCircle size={11} />}
-                    {STATUS_LABEL[to]}
+                    {change.isPending
+                      ? <span className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                      : (
+                        <>
+                          {to === 'SENT' && <Send size={11} />}
+                          {to === 'CORRECTED' && <CheckCircle2 size={11} />}
+                          {to === 'REJECTED' && <XCircle size={11} />}
+                        </>
+                      )
+                    }
+                    {change.isPending ? '…' : STATUS_LABEL[to]}
                   </button>
                 ))}
                 <button

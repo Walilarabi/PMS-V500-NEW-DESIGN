@@ -19,6 +19,7 @@ import { cn } from '@/src/lib/utils';
 import { useConfigStore, type ChannelConfig } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
+import { supabase } from '@/src/lib/supabase';
 
 type ConnectorStatus = 'connected' | 'error' | 'pending' | 'disabled';
 
@@ -33,7 +34,58 @@ interface ConnectorMeta {
 }
 
 const STORAGE_KEY = 'flowtym.connectors';
-const CUSTOM_KEY = 'flowtym.connectors.custom';
+const CUSTOM_KEY  = 'flowtym.connectors.custom';
+const SUPABASE_NS = 'connectors';
+
+// ── Supabase blob persistence ────────────────────────────────────────────────
+
+async function getHotelId(): Promise<string | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.rpc as any)('get_user_hotel_id');
+    return data ? String(data) : null;
+  } catch { return null; }
+}
+
+async function loadFromSupabase(): Promise<{
+  overrides: Record<string, Partial<ConnectorMeta>>;
+  custom: CustomCatalogEntry[];
+} | null> {
+  const hotelId = await getHotelId();
+  if (!hotelId) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from('settings_config_blobs')
+      .select('data')
+      .eq('hotel_id', hotelId)
+      .eq('namespace', SUPABASE_NS)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data.data as { overrides: Record<string, Partial<ConnectorMeta>>; custom: CustomCatalogEntry[] };
+  } catch { return null; }
+}
+
+async function saveToSupabase(payload: {
+  overrides: Record<string, Partial<ConnectorMeta>>;
+  custom: CustomCatalogEntry[];
+}): Promise<void> {
+  const hotelId = await getHotelId();
+  if (!hotelId) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('settings_config_blobs')
+      .upsert({
+        hotel_id:   hotelId,
+        namespace:  SUPABASE_NS,
+        data:       payload,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'hotel_id,namespace' });
+  } catch (err) {
+    console.error('[ConnectorsPage] saveToSupabase failed:', err);
+  }
+}
 
 const CATALOG: Omit<ConnectorMeta, 'status' | 'lastSyncAt'>[] = [
   { id: 'booking',     name: 'Booking.com',    category: 'ota', url: 'https://www.booking.com' },
@@ -134,8 +186,9 @@ export const ConnectorsPage: React.FC = () => {
     if (!partnerDraft.name.trim()) return;
     const id = `custom_${partnerDraft.name.toLowerCase().replace(/\W+/g, '_')}_${Date.now()}`;
     const entry: CustomCatalogEntry = { ...partnerDraft, id };
-    const custom = loadCustom();
-    saveCustom([...custom, entry]);
+    const custom = [...loadCustom(), entry];
+    saveCustom(custom);
+    void saveToSupabase({ overrides: loadStored(), custom });
     setConnectors(buildConnectors(channels));
     logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Partenaire custom "${entry.name}" ajouté (${entry.category})` });
     notify(`Partenaire ${entry.name} ajouté`);
@@ -154,10 +207,23 @@ export const ConnectorsPage: React.FC = () => {
     const stored = loadStored();
     delete stored[id];
     saveStored(stored);
+    void saveToSupabase({ overrides: stored, custom });
     setConnectors(buildConnectors(channels));
     logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Partenaire custom supprimé : ${id}` });
     notify('Partenaire supprimé');
   }
+
+  // ── Hydrate from Supabase on mount, fall back to localStorage
+  useEffect(() => {
+    loadFromSupabase().then((remote) => {
+      if (!remote) return;
+      // Hydrate localStorage from Supabase (authoritative)
+      saveStored(remote.overrides);
+      saveCustom(remote.custom);
+      setConnectors(buildConnectors(channels));
+    }).catch(() => {/* silent — localStorage fallback still loaded */});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { setConnectors(buildConnectors(channels)); }, [channels]);
 
@@ -172,6 +238,8 @@ export const ConnectorsPage: React.FC = () => {
       stored[id] = { ...stored[id], ...patch };
     }
     saveStored(stored);
+    // Sync to Supabase (fire-and-forget — localStorage is the offline cache)
+    void saveToSupabase({ overrides: stored, custom: loadCustom() });
     setConnectors(buildConnectors(channels));
   }
 
