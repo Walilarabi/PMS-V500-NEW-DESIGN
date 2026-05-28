@@ -152,7 +152,7 @@ const calcEarnedPoints = (amountEur: number, tier: string): number =>
 const calcRedeemValue = (points: number): number =>
   Math.floor(points / POINTS_TO_EURO) * EURO_VALUE_PER_1000;
 
-const uid = () => Math.random().toString(36).slice(2, 9);
+const uid = () => crypto.randomUUID().slice(0, 8);
 const TODAY = new Date().toISOString().split('T')[0];
 const fmtDate = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('fr-FR');
 const fmtEuro = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
@@ -192,28 +192,9 @@ const buildMockEliteStay = (reservations: any[], clientId?: string): EliteStayAc
   };
 };
 
-const MOCK_INCIDENTS: Incident[] = [
-  { id: uid(), date: TODAY, time: '14:30', category: 'technique', severity: 'medium',
-    description: 'Climatisation chambre insuffisante — température maintenue à 26°C malgré réglage', status: 'in_progress', guestNotified: true, resolvedBy: 'Maintenance' },
-  { id: uid(), date: '2026-04-20', time: '22:15', category: 'bruit', severity: 'low',
-    description: 'Nuisances sonores signalées — chambre voisine', status: 'resolved', guestNotified: true,
-    resolvedAt: '2026-04-20T22:30:00', compensation: 'Coupes de champagne offertes' },
-];
-
-const MOCK_LOST_ITEMS: LostItem[] = [
-  { id: uid(), foundDate: TODAY, foundLocation: 'Chambre 103', description: 'Chargeur iPhone blanc + câble', category: 'electronique', status: 'found' },
-  { id: uid(), foundDate: '2026-04-18', foundLocation: 'Restaurant', description: 'Veste bleue Zara, taille M', category: 'vetement', status: 'claimed', claimedAt: '2026-04-19' },
-];
-
-const MOCK_REVIEWS: GuestReview[] = [
-  { id: uid(), date: '2026-03-28', source: 'direct', overallScore: 9, cleanliness: 9, comfort: 8, location: 10, service: 9, valueForMoney: 8,
-    comment: 'Excellent séjour, personnel aux petits soins. La suite panoramique valait largement l\'investissement.',
-    response: 'Merci pour votre confiance. Nous espérons vous accueillir à nouveau très prochainement. À bientôt !',
-    responseDate: '2026-03-29', sentiment: 'positive' },
-  { id: uid(), date: '2025-12-15', source: 'booking', overallScore: 7, cleanliness: 8, comfort: 7, service: 7,
-    comment: 'Bon séjour dans l\'ensemble. Climatisation un peu bruyante la nuit.',
-    sentiment: 'neutral' },
-];
+const EMPTY_INCIDENTS: Incident[] = [];
+const EMPTY_LOST_ITEMS: LostItem[] = [];
+const EMPTY_REVIEWS: GuestReview[] = [];
 
 // ─── STYLES PARTAGÉS ─────────────────────────────────────────────────────────
 const CARD = { background: 'white', borderRadius: 16, border: '1px solid #F1F5F9', padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,.04)' } as const;
@@ -436,7 +417,8 @@ const TabReservation: React.FC<{ res: Reservation; onUpdate?: (updated: Reservat
   };
 
   const generatePaymentLink = (processor: string) => {
-     setPaymentLink(`https://pay.flowtym.com/${processor.toLowerCase()}/RES-${Math.floor(Math.random()*90000)}`);
+     const ref = reservation?.reference ?? crypto.randomUUID().slice(0, 8).toUpperCase();
+     setPaymentLink(`https://pay.flowtym.com/${processor.toLowerCase()}/${ref}`);
      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Lien de paiement ${processor} généré` } }));
   };
 
@@ -1593,7 +1575,7 @@ const TabCardex: React.FC<{ res: Reservation; allReservations: Reservation[] }> 
 
 // ─── ONGLET 4 : INCIDENTS ─────────────────────────────────────────────────────
 const TabIncidents: React.FC<{ res: Reservation }> = ({ res }) => {
-  const [incidents, setIncidents] = useState<Incident[]>(MOCK_INCIDENTS);
+  const [incidents, setIncidents] = useState<Incident[]>(EMPTY_INCIDENTS);
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState({ category: 'technique', severity: 'medium', description: '', guestNotified: false });
 
@@ -1756,7 +1738,7 @@ const TabIncidents: React.FC<{ res: Reservation }> = ({ res }) => {
 
 // ─── ONGLET 5 : OBJETS OUBLIÉS ────────────────────────────────────────────────
 const TabLostItems: React.FC = () => {
-  const [items, setItems] = useState<LostItem[]>(MOCK_LOST_ITEMS);
+  const [items, setItems] = useState<LostItem[]>(EMPTY_LOST_ITEMS);
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState({ description: '', foundLocation: '', category: 'autre' });
 
@@ -1875,7 +1857,7 @@ const TabLostItems: React.FC = () => {
 
 // ─── ONGLET 6 : AVIS ──────────────────────────────────────────────────────────
 const TabReviews: React.FC<{ res: Reservation }> = ({ res }) => {
-  const [reviews, setReviews] = useState<GuestReview[]>(MOCK_REVIEWS);
+  const [reviews, setReviews] = useState<GuestReview[]>(EMPTY_REVIEWS);
   const [replyOpen, setReplyOpen] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
 
