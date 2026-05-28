@@ -2,7 +2,7 @@
  * FLOWTYM — FacturationView
  * Module de facturation connecté à Supabase — invoices, folios, lignes, paiements.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText, Plus, Eye, CheckCircle, XCircle, CreditCard,
   Download, Loader2, RefreshCcw, AlertCircle, RotateCcw,
@@ -274,12 +274,22 @@ export const FacturationView = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [page, setPage] = useState(1);
+  const PER_PAGE = 50;
 
-  const { data: invoicesData, isLoading, refetch, isFetching } = useInvoices({ status: statusFilter || undefined });
+  const { data: invoicesData, isLoading, refetch, isFetching } = useInvoices({
+    status: statusFilter || undefined,
+    limit:  PER_PAGE,
+    offset: (page - 1) * PER_PAGE,
+  });
   const { data: stats } = useBillingStats();
   const createInvoice = useCreateInvoice();
 
-  const invoices = invoicesData?.rows ?? [];
+  useEffect(() => { setPage(1); }, [statusFilter]);
+
+  const invoices   = invoicesData?.rows ?? [];
+  const totalInv   = invoicesData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalInv / PER_PAGE));
 
   return (
     <div className="flex h-full overflow-hidden bg-[#F9FAFB]">
@@ -293,7 +303,7 @@ export const FacturationView = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Facturation</h1>
-              <p className="text-xs text-gray-400 font-medium">{invoicesData?.total ?? 0} factures</p>
+              <p className="text-xs text-gray-400 font-medium">{totalInv} factures</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -386,6 +396,31 @@ export const FacturationView = () => {
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/40 text-xs text-gray-500">
+                <span>
+                  {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, totalInv)} sur {totalInv}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => p - 1)}
+                    className="p-1.5 rounded-lg hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight size={14} className="rotate-180" />
+                  </button>
+                  <span className="px-2 font-medium">{page} / {totalPages}</span>
+                  <button
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(p => p + 1)}
+                    className="p-1.5 rounded-lg hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
               </div>
             )}
           </Card>

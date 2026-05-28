@@ -260,7 +260,6 @@ const FilterSelect: React.FC<{
 
 export const ReservationsView = () => {
   const { reservations: _ctxReservations } = useContextReservations(); // kept for potential write-back
-  const { data: supabaseData }             = useReservations({ limit: 500 });
   const createReservation                  = useCreateReservation();
   const deleteReservation                  = useDeleteReservation();
 
@@ -284,27 +283,52 @@ export const ReservationsView = () => {
   const [page,    setPage]    = React.useState(1);
   const [perPage, setPerPage] = React.useState(25);
 
-  // ── Build table rows — Supabase only, no mock fallback
-  const tableRows = React.useMemo<ResTableRow[]>(() => {
-    const liveRows = supabaseData?.rows ?? [];
-    return liveRows.map(mapRow);
-  }, [supabaseData]);
+  // ── Wide query for KPIs and filter dropdowns (no pagination, no text filter)
+  const { data: kpiData } = useReservations({ limit: 1000 });
 
-  // ── KPI metrics from real data
+  // ── Paginated + server-filtered query for the table
+  const serverStatus  = statusFilter  !== 'ALL' ? [STATUS_MODAL_KEY[statusFilter]].filter(Boolean) as string[] : undefined;
+  const serverSource  = channelFilter !== 'ALL' ? channelFilter.toLowerCase() : undefined;
+  const { data: tableData, isLoading } = useReservations({
+    limit:    perPage,
+    offset:   (page - 1) * perPage,
+    search:   debouncedSearch || undefined,
+    status:   serverStatus,
+    source:   serverSource,
+    dateFrom: dateFrom || undefined,
+    dateTo:   dateTo   || undefined,
+  });
+
+  React.useEffect(() => { setPage(1); }, [debouncedSearch, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo, perPage]);
+
+  // ── KPI source: wide unfiltered data
+  const kpiRawRows = kpiData?.rows ?? [];
+  const kpiRows    = React.useMemo(() => kpiRawRows.map(mapRow), [kpiRawRows]);
+
+  // ── Table rows: paginated server data, client-side roomType filter only
+  const tableRows = React.useMemo<ResTableRow[]>(() => {
+    const rows = (tableData?.rows ?? []).map(mapRow);
+    return roomTypeFilter !== 'ALL'
+      ? rows.filter(r => r.roomType === roomTypeFilter)
+      : rows;
+  }, [tableData, roomTypeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil((tableData?.total ?? 0) / perPage));
+
+  // ── KPI metrics from wide unfiltered data
   const kpis = React.useMemo(() => {
     const today    = todayISO();
     const tomorrow = tomorrowISO();
-    const liveRows = supabaseData?.rows ?? [];
 
-    const confirmed    = tableRows.filter(r => r.status === 'CONFIRMÉE').length;
-    const checkedIn    = tableRows.filter(r => r.status === 'CHECK-IN').length;
-    const totalCA      = liveRows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
-    const arrivals     = liveRows.filter(r => r.check_in  === tomorrow).length;
-    const departures   = liveRows.filter(r => r.check_out === today).length;
-    const unpaid       = liveRows.filter(r => (r.solde ?? 0) > 0 && !['cancelled','no_show'].includes(r.status ?? '')).length;
+    const confirmed    = kpiRows.filter(r => r.status === 'CONFIRMÉE').length;
+    const checkedIn    = kpiRows.filter(r => r.status === 'CHECK-IN').length;
+    const totalCA      = kpiRawRows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
+    const arrivals     = kpiRawRows.filter(r => r.check_in  === tomorrow).length;
+    const departures   = kpiRawRows.filter(r => r.check_out === today).length;
+    const unpaid       = kpiRawRows.filter(r => (r.solde ?? 0) > 0 && !['cancelled','no_show'].includes(r.status ?? '')).length;
 
     return [
-      { label: 'Dossiers actifs',   value: tableRows.length.toString(), sub: 'En base',         icon: BedDouble,      color: 'text-violet-600', bg: 'bg-violet-50'  },
+      { label: 'Dossiers actifs',   value: (kpiData?.total ?? kpiRows.length).toString(), sub: 'En base',         icon: BedDouble,      color: 'text-violet-600', bg: 'bg-violet-50'  },
       { label: 'Confirmées',        value: confirmed.toString(),         sub: 'Réservations',    icon: CheckCircle2,   color: 'text-emerald-600', bg: 'bg-emerald-50' },
       { label: 'En séjour',         value: checkedIn.toString(),         sub: 'Check-in actif',  icon: Clock,          color: 'text-blue-600',   bg: 'bg-blue-50'    },
       { label: 'CA total',          value: formatMoney(totalCA),         sub: 'Réservations',    icon: TrendingUp,     color: 'text-emerald-600', bg: 'bg-emerald-50' },
@@ -312,12 +336,12 @@ export const ReservationsView = () => {
       { label: 'Départs auj.',      value: departures.toString(),        sub: 'À libérer',       icon: HelpCircle,     color: 'text-orange-600', bg: 'bg-orange-50'  },
       { label: 'Soldes débiteurs',  value: unpaid.toString(),            sub: 'Paiements à vérif', icon: AlertTriangle, color: 'text-red-500',   bg: 'bg-red-50'     },
     ];
-  }, [supabaseData, tableRows]);
+  }, [kpiData, kpiRawRows, kpiRows]);
 
-  // ── Pie chart data from real data
+  // ── Pie chart data from wide data
   const pieData = React.useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const r of tableRows) {
+    for (const r of kpiRows) {
       counts[r.status] = (counts[r.status] ?? 0) + 1;
     }
     const COLORS: Record<string, string> = {
@@ -332,42 +356,18 @@ export const ReservationsView = () => {
     return Object.entries(counts)
       .filter(([, v]) => v > 0)
       .map(([name, value]) => ({ name, value, color: COLORS[name] ?? '#CBD5E1' }));
-  }, [tableRows]);
+  }, [kpiRows]);
 
-  // ── Dynamic filter options
+  // ── Dynamic filter options from wide data
   const channelOptions = React.useMemo(() => {
-    const channels = [...new Set(tableRows.map(r => r.channel))].sort();
+    const channels = [...new Set(kpiRows.map(r => r.channel))].sort();
     return [{ value: 'ALL', label: 'Tous canaux' }, ...channels.map(c => ({ value: c, label: c }))];
-  }, [tableRows]);
+  }, [kpiRows]);
 
   const roomTypeOptions = React.useMemo(() => {
-    const types = [...new Set(tableRows.map(r => r.roomType).filter(t => t !== '—'))].sort();
+    const types = [...new Set(kpiRows.map(r => r.roomType).filter(t => t !== '—'))].sort();
     return [{ value: 'ALL', label: 'Tout type' }, ...types.map(t => ({ value: t, label: t }))];
-  }, [tableRows]);
-
-  // ── Filter (debouncedSearch évite un recalcul à chaque frappe)
-  const filteredRows = React.useMemo(() => {
-    const q = debouncedSearch.toLowerCase();
-    return tableRows.filter(r => {
-      if (q && !r.client.toLowerCase().includes(q)  &&
-               !r.ref.toLowerCase().includes(q)       &&
-               !r.room.includes(q)                    &&
-               !r.email.toLowerCase().includes(q))    return false;
-      if (statusFilter  !== 'ALL' && r.status   !== statusFilter)  return false;
-      if (channelFilter !== 'ALL' && r.channel  !== channelFilter) return false;
-      if (roomTypeFilter !== 'ALL' && r.roomType !== roomTypeFilter) return false;
-      // Date range: reservation overlaps [dateFrom, dateTo]
-      if (dateFrom && r.checkoutRaw && r.checkoutRaw < dateFrom) return false;
-      if (dateTo   && r.checkinRaw  && r.checkinRaw  > dateTo)   return false;
-      return true;
-    });
-  }, [tableRows, debouncedSearch, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo]);
-
-  React.useEffect(() => { setPage(1); }, [debouncedSearch, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo, perPage]);
-
-  // ── Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / perPage));
-  const pageRows   = filteredRows.slice((page - 1) * perPage, page * perPage);
+  }, [kpiRows]);
 
   // ── Handlers
   const openDetail = (row: ResTableRow) => setSelectedDetail(row);
@@ -406,7 +406,7 @@ export const ReservationsView = () => {
     } as any;
   }, [selectedDetail]);
 
-  const isLoading = supabaseData === undefined;
+  const serverTotal = tableData?.total ?? 0;
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#F8F9FD]">
@@ -418,23 +418,23 @@ export const ReservationsView = () => {
           <div>
             <h1 className="text-[22px] font-black text-gray-900 leading-tight tracking-tight">Réservations</h1>
             <p className="text-[13px] text-gray-400 font-medium mt-0.5">
-              {isLoading ? 'Chargement…' : `${tableRows.length} réservation${tableRows.length !== 1 ? 's' : ''} en base`}
+              {isLoading ? 'Chargement…' : `${serverTotal} réservation${serverTotal !== 1 ? 's' : ''}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="outline" size="sm"
               className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]"
-              onClick={() => downloadBlob(rowsToCsvBlob(filteredRows), buildFilename('csv'))}
-              disabled={filteredRows.length === 0}
+              onClick={() => downloadBlob(rowsToCsvBlob(tableRows), buildFilename('csv'))}
+              disabled={tableRows.length === 0}
             >
               <Download size={14} className="text-gray-400" /> Exporter
             </Button>
             <Button
               variant="outline" size="sm"
               className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]"
-              onClick={() => exportToXlsx(filteredRows, buildFilename('xlsx'))}
-              disabled={filteredRows.length === 0}
+              onClick={() => exportToXlsx(tableRows, buildFilename('xlsx'))}
+              disabled={tableRows.length === 0}
             >
               <FileSpreadsheet size={14} className="text-emerald-500" /> Excel
             </Button>
@@ -588,7 +588,7 @@ export const ReservationsView = () => {
               </button>
             )}
             <span className="text-[12px] text-gray-400 ml-auto">
-              {filteredRows.length} résultat{filteredRows.length !== 1 ? 's' : ''}
+              {serverTotal} résultat{serverTotal !== 1 ? 's' : ''}
             </span>
           </div>
         )}
@@ -600,7 +600,7 @@ export const ReservationsView = () => {
             <h3 className="text-[13px] font-bold text-gray-900 flex items-center gap-2">
               Toutes les réservations
               <span className="bg-violet-600 text-white text-[11px] px-2 py-0.5 rounded-full font-bold">
-                {filteredRows.length}
+                {serverTotal}
               </span>
             </h3>
             <div className="flex items-center gap-2 text-[12px] text-gray-500">
@@ -644,7 +644,7 @@ export const ReservationsView = () => {
                         </div>
                       </td>
                     </tr>
-                  ) : pageRows.length === 0 ? (
+                  ) : tableRows.length === 0 ? (
                     <tr>
                       <td colSpan={12} className="px-6 py-16 text-center">
                         <div className="flex flex-col items-center gap-3">
@@ -652,11 +652,11 @@ export const ReservationsView = () => {
                             <BedDouble size={22} className="text-gray-300" />
                           </div>
                           <p className="text-[13px] font-semibold text-gray-500">
-                            {tableRows.length === 0
+                            {serverTotal === 0
                               ? 'Aucune réservation en base'
                               : 'Aucun résultat pour ces filtres'}
                           </p>
-                          {tableRows.length === 0 && (
+                          {serverTotal === 0 && (
                             <Button
                               size="sm"
                               onClick={() => { setEditRow(null); setIsFormOpen(true); }}
@@ -669,7 +669,7 @@ export const ReservationsView = () => {
                       </td>
                     </tr>
                   ) : (
-                    pageRows.map((row, idx) => (
+                    tableRows.map((row, idx) => (
                       <ResRow
                         key={`${row.id}-${idx}`}
                         row={row}
@@ -687,9 +687,9 @@ export const ReservationsView = () => {
             {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/40">
               <span className="text-[12px] text-gray-400 font-medium">
-                {filteredRows.length === 0
+                {serverTotal === 0
                   ? '0 résultat'
-                  : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, filteredRows.length)} sur ${filteredRows.length}`}
+                  : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, serverTotal)} sur ${serverTotal}`}
               </span>
               <div className="flex items-center gap-1">
                 <button

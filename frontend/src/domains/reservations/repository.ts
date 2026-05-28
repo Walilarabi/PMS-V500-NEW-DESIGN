@@ -35,6 +35,12 @@ export interface ListReservationsParams {
   dateFrom?: string;
   /** YYYY-MM-DD — filtre check_out <= dateTo */
   dateTo?: string;
+  /** ilike search on reference, guest_name, room_number, guest_email */
+  search?: string;
+  /** exact match on source column */
+  source?: string;
+  /** exact match on room_type column */
+  roomType?: string;
 }
 
 export async function listReservations(
@@ -50,12 +56,14 @@ export async function listReservations(
     .range(offset, offset + limit - 1);
 
   if (params.status?.length) q = q.in('status', params.status);
-  // Filtre de date : chevauchement correct
-  // Une réservation est dans la plage si elle CHEVAUCHE [dateFrom, dateTo]
-  // c'est-à-dire : check_in < dateTo ET check_out > dateFrom
-  // (évite d'exclure les in-house qui commencent avant dateFrom)
-  if (params.dateFrom) q = q.gt('check_out', params.dateFrom);  // check_out > dateFrom
-  if (params.dateTo) q = q.lt('check_in', params.dateTo);        // check_in < dateTo
+  if (params.dateFrom) q = q.gt('check_out', params.dateFrom);
+  if (params.dateTo)   q = q.lt('check_in',  params.dateTo);
+  if (params.source)   q = q.eq('source',    params.source);
+  if (params.roomType) q = q.eq('room_type', params.roomType);
+  if (params.search) {
+    const s = `%${params.search}%`;
+    q = q.or(`reference.ilike.${s},guest_name.ilike.${s},room_number.ilike.${s},guest_email.ilike.${s}`);
+  }
 
   const { data, error, count } = await q;
   if (error) throw mapSupabaseError(error);

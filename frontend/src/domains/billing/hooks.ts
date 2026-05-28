@@ -12,7 +12,7 @@ const BILLING_KEY  = ['billing'] as const;
 
 // ─── Invoices ─────────────────────────────────────────────────────────────────
 
-export function useInvoices(params: { status?: string; reservationId?: string } = {}) {
+export function useInvoices(params: { status?: string; reservationId?: string; limit?: number; offset?: number } = {}) {
   const { status } = useAuth();
   return useQuery({
     queryKey: [...INVOICE_KEY, 'list', params],
