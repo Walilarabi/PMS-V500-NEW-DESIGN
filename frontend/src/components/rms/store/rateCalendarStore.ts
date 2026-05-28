@@ -4,7 +4,12 @@ import {
   NewRoomPayload, NewRatePlanPayload, UpdateRoomPayload, UpdateRatePlanPayload,
   CalcMode, RatePlanData
 } from "../types";
-import { fetchCalendarDataFromSupabase as fetchCalendarData } from "../data/supabaseAdapter";
+import {
+  fetchCalendarDataFromSupabase as fetchCalendarData,
+  persistAddRatePlan,
+  persistUpdateRatePlan,
+  persistDeleteRatePlan,
+} from "../data/supabaseAdapter";
 import { PricingRulesEngine } from "../engines/PricingRulesEngine";
 import { CascadePricingEngine } from "../engines/CascadePricingEngine";
 import { propagateVirtualRoomCascade, rebuildAllVirtualInventories } from "../engines/VirtualRoomCascadeEngine";
@@ -580,29 +585,42 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       return { roomTypes: next };
     }),
 
-    addRatePlan: (payload) => set((state) => {
-      const planId = `plan_${payload.planCode.toLowerCase()}`;
-      const newPlan: RatePlanData = {
-        internalId: nextInternalId(), planId, planName: payload.planName, planCode: payload.planCode,
-        pensionType: payload.pensionType, channelType: payload.channelType, calcMode: payload.calcMode,
-        calcValue: payload.calcValue, referencePlanId: payload.referencePlanId, isReference: false,
-        isActive: true, connectivityType: payload.connectivityType, isConnectivityLocked: false,
-        assignedRoomTypeIds: payload.assignedRoomTypeIds, distributionChannels: payload.distributionChannels, prices: [],
-      };
-      (newPlan as any).calcPercent = (payload as any).calcPercent || 0;
-      return { roomTypes: state.roomTypes.map(r => payload.assignedRoomTypeIds.includes(r.roomTypeId) ? { ...r, ratePlans: [...r.ratePlans, newPlan] } : r) };
-    }),
+    addRatePlan: (payload) => {
+      set((state) => {
+        const planId = `plan_${payload.planCode.toLowerCase()}`;
+        const newPlan: RatePlanData = {
+          internalId: nextInternalId(), planId, planName: payload.planName, planCode: payload.planCode,
+          pensionType: payload.pensionType, channelType: payload.channelType, calcMode: payload.calcMode,
+          calcValue: payload.calcValue, referencePlanId: payload.referencePlanId, isReference: false,
+          isActive: true, connectivityType: payload.connectivityType, isConnectivityLocked: false,
+          assignedRoomTypeIds: payload.assignedRoomTypeIds, distributionChannels: payload.distributionChannels, prices: [],
+        };
+        (newPlan as any).calcPercent = (payload as any).calcPercent || 0;
+        return { roomTypes: state.roomTypes.map(r => payload.assignedRoomTypeIds.includes(r.roomTypeId) ? { ...r, ratePlans: [...r.ratePlans, newPlan] } : r) };
+      });
+      void persistAddRatePlan(payload);
+    },
 
-    updateRatePlan: (payload) => set((state) => ({
-      roomTypes: state.roomTypes.map(r => ({
-        ...r,
-        ratePlans: r.ratePlans.map(rp => rp.planId === payload.planId ? { ...rp, ...payload } : rp),
-      })),
-    })),
+    updateRatePlan: (payload) => {
+      set((state) => ({
+        roomTypes: state.roomTypes.map(r => ({
+          ...r,
+          ratePlans: r.ratePlans.map(rp => rp.planId === payload.planId ? { ...rp, ...payload } : rp),
+        })),
+      }));
+      void persistUpdateRatePlan(payload);
+    },
 
-    deleteRatePlan: (roomTypeId, planId) => set((s) => ({
-      roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, ratePlans: r.ratePlans.filter(p => p.planId !== planId) } : r)
-    })),
+    deleteRatePlan: (roomTypeId, planId) => {
+      // Extract planCode from planId before removing from state
+      const plan = get().roomTypes
+        .find(r => r.roomTypeId === roomTypeId)
+        ?.ratePlans.find(p => p.planId === planId);
+      set((s) => ({
+        roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, ratePlans: r.ratePlans.filter(p => p.planId !== planId) } : r)
+      }));
+      if (plan?.planCode) void persistDeleteRatePlan(plan.planCode);
+    },
 
     toggleRatePlanActive: (roomTypeId, planId) => set((s) => ({
       roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, ratePlans: r.ratePlans.map(p => p.planId === planId ? { ...p, isActive: !p.isActive } : p) } : r)
