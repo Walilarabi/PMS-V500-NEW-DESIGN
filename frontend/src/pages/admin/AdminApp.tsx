@@ -1,37 +1,85 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard, Building2, Users, Ticket, BookOpen,
-  LogOut, ChevronRight, Shield, CreditCard, FileText,
+  LogOut, Shield, CreditCard, FileText, Settings,
+  Activity, HeadphonesIcon, Package, ChevronRight,
+  FilePlus,
 } from 'lucide-react';
+import { Toaster } from 'react-hot-toast';
 import { cn } from '@/src/lib/utils';
 import { useAdmin } from '@/src/domains/admin/AdminContext';
 import { supabase } from '@/src/lib/supabase';
-import { AdminDashboard } from './AdminDashboard';
-import { AdminHotels }    from './AdminHotels';
-import { AdminSupport }   from './AdminSupport';
-import { AdminArticles }  from './AdminArticles';
+import { AdminDashboard }    from './AdminDashboard';
+import { AdminHotels }       from './AdminHotels';
+import { AdminUsers }        from './AdminUsers';
+import { AdminSupport }      from './AdminSupport';
+import { AdminArticles }     from './AdminArticles';
+import { AdminSubscriptions }from './AdminSubscriptions';
+import { AdminBilling }      from './AdminBilling';
+import { AdminContracts }    from './AdminContracts';
+import { AdminSupportMode }  from './AdminSupportMode';
+import { AdminLogs }         from './AdminLogs';
+import { AdminSettings }     from './AdminSettings';
 
-// ─── Navigation config ────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type AdminPage = 'dashboard' | 'hotels' | 'users' | 'support' | 'articles' | 'subscriptions' | 'billing';
+export type AdminPage =
+  | 'dashboard' | 'hotels' | 'users'
+  | 'subscriptions' | 'billing' | 'contracts'
+  | 'support_mode' | 'support' | 'articles'
+  | 'logs' | 'settings';
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
 
 interface NavItem {
   id: AdminPage;
   label: string;
   icon: React.ElementType;
-  badge?: string;
-  soon?: boolean;
   requiredRole?: 'super_admin' | 'billing_admin' | 'support_agent';
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard',     label: 'Tableau de bord',    icon: LayoutDashboard },
-  { id: 'hotels',        label: 'Hôtels',             icon: Building2,    requiredRole: 'super_admin' },
-  { id: 'users',         label: 'Utilisateurs',       icon: Users,        soon: true, requiredRole: 'super_admin' },
-  { id: 'subscriptions', label: 'Abonnements',        icon: CreditCard,   soon: true, requiredRole: 'billing_admin' },
-  { id: 'billing',       label: 'Facturation',        icon: FileText,     soon: true, requiredRole: 'billing_admin' },
-  { id: 'support',       label: 'Support global',     icon: Ticket },
-  { id: 'articles',      label: 'Articles d\'aide',   icon: BookOpen },
+// ─── Navigation ───────────────────────────────────────────────────────────────
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Vue d\'ensemble',
+    items: [
+      { id: 'dashboard',  label: 'Tableau de bord', icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: 'Clients',
+    items: [
+      { id: 'hotels',  label: 'Hôtels',          icon: Building2, requiredRole: 'super_admin' },
+      { id: 'users',   label: 'Utilisateurs',    icon: Users,     requiredRole: 'super_admin' },
+    ],
+  },
+  {
+    label: 'Commercial',
+    items: [
+      { id: 'subscriptions', label: 'Abonnements', icon: Package,   requiredRole: 'billing_admin' },
+      { id: 'billing',       label: 'Facturation',  icon: CreditCard,requiredRole: 'billing_admin' },
+      { id: 'contracts',     label: 'Contrats',     icon: FilePlus,  requiredRole: 'billing_admin' },
+    ],
+  },
+  {
+    label: 'Support',
+    items: [
+      { id: 'support_mode', label: 'Mode support',     icon: HeadphonesIcon },
+      { id: 'support',      label: 'Tickets globaux',  icon: Ticket },
+      { id: 'articles',     label: 'Articles d\'aide', icon: BookOpen },
+    ],
+  },
+  {
+    label: 'Plateforme',
+    items: [
+      { id: 'logs',     label: 'Logs & Activité',  icon: Activity,  requiredRole: 'super_admin' },
+      { id: 'settings', label: 'Paramètres',        icon: Settings,  requiredRole: 'super_admin' },
+    ],
+  },
 ];
 
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
@@ -53,8 +101,6 @@ export const AdminApp: React.FC = () => {
     return true;
   };
 
-  const visibleItems = NAV_ITEMS.filter(canAccess);
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/';
@@ -64,64 +110,72 @@ export const AdminApp: React.FC = () => {
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#F9FAFB]">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-100 flex flex-col shrink-0">
+      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+
+      {/* ── Sidebar ────────────────────────────────────────────────────── */}
+      <aside className="w-60 bg-white border-r border-gray-100 flex flex-col shrink-0">
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-gray-100">
+        <div className="px-4 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#8B5CF6] flex items-center justify-center">
-              <Shield size={16} className="text-white" />
+            <div className="w-8 h-8 rounded-xl bg-[#8B5CF6] flex items-center justify-center shadow-md shadow-[#8B5CF6]/30">
+              <Shield size={15} className="text-white" />
             </div>
             <div>
-              <p className="text-sm font-black text-gray-900">Flowtym</p>
-              <p className="text-[10px] font-bold text-[#8B5CF6] uppercase tracking-widest">Administration</p>
+              <p className="text-[13px] font-black text-gray-900 leading-tight">Flowtym</p>
+              <p className="text-[9px] font-bold text-[#8B5CF6] uppercase tracking-widest">Administration</p>
             </div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {visibleItems.map(item => {
-            const active = page === item.id;
+        <nav className="flex-1 p-2 space-y-3 overflow-y-auto">
+          {NAV_GROUPS.map(group => {
+            const visible = group.items.filter(canAccess);
+            if (!visible.length) return null;
             return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => !item.soon && setPage(item.id)}
-                className={cn(
-                  'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[13px] font-bold transition-colors text-left',
-                  active
-                    ? 'bg-[#8B5CF6] text-white'
-                    : item.soon
-                    ? 'text-gray-300 cursor-not-allowed'
-                    : 'text-gray-600 hover:bg-gray-50',
-                )}
-              >
-                <item.icon size={15} className="shrink-0" />
-                <span className="flex-1">{item.label}</span>
-                {item.soon && (
-                  <span className="text-[9px] font-bold bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                    Bientôt
-                  </span>
-                )}
-                {active && <ChevronRight size={13} />}
-              </button>
+              <div key={group.label}>
+                <p className="px-3 mb-1 text-[9px] font-black uppercase tracking-widest text-gray-300">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {visible.map(item => {
+                    const active = page === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setPage(item.id)}
+                        className={cn(
+                          'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12px] font-semibold transition-colors text-left',
+                          active
+                            ? 'bg-[#8B5CF6] text-white shadow-sm shadow-[#8B5CF6]/30'
+                            : 'text-gray-500 hover:text-gray-800 hover:bg-gray-50',
+                        )}
+                      >
+                        <item.icon size={14} className="shrink-0" />
+                        <span className="flex-1">{item.label}</span>
+                        {active && <ChevronRight size={12} className="opacity-60" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </nav>
 
         {/* User info + logout */}
-        <div className="p-3 border-t border-gray-100">
-          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-gray-50">
-            <div className="w-7 h-7 rounded-lg bg-[#8B5CF6]/20 flex items-center justify-center shrink-0">
+        <div className="p-2 border-t border-gray-100 space-y-1">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50">
+            <div className="w-7 h-7 rounded-lg bg-[#8B5CF6]/15 flex items-center justify-center shrink-0">
               <span className="text-[11px] font-black text-[#8B5CF6]">
                 {(admin?.fullName ?? admin?.email ?? 'A').charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] font-bold text-gray-900 truncate">{admin?.fullName ?? admin?.email}</p>
+              <p className="text-[11px] font-bold text-gray-900 truncate">{admin?.fullName ?? admin?.email}</p>
               {roleInfo && (
-                <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-md', roleInfo.color)}>
+                <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded-md', roleInfo.color)}>
                   {roleInfo.label}
                 </span>
               )}
@@ -131,53 +185,35 @@ export const AdminApp: React.FC = () => {
               title="Déconnexion"
               className="p-1.5 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
             >
-              <LogOut size={14} />
+              <LogOut size={13} />
             </button>
           </div>
-          {/* Back to PMS link */}
           <a
             href="/"
-            className="flex items-center justify-center gap-1.5 mt-2 text-[11px] font-bold text-gray-400 hover:text-[#8B5CF6] transition-colors py-1.5"
+            className="flex items-center justify-center gap-1 text-[11px] font-semibold text-gray-400 hover:text-[#8B5CF6] transition-colors py-1"
           >
             ← Retour au PMS hôtel
           </a>
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* ── Main content ───────────────────────────────────────────────── */}
       <main className="flex-1 overflow-y-auto">
-        <div className="p-8 max-w-6xl mx-auto">
-          {page === 'dashboard'     && <AdminDashboard />}
+        <div className="p-6">
+          {page === 'dashboard'     && <AdminDashboard onNavigate={setPage} />}
           {page === 'hotels'        && <AdminHotels />}
+          {page === 'users'         && <AdminUsers />}
+          {page === 'subscriptions' && <AdminSubscriptions />}
+          {page === 'billing'       && <AdminBilling />}
+          {page === 'contracts'     && <AdminContracts />}
+          {page === 'support_mode'  && <AdminSupportMode />}
           {page === 'support'       && <AdminSupport />}
           {page === 'articles'      && <AdminArticles />}
-          {(page === 'users' || page === 'subscriptions' || page === 'billing') && (
-            <ComingSoon page={page} />
-          )}
+          {page === 'logs'          && <AdminLogs />}
+          {page === 'settings'      && <AdminSettings />}
         </div>
       </main>
-    </div>
-  );
-};
 
-const SOON_META: Record<string, { title: string; description: string }> = {
-  users:         { title: 'Gestion des utilisateurs', description: 'Création de comptes, attribution des rôles hôtel, réinitialisation de mots de passe.' },
-  subscriptions: { title: 'Abonnements & Contrats',   description: 'Activation/désactivation des abonnements, ajout d\'options, édition des contrats.' },
-  billing:       { title: 'Facturation',              description: 'Génération de factures, suivi des paiements, historique de facturation par hôtel.' },
-};
-
-const ComingSoon: React.FC<{ page: string }> = ({ page }) => {
-  const meta = SOON_META[page] ?? { title: page, description: '' };
-  return (
-    <div className="flex flex-col items-center justify-center py-24 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-[#8B5CF6]/10 flex items-center justify-center mb-5">
-        <Shield size={28} className="text-[#8B5CF6]" />
-      </div>
-      <h2 className="text-xl font-bold text-gray-900 mb-2">{meta.title}</h2>
-      <p className="text-sm text-gray-400 max-w-sm">{meta.description}</p>
-      <span className="mt-5 px-4 py-2 bg-[#8B5CF6]/8 rounded-xl text-xs font-bold text-[#8B5CF6] uppercase tracking-widest">
-        Prochainement
-      </span>
     </div>
   );
 };
