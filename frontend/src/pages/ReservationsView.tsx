@@ -10,13 +10,14 @@
  */
 
 import React from 'react';
+import * as XLSX from 'xlsx';
 import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 import {
   Search, Filter, Download, FileSpreadsheet, Plus,
   Calendar, Clock, User, Zap, CheckCircle2, HelpCircle,
   ArrowUpRight, Eye, Copy, Trash2, Pencil,
   CreditCard, ChevronDown, ChevronLeft, ChevronRight,
-  BedDouble, TrendingUp, AlertTriangle,
+  BedDouble, TrendingUp, AlertTriangle, X,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
@@ -150,6 +151,50 @@ const AVATAR_COLORS = [
 const avatarColor = (ref: string) =>
   AVATAR_COLORS[ref.charCodeAt(ref.length - 1) % AVATAR_COLORS.length];
 
+// ─── Export helpers ───────────────────────────────────────────────────────
+
+const EXPORT_HEADERS = ['Référence','Statut','Client','Email','Téléphone','Pers.','Check-in','Check-out','Nuits','Montant (€)','Solde (€)','Canal','Chambre','Type'];
+
+function rowsToCsvBlob(rows: ResTableRow[]): Blob {
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const lines = [
+    EXPORT_HEADERS.join(';'),
+    ...rows.map(r => [
+      r.ref, r.status, r.client, r.email, r.phone ?? '',
+      r.pers, r.checkin, r.checkout, r.nights,
+      r.amountRaw, r.soldeRaw, r.channel, r.room, r.roomType,
+    ].map(v => esc(String(v ?? ''))).join(';')),
+  ];
+  return new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportToXlsx(rows: ResTableRow[], filename: string) {
+  const data = [
+    EXPORT_HEADERS,
+    ...rows.map(r => [
+      r.ref, r.status, r.client, r.email, r.phone ?? '',
+      r.pers, r.checkin, r.checkout, r.nights,
+      r.amountRaw, r.soldeRaw, r.channel, r.room, r.roomType,
+    ]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Réservations');
+  XLSX.writeFile(wb, filename);
+}
+
+const buildFilename = (ext: 'csv' | 'xlsx') => {
+  const d = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `reservations-${d}.${ext}`;
+};
+
 // ─── Status badge — pastel ────────────────────────────────────────────────
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
@@ -229,6 +274,9 @@ export const ReservationsView = () => {
   const [statusFilter,   setStatusFilter]   = React.useState('ALL');
   const [channelFilter,  setChannelFilter]  = React.useState('ALL');
   const [roomTypeFilter, setRoomTypeFilter] = React.useState('ALL');
+  const [showDateFilter, setShowDateFilter] = React.useState(false);
+  const [dateFrom,       setDateFrom]       = React.useState('');
+  const [dateTo,         setDateTo]         = React.useState('');
 
   // Pagination
   const [page,    setPage]    = React.useState(1);
@@ -306,11 +354,14 @@ export const ReservationsView = () => {
       if (statusFilter  !== 'ALL' && r.status   !== statusFilter)  return false;
       if (channelFilter !== 'ALL' && r.channel  !== channelFilter) return false;
       if (roomTypeFilter !== 'ALL' && r.roomType !== roomTypeFilter) return false;
+      // Date range: reservation overlaps [dateFrom, dateTo]
+      if (dateFrom && r.checkoutRaw && r.checkoutRaw < dateFrom) return false;
+      if (dateTo   && r.checkinRaw  && r.checkinRaw  > dateTo)   return false;
       return true;
     });
-  }, [tableRows, searchQuery, statusFilter, channelFilter, roomTypeFilter]);
+  }, [tableRows, searchQuery, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo]);
 
-  React.useEffect(() => { setPage(1); }, [searchQuery, statusFilter, channelFilter, roomTypeFilter, perPage]);
+  React.useEffect(() => { setPage(1); }, [searchQuery, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo, perPage]);
 
   // ── Pagination
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / perPage));
@@ -369,10 +420,20 @@ export const ReservationsView = () => {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]">
+            <Button
+              variant="outline" size="sm"
+              className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]"
+              onClick={() => downloadBlob(rowsToCsvBlob(filteredRows), buildFilename('csv'))}
+              disabled={filteredRows.length === 0}
+            >
               <Download size={14} className="text-gray-400" /> Exporter
             </Button>
-            <Button variant="outline" size="sm" className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]">
+            <Button
+              variant="outline" size="sm"
+              className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]"
+              onClick={() => exportToXlsx(filteredRows, buildFilename('xlsx'))}
+              disabled={filteredRows.length === 0}
+            >
               <FileSpreadsheet size={14} className="text-emerald-500" /> Excel
             </Button>
             <Button
@@ -469,8 +530,20 @@ export const ReservationsView = () => {
             <FilterSelect value={roomTypeFilter} onChange={setRoomTypeFilter} options={roomTypeOptions} />
           )}
 
-          <Button variant="outline" className="gap-1.5 font-semibold border-gray-200 text-violet-600 h-9 text-[13px]">
+          <Button
+            variant="outline"
+            className={cn(
+              'gap-1.5 font-semibold h-9 text-[13px]',
+              showDateFilter
+                ? 'border-violet-400 text-violet-700 bg-violet-50'
+                : 'border-gray-200 text-violet-600',
+            )}
+            onClick={() => setShowDateFilter(v => !v)}
+          >
             <Filter size={13} /> Filtres
+            {(dateFrom || dateTo) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-600 ml-0.5" />
+            )}
           </Button>
 
           {/* Date info */}
@@ -479,6 +552,43 @@ export const ReservationsView = () => {
             {new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
           </div>
         </div>
+
+        {/* ── Date range filter panel ────────────────────────────────── */}
+        {showDateFilter && (
+          <div className="flex items-center gap-4 px-4 py-3 bg-white rounded-2xl border border-violet-100 shadow-sm">
+            <span className="text-[12px] font-bold text-gray-500 uppercase tracking-wider shrink-0">Période</span>
+            <div className="flex items-center gap-2">
+              <label className="text-[12px] text-gray-500 font-medium shrink-0">Du</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] font-medium text-gray-700 bg-white outline-none focus:border-violet-400 transition-colors"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[12px] text-gray-500 font-medium shrink-0">Au</label>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={e => setDateTo(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] font-medium text-gray-700 bg-white outline-none focus:border-violet-400 transition-colors"
+              />
+            </div>
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); }}
+                className="flex items-center gap-1 text-[12px] text-red-400 hover:text-red-600 font-semibold transition-colors"
+              >
+                <X size={12} /> Effacer
+              </button>
+            )}
+            <span className="text-[12px] text-gray-400 ml-auto">
+              {filteredRows.length} résultat{filteredRows.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
 
         {/* ── Table pleine largeur ─────────────────────────────────────── */}
         <div className="space-y-3">
