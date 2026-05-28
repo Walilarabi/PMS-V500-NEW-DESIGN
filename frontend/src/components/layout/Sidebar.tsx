@@ -237,9 +237,9 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
       ],
     },
     {
-      label: 'Support',
+      label: 'Aide & Support',
       items: [
-        { id: 'support', label: 'Support technique', icon: Headphones },
+        { id: 'support', label: 'Aide & Support',    icon: Headphones },
       ],
     },
   ],
