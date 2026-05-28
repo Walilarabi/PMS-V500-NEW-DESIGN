@@ -284,6 +284,7 @@ export const ReservationsView = () => {
   // Pagination
   const [page,    setPage]    = React.useState(1);
   const [perPage, setPerPage] = React.useState(25);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
   // ── Wide query for KPIs and filter dropdowns (no pagination, no text filter)
   const { data: kpiData } = useReservations({ limit: 1000 });
@@ -426,6 +427,12 @@ export const ReservationsView = () => {
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#F8F9FD]">
+      {errorMsg && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-rose-700 text-white text-[12.5px] px-4 py-2.5 shadow-lg flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-200 shrink-0" />
+          {errorMsg}
+        </div>
+      )}
       <div className="p-6 space-y-5 max-w-[1800px] mx-auto">
         <LiveReservationsBanner />
 
@@ -823,6 +830,9 @@ export const ReservationsView = () => {
                       setConfirmDelete(null);
                     } catch (err) {
                       console.error('[ReservationsView] delete failed:', err);
+                      setConfirmDelete(null);
+                      setErrorMsg(err instanceof Error ? err.message : 'Impossible de supprimer la réservation');
+                      window.setTimeout(() => setErrorMsg(null), 5000);
                     }
                   }}
                 >

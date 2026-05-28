@@ -84,6 +84,12 @@ async function saveToSupabase(payload: {
       }, { onConflict: 'hotel_id,namespace' });
   } catch (err) {
     console.error('[ConnectorsPage] saveToSupabase failed:', err);
+    try {
+      const { captureError } = await import('@/src/services/settings/monitoringService');
+      captureError(err, { context: 'ConnectorsPage.saveToSupabase' });
+    } catch {
+      // monitoring unavailable
+    }
   }
 }
 
