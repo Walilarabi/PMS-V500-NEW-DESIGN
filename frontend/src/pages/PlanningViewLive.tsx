@@ -749,7 +749,7 @@ export const PlanningView = () => {
                 >
                   <div className="grid grid-cols-3 gap-1 p-3">
                     {Array.from({ length: 12 }).map((_, i) => {
-                      const d = new Date(2026, i, 1);
+                      const d = new Date(new Date().getFullYear(), i, 1);
                       const isCurrent = i === (displayMode === 'Gantt' ? currentDate.getMonth() : monthDate.getMonth());
                       return (
                         <button

@@ -3,7 +3,7 @@
  */
 import { useState } from 'react';
 import {
-  AlertTriangle, BadgeEuro, BedDouble, Calendar, Clock, CreditCard, Crown, FileText,
+  AlertTriangle, BadgeEuro, BedDouble, Calendar, CreditCard, FileText,
   Globe2, Hash, Hotel, IdCard, Mail, MapPin, Phone, Printer, Search, Sparkles, Users,
   WalletCards, X, type LucideIcon,
 } from 'lucide-react';
@@ -185,19 +185,57 @@ export const ReservationModal = ({ state, onClose, onValidate }: { state: Reserv
           )}
 
           {activeTab === 'incidents' && (
-            <div className="space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-4"><div className="rounded-2xl bg-red-50 p-4 text-red-600"><AlertTriangle /></div><div><h4 className="text-2xl font-black">Journal des Incidents</h4><p className="font-semibold text-slate-400">Chambre {row.room} · 1 actif(s)</p></div></div><button className="rounded-2xl bg-violet-600 px-6 py-3 font-black text-white shadow-lg shadow-violet-600/25">+ Signaler un incident</button></div>{[{ tone: 'orange', title: 'Climatisation chambre insuffisante — température maintenue à 26°C malgré réglage', status: 'EN COURS' }, { tone: 'green', title: 'Nuisances sonores signalées — chambre voisine', status: 'RÉSOLU' }].map((incident) => <div key={incident.title} className={cn('rounded-3xl bg-white p-7 shadow-sm border-l-4', incident.tone === 'orange' ? 'border-orange-500' : 'border-emerald-500')}><div className="flex items-center gap-3 text-sm font-black"><span className="rounded-xl bg-slate-100 px-3 py-2 text-slate-500">TECHNIQUE</span><span className={cn('rounded-xl px-3 py-2', incident.tone === 'orange' ? 'bg-orange-50 text-orange-600' : 'bg-emerald-50 text-emerald-600')}>{incident.status}</span><span className="text-slate-400">05/05/2026 · 14:30</span></div><h5 className="mt-5 text-xl font-black text-slate-900">{incident.title}</h5><div className="mt-6 border-t border-slate-100 pt-5 text-slate-500">Intervention : <b>Maintenance</b> <span className="ml-4 rounded-lg bg-blue-50 px-3 py-1 font-black text-blue-600">✓ CLIENT INFORMÉ</span></div></div>)}</div>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="rounded-2xl bg-red-50 p-4 text-red-600"><AlertTriangle /></div>
+                  <div><h4 className="text-2xl font-black">Journal des Incidents</h4><p className="font-semibold text-slate-400">Chambre {row.room}</p></div>
+                </div>
+                <button className="rounded-2xl bg-violet-600 px-6 py-3 font-black text-white shadow-lg shadow-violet-600/25">+ Signaler un incident</button>
+              </div>
+              <div className="rounded-3xl bg-slate-50 p-10 text-center text-slate-400 font-semibold">
+                Aucun incident enregistré pour ce séjour.
+              </div>
+            </div>
           )}
 
           {activeTab === 'lost' && (
-            <div className="space-y-6"><div className="flex items-center justify-between"><div className="flex items-center gap-4"><div className="rounded-2xl bg-orange-50 p-4 text-orange-600"><Search /></div><div><h4 className="text-2xl font-black">Objets Oubliés (Lost & Found)</h4><p className="font-semibold text-slate-400">Gestion des articles trouvés en chambre</p></div></div><button className="rounded-2xl bg-violet-600 px-6 py-3 font-black text-white shadow-lg shadow-violet-600/25">+ Déclarer un objet</button></div><div className="grid gap-5 md:grid-cols-2">{['Chargeur iPhone blanc + câble', 'Veste bleue Zara, taille M'].map((item, i) => <div key={item} className={cn('rounded-3xl bg-white p-7 shadow-sm border-l-4', i === 0 ? 'border-orange-500' : 'border-blue-600')}><div className="mb-5 flex justify-between"><span className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-black uppercase text-slate-400">{i === 0 ? 'Electronique' : 'Vêtement'}</span><span className={cn('rounded-xl px-3 py-2 text-xs font-black', i === 0 ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600')}>{i === 0 ? 'À traiter' : 'Réclamé'}</span></div><h5 className="text-xl font-black text-slate-900">{item}</h5><p className="mt-3 font-semibold text-slate-500"><MapPin size={16} className="inline mr-2" />Trouvé à : {i === 0 ? `Chambre ${row.room}` : 'Restaurant'}</p><div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4 text-sm text-slate-400"><span>Déclaré le 05/05/2026</span><div className="flex gap-2"><button className="rounded-xl border border-slate-200 px-3 py-2 font-bold text-slate-500">Étiqueter</button><button className="rounded-xl border border-blue-200 px-3 py-2 font-bold text-blue-600">Informer client</button></div></div></div>)}</div></div>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="rounded-2xl bg-orange-50 p-4 text-orange-600"><Search /></div>
+                  <div><h4 className="text-2xl font-black">Objets Oubliés (Lost & Found)</h4><p className="font-semibold text-slate-400">Gestion des articles trouvés en chambre</p></div>
+                </div>
+                <button className="rounded-2xl bg-violet-600 px-6 py-3 font-black text-white shadow-lg shadow-violet-600/25">+ Déclarer un objet</button>
+              </div>
+              <div className="rounded-3xl bg-slate-50 p-10 text-center text-slate-400 font-semibold">
+                Aucun objet déclaré pour cette chambre.
+              </div>
+            </div>
           )}
 
-          {activeTab === 'reviews' && (
-            <div className="space-y-6"><div className="rounded-3xl bg-white p-8 shadow-sm border border-slate-100 md:flex md:items-center md:gap-10"><div className="border-r border-slate-100 pr-10"><div className="text-6xl font-black text-amber-500">8.0</div><div className="mt-2 font-black text-slate-400">2 AVIS CLIENTS</div></div><div className="grid flex-1 gap-5 md:grid-cols-2">{[['Propreté','8.5','bg-emerald-500'],['Confort','7.5','bg-amber-500'],['Localisation','10.0','bg-emerald-500'],['Service','8.0','bg-emerald-500']].map(([label, score, color]) => <div key={label}><div className="mb-2 flex justify-between font-black text-slate-600"><span>{label}</span><span>{score}</span></div><div className="h-2 rounded-full bg-slate-100"><div className={cn('h-full rounded-full', color)} style={{ width: `${Number(score) * 10}%` }} /></div></div>)}</div></div>{['Excellent séjour, personnel aux petits soins. La suite panoramique valait largement l’investissement.', 'Bon séjour dans l’ensemble. Climatisation un peu bruyante la nuit.'].map((review, i) => <div key={review} className={cn('rounded-3xl bg-white p-8 shadow-sm border-l-4', i === 0 ? 'border-emerald-500' : 'border-amber-500')}><div className="mb-5 flex justify-between"><span className="rounded-xl bg-violet-50 px-4 py-2 text-sm font-black text-violet-600">{i === 0 ? 'DIRECT' : 'BOOKING.COM'}</span><span className="font-black text-slate-900">{i === 0 ? '9/10' : '7/10'}</span></div><blockquote className="text-xl font-bold italic text-slate-800">"{review}"</blockquote>{i === 0 ? <div className="mt-6 rounded-2xl bg-slate-50 p-5 text-slate-600">Merci pour votre confiance. Nous espérons vous accueillir à nouveau très prochainement.</div> : <button className="mt-6 rounded-2xl border border-violet-200 px-5 py-3 font-black text-violet-500">Répondre à cet avis</button>}</div>)}</div>
+          {activeTab === ‘reviews’ && (
+            <div className="space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="rounded-2xl bg-amber-50 p-4 text-amber-600"><Sparkles /></div>
+                <div><h4 className="text-2xl font-black">Avis Clients</h4><p className="font-semibold text-slate-400">Évaluations liées à ce séjour</p></div>
+              </div>
+              <div className="rounded-3xl bg-slate-50 p-10 text-center text-slate-400 font-semibold">
+                Aucun avis enregistré pour ce séjour.
+              </div>
+            </div>
           )}
 
           {activeTab === 'elite' && (
-            <div className="space-y-7"><div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-900 to-orange-700 p-9 text-white"><div className="text-sm font-black uppercase tracking-[0.25em] text-white/55">Élite Stay Member</div><h4 className="mt-2 text-3xl font-black">Tier Gold</h4><div className="mt-3 text-2xl font-black">{row.guest}</div><p className="mt-4 font-semibold text-white/65">Inscrit le 15/01/2024 · 6 séjours cumulés</p><div className="mt-3 text-6xl font-black text-amber-200">15004 <span className="text-xl text-white/55">PTS</span></div><div className="absolute right-10 top-10 text-right"><div className="text-sm font-black text-white/55">ID MEMBRE</div><div className="mt-2 font-mono text-xl font-black">ES-GUEST</div></div><div className="absolute bottom-10 right-10 rounded-2xl bg-white/10 px-8 py-5 text-center"><div className="text-sm font-black text-white/55">VALEUR</div><div className="text-2xl font-black">150,00 €</div></div></div><div className="rounded-3xl bg-white p-7 shadow-sm border border-slate-100"><div className="mb-4 flex justify-between font-black"><span>Objectif Platinum</span><span className="text-violet-600">31244 pts manquants</span></div><div className="h-3 rounded-full bg-slate-100"><div className="h-full w-[18%] rounded-full bg-gradient-to-r from-amber-500 to-violet-500" /></div><div className="mt-3 flex justify-between font-bold text-slate-400"><span>18756 pts (Total)</span><span>Prochain palier : 50000 pts</span></div></div><div className="grid gap-5 md:grid-cols-4"><Metric label="Dépenses totales" value="1500,50 €" /><Metric label="Gains ce séjour" value="+6300 pts" tone="text-emerald-600" /><Metric label="Taux multiplicateur" value="×1.5" tone="text-violet-600" /><Metric label="Statut actuel" value="Gold" tone="text-amber-500" /></div><div className="grid gap-6 md:grid-cols-2"><div className="rounded-3xl bg-white p-7 shadow-sm border border-slate-100"><PanelTitle icon={Crown}>Vos avantages Gold</PanelTitle><div className="space-y-4 font-semibold text-slate-600">{['Bonus x1.5 sur les points','Surclassement si disponible','Petit-déjeuner offert 1×/séjour','Late checkout 14h00'].map((b) => <div key={b} className="flex gap-3"><span className="text-emerald-500">✓</span>{b}</div>)}</div></div><div className="rounded-3xl border border-violet-200 bg-violet-50 p-7"><PanelTitle icon={BadgeEuro}>Comment convertir ?</PanelTitle><div className="space-y-4 font-bold text-violet-700"><p>· Vous gagnez 10 points par euro dépensé.</p><p>· 1000 points = 10,00 € de remise directe.</p><p>· Valable sur les séjours, le restaurant et le spa.</p></div><button className="mt-7 w-full rounded-2xl bg-violet-600 py-4 font-black text-white shadow-lg shadow-violet-600/25">Utiliser mes points maintenant</button></div></div><div className="rounded-3xl bg-white p-7 shadow-sm border border-slate-100"><PanelTitle icon={Clock}>Historique des transactions</PanelTitle><table className="w-full text-sm"><thead className="bg-slate-50 text-left text-slate-400"><tr><th className="p-4">Date</th><th>Type</th><th>Détails</th><th className="pr-4 text-right">Points</th></tr></thead><tbody className="divide-y divide-slate-100">{['Séjour — Ch. 102 — 5 nuit(s)','Séjour — Ch. 101 — 3 nuit(s)','Bonus Silver ×1.25 — RES-001'].map((detail, i) => <tr key={detail}><td className="p-4 text-slate-500">05/05/2026</td><td><span className={cn('rounded-full px-3 py-1 text-xs font-black', i === 2 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600')}>{i === 2 ? 'DÉBIT' : 'GAIN'}</span></td><td className="font-bold">{detail}</td><td className="pr-4 text-right font-black text-emerald-600">+{i === 0 ? '250' : i === 1 ? '4200' : '1050'}</td></tr>)}</tbody></table></div></div>
+            <div className="space-y-7">
+              <div className="flex items-center gap-4">
+                <div className="rounded-2xl bg-amber-50 p-4 text-amber-600"><BadgeEuro /></div>
+                <div><h4 className="text-2xl font-black">Élite Stay</h4><p className="font-semibold text-slate-400">{row.guest}</p></div>
+              </div>
+              <div className="rounded-3xl bg-slate-50 p-10 text-center text-slate-400 font-semibold">
+                Aucune adhésion Élite Stay trouvée pour ce client.
+              </div>
+            </div>
           )}
         </div>
       </div>

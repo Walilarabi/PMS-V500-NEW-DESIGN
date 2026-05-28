@@ -143,8 +143,9 @@ const appendLog = (res: Reservation, log: Omit<ReservationLog, 'timestamp'>): Re
 const calcNights = (arrival: string, departure: string): number => {
   // Try to extract date part if it's "DD MMM HH:mm"
   const parseSpecial = (s: string) => {
-    if (s.includes(' avr.')) return new Date(2026, 3, parseInt(s));
-    if (s.includes(' mai')) return new Date(2026, 4, parseInt(s));
+    const y = new Date().getFullYear();
+    if (s.includes(' avr.')) return new Date(y, 3, parseInt(s));
+    if (s.includes(' mai')) return new Date(y, 4, parseInt(s));
     return new Date(s);
   };
 

@@ -78,7 +78,7 @@ function layoutWeek(weekStart: Date, weekEnd: Date, events: RMSMarketEvent[]) {
 export const EventsCalendar: React.FC<EventsCalendarProps> = ({ onSelectEvent, onCreate }) => {
   const { getFilteredEvents, getPressureWindow } = useEventsStore();
   const events = getFilteredEvents();
-  const [cursor, setCursor] = useState<Date>(() => new Date(2026, 5, 1)); // juin 2026 pour démo
+  const [cursor, setCursor] = useState<Date>(() => new Date());
 
   const gridStart = useMemo(() => startOfMonthGrid(cursor), [cursor]);
   const weeks = useMemo(() => {
