@@ -8,6 +8,68 @@ import toast from 'react-hot-toast';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
 
+// ─── PDF generation ───────────────────────────────────────────────────────────
+
+async function downloadContractPDF(c: Contract): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+  doc.setFillColor(139, 92, 246);
+  doc.rect(0, 0, 210, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('FLOWTYM', 14, 16);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Contrat SaaS PMS Hôtelier', 14, 22);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('CONTRAT', 160, 16);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(c.number, 160, 22);
+
+  doc.setTextColor(30, 30, 30);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text(c.title, 14, 42);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Hôtel : ${c.hotel_name ?? c.hotel_id}`, 14, 52);
+  doc.text(`Date : ${new Date(c.created_at).toLocaleDateString('fr-FR')}`, 14, 57);
+  if (c.sent_at) doc.text(`Envoyé le : ${new Date(c.sent_at).toLocaleDateString('fr-FR')}`, 14, 62);
+  if (c.signed_at) doc.text(`Signé le : ${new Date(c.signed_at).toLocaleDateString('fr-FR')}`, 14, 67);
+  if (c.expires_at) doc.text(`Expire le : ${new Date(c.expires_at).toLocaleDateString('fr-FR')}`, 14, 72);
+
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, 78, 196, 78);
+
+  if (c.body) {
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(c.body, 180);
+    doc.text(lines, 14, 86);
+  }
+
+  const signY = c.body ? Math.min(250, 90 + Math.ceil((c.body.length / 80)) * 5) : 120;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Signature :', 14, signY);
+  doc.line(14, signY + 15, 90, signY + 15);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text('Pour Flowtym SAS', 14, signY + 20);
+  doc.line(120, signY + 15, 196, signY + 15);
+  doc.text(`Pour ${c.hotel_name ?? c.hotel_id}`, 120, signY + 20);
+
+  doc.setTextColor(150, 150, 150);
+  doc.setFontSize(7);
+  doc.text('Flowtym SAS — Contrat v' + c.version, 14, 285);
+
+  doc.save(`${c.number}.pdf`);
+}
+
 interface Contract {
   id: string;
   hotel_id: string;
@@ -164,7 +226,11 @@ export const AdminContracts: React.FC = () => {
                     <div className="flex items-center justify-end gap-1.5">
                       {c.status === 'draft' && <button onClick={() => handleSend(c)} className="p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50" title="Marquer comme envoyé"><Send size={13} /></button>}
                       {c.status === 'sent'  && <button onClick={() => handleSign(c)} className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-500 hover:bg-emerald-50" title="Marquer comme signé"><FilePlus size={13} /></button>}
-                      <button className="p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50" title="Télécharger PDF"><Download size={13} /></button>
+                      <button
+                        onClick={() => { toast.promise(downloadContractPDF(c), { loading: 'Génération PDF…', success: 'PDF téléchargé.', error: 'Erreur PDF.' }); }}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50" title="Télécharger PDF">
+                        <Download size={13} />
+                      </button>
                     </div>
                   </td>
                 </tr>

@@ -1,12 +1,103 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, Plus, Download, Send, X, Save, Search, AlertTriangle } from 'lucide-react';
+import { CreditCard, Plus, Download, Send, X, Save, Search, AlertTriangle, Eye } from 'lucide-react';
 import { supabase } from '@/src/lib/supabase';
 import { cn } from '@/src/lib/utils';
 import toast from 'react-hot-toast';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
+
+// ─── PDF generation ───────────────────────────────────────────────────────────
+
+async function downloadInvoicePDF(inv: PlatformInvoice): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+  // Header
+  doc.setFillColor(139, 92, 246);
+  doc.rect(0, 0, 210, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('FLOWTYM', 14, 16);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Plateforme SaaS PMS Hôtelier', 14, 22);
+
+  // Invoice title
+  doc.setTextColor(30, 30, 30);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.text('FACTURE', 140, 16);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(inv.number, 140, 22);
+
+  // Infos
+  doc.setFontSize(9);
+  doc.text(`Émetteur : Flowtym SAS`, 14, 40);
+  doc.text(`Destinataire : ${inv.hotel_name ?? inv.hotel_id}`, 14, 46);
+  doc.text(`Date d'émission : ${new Date(inv.created_at).toLocaleDateString('fr-FR')}`, 140, 40);
+  if (inv.due_date) doc.text(`Échéance : ${new Date(inv.due_date).toLocaleDateString('fr-FR')}`, 140, 46);
+  if (inv.period_start && inv.period_end) {
+    doc.text(`Période : ${new Date(inv.period_start).toLocaleDateString('fr-FR')} – ${new Date(inv.period_end).toLocaleDateString('fr-FR')}`, 14, 52);
+  }
+
+  // Separator
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, 58, 196, 58);
+
+  // Table header
+  doc.setFillColor(248, 248, 248);
+  doc.rect(14, 62, 182, 8, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.text('Désignation', 16, 67.5);
+  doc.text('Montant HT', 140, 67.5);
+  doc.text('TVA', 165, 67.5);
+  doc.text('TTC', 182, 67.5);
+
+  // Table row
+  doc.setFont('helvetica', 'normal');
+  doc.text('Abonnement Flowtym PMS', 16, 78);
+  doc.text(`${inv.amount_ht.toFixed(2)} ${inv.currency}`, 140, 78);
+  doc.text(`${inv.tva_rate}%`, 165, 78);
+  doc.text(`${inv.amount_ttc.toFixed(2)} ${inv.currency}`, 182, 78);
+
+  doc.line(14, 82, 196, 82);
+
+  // Totals
+  doc.setFont('helvetica', 'bold');
+  doc.text('Total HT', 140, 90);
+  doc.text(`${inv.amount_ht.toFixed(2)} €`, 182, 90);
+  doc.text(`TVA ${inv.tva_rate}%`, 140, 96);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${inv.tva_amount.toFixed(2)} €`, 182, 96);
+
+  doc.setFillColor(139, 92, 246);
+  doc.rect(130, 100, 66, 10, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL TTC', 140, 106.5);
+  doc.text(`${inv.amount_ttc.toFixed(2)} €`, 182, 106.5);
+
+  if (inv.notes) {
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.text(`Notes : ${inv.notes}`, 14, 120);
+  }
+
+  // Footer
+  doc.setTextColor(150, 150, 150);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.text('Flowtym SAS — TVA FR12345678901 — IBAN FR76 XXXX XXXX XXXX XXXX', 14, 280);
+  doc.text(`Facture ${inv.number} — Émise le ${new Date(inv.created_at).toLocaleDateString('fr-FR')}`, 14, 284);
+
+  doc.save(`${inv.number}.pdf`);
+}
 
 interface PlatformInvoice {
   id: string;
@@ -208,8 +299,22 @@ export const AdminBilling: React.FC = () => {
                   </td>
                   <td className="px-4 py-3.5">
                     <div className="flex items-center justify-end gap-1.5">
-                      <button className="p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50" title="Télécharger"><Download size={13} /></button>
-                      <button className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-500 hover:bg-emerald-50" title="Envoyer par email"><Send size={13} /></button>
+                      <button
+                        onClick={() => { toast.promise(downloadInvoicePDF(inv), { loading: 'Génération PDF…', success: 'PDF téléchargé.', error: 'Erreur PDF.' }); }}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50" title="Télécharger PDF">
+                        <Download size={13} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (inv.hotel_name) {
+                            toast.success(`Email simulé vers ${inv.hotel_name}. (Intégration SMTP à configurer.)`);
+                          } else {
+                            toast.error('Email hôtel manquant.');
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-500 hover:bg-emerald-50" title="Envoyer par email">
+                        <Send size={13} />
+                      </button>
                     </div>
                   </td>
                 </tr>
