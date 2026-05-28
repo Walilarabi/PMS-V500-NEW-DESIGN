@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '@/src/components/ui/Badge';
 import { Button } from '@/src/components/ui/Button';
 import { Card } from '@/src/components/ui/Card';
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton';
 import { cn } from '@/src/lib/utils';
 import {
   useInvoices, useInvoice, useFolios, useInvoiceLines, usePayments,
@@ -350,9 +351,7 @@ export const FacturationView = () => {
         <div className="flex-1 overflow-y-auto mx-6 mb-6">
           <Card className="bg-white border-transparent shadow-sm overflow-hidden">
             {isLoading ? (
-              <div className="flex items-center justify-center py-16 text-gray-400 gap-2">
-                <Loader2 size={18} className="animate-spin" /> Chargement…
-              </div>
+              <TableSkeleton rows={8} cols={7} />
             ) : invoices.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-gray-400">
                 <FileText size={32} className="mb-3 opacity-20" />

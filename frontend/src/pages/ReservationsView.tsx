@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton';
 import { cn } from '@/src/lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -637,11 +638,8 @@ export const ReservationsView = () => {
                 <tbody className="divide-y divide-gray-50">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={12} className="px-6 py-16 text-center">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="w-8 h-8 rounded-full border-2 border-violet-200 border-t-violet-600 animate-spin" />
-                          <span className="text-[13px] text-gray-400 font-medium">Chargement des réservations…</span>
-                        </div>
+                      <td colSpan={12} className="p-0">
+                        <TableSkeleton rows={perPage} cols={9} />
                       </td>
                     </tr>
                   ) : tableRows.length === 0 ? (
