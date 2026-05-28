@@ -608,7 +608,18 @@ const ReservationFormModal: React.FC<Props> = ({
     // Toast visible
     const toast = document.createElement('div');
     toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;background:#1e293b;color:#fff;padding:12px 18px;border-radius:14px;font-family:Inter,sans-serif;font-size:12px;font-weight:600;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:fadeIn .3s ease';
-    toast.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg> Email + lien de paiement envoyés à ${d.email || d.guestName}`;
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('width', '16'); svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', '#10B981'); svg.setAttribute('stroke-width', '2');
+    const circle = document.createElementNS(svgNs, 'circle');
+    circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '10');
+    const path = document.createElementNS(svgNs, 'path');
+    path.setAttribute('d', 'm9 12 2 2 4-4');
+    svg.appendChild(circle); svg.appendChild(path);
+    const label = document.createTextNode(` Email + lien de paiement envoyés à ${d.email || d.guestName}`);
+    toast.appendChild(svg); toast.appendChild(label);
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3500);
   };
