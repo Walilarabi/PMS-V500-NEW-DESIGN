@@ -9,12 +9,19 @@ import { defineConfig } from 'vitest/config';
 import path from 'path';
 
 const frontendRoot = path.resolve(__dirname, 'frontend');
+const rootNodeModules = path.resolve(__dirname, 'node_modules');
 
 export default defineConfig({
   resolve: {
     alias: {
       '@': frontendRoot,
+      // Force single React instance — root copy wins (matches @testing-library/react)
+      'react': path.resolve(rootNodeModules, 'react'),
+      'react-dom': path.resolve(rootNodeModules, 'react-dom'),
+      'react-dom/client': path.resolve(rootNodeModules, 'react-dom/client'),
     },
+    // Deduplicate these packages so there is never more than one copy loaded
+    dedupe: ['react', 'react-dom', 'zustand'],
   },
   test: {
     // jsdom par défaut (les tests Finance utilisent DOMParser). Les tests
