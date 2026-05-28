@@ -9,6 +9,7 @@ export function useGuests(params: ListGuestsParams = {}) {
   return useQuery({
     queryKey: ['guests', params],
     queryFn: () => listGuests(params),
+    staleTime: 30_000,
   });
 }
 
