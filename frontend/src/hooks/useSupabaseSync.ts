@@ -243,19 +243,8 @@ export function useSupabaseSync() {
             console.info(
               `[useSupabaseSync] ✅ Synced ${mapped.length} reservations from Supabase for hotel ${tenantId}`
             );
-            // Debug : afficher un échantillon
-            if (mapped.length > 0) {
-              console.info('[useSupabaseSync] Sample reservation:', {
-                room: mapped[0].room,
-                client: mapped[0].client,
-                arrival: mapped[0].arrival,
-                departure: mapped[0].departure,
-                checkIn: mapped[0].checkIn,
-                checkOut: mapped[0].checkOut,
-              });
-            }
           } else {
-            console.info('[useSupabaseSync] No reservations in DB, keeping mocks');
+            console.info('[useSupabaseSync] No reservations in DB.');
           }
         }
 
