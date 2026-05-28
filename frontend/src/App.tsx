@@ -291,7 +291,7 @@ export default function App() {
           {renderPage(activePage, navigate)}
         </main>
       </div>
-      <DebugPanel />
+      {import.meta.env.DEV && <DebugPanel />}
     </div>
   );
 }
