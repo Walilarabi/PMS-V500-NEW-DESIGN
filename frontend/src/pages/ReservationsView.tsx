@@ -239,7 +239,7 @@ const FilterSelect: React.FC<{
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
-}> = ({ value, onChange, options }) => {
+}> = React.memo(({ value, onChange, options }) => {
   const label = options.find(o => o.value === value)?.label ?? options[0]?.label;
   return (
     <div className="relative flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl cursor-pointer hover:border-violet-300 transition-colors">
@@ -256,7 +256,7 @@ const FilterSelect: React.FC<{
       <ChevronDown size={13} className="text-gray-300 shrink-0" />
     </div>
   );
-};
+});
 
 // ─── Main Component ───────────────────────────────────────────────────────
 
@@ -849,7 +849,7 @@ interface ResRowProps {
   onCopy: () => void;
 }
 
-const ResRow: React.FC<ResRowProps> = ({ row, onView, onEdit, onDelete, onCopy }) => (
+const ResRow: React.FC<ResRowProps> = React.memo(({ row, onView, onEdit, onDelete, onCopy }) => (
   <tr
     className="hover:bg-violet-50/20 transition-colors group cursor-pointer"
     onClick={onView}
@@ -904,4 +904,4 @@ const ResRow: React.FC<ResRowProps> = ({ row, onView, onEdit, onDelete, onCopy }
       </div>
     </td>
   </tr>
-);
+));
