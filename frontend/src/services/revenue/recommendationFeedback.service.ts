@@ -79,7 +79,7 @@ export const recommendationFeedback = {
 
   log(entry: Omit<FeedbackEntry, 'id' | 'timestamp'>): FeedbackEntry {
     const full: FeedbackEntry = {
-      id: `fb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: `fb_${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b.toString(16).padStart(2, '0')).join('')}`,
       timestamp: new Date().toISOString(),
       ...entry,
     };

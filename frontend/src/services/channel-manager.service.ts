@@ -155,7 +155,7 @@ async function sleep(ms: number) {
 }
 
 function makeId() {
-  return `cm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  return `cm_${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /**

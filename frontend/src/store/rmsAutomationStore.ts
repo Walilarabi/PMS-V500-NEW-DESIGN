@@ -191,7 +191,7 @@ interface RmsAutomationState {
 }
 
 function newId(prefix: string): string {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  return `${prefix}-${Date.now().toString(36)}-${Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** Applique une fluctuation aléatoire bornée à un signal. */

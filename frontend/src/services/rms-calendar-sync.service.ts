@@ -86,7 +86,7 @@ function resolveTargets(payload: RMSDecisionPayload): {
 export function syncRMSDecision(payload: RMSDecisionPayload): SyncRecord {
   const { roomTypeId, planId } = resolveTargets(payload);
   const record: SyncRecord = {
-    id: `sync_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `sync_${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')}`,
     timestamp: new Date().toISOString(),
     payload,
     resolvedRoomTypeId: roomTypeId,

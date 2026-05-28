@@ -437,9 +437,7 @@ export const usePromotionsStore = create<PromotionsStore>()(
       },
 
       createPromotion: (input) => {
-        const id = `promo_${Date.now().toString(36)}_${Math.random()
-          .toString(36)
-          .slice(2, 7)}`;
+        const id = `promo_${Date.now().toString(36)}_${Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b.toString(16).padStart(2, '0')).join('')}`;
         const promo: Promotion = { ...input, id, sparkline: spark(14, 12, 8) };
         set((s) => ({ promotions: [promo, ...s.promotions] }));
         emitRmsEvent('promotion:created', { promotionId: id, name: promo.name });
@@ -449,9 +447,7 @@ export const usePromotionsStore = create<PromotionsStore>()(
       duplicatePromotion: (id) => {
         const source = get().promotions.find((p) => p.id === id);
         if (!source) return null;
-        const newId = `promo_${Date.now().toString(36)}_${Math.random()
-          .toString(36)
-          .slice(2, 7)}`;
+        const newId = `promo_${Date.now().toString(36)}_${Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b.toString(16).padStart(2, '0')).join('')}`;
         const copy: Promotion = {
           ...source,
           id: newId,
