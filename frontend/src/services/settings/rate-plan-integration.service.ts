@@ -127,7 +127,7 @@ function toRatePlanData(
   const calcMode: CalcMode = p.computation === 'reference' ? 'fixed' : 'derived';
 
   return {
-    internalId: Date.now() + Math.floor(Math.random() * 10000),
+    internalId: Date.now() + (crypto.getRandomValues(new Uint16Array(1))[0] % 10000),
     planId: `imported_${p.id}`,
     planName: p.name,
     planCode: p.code,

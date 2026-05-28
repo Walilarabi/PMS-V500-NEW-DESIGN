@@ -203,7 +203,7 @@ function persistSavedViewsLocal(list: SavedView[]) {
 export function saveView(input: { reportId: string; name: string; filters: Record<string, unknown> }): SavedView {
   const now = new Date().toISOString();
   const view: SavedView = {
-    id: `view_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `view_${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b.toString(16).padStart(2, '0')).join('')}`,
     reportId: input.reportId,
     name: input.name.trim(),
     filters: input.filters,
