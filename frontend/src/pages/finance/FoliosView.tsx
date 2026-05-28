@@ -6,7 +6,8 @@
  * immuable des transferts (qui, quand, pourquoi).
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDebounce } from '@/src/hooks/useDebounce';
 import {
   FolderOpen, Search, Plus, Loader2, ArrowLeftRight, History, X,
   GripVertical, User, Building2, Crown, Sparkles, Receipt, AlertCircle,
@@ -48,20 +49,19 @@ interface PendingTransfer {
 
 function ReservationPicker({ onPick }: { onPick: (r: FolioReservationPick) => void }) {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 300);
   const [results, setResults] = useState<FolioReservationPick[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(async () => {
-      setLoading(true);
-      try { setResults(await searchFolioReservations(query)); }
-      finally { setLoading(false); }
-    }, 280);
-    return () => { if (debounce.current) clearTimeout(debounce.current); };
-  }, [query]);
+    let cancelled = false;
+    setLoading(true);
+    searchFolioReservations(debouncedQuery)
+      .then(r => { if (!cancelled) setResults(r); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [debouncedQuery]);
 
   return (
     <div className="relative max-w-xl">

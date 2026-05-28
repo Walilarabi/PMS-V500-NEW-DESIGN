@@ -6,7 +6,8 @@
  * et suivi du cycle de vie réglementaire (réforme e-facture 2026).
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDebounce } from '@/src/hooks/useDebounce';
 import {
   FileCode2, Send, RefreshCw, Loader2, Plus, Search, X, Download,
   AlertCircle, CheckCircle2, Clock, FileText, ShieldCheck, History,
@@ -76,22 +77,21 @@ function IssueModal({
   onIssued: (submissionId: string) => void;
 }) {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebounce(query, 300);
   const [results, setResults] = useState<FolioReservationPick[]>([]);
   const [searching, setSearching] = useState(false);
   const [picked, setPicked] = useState<FolioReservationPick | null>(null);
   const [issuing, setIssuing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (debounce.current) clearTimeout(debounce.current);
-    debounce.current = setTimeout(async () => {
-      setSearching(true);
-      try { setResults(await searchFolioReservations(query)); }
-      finally { setSearching(false); }
-    }, 280);
-    return () => { if (debounce.current) clearTimeout(debounce.current); };
-  }, [query]);
+    let cancelled = false;
+    setSearching(true);
+    searchFolioReservations(debouncedQuery)
+      .then(r => { if (!cancelled) setResults(r); })
+      .finally(() => { if (!cancelled) setSearching(false); });
+    return () => { cancelled = true; };
+  }, [debouncedQuery]);
 
   const handleIssue = async () => {
     if (!picked) return;

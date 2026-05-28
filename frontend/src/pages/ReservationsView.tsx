@@ -11,6 +11,7 @@
 
 import React from 'react';
 import * as XLSX from 'xlsx';
+import { useDebounce } from '@/src/hooks/useDebounce';
 import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 import {
   Search, Filter, Download, FileSpreadsheet, Plus,
@@ -271,6 +272,7 @@ export const ReservationsView = () => {
 
   // Filter state
   const [searchQuery,    setSearchQuery]    = React.useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [statusFilter,   setStatusFilter]   = React.useState('ALL');
   const [channelFilter,  setChannelFilter]  = React.useState('ALL');
   const [roomTypeFilter, setRoomTypeFilter] = React.useState('ALL');
@@ -343,9 +345,9 @@ export const ReservationsView = () => {
     return [{ value: 'ALL', label: 'Tout type' }, ...types.map(t => ({ value: t, label: t }))];
   }, [tableRows]);
 
-  // ── Filter
+  // ── Filter (debouncedSearch évite un recalcul à chaque frappe)
   const filteredRows = React.useMemo(() => {
-    const q = searchQuery.toLowerCase();
+    const q = debouncedSearch.toLowerCase();
     return tableRows.filter(r => {
       if (q && !r.client.toLowerCase().includes(q)  &&
                !r.ref.toLowerCase().includes(q)       &&
@@ -359,9 +361,9 @@ export const ReservationsView = () => {
       if (dateTo   && r.checkinRaw  && r.checkinRaw  > dateTo)   return false;
       return true;
     });
-  }, [tableRows, searchQuery, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo]);
+  }, [tableRows, debouncedSearch, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo]);
 
-  React.useEffect(() => { setPage(1); }, [searchQuery, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo, perPage]);
+  React.useEffect(() => { setPage(1); }, [debouncedSearch, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo, perPage]);
 
   // ── Pagination
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / perPage));
