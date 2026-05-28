@@ -1,7 +1,7 @@
 /**
  * FLOWTYM — Reservations TanStack Query hooks.
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { supabase } from '@/src/lib/supabase';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 
@@ -15,11 +15,45 @@ import {
 } from './schemas';
 
 const RESERVATIONS_KEY = ['reservations'] as const;
+const LIST_KEY        = [...RESERVATIONS_KEY, 'list']  as const;
+const RANGE_KEY       = [...RESERVATIONS_KEY, 'range'] as const;
+
+// ─── Cache helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Patches the updated reservation into every cached query that holds it:
+ *   - ['reservations','one',id]            — detail view
+ *   - ['reservations','list',...]          — all list pages (updates matching row in-place)
+ *   - ['reservations','range',...]         — all planning range windows (updates row in-place)
+ * Avoids network refetches for status-only mutations.
+ */
+function patchReservationInCaches(qc: QueryClient, updated: ReservationRow) {
+  // Detail
+  qc.setQueryData([...RESERVATIONS_KEY, 'one', updated.id], updated);
+
+  // List pages
+  qc.setQueriesData<{ rows: ReservationRow[]; total: number }>(
+    { queryKey: LIST_KEY },
+    (prev) => prev
+      ? { ...prev, rows: prev.rows.map((r) => r.id === updated.id ? updated : r) }
+      : prev,
+  );
+
+  // Range caches (planning Gantt)
+  qc.setQueriesData<ReservationRow[]>(
+    { queryKey: RANGE_KEY },
+    (prev) => prev
+      ? prev.map((r) => r.id === updated.id ? updated : r)
+      : prev,
+  );
+}
+
+// ─── Queries ──────────────────────────────────────────────────────────────────
 
 export function useReservations(params: repo.ListReservationsParams = {}) {
   const { status } = useAuth();
   return useQuery<{ rows: ReservationRow[]; total: number }>({
-    queryKey: [...RESERVATIONS_KEY, 'list', params],
+    queryKey: [...LIST_KEY, params],
     queryFn: () => repo.listReservations(params),
     enabled: status === 'authenticated',
     staleTime: 15_000,
@@ -34,6 +68,8 @@ export function useReservation(id: string | null) {
   });
 }
 
+// ─── Mutations ────────────────────────────────────────────────────────────────
+
 export function useCreateReservation() {
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -41,7 +77,6 @@ export function useCreateReservation() {
     mutationFn: async (input) => {
       const parsed = createReservationInputSchema.parse(input);
 
-      // Résolution hotel_id robuste — session.tenantId peut être null
       let hotelId = session?.tenantId ?? '';
       if (!hotelId) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -52,7 +87,6 @@ export function useCreateReservation() {
         }
       }
       if (!hotelId) {
-        // Dernier recours: premier hôtel disponible (démo)
         const { data: h } = await supabase.from('hotels').select('id').limit(1).maybeSingle();
         hotelId = (h as any)?.id ?? '';
       }
@@ -61,12 +95,10 @@ export function useCreateReservation() {
       return repo.createReservation(hotelId, parsed);
     },
     onSuccess: (newReservation) => {
-      // Invalider TOUTES les queries avec le préfixe ['reservations']
-      // Couvre : list, range (planning), one — par préfixe TanStack Query
-      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
-      // Invalider aussi les rooms (dispo peut avoir changé)
+      // New row: invalidate list + range (availability changed)
+      void qc.invalidateQueries({ queryKey: LIST_KEY });
+      void qc.invalidateQueries({ queryKey: RANGE_KEY });
       void qc.invalidateQueries({ queryKey: ['rooms'] });
-      // Invalider les guests si un guest_id est lié
       if (newReservation.guest_id) {
         void qc.invalidateQueries({ queryKey: ['guests-by-ids'] });
       }
@@ -86,10 +118,9 @@ export function useUpdateReservationStatus() {
   >({
     mutationFn: ({ id, status, expectedVersion }) =>
       repo.updateReservationStatus(id, status, expectedVersion),
-    onSuccess: (_data, vars) => {
-      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+    onSuccess: (data) => {
+      patchReservationInCaches(qc, data);
       void qc.invalidateQueries({ queryKey: ['audit-logs'] });
-      void qc.invalidateQueries({ queryKey: [...RESERVATIONS_KEY, 'one', vars.id] });
     },
   });
 }
@@ -99,10 +130,9 @@ export function useCheckIn() {
   return useMutation<ReservationRow, Error, { id: string; expectedVersion: number }>({
     mutationFn: ({ id, expectedVersion }) =>
       repo.checkInReservation(id, expectedVersion),
-    onSuccess: (_data, vars) => {
-      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+    onSuccess: (data) => {
+      patchReservationInCaches(qc, data);
       void qc.invalidateQueries({ queryKey: ['audit-logs'] });
-      void qc.invalidateQueries({ queryKey: [...RESERVATIONS_KEY, 'one', vars.id] });
     },
   });
 }
@@ -112,10 +142,9 @@ export function useCheckOut() {
   return useMutation<ReservationRow, Error, { id: string; expectedVersion: number }>({
     mutationFn: ({ id, expectedVersion }) =>
       repo.checkOutReservation(id, expectedVersion),
-    onSuccess: (_data, vars) => {
-      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+    onSuccess: (data) => {
+      patchReservationInCaches(qc, data);
       void qc.invalidateQueries({ queryKey: ['audit-logs'] });
-      void qc.invalidateQueries({ queryKey: [...RESERVATIONS_KEY, 'one', vars.id] });
     },
   });
 }
@@ -129,10 +158,9 @@ export function useCancelReservation() {
   >({
     mutationFn: ({ id, reason, expectedVersion }) =>
       repo.cancelReservation(id, reason, expectedVersion),
-    onSuccess: (_data, vars) => {
-      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+    onSuccess: (data) => {
+      patchReservationInCaches(qc, data);
       void qc.invalidateQueries({ queryKey: ['audit-logs'] });
-      void qc.invalidateQueries({ queryKey: [...RESERVATIONS_KEY, 'one', vars.id] });
     },
   });
 }
@@ -142,7 +170,8 @@ export function useDeleteReservation() {
   return useMutation<void, Error, string>({
     mutationFn: (id) => repo.deleteReservation(id),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+      void qc.invalidateQueries({ queryKey: LIST_KEY });
+      void qc.invalidateQueries({ queryKey: RANGE_KEY });
       void qc.invalidateQueries({ queryKey: ['rooms'] });
       void qc.invalidateQueries({ queryKey: ['audit-logs'] });
     },
@@ -157,37 +186,20 @@ export function useDeleteReservation() {
 // ============================================================================
 
 export interface ReservationsByRangeParams {
-  /** YYYY-MM-DD — premier jour de la période affichée */
   rangeStart: string;
-  /** YYYY-MM-DD — dernier jour de la période affichée */
   rangeEnd: string;
 }
 
-/**
- * Récupère les réservations dont la période chevauche [rangeStart, rangeEnd].
- *
- * RÈGLE MÉTIER : chevauchement correct = check_in < rangeEnd ET check_out > rangeStart
- * (inclusif côté arrivée, exclusif côté départ — conforme au trigger anti-overbooking)
- *
- * BUG ÉVITÉ : ne pas utiliser check_in >= rangeStart AND check_in <= rangeEnd
- * car cela exclut les réservations qui commencent AVANT la fenêtre mais
- * sont encore présentes pendant (in-house).
- *
- * QueryKey inclut [rangeStart, rangeEnd] pour que chaque fenêtre soit
- * cachée indépendamment ET invalidée par useReservationsRealtime qui
- * invalide ['reservations'] (préfixe commun).
- */
 export function useReservationsByRange(params: ReservationsByRangeParams) {
   const { status } = useAuth();
   return useQuery<ReservationRow[]>({
-    queryKey: [...RESERVATIONS_KEY, 'range', params.rangeStart, params.rangeEnd],
+    queryKey: [...RANGE_KEY, params.rangeStart, params.rangeEnd],
     queryFn: async () => {
-      // Chevauchement : check_in < rangeEnd ET check_out > rangeStart
       const { data, error } = await supabase
         .from('reservations')
         .select('*')
-        .lt('check_in', params.rangeEnd)   // check_in < rangeEnd
-        .gt('check_out', params.rangeStart) // check_out > rangeStart
+        .lt('check_in', params.rangeEnd)
+        .gt('check_out', params.rangeStart)
         .not('status', 'in', '("cancelled","no_show")')
         .order('check_in', { ascending: true })
         .limit(500);
@@ -207,41 +219,32 @@ export interface MoveReservationInput {
   checkOut: string;
 }
 
-/**
- * Déplace une réservation (chambre et/ou dates) depuis le planning Gantt.
- * Utilise l'optimistic locking (fromVersion) pour détecter les conflits.
- * Invalide toutes les queries 'reservations' après succès.
- */
 export function useMoveReservation() {
   const qc = useQueryClient();
   return useMutation<ReservationRow, Error, MoveReservationInput>({
     mutationFn: async ({ id, fromVersion, roomId, checkIn, checkOut }) => {
       const { data, error } = await supabase
         .from('reservations')
-        .update({
-          room_id: roomId,
-          check_in: checkIn,
-          check_out: checkOut,
-        })
+        .update({ room_id: roomId, check_in: checkIn, check_out: checkOut })
         .eq('id', id)
-        .eq('version', fromVersion) // optimistic lock
+        .eq('version', fromVersion)
         .select('*')
         .maybeSingle();
 
       if (error) throw mapSupabaseError(error);
-
       if (!data) {
         throw new Error(
           `Conflit de version sur la réservation ${id} — ` +
           `modification concurrente détectée. Rechargez et réessayez.`,
         );
       }
-
       return reservationRowSchema.parse(data);
     },
-    onSuccess: () => {
-      // Invalider tout le préfixe ['reservations'] — couvre list, range, one
-      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+    onSuccess: (data) => {
+      // Dates changed → patch detail + invalidate list and all range caches
+      qc.setQueryData([...RESERVATIONS_KEY, 'one', data.id], data);
+      void qc.invalidateQueries({ queryKey: LIST_KEY });
+      void qc.invalidateQueries({ queryKey: RANGE_KEY });
     },
     onError: (err) => {
       console.error('[useMoveReservation]', err);
