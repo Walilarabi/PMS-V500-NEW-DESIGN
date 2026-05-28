@@ -35,6 +35,8 @@ import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
 import { NewReservationModal } from '@/src/components/modals/NewReservationModal';
+import { BlockRoomsModal } from '@/src/components/modals/BlockRoomsModal';
+import { RestrictionsModal } from '@/src/components/modals/RestrictionsModal';
 import { useReservations as useContextReservations, Reservation } from '@/src/contexts/ReservationContext';
 import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
 import { useRooms } from '@/src/domains/hotel/hooks';
@@ -175,6 +177,12 @@ export const PlanningView = () => {
   const [subView, setSubView] = useState<RevenueSubView>('KPI');
   const [selectedDay, setSelectedDay] = useState<DayCell | null>(null);
   const [showRightSidebar, setShowRightSidebar] = useState(true);
+
+  // Block rooms + Restrictions modals
+  const [showBlockRooms, setShowBlockRooms] = useState(false);
+  const [blockRoomsDate, setBlockRoomsDate] = useState<string | null>(null);
+  const [showRestrictions, setShowRestrictions] = useState(false);
+  const [restrictionsDate, setRestrictionsDate] = useState<string | null>(null);
 
   // Revenue Calendar data (pickup, cancellations, real-time sync)
   const { pickupByDate, cancellationsByDate } = useRevenueCalendarData();
@@ -1095,17 +1103,19 @@ export const PlanningView = () => {
           setSelectedEventDate(dateStr);
           setIsModalOpen(true);
         }}
-        onBlockRooms={(_dateStr) => {
+        onBlockRooms={(dateStr) => {
           setSelectedDay(null);
-          // TODO: open block rooms modal when implemented
+          setBlockRoomsDate(dateStr);
+          setShowBlockRooms(true);
         }}
         onEditRates={(_dateStr) => {
           setSelectedDay(null);
           openRatePanel(null);
         }}
-        onAddRestriction={(_dateStr) => {
+        onAddRestriction={(dateStr) => {
           setSelectedDay(null);
-          // TODO: open restrictions modal when implemented
+          setRestrictionsDate(dateStr);
+          setShowRestrictions(true);
         }}
         onViewInGantt={(_dateStr) => {
           setSelectedDay(null);
@@ -1188,10 +1198,24 @@ export const PlanningView = () => {
           }
         }}
       />
-      <EventManagerModal 
-        isOpen={isEventModalOpen} 
+      <EventManagerModal
+        isOpen={isEventModalOpen}
         onClose={() => setIsEventModalOpen(false)}
         initialDate={selectedEventDate || undefined}
+      />
+
+      <BlockRoomsModal
+        isOpen={showBlockRooms}
+        dateStr={blockRoomsDate}
+        rooms={effectiveRooms.map(r => ({ id: r.id, number: r.number, type: r.type }))}
+        onClose={() => setShowBlockRooms(false)}
+      />
+
+      <RestrictionsModal
+        isOpen={showRestrictions}
+        dateStr={restrictionsDate}
+        roomTypes={Array.from(new Set(effectiveRooms.map(r => r.type))).sort()}
+        onClose={() => setShowRestrictions(false)}
       />
 
       <style dangerouslySetInnerHTML={{ __html: `

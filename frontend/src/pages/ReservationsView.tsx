@@ -10,6 +10,7 @@
  */
 
 import React from 'react';
+import toast from 'react-hot-toast';
 import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 import {
   Search, Filter, Download, FileSpreadsheet, Plus,
@@ -24,7 +25,7 @@ import { cn } from '@/src/lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 import { useReservations as useContextReservations } from '@/src/contexts/ReservationContext';
-import { useReservations, useCreateReservation } from '@/src/domains/reservations/hooks';
+import { useReservations, useCreateReservation, useDeleteReservation } from '@/src/domains/reservations/hooks';
 import ReservationFormModal from '@/src/components/modals/ReservationFormModal';
 import { LiveReservationsBanner } from '@/src/domains/reservations/LiveReservationsBanner';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
@@ -216,12 +217,13 @@ export const ReservationsView = () => {
   const { reservations: _ctxReservations } = useContextReservations(); // kept for potential write-back
   const { data: supabaseData }             = useReservations({ limit: 500 });
   const createReservation                  = useCreateReservation();
+  const deleteMut                          = useDeleteReservation();
 
   // Modal state
   const [isFormOpen,        setIsFormOpen]        = React.useState(false);
   const [selectedDetail,    setSelectedDetail]    = React.useState<ResTableRow | null>(null);
   const [editRow,           setEditRow]           = React.useState<ResTableRow | null>(null);
-  const [confirmDeleteRef,  setConfirmDeleteRef]  = React.useState<string | null>(null);
+  const [confirmDeleteRef,  setConfirmDeleteRef]  = React.useState<{ ref: string; id: string } | null>(null);
 
   // Filter state
   const [searchQuery,    setSearchQuery]    = React.useState('');
@@ -561,7 +563,7 @@ export const ReservationsView = () => {
                         row={row}
                         onView={() => openDetail(row)}
                         onEdit={() => openEdit(row)}
-                        onDelete={() => setConfirmDeleteRef(row.ref)}
+                        onDelete={() => setConfirmDeleteRef({ ref: row.ref, id: row.id })}
                         onCopy={() => copyRef(row.ref)}
                       />
                     ))
@@ -667,7 +669,7 @@ export const ReservationsView = () => {
                 </div>
                 <div>
                   <h3 className="text-[13px] font-bold text-gray-900">Supprimer la réservation</h3>
-                  <p className="text-[12px] text-gray-400 font-mono">{confirmDeleteRef}</p>
+                  <p className="text-[12px] text-gray-400 font-mono">{confirmDeleteRef.ref}</p>
                 </div>
               </div>
               <p className="text-[13px] text-gray-600 mb-5">
@@ -678,12 +680,20 @@ export const ReservationsView = () => {
                 <Button
                   size="sm"
                   className="!bg-red-500 hover:!bg-red-600 !text-white"
+                  disabled={deleteMut.isPending}
                   onClick={() => {
-                    console.warn('[ReservationsView] Delete not yet wired:', confirmDeleteRef);
-                    setConfirmDeleteRef(null);
+                    if (!confirmDeleteRef) return;
+                    toast.promise(
+                      deleteMut.mutateAsync(confirmDeleteRef.id).then(() => setConfirmDeleteRef(null)),
+                      {
+                        loading: 'Suppression…',
+                        success: `Réservation ${confirmDeleteRef.ref} supprimée`,
+                        error: 'Erreur lors de la suppression',
+                      }
+                    );
                   }}
                 >
-                  Supprimer
+                  {deleteMut.isPending ? 'Suppression…' : 'Supprimer'}
                 </Button>
               </div>
             </div>

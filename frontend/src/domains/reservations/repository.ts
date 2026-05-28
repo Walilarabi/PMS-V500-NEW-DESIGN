@@ -254,6 +254,21 @@ export async function checkOutReservation(
 }
 
 /**
+ * deleteReservation — Suppression définitive (hard delete). À utiliser avec précaution.
+ */
+export async function deleteReservation(id: string): Promise<void> {
+  const { error } = await supabase.from('reservations').delete().eq('id', id);
+  if (error) throw mapSupabaseError(error);
+
+  await writeAuditLog({
+    entity: 'reservation',
+    entity_id: id,
+    action: 'DELETE',
+    payload: { deleted_at: new Date().toISOString() },
+  });
+}
+
+/**
  * cancelReservation — Annulation avec motif obligatoire pour l'audit.
  */
 export async function cancelReservation(

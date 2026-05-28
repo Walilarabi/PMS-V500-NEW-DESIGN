@@ -197,6 +197,20 @@ export interface MoveReservationInput {
  * Utilise l'optimistic locking (fromVersion) pour détecter les conflits.
  * Invalide toutes les queries 'reservations' après succès.
  */
+export function useDeleteReservation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => repo.deleteReservation(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: RESERVATIONS_KEY });
+      void qc.invalidateQueries({ queryKey: ['rooms'] });
+    },
+    onError: (err) => {
+      console.error('[useDeleteReservation]', err);
+    },
+  });
+}
+
 export function useMoveReservation() {
   const qc = useQueryClient();
   return useMutation<ReservationRow, Error, MoveReservationInput>({

@@ -67,13 +67,21 @@ import {
   type PromotionsExportInput,
 } from '@/src/services/revenueExport.service';
 import {
-  usePromotionsStore,
   type Promotion,
   type PromoAlert,
   type PromoPriority,
   type PromoStatus,
   type PromoType,
 } from '@/src/store/promotionsStore';
+import {
+  usePromoCampaigns,
+  useTogglePromoCampaign,
+  useDeletePromoCampaign,
+  useDuplicatePromoCampaign,
+  useCreatePromoCampaign,
+  type CreatePromoCampaignInput,
+} from '@/src/hooks/usePromoCampaigns';
+import toast from 'react-hot-toast';
 
 const PERIOD_LABELS: Record<PeriodKey, string> = {
   '7d': '7 derniers jours',
@@ -193,11 +201,13 @@ const daysFromNow = (iso: string) =>
 /* ────────────────────────────────────────────────────────────────────────── */
 
 export function PromotionsCompact() {
-  // Source de vérité = store persisté + bus d'événements RMS
-  const promotions = usePromotionsStore((s) => s.promotions);
-  const storeToggleStatus = usePromotionsStore((s) => s.toggleStatus);
-  const storeDuplicate = usePromotionsStore((s) => s.duplicatePromotion);
-  const storeDelete = usePromotionsStore((s) => s.deletePromotion);
+  // Source de vérité = Supabase promo_campaigns + bus d'événements RMS
+  const { data: livePromos = [], isSuccess: hasLiveData } = usePromoCampaigns();
+  const promotions = livePromos;
+  const toggleMut    = useTogglePromoCampaign();
+  const deleteMut    = useDeletePromoCampaign();
+  const duplicateMut = useDuplicatePromoCampaign();
+  const createMut    = useCreatePromoCampaign();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<PromoType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<PromoStatus | 'all'>('all');
@@ -289,13 +299,33 @@ export function PromotionsCompact() {
     []
   );
 
-  /* handlers — délégués au store, qui émet les événements RMS */
-  const toggleStatus = (id: string) => storeToggleStatus(id);
-  const duplicatePromo = (p: Promotion) => storeDuplicate(p.id);
-  const deletePromo = (id: string) => {
-    storeDelete(id);
-    setSelectedPromo(null);
+  /* handlers — mutations Supabase + bus RMS */
+  const toggleStatus = (id: string) => {
+    toast.promise(toggleMut.mutateAsync(id), {
+      loading: 'Mise à jour…',
+      success: 'Statut mis à jour',
+      error: 'Erreur de mise à jour',
+    });
   };
+  const duplicatePromo = (p: Promotion) => {
+    toast.promise(duplicateMut.mutateAsync(p), {
+      loading: 'Duplication…',
+      success: 'Promotion dupliquée',
+      error: 'Erreur de duplication',
+    });
+  };
+  const deletePromo = (id: string) => {
+    toast.promise(
+      deleteMut.mutateAsync(id).then(() => setSelectedPromo(null)),
+      {
+        loading: 'Suppression…',
+        success: 'Promotion supprimée',
+        error: 'Erreur de suppression',
+      }
+    );
+  };
+
+  void hasLiveData; // used to trigger re-render when data loads
 
   /* build export payload — shared by Excel + PDF handlers */
   const buildExportInput = (): PromotionsExportInput => ({
@@ -1654,88 +1684,126 @@ const LogsTab: React.FC<{ promo: Promotion }> = ({ promo }) => (
 /* CREATE MODAL (light placeholder, premium look)                             */
 /* ────────────────────────────────────────────────────────────────────────── */
 
-const CreatePromoModal: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => (
-  <AnimatePresence>
-    {open && (
-      <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-      >
+const TYPE_OPTIONS: { value: PromoType; label: string }[] = TYPE_FILTERS
+  .filter(t => t.id !== 'all')
+  .map(t => ({ value: t.id as PromoType, label: t.label }));
+
+const CreatePromoModal: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
+  const createMut = useCreatePromoCampaign();
+  const today = new Date().toISOString().slice(0, 10);
+  const [name, setName] = React.useState('');
+  const [code, setCode] = React.useState('');
+  const [type, setType] = React.useState<PromoType>('early_booker');
+  const [discount, setDiscount] = React.useState('');
+  const [startDate, setStartDate] = React.useState(today);
+  const [endDate, setEndDate] = React.useState('');
+
+  React.useEffect(() => {
+    if (open) {
+      setName(''); setCode(''); setType('early_booker');
+      setDiscount(''); setStartDate(today); setEndDate('');
+    }
+  }, [open, today]);
+
+  const typeLabel = TYPE_OPTIONS.find(o => o.value === type)?.label ?? type;
+
+  const handleSubmit = () => {
+    if (!name.trim() || !startDate || !endDate) {
+      toast.error('Nom, date de début et date de fin sont requis');
+      return;
+    }
+    const val = parseFloat(discount);
+    const input: CreatePromoCampaignInput = {
+      name: name.trim(),
+      type,
+      typeLabel,
+      discountValue: isNaN(val) ? 0 : val,
+      discount: isNaN(val) ? discount : `${val}%`,
+      code: code.trim() || null,
+      startDate,
+      endDate,
+    };
+    toast.promise(createMut.mutateAsync(input).then(() => onClose()), {
+      loading: 'Création…',
+      success: 'Promotion créée !',
+      error: (err: Error) => err.message,
+    });
+  };
+
+  return (
+    <AnimatePresence>
+      {open && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.98, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.98, y: 8 }}
-          onClick={(e) => e.stopPropagation()}
-          className="w-[min(620px,95vw)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={onClose}
         >
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md shadow-violet-500/30">
-                <Plus className="h-4 w-4" />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98, y: 8 }}
+            onClick={(e) => e.stopPropagation()}
+            className="w-[min(620px,95vw)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md shadow-violet-500/30">
+                  <Plus className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Nouvelle promotion</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Configurez votre campagne — synchronisation automatique vers vos OTAs
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">Nouvelle promotion</h3>
-                <p className="text-[11px] text-slate-500">
-                  Configurez votre campagne — synchronisation automatique vers vos OTAs
-                </p>
-              </div>
+              <button onClick={onClose} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
 
-          <div className="grid gap-4 p-5 sm:grid-cols-2">
-            <Field label="Nom de la campagne">
-              <input className="form-input" placeholder="Ex: Été 2026" />
-            </Field>
-            <Field label="Code promo (optionnel)">
-              <input className="form-input" placeholder="Ex: SUMMER20" />
-            </Field>
-            <Field label="Type de promotion">
-              <select className="form-input">
-                {TYPE_FILTERS.filter((t) => t.id !== 'all').map((t) => (
-                  <option key={t.id}>{t.label}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Réduction (%)">
-              <input className="form-input" type="number" placeholder="20" />
-            </Field>
-            <Field label="Date de début">
-              <input className="form-input" type="date" />
-            </Field>
-            <Field label="Date de fin">
-              <input className="form-input" type="date" />
-            </Field>
-          </div>
+            <div className="grid gap-4 p-5 sm:grid-cols-2">
+              <Field label="Nom de la campagne">
+                <input className="form-input" placeholder="Ex: Été 2026" value={name} onChange={e => setName(e.target.value)} />
+              </Field>
+              <Field label="Code promo (optionnel)">
+                <input className="form-input" placeholder="Ex: SUMMER20" value={code} onChange={e => setCode(e.target.value)} />
+              </Field>
+              <Field label="Type de promotion">
+                <select className="form-input" value={type} onChange={e => setType(e.target.value as PromoType)}>
+                  {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Réduction (%)">
+                <input className="form-input" type="number" placeholder="20" value={discount} onChange={e => setDiscount(e.target.value)} />
+              </Field>
+              <Field label="Date de début">
+                <input className="form-input" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              </Field>
+              <Field label="Date de fin">
+                <input className="form-input" type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)} />
+              </Field>
+            </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
-            <button
-              onClick={onClose}
-              className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Annuler
-            </button>
-            <button
-              onClick={onClose}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 px-3.5 text-sm font-semibold text-white shadow-md shadow-violet-500/30 hover:shadow-lg"
-            >
-              <Sparkles className="h-4 w-4" />
-              Créer la promotion
-            </button>
-          </div>
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 px-5 py-3">
+              <button onClick={onClose} className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Annuler
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={createMut.isPending}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 px-3.5 text-sm font-semibold text-white shadow-md shadow-violet-500/30 hover:shadow-lg disabled:opacity-60"
+              >
+                <Sparkles className="h-4 w-4" />
+                {createMut.isPending ? 'Création…' : 'Créer la promotion'}
+              </button>
+            </div>
+          </motion.div>
         </motion.div>
-      </motion.div>
-    )}
-  </AnimatePresence>
-);
+      )}
+    </AnimatePresence>
+  );
+};
 
 const Field: React.FC<React.PropsWithChildren<{ label: string }>> = ({ label, children }) => (
   <label className="flex flex-col gap-1.5">
