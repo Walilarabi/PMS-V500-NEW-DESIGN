@@ -438,6 +438,7 @@ export const ReservationsView = () => {
             </Button>
             <Button
               onClick={() => { setEditRow(null); setIsFormOpen(true); }}
+              data-testid="btn-new-reservation"
               className="bg-violet-600 hover:bg-violet-700 text-white font-semibold gap-2 px-4 py-2 rounded-xl shadow-md shadow-violet-200 text-[13px]"
             >
               <Plus size={15} /> Nouvelle réservation
