@@ -66,13 +66,8 @@ async function querySource(
   source: EventSource,
   q: SearchQueryInput,
 ): Promise<RMSMarketEvent[]> {
-  // simulation : 150-650ms par source
-  await sleep(150 + Math.random() * 500);
-
-  // taux d'erreur réaliste sur les méthodes scraping
-  if (source.method === 'scraping' && Math.random() < 0.04) {
-    throw new Error('Timeout de la source — réessai automatique à la prochaine synchro.');
-  }
+  // Simulated source latency — replace with real fetch() when source APIs are wired
+  await sleep(150);
 
   return SEED_PARIS_EVENTS.filter(
     (e) =>

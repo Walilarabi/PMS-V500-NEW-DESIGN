@@ -15,6 +15,7 @@ import {
   listClosures, startClosure, executeClosureStep, rollbackClosure,
   type ClosureWorkflow, type ClosureStepResult,
 } from '../../services/finance/finance.service';
+import { toast } from '../../hooks/use-toast';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -91,7 +92,7 @@ export const ClosureWorkflowView: React.FC = () => {
     setError(null);
     try {
       const result = await rollbackClosure(closureId);
-      alert(`Rollback effectué :\n${result.recouchants_reverted} recouchants supprimés\n${result.noshows_reverted} no-shows annulés`);
+      toast({ title: 'Rollback effectué', description: `${result.recouchants_reverted} recouchants supprimés · ${result.noshows_reverted} no-shows annulés`, variant: 'success' });
       await reload();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

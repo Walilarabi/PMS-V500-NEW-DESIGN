@@ -22,6 +22,7 @@ import {
 import {
   listTvaSnapshots, generateTvaSnapshot, type TvaSnapshot,
 } from '../../services/finance/finance.service';
+import { toast } from '../../hooks/use-toast';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -129,7 +130,7 @@ export const TvaDeclarationView: React.FC = () => {
               PDF
             </button>
             <button
-              onClick={() => alert('Export FEC — déjà disponible via Comptabilité (sous-module Audit)')}
+              onClick={() => toast({ title: 'Export FEC disponible via Comptabilité', description: 'Sous-module Audit → Export FEC', variant: 'default' })}
               className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center gap-1.5 font-bold"
             >
               <Download className="w-4 h-4" />

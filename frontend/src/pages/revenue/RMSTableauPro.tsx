@@ -71,6 +71,7 @@ import {
 import { centralPricingEngine } from '../../services/revenue/centralPricingEngine.service';
 import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
+import { toast } from '../../hooks/use-toast';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -958,7 +959,7 @@ export function RMSTableauPro() {
     const validated = rmsData.filter((d) => d.finalPrice !== null);
 
     if (validated.length === 0) {
-      alert('Aucune validation à propager');
+      toast({ title: 'Aucune validation à propager', variant: 'default' });
       return;
     }
 
@@ -988,14 +989,12 @@ export function RMSTableauPro() {
       );
 
       if (result.success) {
-        alert(
-          `✅ Propagation réussie!\n\n${result.validationsCount} tarifs propagés`
-        );
+        toast({ title: `Propagation réussie — ${result.validationsCount} tarifs propagés`, variant: 'success' });
       } else {
-        alert(`❌ Propagation échouée:\n${result.errors.join('\n')}`);
+        toast({ title: 'Propagation échouée', description: result.errors.join(' · '), variant: 'destructive' });
       }
-    } catch (error: any) {
-      alert(`❌ Erreur: ${error.message}`);
+    } catch (error: unknown) {
+      toast({ title: 'Erreur propagation', description: error instanceof Error ? error.message : String(error), variant: 'destructive' });
     } finally {
       setIsPropagating(false);
       setPropagationProgress(0);

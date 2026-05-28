@@ -56,13 +56,16 @@ interface CMProviderConfig {
   simulatedLatencyMs: number;
 }
 
+// NOTE: Real channel manager API integration is pending (requires CM API tokens).
+// simulatedFailureRate is set to 0 to prevent spurious random failures in production.
+// simulatedLatencyMs simulates network round-trip until real HTTP calls are wired.
 const PROVIDER_CONFIGS: Record<CMProvider, CMProviderConfig> = {
   'D-EDGE': {
     provider: 'D-EDGE',
     enabled: true,
     apiUrl: 'https://api.d-edge.com/v1',
     hotelId: 'HOTEL_001',
-    simulatedFailureRate: 0.05,
+    simulatedFailureRate: 0,
     simulatedLatencyMs: 350,
   },
   'SiteMinder': {
@@ -70,7 +73,7 @@ const PROVIDER_CONFIGS: Record<CMProvider, CMProviderConfig> = {
     enabled: false,
     apiUrl: 'https://api.siteminder.com/v2',
     hotelId: 'HOTEL_001',
-    simulatedFailureRate: 0.1,
+    simulatedFailureRate: 0,
     simulatedLatencyMs: 500,
   },
   'Cloudbeds': {
@@ -78,7 +81,7 @@ const PROVIDER_CONFIGS: Record<CMProvider, CMProviderConfig> = {
     enabled: false,
     apiUrl: 'https://api.cloudbeds.com/v1',
     hotelId: 'HOTEL_001',
-    simulatedFailureRate: 0.08,
+    simulatedFailureRate: 0,
     simulatedLatencyMs: 400,
   },
   'STAAH': {
@@ -86,7 +89,7 @@ const PROVIDER_CONFIGS: Record<CMProvider, CMProviderConfig> = {
     enabled: false,
     apiUrl: 'https://api.staah.com/v1',
     hotelId: 'HOTEL_001',
-    simulatedFailureRate: 0.07,
+    simulatedFailureRate: 0,
     simulatedLatencyMs: 450,
   },
 };
