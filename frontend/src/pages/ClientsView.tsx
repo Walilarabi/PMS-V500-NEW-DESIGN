@@ -19,12 +19,13 @@ import {
   LayoutGrid,
   BarChart3,
   ChevronRight,
+  X,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/src/components/ui/Card';
 import { Badge } from '@/src/components/ui/Badge';
 import { Button } from '@/src/components/ui/Button';
 import { cn } from '@/src/lib/utils';
-import { useGuests } from '@/src/domains/guests/hooks';
+import { useGuests, useCreateGuest } from '@/src/domains/guests/hooks';
 import { ClientProfile360 } from '@/src/pages/clients/ClientProfile360';
 import { ClientsKanban } from '@/src/pages/clients/ClientsKanban';
 import { ClientsAnalytics } from '@/src/pages/clients/ClientsAnalytics';
@@ -57,6 +58,9 @@ export const ClientsView = () => {
   const [countryFilter, setCountryFilter] = React.useState('ALL');
   const [viewMode,      setViewMode]      = React.useState<ViewMode>('table');
   const [selectedId,    setSelectedId]    = React.useState<string | null>(null);
+  const [showNewGuest,  setShowNewGuest]  = React.useState(false);
+  const [guestDraft,    setGuestDraft]    = React.useState({ fullName: '', email: '', phone: '', segment: '' });
+  const createGuest = useCreateGuest();
 
   const guestsQ = useGuests({
     limit:   200,
@@ -114,7 +118,7 @@ export const ClientsView = () => {
           <Button variant="outline" size="sm" className="gap-2 px-4 shadow-sm bg-white">
             <Download size={14} /> Exporter
           </Button>
-          <Button className="gap-2 shadow-lg shadow-[#8B5CF6]/20">
+          <Button className="gap-2 shadow-lg shadow-[#8B5CF6]/20" onClick={() => { setGuestDraft({ fullName: '', email: '', phone: '', segment: '' }); setShowNewGuest(true); }}>
             <UserPlus size={16} /> Nouveau client
           </Button>
         </div>
@@ -360,6 +364,87 @@ export const ClientsView = () => {
 
       {/* 360° profile drawer */}
       <ClientProfile360 guestId={selectedId} onClose={() => setSelectedId(null)} />
+
+      {/* ── Nouveau client modal ────────────────────────────────────── */}
+      {showNewGuest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#8B5CF6]/10 flex items-center justify-center">
+                  <UserPlus size={15} className="text-[#8B5CF6]" />
+                </div>
+                <h3 className="font-bold text-gray-900 text-[14px]">Nouveau client</h3>
+              </div>
+              <button onClick={() => setShowNewGuest(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              {[
+                { label: 'Nom complet *', key: 'fullName', type: 'text', placeholder: 'Prénom Nom' },
+                { label: 'Email',         key: 'email',    type: 'email', placeholder: 'client@email.com' },
+                { label: 'Téléphone',     key: 'phone',    type: 'tel', placeholder: '+33 6 …' },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">{f.label}</label>
+                  <input
+                    type={f.type}
+                    placeholder={f.placeholder}
+                    value={(guestDraft as any)[f.key]}
+                    onChange={e => setGuestDraft(d => ({ ...d, [f.key]: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-[13px] font-medium text-gray-900 outline-none focus:border-[#8B5CF6] transition-colors"
+                  />
+                </div>
+              ))}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Segment</label>
+                <select
+                  value={guestDraft.segment}
+                  onChange={e => setGuestDraft(d => ({ ...d, segment: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-[13px] font-medium text-gray-700 bg-white outline-none focus:border-[#8B5CF6] transition-colors"
+                >
+                  <option value="">— Choisir —</option>
+                  <option value="Business">Business</option>
+                  <option value="Leisure">Leisure</option>
+                  <option value="VIP">VIP</option>
+                </select>
+              </div>
+              {createGuest.isError && (
+                <p className="text-[12px] text-red-500 font-medium">{createGuest.error?.message ?? 'Erreur lors de la création'}</p>
+              )}
+            </div>
+            <div className="px-5 pb-4 flex gap-2">
+              <Button
+                className="flex-1 gap-1.5"
+                disabled={!guestDraft.fullName.trim() || createGuest.isPending}
+                onClick={async () => {
+                  try {
+                    await createGuest.mutateAsync({
+                      fullName:    guestDraft.fullName,
+                      email:       guestDraft.email   || undefined,
+                      phone:       guestDraft.phone   || undefined,
+                      segment:     guestDraft.segment || undefined,
+                    });
+                    setShowNewGuest(false);
+                  } catch {
+                    // error shown above
+                  }
+                }}
+              >
+                {createGuest.isPending ? (
+                  <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Création…</>
+                ) : (
+                  <><UserPlus size={14} />Créer le client</>
+                )}
+              </Button>
+              <Button variant="outline" onClick={() => setShowNewGuest(false)} disabled={createGuest.isPending}>
+                Annuler
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
