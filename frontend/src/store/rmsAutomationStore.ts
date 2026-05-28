@@ -196,7 +196,8 @@ function newId(prefix: string): string {
 
 /** Applique une fluctuation aléatoire bornée à un signal. */
 function jitter(value: number, amplitude: number, min: number, max: number): number {
-  const next = value + (Math.random() - 0.5) * 2 * amplitude;
+  const rand = crypto.getRandomValues(new Uint8Array(1))[0] / 255;
+  const next = value + (rand - 0.5) * 2 * amplitude;
   return Math.round(Math.min(max, Math.max(min, next)));
 }
 

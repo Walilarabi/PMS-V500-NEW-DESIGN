@@ -72,11 +72,11 @@ export const RoomsPage: React.FC = () => {
   const [draft, setDraft] = useState<Room>({
     id: '', number: '', type: 'Double', category: 'Standard', floor: '1', status: 'clean', price: 120,
   });
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; isError?: boolean } | null>(null);
 
-  function notify(msg: string) {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 2500);
+  function notify(msg: string, isError = false) {
+    setToast({ msg, isError });
+    window.setTimeout(() => setToast(null), isError ? 4000 : 2500);
   }
 
   // ─── Filtres & tri ────────────────────────────────────────────────────
@@ -130,10 +130,15 @@ export const RoomsPage: React.FC = () => {
       active: true,
     })).filter((r) => !existingNumbers.has(r.number));
     if (toCreate.length === 0) { notify('Tous les numéros existent déjà'); setBulkCreating(false); return; }
-    for (const r of toCreate) await createRoom.mutateAsync(r as Parameters<typeof createRoom.mutateAsync>[0]);
-    notify(`${toCreate.length} chambres créées (${bulkStart}–${bulkStart + bulkCount - 1})`);
-    logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Création en masse de ${toCreate.length} chambres fictives` });
-    setBulkCreating(false);
+    try {
+      for (const r of toCreate) await createRoom.mutateAsync(r as Parameters<typeof createRoom.mutateAsync>[0]);
+      notify(`${toCreate.length} chambres créées (${bulkStart}–${bulkStart + bulkCount - 1})`);
+      logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Création en masse de ${toCreate.length} chambres fictives` });
+    } catch (e) {
+      notify(`Erreur lors de la création en masse : ${e instanceof Error ? e.message : 'Erreur inconnue'}`, true);
+    } finally {
+      setBulkCreating(false);
+    }
   }
 
   function startAdd() {
@@ -160,46 +165,58 @@ export const RoomsPage: React.FC = () => {
       notify(`La chambre ${draft.number} existe déjà`);
       return;
     }
-    if (adding) {
-      await createRoom.mutateAsync({
-        hotel_id: session.tenantId,
-        number: draft.number,
-        type: draft.type,
-        category: draft.category,
-        floor: parseInt(draft.floor, 10) || null,
-        status: draft.status,
-        base_price: draft.price ?? null,
-        active: true,
-      } as Parameters<typeof createRoom.mutateAsync>[0]);
-      logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${draft.number} créée (${draft.type} ${draft.category}, étage ${draft.floor})` });
-      notify(`Chambre ${draft.number} créée`);
-    } else if (editing) {
-      await updateRoom.mutateAsync({
-        id: editing.id,
-        patch: {
+    try {
+      if (adding) {
+        await createRoom.mutateAsync({
+          hotel_id: session.tenantId,
           number: draft.number,
           type: draft.type,
           category: draft.category,
           floor: parseInt(draft.floor, 10) || null,
           status: draft.status,
           base_price: draft.price ?? null,
-        },
-      });
-      logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${draft.number} mise à jour` });
-      notify(`Chambre ${draft.number} mise à jour`);
+          active: true,
+        } as Parameters<typeof createRoom.mutateAsync>[0]);
+        logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${draft.number} créée (${draft.type} ${draft.category}, étage ${draft.floor})` });
+        notify(`Chambre ${draft.number} créée`);
+      } else if (editing) {
+        await updateRoom.mutateAsync({
+          id: editing.id,
+          patch: {
+            number: draft.number,
+            type: draft.type,
+            category: draft.category,
+            floor: parseInt(draft.floor, 10) || null,
+            status: draft.status,
+            base_price: draft.price ?? null,
+          },
+        });
+        logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${draft.number} mise à jour` });
+        notify(`Chambre ${draft.number} mise à jour`);
+      }
+      cancel();
+    } catch (e) {
+      notify(`Erreur : ${e instanceof Error ? e.message : 'Impossible de sauvegarder'}`, true);
     }
-    cancel();
   }
 
   async function remove(r: Room) {
     if (!confirm(`Supprimer la chambre ${r.number} ? Cette action est irréversible.`)) return;
-    await deleteRoom.mutateAsync(r.id);
-    logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${r.number} supprimée` });
-    notify(`Chambre ${r.number} supprimée`);
+    try {
+      await deleteRoom.mutateAsync(r.id);
+      logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${r.number} supprimée` });
+      notify(`Chambre ${r.number} supprimée`);
+    } catch (e) {
+      notify(`Erreur : ${e instanceof Error ? e.message : 'Impossible de supprimer la chambre'}`, true);
+    }
   }
 
   async function quickStatus(r: Room, status: RoomStatus) {
-    await updateRoom.mutateAsync({ id: r.id, patch: { status } });
+    try {
+      await updateRoom.mutateAsync({ id: r.id, patch: { status } });
+    } catch (e) {
+      notify(`Erreur statut : ${e instanceof Error ? e.message : 'Échec'}`, true);
+    }
   }
 
   if (!canRead) return <DeniedBanner />;
@@ -404,8 +421,15 @@ export const RoomsPage: React.FC = () => {
         </section>
 
         {toast && (
-          <div className="fixed bottom-6 right-6 rounded-xl bg-slate-900 text-white text-[12.5px] px-4 py-2.5 shadow-lg flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> {toast}
+          <div className={cn(
+            'fixed bottom-6 right-6 rounded-xl text-white text-[12.5px] px-4 py-2.5 shadow-lg flex items-center gap-2',
+            toast.isError ? 'bg-rose-700' : 'bg-slate-900',
+          )}>
+            {toast.isError
+              ? <AlertCircle className="w-4 h-4 text-rose-200 shrink-0" />
+              : <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            }
+            {toast.msg}
           </div>
         )}
       </div>

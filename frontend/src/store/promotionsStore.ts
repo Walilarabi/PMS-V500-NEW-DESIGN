@@ -81,7 +81,7 @@ const spark = (n: number, base = 50, jitter = 25): number[] =>
   Array.from({ length: n }, (_, i) =>
     Math.max(
       2,
-      Math.round(base + Math.sin(i / 1.4) * jitter + (Math.random() - 0.5) * jitter * 0.6)
+      Math.round(base + Math.sin(i / 1.4) * jitter + Math.sin(i * 3.7 + base) * jitter * 0.3)
     )
   );
 

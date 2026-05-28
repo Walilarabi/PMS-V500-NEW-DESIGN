@@ -120,7 +120,8 @@ export const LanguagesPage: React.FC = () => {
       for (const code of c.enabledCurrencies) {
         if (code === c.defaultCurrency) { next[code] = 1; continue; }
         const base = next[code] ?? 1;
-        next[code] = Math.round(base * (1 + (Math.random() - 0.5) * 0.04) * 1000) / 1000;
+        const jitter = (crypto.getRandomValues(new Uint8Array(1))[0] / 255 - 0.5) * 0.04;
+        next[code] = Math.round(base * (1 + jitter) * 1000) / 1000;
       }
       return { ...c, rates: next, ratesUpdatedAt: new Date().toISOString() };
     });

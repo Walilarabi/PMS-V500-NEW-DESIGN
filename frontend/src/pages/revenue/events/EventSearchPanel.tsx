@@ -388,7 +388,7 @@ const AddSourceModal: React.FC<AddSourceModalProps> = ({ city, existingSources, 
     }
 
     const newSource: EventSource = {
-      id: `custom_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: `custom_${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')}`,
       city,
       country: 'France',
       name: name.trim(),

@@ -116,6 +116,10 @@ interface ConfigState {
   events: HotelEvent[];
   channels: ChannelConfig[];
 
+  /** Tracks whether the initial Supabase sync completed at least once. */
+  syncStatus: 'idle' | 'loading' | 'done' | 'error';
+  setSyncStatus: (s: ConfigState['syncStatus']) => void;
+
   // Nouvelles configs
   overbooking: OverbookingConfig;
   pricingRules: PricingRule[];
@@ -262,6 +266,9 @@ export const useConfigStore = create<ConfigState>()(
       },
 
       // ── Actions existantes ──
+      syncStatus: 'idle',
+      setSyncStatus: (s) => set({ syncStatus: s }),
+
       updateHotel: (hotel) => set((state) => ({ hotel: { ...state.hotel, ...hotel } })),
       updateTaxes: (taxes) => set((state) => ({ taxes: { ...state.taxes, ...taxes } })),
       updateUsers: (users) => set({ users }),

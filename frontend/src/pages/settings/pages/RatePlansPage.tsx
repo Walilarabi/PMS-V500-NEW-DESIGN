@@ -41,7 +41,7 @@ interface RatePlansPageProps {
 }
 
 export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
-  const { roomTypes, loadData } = useRateCalendarStore();
+  const { roomTypes, loadData, isLoading: storeLoading, loadError } = useRateCalendarStore();
   const [search, setSearch] = useState('');
   const [filterRoom, setFilterRoom] = useState<string>('all');
   const [toast, setToast] = useState<string | null>(null);
@@ -185,6 +185,14 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
         </div>
       </div>
     );
+  }
+
+  if (storeLoading) {
+    return <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Chargement des plans tarifaires…</div>;
+  }
+
+  if (loadError) {
+    return <div className="flex-1 flex items-center justify-center text-rose-500 text-sm">{loadError}</div>;
   }
 
   return (

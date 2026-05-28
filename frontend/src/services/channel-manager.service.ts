@@ -145,7 +145,7 @@ async function simulateProviderCall(
   payload: CMPushPayload
 ): Promise<void> {
   await new Promise((r) => setTimeout(r, config.simulatedLatencyMs));
-  if (Math.random() < config.simulatedFailureRate) {
+  if (crypto.getRandomValues(new Uint8Array(1))[0] / 256 < config.simulatedFailureRate) {
     throw new Error(`${config.provider} API timeout for ${payload.date}`);
   }
 }

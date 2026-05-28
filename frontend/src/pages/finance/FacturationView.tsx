@@ -447,10 +447,15 @@ export const FacturationView = () => {
           <CreateInvoiceModal
             onClose={() => setShowCreate(false)}
             onCreate={async (input) => {
-              await createInvoice.mutateAsync(input);
-              setShowCreate(false);
+              try {
+                await createInvoice.mutateAsync(input);
+                setShowCreate(false);
+              } catch {
+                // error surfaced by isError prop below
+              }
             }}
             isLoading={createInvoice.isPending}
+            error={createInvoice.isError ? String(createInvoice.error) : undefined}
           />
         )}
       </AnimatePresence>
@@ -461,11 +466,12 @@ export const FacturationView = () => {
 // ─── Create Invoice Modal ─────────────────────────────────────────────────────
 
 function CreateInvoiceModal({
-  onClose, onCreate, isLoading,
+  onClose, onCreate, isLoading, error,
 }: {
   onClose: () => void;
   onCreate: (input: { billToName?: string; billToAddress?: string; billToVat?: string; notes?: string; dueDate?: string }) => Promise<void>;
   isLoading: boolean;
+  error?: string;
 }) {
   const [form, setForm] = useState({ billToName: '', billToAddress: '', billToVat: '', notes: '', dueDate: '' });
 
@@ -494,6 +500,9 @@ function CreateInvoiceModal({
             />
           </div>
         ))}
+        {error && (
+          <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>
+        )}
         <div className="flex gap-3 pt-2">
           <Button variant="ghost" onClick={onClose} className="flex-1 font-bold">Annuler</Button>
           <Button onClick={() => onCreate(form)} disabled={isLoading} className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20">

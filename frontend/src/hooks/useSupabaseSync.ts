@@ -164,6 +164,7 @@ function mapSupabaseReservationToContext(r: SupabaseReservation): Reservation {
 export function useSupabaseSync() {
   const { status, session } = useAuth();
   const updateRooms = useConfigStore((s) => s.updateRooms);
+  const setSyncStatus = useConfigStore((s) => s.setSyncStatus);
   const { replaceAll: replaceAllReservations } = useReservationContext();
   const tenantId = session?.tenantId ?? null;
 
@@ -193,6 +194,8 @@ export function useSupabaseSync() {
     if (lastSyncedRef.current === tenantId) return;
 
     let cancelled = false;
+
+    setSyncStatus('loading');
 
     async function syncAll() {
       try {
@@ -248,9 +251,13 @@ export function useSupabaseSync() {
           }
         }
 
-        lastSyncedRef.current = tenantId;
+        if (!cancelled) {
+          lastSyncedRef.current = tenantId;
+          setSyncStatus('done');
+        }
       } catch (e) {
         console.error('[useSupabaseSync] Unexpected error:', e);
+        if (!cancelled) setSyncStatus('error');
       }
     }
 
@@ -259,5 +266,5 @@ export function useSupabaseSync() {
     return () => {
       cancelled = true;
     };
-  }, [status, tenantId, updateRooms, replaceAllReservations]);
+  }, [status, tenantId, updateRooms, setSyncStatus, replaceAllReservations]);
 }

@@ -78,8 +78,8 @@ function saveHooks(h: WebhookConfig[]) { localStorage.setItem(HOOKS_STORAGE, JSO
 
 function genSecret(prefix: string): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let out = '';
-  for (let i = 0; i < 32; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const out = Array.from(bytes).map(b => chars[b % chars.length]).join('');
   return `${prefix}_${out}`;
 }
 

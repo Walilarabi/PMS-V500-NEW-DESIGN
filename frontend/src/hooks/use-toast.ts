@@ -35,7 +35,7 @@ const remove = (id: string): void => {
 };
 
 export function toast(options: ToastOptions): { id: string; dismiss: () => void } {
-  const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const id = `t-${Date.now()}-${Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b.toString(16).padStart(2, '0')).join('')}`;
   const entry: ToastEntry = { id, variant: 'default', duration: 4000, ...options };
   toasts = [...toasts, entry];
   emit();

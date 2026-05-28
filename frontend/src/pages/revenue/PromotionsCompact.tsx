@@ -91,7 +91,7 @@ const spark = (n: number, base = 50, jitter = 25): number[] =>
   Array.from({ length: n }, (_, i) =>
     Math.max(
       2,
-      Math.round(base + Math.sin(i / 1.4) * jitter + (Math.random() - 0.5) * jitter * 0.6)
+      Math.round(base + Math.sin(i / 1.4) * jitter + Math.sin(i * 3.7 + base) * jitter * 0.3)
     )
   );
 
@@ -280,10 +280,11 @@ export function PromotionsCompact() {
     () =>
       Array.from({ length: 14 }, (_, i) => {
         const base = 60 + Math.sin(i / 1.3) * 8;
+        const jitter = Math.sin(i * 7.3) * 2; // deterministic visual jitter
         return {
           day: `J${i - 13}`,
-          avant: Math.round(base + (Math.random() - 0.5) * 4),
-          apres: Math.round(base + 12 + (Math.random() - 0.5) * 4),
+          avant: Math.round(base + jitter),
+          apres: Math.round(base + 12 + jitter * 0.5),
         };
       }),
     []
@@ -1116,7 +1117,7 @@ const CalendarHeatmap: React.FC<{ promotions: Promotion[] }> = ({ promotions }) 
   const months = ['Mai', 'Juin', 'Juil.'];
   const monthIndexes = [4, 5, 6];
   const cells = monthIndexes.flatMap((m) =>
-    Array.from({ length: 14 }, (_, i) => ({ m, i, intensity: Math.random() }))
+    Array.from({ length: 14 }, (_, i) => ({ m, i, intensity: (Math.sin(m * 3.7 + i * 1.9) + 1) / 2 }))
   );
 
   return (
@@ -1133,10 +1134,9 @@ const CalendarHeatmap: React.FC<{ promotions: Promotion[] }> = ({ promotions }) 
             <span className="w-28 truncate text-[11px] font-medium text-slate-600">{p.name}</span>
             <div className="flex flex-1 gap-1">
               {cells
-                .filter((c) => c.m === monthIndexes[Math.floor(Math.random() * 3)] || true)
                 .slice(0, 24)
-                .map((_, idx) => {
-                  const intensity = Math.random();
+                .map((cell, idx) => {
+                  const intensity = (Math.sin(p.id.charCodeAt(0) * 0.4 + idx * 1.7) + 1) / 2;
                   const tone = TYPE_PALETTE[p.type];
                   return (
                     <span

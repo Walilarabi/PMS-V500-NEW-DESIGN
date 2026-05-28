@@ -95,7 +95,7 @@ const getRoomCode = (type: string, category: string): string => {
 
 export const PlanningView = () => {
   const { addReservation, updateReservation, reservations: contextReservations } = useReservations();
-  const { rooms: storeRooms, events: storeEvents, channels: storeChannels } = useConfigStore();
+  const { rooms: storeRooms, events: storeEvents, channels: storeChannels, syncStatus } = useConfigStore();
   const rmsEvents = useEventsStore((s) => s.events);
   
   // Calcul KPI temps réel automatique
@@ -664,6 +664,25 @@ export const PlanningView = () => {
       )
     }));
   }, [storeRooms, contextReservations]);
+
+  if (syncStatus === 'loading') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#F8FAFC] gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+        <p className="text-sm text-slate-500">Chargement du planning…</p>
+      </div>
+    );
+  }
+
+  if (syncStatus === 'error') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#F8FAFC] gap-3">
+        <AlertCircle className="w-8 h-8 text-rose-500" />
+        <p className="text-sm text-slate-700 font-medium">Impossible de charger le planning</p>
+        <p className="text-xs text-slate-400">Vérifiez votre connexion et rechargez la page.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#F8FAFC] overflow-hidden font-sans select-none" onMouseMove={handleMouseMove}>
