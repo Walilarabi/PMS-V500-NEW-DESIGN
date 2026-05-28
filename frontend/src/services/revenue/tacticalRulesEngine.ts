@@ -36,7 +36,7 @@ function historySample(actor: string, count: number, outcomeMix: ('success' | 'a
     trigger: `Contexte ${actor} détecté`,
     action: `${actor} appliqué`,
     outcome: outcomeMix[i % outcomeMix.length],
-    revenueImpact: Math.round(80 + Math.random() * 320),
+    revenueImpact: 80 + ((i * 73 + actor.charCodeAt(0)) % 321),
     explanation: `Règle ${actor} déclenchée sur conditions marché.`,
   }));
 }
