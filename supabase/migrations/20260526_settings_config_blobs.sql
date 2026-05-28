@@ -19,7 +19,7 @@
 
 CREATE TABLE IF NOT EXISTS settings_config_blobs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  hotel_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  hotel_id UUID NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
 
   namespace TEXT NOT NULL,                          -- ex: 'taxes', 'branding'
   data JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -37,25 +37,19 @@ ALTER TABLE settings_config_blobs ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY settings_config_blobs_select_own
   ON settings_config_blobs FOR SELECT
-  USING (hotel_id IN (SELECT hotel_id FROM hotel_users WHERE user_id = auth.uid()));
+  TO authenticated
+  USING (hotel_id = public.get_user_hotel_id());
 
-CREATE POLICY settings_config_blobs_insert_own
-  ON settings_config_blobs FOR INSERT
-  WITH CHECK (hotel_id IN (SELECT hotel_id FROM hotel_users WHERE user_id = auth.uid()));
-
-CREATE POLICY settings_config_blobs_update_own
-  ON settings_config_blobs FOR UPDATE
-  USING (hotel_id IN (SELECT hotel_id FROM hotel_users WHERE user_id = auth.uid()))
-  WITH CHECK (hotel_id IN (SELECT hotel_id FROM hotel_users WHERE user_id = auth.uid()));
-
-CREATE POLICY settings_config_blobs_delete_own
-  ON settings_config_blobs FOR DELETE
-  USING (hotel_id IN (SELECT hotel_id FROM hotel_users WHERE user_id = auth.uid()));
+CREATE POLICY settings_config_blobs_modify_own
+  ON settings_config_blobs FOR ALL
+  TO authenticated
+  USING (hotel_id = public.get_user_hotel_id())
+  WITH CHECK (hotel_id = public.get_user_hotel_id());
 
 DROP TRIGGER IF EXISTS trg_settings_config_blobs_updated_at ON settings_config_blobs;
 CREATE TRIGGER trg_settings_config_blobs_updated_at
   BEFORE UPDATE ON settings_config_blobs
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at_settings();
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- FIN MIGRATION 20260526_settings_config_blobs.sql

@@ -6,6 +6,7 @@
  */
 
 import { parseLighthouseExcel, type LighthouseImport } from '../lighthouse-parser.service';
+import { persistLighthouseImport } from '../lighthouse-persistence.service';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import type {
   ImportPreview,
@@ -119,6 +120,18 @@ export const lighthouseFileProvider: MarketDataProvider<LighthouseImport> = {
     });
 
     useLighthouseStore.getState().setImportData(payload);
+
+    persistLighthouseImport(payload).then((persistResult) => {
+      if (persistResult.errors.length > 0) {
+        console.warn('[lighthouse] persistLighthouseImport errors:', persistResult.errors);
+      } else {
+        console.info(
+          `[lighthouse] Persisted: importId=${persistResult.importId}, days=${persistResult.daysInserted}, archived=${persistResult.archivedCount}`,
+        );
+      }
+    }).catch((err) => {
+      console.error('[lighthouse] persistLighthouseImport threw:', err);
+    });
 
     const result: Omit<ImportResult, 'id'> = {
       source: META.id,
