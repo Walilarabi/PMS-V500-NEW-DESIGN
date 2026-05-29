@@ -126,7 +126,7 @@ function persist(arr: AuditEntry[]) {
 export function logAudit(entry: Omit<AuditEntry, 'id' | 'at' | 'severity'> & { severity?: AuditSeverity }): AuditEntry {
   const full: AuditEntry = {
     ...entry,
-    id: `audit_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `audit_${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')}`,
     at: new Date().toISOString(),
     severity: entry.severity ?? DEFAULT_SEVERITY[entry.action] ?? 'info',
   };

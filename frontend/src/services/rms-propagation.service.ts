@@ -62,12 +62,7 @@ export class RMSPropagationService {
     };
 
     try {
-      // ─────────────────────────────────────────────────────────────────────
       // STEP 1: Update Pricing Calendar (Supabase)
-      // ─────────────────────────────────────────────────────────────────────
-      
-      console.log('[RMS] Step 1/4: Updating pricing calendar...');
-      
       const calendarUpdates = validations.map((v) => ({
         tenant_id: tenantId,
         date: v.date,
@@ -93,43 +88,25 @@ export class RMSPropagationService {
       }
 
       result.pricingCalendarUpdated = true;
-      console.log('[RMS] ✓ Pricing calendar updated');
 
-      // ─────────────────────────────────────────────────────────────────────
-      // STEP 2: Sync to D-EDGE Channel Manager (API)
-      // ─────────────────────────────────────────────────────────────────────
-      
-      console.log('[RMS] Step 2/4: Syncing to Channel Manager...');
-      
+      // STEP 2: Sync to D-EDGE Channel Manager (not yet integrated — skipped)
       try {
         await this.syncToChannelManager(validations, tenantId);
         result.channelManagerSynced = true;
-        console.log('[RMS] ✓ Channel Manager synced');
-      } catch (cmError: any) {
-        result.errors.push(`Channel Manager sync failed: ${cmError.message}`);
-        // Continue même si CM fail (sera retry en background)
+      } catch (cmError: unknown) {
+        // Expected until D-EDGE integration is configured — not a fatal error
+        result.errors.push(`Channel Manager: ${cmError instanceof Error ? cmError.message : String(cmError)}`);
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // STEP 3: Update Réservations Price Cache
-      // ─────────────────────────────────────────────────────────────────────
-      
-      console.log('[RMS] Step 3/4: Updating reservations cache...');
-      
+      // STEP 3: Update Reservations Cache (not yet integrated — skipped)
       try {
         await this.updateReservationsCache(validations, tenantId);
         result.cacheUpdated = true;
-        console.log('[RMS] ✓ Reservations cache updated');
-      } catch (cacheError: any) {
-        result.errors.push(`Cache update failed: ${cacheError.message}`);
+      } catch (cacheError: unknown) {
+        result.errors.push(`Cache: ${cacheError instanceof Error ? cacheError.message : String(cacheError)}`);
       }
 
-      // ─────────────────────────────────────────────────────────────────────
       // STEP 4: Create Audit Log
-      // ─────────────────────────────────────────────────────────────────────
-      
-      console.log('[RMS] Step 4/4: Creating audit log...');
-      
       const { error: auditError } = await supabase.from('audit_logs').insert({
         tenant_id: tenantId,
         user_id: userId,
@@ -152,24 +129,12 @@ export class RMSPropagationService {
         result.errors.push(`Audit log failed: ${auditError.message}`);
       } else {
         result.auditLogCreated = true;
-        console.log('[RMS] ✓ Audit log created');
       }
 
-      // ─────────────────────────────────────────────────────────────────────
-      // SUCCESS
-      // ─────────────────────────────────────────────────────────────────────
-      
       result.success = result.pricingCalendarUpdated;
-      
-      console.log('[RMS] Propagation complete:', {
-        success: result.success,
-        validations: result.validationsCount,
-        errors: result.errors.length,
-      });
-
       return result;
-    } catch (error: any) {
-      result.errors.push(`Global error: ${error.message}`);
+    } catch (error: unknown) {
+      result.errors.push(`Global error: ${error instanceof Error ? error.message : String(error)}`);
       console.error('[RMS] Propagation failed:', error);
       return result;
     }
@@ -177,64 +142,26 @@ export class RMSPropagationService {
 
   /**
    * Sync prices to D-EDGE Channel Manager API
+   * TODO Phase 4.5: implement D-EDGE REST API integration
    */
   private static async syncToChannelManager(
-    validations: RMSValidation[],
-    tenantId: string
+    _validations: RMSValidation[],
+    _tenantId: string
   ): Promise<void> {
-    // TODO Phase 4.5: Implémenter intégration D-EDGE API
-    // Pour l'instant: mock success avec delay
-    
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    
-    console.log('[RMS] Channel Manager sync (mock):', {
-      validations: validations.length,
-      dates: validations.map((v) => v.date),
-    });
-
-    // Future implementation:
-    /*
-    const dedgeConfig = await getDEdgeConfig(tenantId);
-    const dedgeClient = new DEdgeAPI(dedgeConfig);
-    
-    await dedgeClient.updatePrices({
-      hotel_code: dedgeConfig.hotel_code,
-      updates: validations.map(v => ({
-        date: v.date,
-        rate_plan: 'STANDARD',
-        price: v.finalPrice,
-        currency: 'EUR'
-      }))
-    });
-    */
+    // Not yet implemented — throws so channelManagerSynced stays false
+    throw new Error('D-EDGE Channel Manager integration not yet configured');
   }
 
   /**
-   * Update réservations form price cache
+   * Update reservations price cache after propagation
+   * TODO Phase 4.5: implement Redis/Supabase cache invalidation
    */
   private static async updateReservationsCache(
-    validations: RMSValidation[],
-    tenantId: string
+    _validations: RMSValidation[],
+    _tenantId: string
   ): Promise<void> {
-    // TODO Phase 4.5: Implémenter cache Redis ou Supabase
-    // Pour l'instant: mock success
-    
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    
-    console.log('[RMS] Reservations cache updated (mock):', {
-      validations: validations.length,
-    });
-
-    // Future implementation:
-    /*
-    const cacheUpdates = validations.map(v => ({
-      key: `price:${tenantId}:${v.date}`,
-      value: v.finalPrice,
-      ttl: 86400 // 24h
-    }));
-    
-    await redis.mset(cacheUpdates);
-    */
+    // Not yet implemented — throws so cacheUpdated stays false
+    throw new Error('Reservations cache update not yet implemented');
   }
 
   /**

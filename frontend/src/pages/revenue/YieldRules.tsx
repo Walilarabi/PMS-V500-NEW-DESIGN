@@ -5,7 +5,7 @@
  * Version simplifiée Phase 1
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Zap,
   Plus,
@@ -19,6 +19,12 @@ import {
   Clock,
 } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
+import {
+  syncConfigBlobToSupabase,
+  fetchConfigBlobFromSupabase,
+} from '../../services/settings/settingsPersistence';
+
+const YIELD_NS = 'yield_rules';
 
 const cn = (...classes: (string | boolean | undefined)[]) => classes.filter(Boolean).join(' ');
 
@@ -59,10 +65,10 @@ function generateYieldRules(): YieldRule[] {
       priority: 9,
       condition: 'Si occupation > 80%',
       coefficient: 1.30,
-      dateStart: '2026-01-01',
-      dateEnd: '2026-12-31',
-      applied: 142,
-      revenue: 38420,
+      dateStart: `${new Date().getFullYear()}-01-01`,
+      dateEnd: `${new Date().getFullYear()}-12-31`,
+      applied: 0,
+      revenue: 0,
     },
     {
       id: '2',
@@ -73,10 +79,10 @@ function generateYieldRules(): YieldRule[] {
       priority: 8,
       condition: 'Si résa < 7 jours avant',
       coefficient: 1.25,
-      dateStart: '2026-01-01',
-      dateEnd: '2026-12-31',
-      applied: 87,
-      revenue: 24350,
+      dateStart: `${new Date().getFullYear()}-01-01`,
+      dateEnd: `${new Date().getFullYear()}-12-31`,
+      applied: 0,
+      revenue: 0,
     },
     {
       id: '3',
@@ -87,10 +93,10 @@ function generateYieldRules(): YieldRule[] {
       priority: 10,
       condition: 'Événement EuroPCR 19-22 mai',
       coefficient: 1.40,
-      dateStart: '2026-05-19',
-      dateEnd: '2026-05-22',
-      applied: 56,
-      revenue: 15680,
+      dateStart: '',
+      dateEnd: '',
+      applied: 0,
+      revenue: 0,
     },
     {
       id: '4',
@@ -101,10 +107,10 @@ function generateYieldRules(): YieldRule[] {
       priority: 6,
       condition: 'Si vendredi/samedi',
       coefficient: 1.15,
-      dateStart: '2026-01-01',
-      dateEnd: '2026-12-31',
-      applied: 298,
-      revenue: 81240,
+      dateStart: `${new Date().getFullYear()}-01-01`,
+      dateEnd: `${new Date().getFullYear()}-12-31`,
+      applied: 0,
+      revenue: 0,
     },
     {
       id: '5',
@@ -115,10 +121,10 @@ function generateYieldRules(): YieldRule[] {
       priority: 5,
       condition: 'Si séjour >= 3 nuits',
       coefficient: 0.90,
-      dateStart: '2026-01-01',
-      dateEnd: '2026-12-31',
-      applied: 124,
-      revenue: 42870,
+      dateStart: `${new Date().getFullYear()}-01-01`,
+      dateEnd: `${new Date().getFullYear()}-12-31`,
+      applied: 0,
+      revenue: 0,
     },
     {
       id: '6',
@@ -129,10 +135,10 @@ function generateYieldRules(): YieldRule[] {
       priority: 7,
       condition: 'Si check-in demain',
       coefficient: 1.20,
-      dateStart: '2026-01-01',
-      dateEnd: '2026-12-31',
-      applied: 67,
-      revenue: 18340,
+      dateStart: `${new Date().getFullYear()}-01-01`,
+      dateEnd: `${new Date().getFullYear()}-12-31`,
+      applied: 0,
+      revenue: 0,
     },
     {
       id: '7',
@@ -143,10 +149,10 @@ function generateYieldRules(): YieldRule[] {
       priority: 4,
       condition: 'Si résa > 30 jours avant',
       coefficient: 0.85,
-      dateStart: '2026-01-01',
-      dateEnd: '2026-12-31',
-      applied: 212,
-      revenue: 58120,
+      dateStart: `${new Date().getFullYear()}-01-01`,
+      dateEnd: `${new Date().getFullYear()}-12-31`,
+      applied: 0,
+      revenue: 0,
     },
     {
       id: '8',
@@ -157,8 +163,8 @@ function generateYieldRules(): YieldRule[] {
       priority: 10,
       condition: 'Période 24 déc - 2 jan',
       coefficient: 1.50,
-      dateStart: '2025-12-24',
-      dateEnd: '2026-01-02',
+      dateStart: `${new Date().getFullYear() - 1}-12-24`,
+      dateEnd: `${new Date().getFullYear()}-01-02`,
       applied: 0,
       revenue: 0,
     },
@@ -166,24 +172,23 @@ function generateYieldRules(): YieldRule[] {
 }
 
 export function YieldRules() {
-  const [rules, setRulesRaw] = useState<YieldRule[]>(() => {
-    try {
-      const raw = localStorage.getItem('flowtym_yield_rules');
-      if (!raw) return generateYieldRules();
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : generateYieldRules();
-    } catch {
-      return generateYieldRules();
-    }
-  });
-  const setRules: typeof setRulesRaw = (updater) => {
-    setRulesRaw((prev) => {
-      const next = typeof updater === 'function' ? (updater as (p: YieldRule[]) => YieldRule[])(prev) : updater;
-      try { localStorage.setItem('flowtym_yield_rules', JSON.stringify(next)); } catch { /* ignore */ }
+  const [rules, setRulesRaw] = useState<YieldRule[]>(generateYieldRules);
+  const [selectedRule, setSelectedRule] = useState<YieldRule | null>(null);
+
+  // Load from Supabase on mount
+  useEffect(() => {
+    fetchConfigBlobFromSupabase<YieldRule[]>(YIELD_NS).then(saved => {
+      if (Array.isArray(saved) && saved.length > 0) setRulesRaw(saved);
+    });
+  }, []);
+
+  const setRules = (updater: YieldRule[] | ((prev: YieldRule[]) => YieldRule[])) => {
+    setRulesRaw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      void syncConfigBlobToSupabase(YIELD_NS, next);
       return next;
     });
   };
-  const [selectedRule, setSelectedRule] = useState<YieldRule | null>(null);
 
   // KPIs
   const activeCount = rules.filter(r => r.active).length;

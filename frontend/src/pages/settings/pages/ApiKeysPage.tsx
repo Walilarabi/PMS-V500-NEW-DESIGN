@@ -78,9 +78,18 @@ function saveHooks(h: WebhookConfig[]) { localStorage.setItem(HOOKS_STORAGE, JSO
 
 function genSecret(prefix: string): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let out = '';
-  for (let i = 0; i < 32; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const out = Array.from(bytes).map(b => chars[b % chars.length]).join('');
   return `${prefix}_${out}`;
+}
+
+function isValidHttpsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url.trim());
+    return parsed.protocol === 'https:' && parsed.hostname.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 export const ApiKeysPage: React.FC = () => {
@@ -100,6 +109,7 @@ export const ApiKeysPage: React.FC = () => {
   const { canRead, canWrite, canAdmin, DeniedBanner } = usePagePermission('set_api');
   const [newKeyDraft, setNewKeyDraft] = useState<{ label: string; scopes: string[] }>({ label: '', scopes: ['read'] });
   const [newHookDraft, setNewHookDraft] = useState<{ label: string; url: string; events: string[] }>({ label: '', url: '', events: ['reservation.created'] });
+  const hookUrlError = newHookDraft.url.trim().length > 0 && !isValidHttpsUrl(newHookDraft.url);
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -169,7 +179,7 @@ export const ApiKeysPage: React.FC = () => {
   }
 
   function createHook() {
-    if (!newHookDraft.label.trim() || !newHookDraft.url.trim()) return;
+    if (!newHookDraft.label.trim() || !isValidHttpsUrl(newHookDraft.url)) return;
     const hook: WebhookConfig = {
       id: `hook_${Date.now()}`,
       label: newHookDraft.label.trim(),
@@ -364,12 +374,20 @@ export const ApiKeysPage: React.FC = () => {
                   onChange={(e) => setNewHookDraft({ ...newHookDraft, label: e.target.value })}
                   className="px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px] focus:ring-violet-500 outline-none"
                 />
-                <input
-                  type="url" placeholder="https://votre-domaine.com/webhook"
-                  value={newHookDraft.url}
-                  onChange={(e) => setNewHookDraft({ ...newHookDraft, url: e.target.value })}
-                  className="px-3 py-2 rounded-lg ring-1 ring-slate-200 text-[13px] focus:ring-violet-500 outline-none"
-                />
+                <div className="flex flex-col gap-1">
+                  <input
+                    type="url" placeholder="https://votre-domaine.com/webhook"
+                    value={newHookDraft.url}
+                    onChange={(e) => setNewHookDraft({ ...newHookDraft, url: e.target.value })}
+                    className={cn(
+                      'px-3 py-2 rounded-lg ring-1 text-[13px] outline-none',
+                      hookUrlError ? 'ring-red-400 bg-red-50/40' : 'ring-slate-200 focus:ring-violet-500',
+                    )}
+                  />
+                  {hookUrlError && (
+                    <span className="text-[11px] text-red-500">URL invalide — doit commencer par https://</span>
+                  )}
+                </div>
               </div>
               <div className="mt-3">
                 <div className="text-[11px] uppercase tracking-wide font-semibold text-slate-500 mb-1.5">Événements souscrits</div>
@@ -397,7 +415,7 @@ export const ApiKeysPage: React.FC = () => {
               <div className="mt-3 flex justify-end">
                 <button
                   onClick={() => canAdmin && createHook()}
-                  disabled={!canAdmin || !newHookDraft.label.trim() || !newHookDraft.url.trim() || newHookDraft.events.length === 0}
+                  disabled={!canAdmin || !newHookDraft.label.trim() || !isValidHttpsUrl(newHookDraft.url) || newHookDraft.events.length === 0}
                   title={!canAdmin ? 'Permission requise : set_api (admin)' : undefined}
                   className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >

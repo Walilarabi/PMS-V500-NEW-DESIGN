@@ -190,6 +190,13 @@ export const ReconciliationView: React.FC = () => {
           </div>
         </header>
 
+        {(stmtQ.isError || payoutsQ.isError || reservationsQ.isError) && (
+          <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 flex items-center gap-2">
+            <AlertTriangle size={14} className="shrink-0" />
+            Erreur de chargement des données. Vérifiez votre connexion et rafraîchissez.
+          </div>
+        )}
+
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Kpi testid="recon-kpi-unmatched" label="À rapprocher" value={String(kpis.unmatched.length)} hint={fmtEUR(kpis.totalToReconcile)} icon={AlertTriangle} tone="amber" />
           <Kpi testid="recon-kpi-matched" label="Rapprochés" value={String(kpis.matched.length)} hint={fmtEUR(kpis.totalReconciled)} icon={CheckCircle2} tone="emerald" />

@@ -1,398 +1,284 @@
-# Plan — Formulaires typologies & plans tarifaires + Sélecteur partenaire
+# Plan : Performance Optimisation — Flowtym PMS
 
-**Date :** 2026-05-27  
-**Branche :** `main`  
-**Scope :** Amélioration profonde des formulaires de création chambre & plan tarifaire, intégration du sélecteur partenaire (34 OTA), cohérence Planning / Calendrier / Réservations.
-
----
-
-## Contexte & Diagnostic
-
-### Ce qui existe aujourd'hui
-
-| Composant | Localisation | État |
-|-----------|-------------|------|
-| `RoomManagerPanel` | `components/rms/calendar/` | Drawer CRUD complet — fonctionne dans le Store, **pas de persistance Supabase** |
-| `RateManagerPanel` | `components/rms/calendar/` | Drawer CRUD + dupliquer/toggle — **liste partenaires trop courte (8)**, search non branché |
-| `RoomTypesPage` | `pages/settings/pages/` | Liste + suppression virtuelles uniquement — **pas de création chambre physique** depuis cette page |
-| `RatePlansPage` | `pages/settings/pages/` | Lecture seule + import Excel — **pas d'édition inline fonctionnelle** |
-| `ReservationFormModal` | `components/modals/` | Champ `channel` avec 5 options — **pas de filtrage plan par partenaire** |
-| `constants/channels.ts` | `constants/` | 5 canaux seulement — **34 partenaires requis** |
-
-> **TASKS 1–8 COMPLETED** — 2026-05-27.  
-> Branches T3–T8 merged to main. All room/rate/modal forms fully rebuilt.
+**Date :** 2026-05-28
+**Branche :** `claude/amazing-sagan-NZbfi`
+**Scope :** 9 axes de performance — React Query, realtime, debounce, pagination, virtualisation, skeletons, memoïsation, indexes Supabase.
 
 ---
 
----
+## Audit — Constats clés
 
-# Plan — Revenue Calendar Rebuild
+### React Query
+- `main.tsx:17-22` : `QueryClient` global sans `gcTime` (défaut 5 min)
+- `domains/guests/hooks.ts:10-12` : `useGuests` sans `staleTime` → refetch à chaque render
+- `domains/reservations/hooks.ts:66` : `invalidateQueries({ queryKey: ['reservations'] })` bust TOUTES les sous-queries sur chaque mutation
 
-**Date :** 2026-05-27  
-**Branche :** `claude/amazing-sagan-NZbfi`  
-**Scope :** Corriger les bugs critiques du module Planning (Calendrier mort, imports cassés) et reconstruire le Revenue Calendar avec données Supabase réelles, métriques fiables, filtres, modales actionnables et UX colour-codée.
+### Realtime — canal potentiellement zombie
+- **DEUX** implémentations de `useReservationsRealtime` :
+  - `hooks/useRealtimeChannels.ts` — montée dans `App.tsx:249`
+  - `domains/reservations/realtime.ts` — importée par `RealtimeBridge.tsx`
+- `RealtimeBridge.tsx` est **dead code** (jamais rendu dans le JSX)
+- Si un jour rendu, 2 canaux `reservations` s'ouvriraient simultanément
 
----
+### Debounce
+- `ReservationsView.tsx:504` : `onChange → setSearchQuery` instantané, `useMemo` recalculé à chaque frappe
+- Aucun hook `useDebounce` partagé dans le codebase
+- `FoliosView.tsx:54-63` et `EInvoiceView.tsx:84-93` : debounce maison `useRef+setTimeout` non réutilisé
 
-## Audit — Bugs Critiques Confirmés
+### Virtualisation
+- `@tanstack/react-virtual` **non installé**
+- `ReservationsView` (881 lignes), `FacturationView` (473 lignes) : rendu DOM complet
+- Tableaux avec pagination locale uniquement (pas de pagination serveur)
 
-| # | Fichier | Bug | Impact |
-|---|---------|-----|--------|
-| B1 | `PlanningView.tsx:167,400-405` | Toggle `displayMode='Calendar'` existe mais rien ne s'affiche — `RevenueCalendar` n'est jamais rendu | **CRITIQUE** — bouton mort |
-| B2 | `hooks/usePlanningMetrics.ts:2-7` | Imports `computeDayMetrics`, `computeMonthlyKPIs`, `DayMetric`, `MonthMetric` depuis `pmsLogic` — ces exports n'existent pas → 4 erreurs TS2305 | **CRITIQUE** — crash silencieux |
-| B3 | `PlanningView.tsx:280` | `adr: 120 + Math.floor(Math.random() * 40)` — ADR fictif dans l'en-tête Gantt | **MOYEN** — données trompeuses |
-| B4 | `RevenueCalendar.tsx:63` | `adr = ca / occRes.length` — divise le CA total par le nb de réservations, pas par le nb de nuits | **MOYEN** — ADR mal calculé |
+### Skeletons
+- `Analysis/ReportSkeleton.tsx` existe — cantonné au module Analyse
+- `ReservationsView:636-641` : texte "Chargement des réservations…" seulement
+- Aucun skeleton pour tableaux principaux (Réservations, Facturation, Clients)
 
-## Audit — Fonctionnalités Manquantes
-
-| # | Manque |
-|---|--------|
-| F1 | Aucun sélecteur de période (7/14/30/60/90 jours) dans le Revenue Calendar |
-| F2 | Aucun filtre (type chambre, partenaire, plan tarifaire) dans le Revenue Calendar |
-| F3 | Aucun handler sur les cellules du calendrier — pas de modal |
-| F4 | Aucun tracking pickup / annulations / no-show |
-| F5 | Aucun abonnement Supabase temps-réel pour le Revenue Calendar |
-| F6 | Thresholds couleur en dur dans `RevenueCalendar.tsx` (non centralisés) |
-| F7 | `CATEGORY_PRICES` mocké dans `types.ts` (non branché aux rate_prices Supabase) |
+### Indexes Supabase
+- Billing tables (`invoices`, `folios`, `invoice_lines`, `payments`) créées par
+  `20260530_billing_rls.sql` sans aucun index
 
 ---
 
 ## Graphe de dépendances
 
 ```
-T1 — pmsLogic.ts : computeDayMetrics + computeMonthlyKPIs + types
-     ↓
-T2 — PlanningView.tsx : Fix toggle dead + remove random ADR + wire RevenueCalendar
-     ↓
-T3 — RevenueCalendar.tsx : fix ADR calc + add period selector + filters
-     ↓
-T4 — hooks/useRevenueCalendarData.ts : hook centralisé données + pickup + annulations
-     ↓
-T5 — DayDetailModal.tsx : modal jour cliquable, 7 boutons action
-     ↓
-T6 — RevenueCalendar : wire click handlers → DayDetailModal
-     ↓
-T7 — Real-time Supabase subscriptions + centralize threshold constants
-     ↓
-T8 — Build verify + commit + push
+Phase 1 (fondations — aucun changement UX visible)
+  T1 QueryClient config     ← sans dépendance
+  T2 Billing indexes        ← sans dépendance
+  T3 Realtime cleanup       ← sans dépendance
+
+Phase 2 (données — après Phase 1)
+  T4 useDebounce hook       ← T1
+  T5 Invalidation ciblée    ← T1
+  T6 Pagination serveur     ← T1, T5
+
+Phase 3 (UI — après Phase 2)
+  T7 Skeleton loaders       ← T4
+  T8 Virtualisation         ← T6
+  T9 React.memo/useMemo     ← T8
 ```
 
 ---
 
-## Tâches verticales
+## Phase 1 — Fondations
+
+### T1 — QueryClient : gcTime, staleTime cohérents, guests fix
+**Scope :** S (2 fichiers)
+**Fichiers :** `frontend/src/main.tsx`, `domains/guests/hooks.ts`
+
+Ajoute `gcTime: 10 * 60_000` aux defaults globaux. Corrige `useGuests` qui n'a
+aucun `staleTime` (0 = refetch à chaque render).
+
+**Acceptance criteria**
+- [ ] `main.tsx` : `defaultOptions.queries` contient `gcTime: 10 * 60_000`
+- [ ] `useGuests` : `staleTime: 30_000` ajouté
+- [ ] `npm test` vert
+
+**Verification :** `npm test` + `npm run build`
 
 ---
 
-### T1 — Ajouter `computeDayMetrics` / `computeMonthlyKPIs` à pmsLogic.ts
-**Fichier :** `frontend/src/lib/pmsLogic.ts`  
-**Taille :** S (1 fichier, ~60 lignes)
+### T2 — Migration indexes billing
+**Scope :** XS (1 fichier SQL)
+**Fichiers :** `supabase/migrations/20260531_billing_indexes.sql` (nouveau)
 
-**Description :**  
-`usePlanningMetrics.ts` importe 4 symboles de `pmsLogic` qui n'existent pas.  
-Ajouter ces fonctions + types dans `pmsLogic.ts` pour corriger les 4 erreurs TS2305.  
-Les calculs doivent être corrects : ADR = revenu total / nombre de nuits vendues (pas nombre de réservations).
+Index `(hotel_id, created_at DESC)` sur `invoices`, `folios`, `invoice_lines`,
+`payments`. Index FK `(invoice_id)` sur `folios`, `invoice_lines`, `payments`.
+Index `(status)` sur `invoices`.
 
-**Types à ajouter :**
-```typescript
-export interface DayMetric {
-  dateStr: string;
-  occupiedRooms: number;
-  availableRooms: number;
-  occupancyRate: number;  // 0-100
-  revenue: number;        // CA total du jour
-  adr: number;            // CA / nuits vendues
-  revpar: number;         // CA / chambres disponibles
-  arrivals: number;
-  departures: number;
-  cancellations: number;
-}
+**Acceptance criteria**
+- [ ] Migration idempotente (`IF NOT EXISTS`)
+- [ ] Couvre les 4 tables
+- [ ] Syntaxe SQL valide
 
-export interface MonthMetric {
-  year: number;
-  month: number;
-  totalRevenue: number;
-  avgOccupancy: number;
-  avgADR: number;
-  avgRevPAR: number;
-  totalArrivals: number;
-  totalDepartures: number;
-  totalCancellations: number;
-}
-```
-
-**Fonctions à ajouter :**
-```typescript
-export function computeDayMetrics(
-  reservations: any[],
-  dateStr: string,
-  totalRoomsCount: number
-): DayMetric
-
-export function computeMonthlyKPIs(
-  reservations: any[],
-  year: number,
-  month: number,
-  totalRoomsCount: number
-): MonthMetric
-```
-
-**Critères d'acceptation :**
-- [ ] `npx tsc --noEmit` → 0 erreur dans `usePlanningMetrics.ts`
-- [ ] `computeDayMetrics` : ADR = revenu_du_jour / nombre_réservations_présentes (minimum 1)
-- [ ] `computeMonthlyKPIs` : agrège tous les jours du mois
-
-**Vérification :** `npx tsc --noEmit 2>&1 | grep usePlanningMetrics` → vide
+**Verification :** lecture du fichier SQL
 
 ---
 
-### T2 — Wirer RevenueCalendar dans PlanningView + supprimer ADR aléatoire
-**Fichier :** `frontend/src/pages/PlanningView.tsx`  
-**Taille :** S (1 fichier, ~20 lignes modifiées)
+### T3 — Consolidation realtime (dead code + doublon)
+**Scope :** S (3 fichiers)
+**Fichiers :** `RealtimeBridge.tsx`, `domains/reservations/realtime.ts`, `App.tsx`
 
-**Description :**  
-1. Importer `RevenueCalendar` et `RevenueSubView` dans PlanningView  
-2. Ajouter `subView` state  
-3. Dans le JSX, conditionner : si `displayMode === 'Calendar'` → rendre `<RevenueCalendar .../>` sinon rendre le Gantt  
-4. Passer les bonnes props : `monthDate={currentDate}` `reservations={supabaseReservations}` `rooms={roomRows}` `events={storeEvents}` `subView` `setSubView`  
-5. Remplacer `adr: 120 + Math.floor(Math.random() * 40)` (ligne 280) par un calcul réel depuis les réservations du jour
+Supprimer `RealtimeBridge.tsx` et `domains/reservations/realtime.ts`. App.tsx
+importe uniquement depuis `hooks/useRealtimeChannels.ts`.
 
-**Données disponibles dans PlanningView :**
-- `supabaseReservations` — depuis `useReservations()` (domaine)  
-- `roomsData` / `roomsQuery.data` — depuis `useRooms()`  
-- `storeEvents` — depuis `useConfigStore(s => s.events)`  
-- `currentDate` — état existant
+**Acceptance criteria**
+- [ ] `RealtimeBridge.tsx` supprimé (ou redirige vers null)
+- [ ] `domains/reservations/realtime.ts` supprimé
+- [ ] Une seule instance du canal `flowtym:reservations:live` à l'ouverture
+- [ ] `npm test` vert
 
-**Critères d'acceptation :**
-- [ ] Clic "Calendrier" → `<RevenueCalendar>` s'affiche à la place du Gantt
-- [ ] Clic "Gantt" → Gantt s'affiche, Revenue Calendar disparaît
-- [ ] En-tête Gantt : ADR calculé depuis les vraies réservations (pas de `Math.random`)
-- [ ] Aucune régression sur le Gantt existant
-
-**Vérification :** `npm run build` réussit ; basculer manuellement entre Gantt et Calendrier
+**Verification :** grep confirme un seul import de `useReservationsRealtime`
 
 ---
 
-### T3 — Améliorer RevenueCalendar : ADR corrigé + sélecteur période + filtres
-**Fichier :** `frontend/src/pages/planning/RevenueCalendar.tsx`  
-**Taille :** M (1 fichier, ~100 lignes ajoutées)
-
-**Description :**  
-1. **Fix ADR** : `adr = Math.round(ca / Math.max(1, occRes.length))` → calculé par jour, correct  
-2. **Sélecteur période** : boutons `7J / 14J / 30J / 60J / 90J` au lieu du calendrier mensuel fixe. Quand sélectionné, le calendrier affiche une grille de N jours à partir de `startDate`  
-3. **Filtre type chambre** : dropdown "Tous les types" → filtre `reservations` par `room_type`  
-4. **Filtre partenaire** : dropdown "Tous les canaux" → filtre `reservations` par `source`  
-5. **Mode "Range" vs "Mois"** : ajouter `viewMode: 'month' | 'range'` state. Le sélecteur existant Gantt/Calendar opère sur le mois courant (mode month). Les nouveaux boutons 7J/14J/30J... passent en mode range.
-
-**Props étendues :**
-```typescript
-interface Props {
-  monthDate: Date;
-  startDate: Date;          // NEW — pour le mode range
-  reservations: ReservationRow[];
-  rooms: RoomRow[];
-  events: HotelEvent[];
-  subView: RevenueSubView;
-  setSubView: (s: RevenueSubView) => void;
-}
-```
-
-**Critères d'acceptation :**
-- [ ] Boutons 7J/14J/30J/60J/90J visibles et cliquables dans le header du Revenue Calendar
-- [ ] Clic "30J" → grille de 30 jours à partir d'aujourd'hui (pas de vue mensuelle)
-- [ ] Filtre type chambre → ne compte que les réservations de ce type
-- [ ] Filtre partenaire → ne compte que les réservations de ce canal
-- [ ] ADR d'un jour = CA_du_jour / nb_réservations_présentes (correct, no division par 0)
-
-**Vérification :** Observer manuellement la grille après changement de période + filtres
+### ✅ Checkpoint Phase 1
+- [ ] `npm test` vert
+- [ ] `npm run build` propre
+- [ ] Pas de régression UI
 
 ---
 
-### T4 — Hook `useRevenueCalendarData` : pickup + annulations + temps-réel
-**Fichier :** `frontend/src/hooks/useRevenueCalendarData.ts` (nouveau)  
-**Taille :** M (1 nouveau fichier, ~120 lignes)
+## Phase 2 — Couche données
 
-**Description :**  
-Centraliser toute la logique de données du Revenue Calendar dans un hook réutilisable.  
-Ce hook remplace les props directes par un état enrichi avec :
-- Pickup : réservations créées dans les 7 derniers jours pour une date future donnée
-- Annulations : réservations avec `status = 'cancelled'` sur la période
-- No-show : réservations avec `status = 'no_show'`
-- Arrivées/départs : filtrage par `check_in` / `check_out` du jour
-- Abonnement Supabase temps-réel sur la table `reservations`
+### T4 — Hook `useDebounce` partagé + application
+**Scope :** M (4 fichiers)
+**Fichiers :**
+- `frontend/src/hooks/useDebounce.ts` (nouveau)
+- `pages/ReservationsView.tsx`
+- `pages/finance/FoliosView.tsx`
+- `pages/finance/EInvoiceView.tsx`
 
-**Interface de retour :**
-```typescript
-interface UseRevenueCalendarDataReturn {
-  reservations: ReservationRow[];
-  cancellations: ReservationRow[];
-  pickupByDate: Map<string, number>;   // date → nb réservations récentes
-  isLoading: boolean;
-  lastUpdated: Date | null;
-}
-```
+Hook générique `useDebounce<T>(value: T, delay = 300): T`. Appliqué à
+ReservationsView (`useMemo` dépend de `debouncedSearch`, pas de `searchQuery`).
+Remplace les `useRef+setTimeout` maisons dans FoliosView et EInvoiceView.
 
-**Supabase subscription :**
-```typescript
-supabase
-  .channel('revenue-calendar-reservations')
-  .on('postgres_changes', {
-    event: '*',
-    schema: 'public',
-    table: 'reservations',
-  }, () => { refetch() })
-  .subscribe()
-```
+**Acceptance criteria**
+- [ ] `useDebounce.ts` : hook pur, test unitaire inclus
+- [ ] `ReservationsView` : `useMemo` filter dépend de `debouncedSearch`
+- [ ] FoliosView, EInvoiceView : useRef+setTimeout remplacés
+- [ ] Aucun filtre ne se déclenche avant 300ms d'inactivité
 
-**Critères d'acceptation :**
-- [ ] Hook exporté et typé sans erreur TS
-- [ ] `pickupByDate` contient les nouvelles réservations sur les 7 derniers jours par date
-- [ ] `cancellations` filtre correctement par `status = 'cancelled'`
-- [ ] Subscription Supabase se nettoie dans le `useEffect` cleanup
-
-**Vérification :** Créer une réservation dans Supabase → `lastUpdated` se met à jour
+**Verification :** taper rapidement → le filtre ne se met à jour qu'après pause
 
 ---
 
-### T5 — Modal `DayDetailModal` : détail jour + boutons action
-**Fichier :** `frontend/src/components/modals/DayDetailModal.tsx` (nouveau)  
-**Taille :** M (1 nouveau fichier, ~200 lignes)
+### T5 — Invalidation ciblée des mutations
+**Scope :** M (3 fichiers)
+**Fichiers :**
+- `domains/reservations/hooks.ts`
+- `domains/guests/hooks.ts`
+- `domains/billing/hooks.ts`
 
-**Description :**  
-Modal qui s'ouvre au clic sur une cellule du Revenue Calendar.  
-Affiche les métriques réelles du jour et propose 7 boutons d'action.
+Remplacer les invalidations broad par des invalidations + `setQueryData` ciblées :
+- `updateReservation` → `setQueryData(['reservations','one',id])` + invalide `['reservations','list']` seulement
+- `createReservation` → invalide `['reservations','list']` et `['reservations','range',...]`
+- `cancelReservation` → `setQueryData` + invalide `['reservations','list']`
+- `createGuest` → invalide `['guests', {}]` (pas le profil 360)
+- Billing : vérifier `addInvoiceLine` (déjà ciblé `['invoice_lines', invoiceId]`)
 
-**Données affichées :**
-- Date (formatée en français)
-- Occupation : `N/M chambres (P%)`
-- ADR, RevPAR, CA du jour
-- Liste des réservations présentes ce jour (nom client, chambre, canal)
-- Pickup (nouvelles résa dans les 7j)
-- Événements hôtel ce jour
-- Badge de compression (si occupation > seuil)
+**Acceptance criteria**
+- [ ] Aucun `invalidateQueries({ queryKey: RESERVATIONS_KEY })` broad restant dans les mutations (sauf realtime)
+- [ ] `updateReservation` met à jour le cache en place avant d'invalider
+- [ ] `npm test` vert
 
-**Boutons d'action :**
-1. `+ Nouvelle réservation` → ouvre `ReservationFormModal` pré-rempli avec la date
-2. `Bloquer des chambres` → ouvre sélecteur chambre + confirmation
-3. `Modifier les tarifs` → ouvre `RateManagerPanel` sur la date
-4. `Ajouter une restriction` → mini-form (min_stay, max_stay, close_to_arrival)
-5. `Voir les réservations` → scroll vers les réservations du jour dans le Gantt
-6. `Ajouter un événement` → ouvre `EventManagerModal` pré-rempli avec la date
-7. `Copier les tarifs` → action future (disabled avec tooltip "Bientôt disponible")
-
-**Critères d'acceptation :**
-- [ ] Modal s'ouvre avec les données réelles du jour cliqué
-- [ ] "Nouvelle réservation" → `ReservationFormModal` s'ouvre (avec date pré-remplie)
-- [ ] "Ajouter un événement" → `EventManagerModal` s'ouvre avec la date
-- [ ] Fermeture avec Escape ou clic sur overlay
-- [ ] Accessible au clavier (focus trap, Escape ferme)
-
-**Vérification :** Cliquer sur une cellule → modal visible avec données du jour
+**Verification :** DevTools TanStack Query → après update, seules les queries affectées re-fetched
 
 ---
 
-### T6 — Wirer les click handlers dans RevenueCalendar → DayDetailModal
-**Fichier :** `frontend/src/pages/planning/RevenueCalendar.tsx`  
-**Taille :** S (modifier fichier existant, ~30 lignes)
+### T6 — Pagination serveur Réservations + Facturation
+**Scope :** L (5 fichiers)
+**Fichiers :**
+- `domains/reservations/repository.ts`
+- `domains/reservations/hooks.ts`
+- `domains/billing/repository.ts`
+- `domains/billing/hooks.ts`
+- `pages/ReservationsView.tsx`
+- `pages/finance/FacturationView.tsx`
 
-**Description :**  
-1. Ajouter prop `onDayClick?: (day: DayCell) => void`  
-2. Dans `KpiCalendar`, ajouter `onClick={() => onDayClick?.(d)}` + `cursor-pointer` sur chaque cellule  
-3. Dans `PlanningView`, gérer `selectedDay` state + rendre `<DayDetailModal>`  
-4. Passer les callbacks nécessaires (openReservationModal, openEventModal, openRatePanel)
+`listReservations` et `listInvoices` acceptent `{ limit: 50, offset }`, retournent
+`{ rows, total }`. `useReservations` et `useInvoices` exposent `page`, `setPage`,
+`totalPages`. Les vues affichent "Page X / Y" avec boutons Précédent/Suivant.
 
-**Critères d'acceptation :**
-- [ ] Clic sur n'importe quelle cellule → DayDetailModal s'ouvre
-- [ ] DayDetailModal reçoit les bonnes données (occ, adr, revpar, réservations du jour)
-- [ ] Cellule courante surlignée au hover (déjà `hover:bg-indigo-50/30` — à renforcer)
+**Acceptance criteria**
+- [ ] `listReservations` retourne `{ rows, total }` avec limit/offset
+- [ ] `queryKey` inclut `{ limit, offset }` → cache par page
+- [ ] Navigation page 1→2→1 : retour page 1 sans réseau (cache hit)
+- [ ] Boutons Précédent/Suivant visibles et fonctionnels
+- [ ] Tests repository mis à jour
 
-**Vérification :** Clic cellule → modal → données cohérentes avec Gantt du même jour
-
----
-
-### T7 — Centraliser les seuils + polish UX
-**Fichiers :** `frontend/src/pages/planning/revenueThresholds.ts` (nouveau), `RevenueCalendar.tsx`  
-**Taille :** S (1 nouveau petit fichier + modif mineur RevenueCalendar)
-
-**Description :**  
-1. Extraire les seuils de couleur dans `revenueThresholds.ts` :
-```typescript
-export const OCC_THRESHOLDS = {
-  CRITICAL:   { min: 90, bg: 'bg-rose-100',    ring: 'ring-rose-200',    label: 'Compression' },
-  HIGH:       { min: 75, bg: 'bg-orange-100',   ring: 'ring-orange-200',  label: 'Forte demande' },
-  NORMAL:     { min: 50, bg: 'bg-emerald-100',  ring: 'ring-emerald-200', label: 'Normal' },
-  LOW:        { min: 25, bg: 'bg-sky-50',       ring: 'ring-sky-100',     label: 'Faible' },
-  EMPTY:      { min: 0,  bg: 'bg-gray-50',      ring: 'ring-gray-100',    label: 'Vide' },
-} as const;
-```
-2. Afficher le label de seuil dans les cellules (ex. petit badge "Compression" sur les jours ≥90%)  
-3. Indicateur pickup dans la cellule (flèche ↑ si pickup > 0 pour ce jour)  
-4. Afficher nb annulations dans cellule si > 0 (badge rouge)
-
-**Critères d'acceptation :**
-- [ ] `OCC_THRESHOLDS` importé dans `RevenueCalendar.tsx` (plus de seuils en dur)
-- [ ] Cellules ≥90% affichent un mini-badge "Compression"
-- [ ] Cellules avec pickup > 0 affichent ↑ indicateur
-- [ ] Pas de régression sur la heatmap
-
-**Vérification :** Observer le calendrier avec données réelles — badges corrects
+**Verification :** DevTools Network → retour page 1 = 0 requête réseau
 
 ---
 
-### T8 — Build verify + commit + push
-**Fichiers :** tous les fichiers modifiés  
-**Taille :** XS
-
-**Description :**  
-Build complet + vérification TypeScript + push sur la branche de développement.
-
-**Critères d'acceptation :**
-- [ ] `npx tsc --noEmit` → 0 erreur dans les fichiers nouveaux/modifiés
-- [ ] `npm run build` → succès
-- [ ] `git push -u origin claude/amazing-sagan-NZbfi`
+### ✅ Checkpoint Phase 2
+- [ ] `npm test` vert
+- [ ] `npm run build` propre
+- [ ] Recherche ne spamme plus le réseau
+- [ ] Pagination serveur visible
 
 ---
 
-## Checkpoints
+## Phase 3 — Couche UI
 
-```
-✅ CHECKPOINT A (après T1+T2) :
-   → npx tsc → 0 erreur usePlanningMetrics
-   → Basculer Gantt/Calendrier fonctionne visuellement
+### T7 — Skeleton loaders tableaux
+**Scope :** M (4 fichiers)
+**Fichiers :**
+- `components/ui/TableSkeleton.tsx` (nouveau)
+- `pages/ReservationsView.tsx`
+- `pages/finance/FacturationView.tsx`
 
-✅ CHECKPOINT B (après T3+T4) :
-   → Période 30J visible, filtres chambre + partenaire opérationnels
-   → useRevenueCalendarData hook fonctionnel
+Composant `<TableSkeleton rows={8} cols={6} />` avec `animate-pulse`. Remplace
+les textes "Chargement..." par le skeleton dans les 3 vues principales.
 
-✅ CHECKPOINT C (après T5+T6) :
-   → Clic cellule → DayDetailModal avec vraies données
-   → "Nouvelle réservation" et "Ajouter événement" fonctionnels depuis modal
+**Acceptance criteria**
+- [ ] `TableSkeleton` accepte `rows` et `cols`
+- [ ] Les vues affichent le skeleton pendant `isLoading`
+- [ ] Aucune régression états vides / erreur
 
-✅ CHECKPOINT D (après T7+T8) :
-   → Seuils centralisés, badges compression/pickup visibles
-   → Build propre + push
-```
-
----
-
-## Décisions architecturales
-
-| Décision | Choix | Raison |
-|----------|-------|--------|
-| Seuils couleur | Fichier `revenueThresholds.ts` dédié | Un seul endroit à modifier pour changer les thresholds business |
-| Données Revenue Calendar | Réutiliser `useReservations()` existant | Évite une seconde query, partage le cache React Query |
-| Abonnement temps-réel | Dans `useRevenueCalendarData` hook séparé | Isolation : subscribe/unsubscribe géré en un endroit |
-| DayDetailModal | Composant `components/modals/` | Cohérent avec les autres modales du projet |
-| Pickup | `createdAt` des 7 derniers jours | Standard hôtelier pour le pickup N-7 |
+**Verification :** DevTools → throttle "Slow 3G" → skeleton visible avant données
 
 ---
 
-## Fichiers touchés (récapitulatif)
+### T8 — Virtualisation `@tanstack/react-virtual`
+**Scope :** L (3 fichiers)
+**Fichiers :**
+- `package.json` (add `@tanstack/react-virtual`)
+- `pages/ReservationsView.tsx`
+- `pages/finance/FacturationView.tsx`
 
-```
-MOD   frontend/src/lib/pmsLogic.ts
-MOD   frontend/src/pages/PlanningView.tsx
-MOD   frontend/src/pages/planning/RevenueCalendar.tsx
-NEW   frontend/src/hooks/useRevenueCalendarData.ts
-NEW   frontend/src/components/modals/DayDetailModal.tsx
-NEW   frontend/src/pages/planning/revenueThresholds.ts
-```
+`useVirtualizer` avec `estimateSize: () => 52`, `overscan: 5`. Conteneur
+scrollable à hauteur fixe (CSS `overflow-y: auto; height: calc(100vh - Xpx)`).
+
+**Acceptance criteria**
+- [ ] `@tanstack/react-virtual` dans `dependencies`
+- [ ] Avec 500 lignes : < 30 `<tr>` dans le DOM à tout moment
+- [ ] Scroll fluide, hauteur stable (pas de saut)
+- [ ] `npm test` vert
+
+**Verification :** DevTools Elements → compter `<tr>` pendant scroll
+
+---
+
+### T9 — React.memo + useMemo sur composants lourds
+**Scope :** S (2 fichiers)
+**Fichiers :**
+- `pages/ReservationsView.tsx`
+- `pages/finance/FacturationView.tsx`
+
+Enveloppe `FilterSelect` dans `React.memo`. Déplace `channelOptions`,
+`roomTypeOptions`, `statusOptions` dans `useMemo` dépendant de leurs sources.
+
+**Acceptance criteria**
+- [ ] `FilterSelect` wrappé dans `React.memo`
+- [ ] `channelOptions` etc. : `useMemo` avec dépendances correctes
+- [ ] React Profiler : `FilterSelect` ne re-render pas lors d'une frappe dans la recherche
+
+**Verification :** React DevTools Profiler → saisir dans recherche → FilterSelect ne flamme pas
+
+---
+
+### ✅ Checkpoint Phase 3 (final)
+- [ ] `npm test` vert
+- [ ] `npm run build` propre
+- [ ] Virtualisation : ≤ 30 lignes DOM simultanées
+- [ ] Skeleton sur toutes les vues principales
+- [ ] Aucune requête dupliquée visible dans DevTools Network
+
+---
+
+## Risques
+
+| Risque | Impact | Mitigation |
+|--------|--------|-----------|
+| `react-virtual` casse le layout tableau | Moyen | Wrapper div avec hauteur fixe + overflow-y: auto |
+| Pagination serveur brise les filtres locaux | Moyen | Les filtres deviennent params query, pas state local |
+| Invalidation ciblée → incohérence cache | Faible | `setQueryData` + invalide list = cohérent |
+| `gcTime` réduit vide le cache trop tôt | Faible | 10 min reste large, réglable |
+
+## Hors scope
+- Virtualisation du Gantt planning (canvas/SVG, logique différente)
+- Pagination GuestsListPage (non prioritaire)
+- Profiling complet PlanningViewLive (2 181 lignes — tâche séparée)

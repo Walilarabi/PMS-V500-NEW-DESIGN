@@ -1,14 +1,13 @@
 /**
  * FLOWTYM — Paramètres · Fiscalité France 2026.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Percent, Save, ShieldCheck, AlertCircle, Globe } from 'lucide-react';
 import { useConfigStore } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
+import { useConfigBlob } from '@/src/hooks/settings/useConfigBlob';
 import { SettingsPageHeader, SettingsToast, Phase2Notice } from './_common';
-
-const STORAGE_KEY = 'flowtym.fiscal.config';
 
 interface FiscalConfig {
   einvoiceProvider: 'ppf' | 'pdp' | 'none';
@@ -32,22 +31,14 @@ const DEFAULT: FiscalConfig = {
   euInvoicingScheme: 'BOTH',
 };
 
-function load(): FiscalConfig {
-  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT; } catch { return DEFAULT; }
-}
-function save(c: FiscalConfig) { localStorage.setItem(STORAGE_KEY, JSON.stringify(c)); }
-
 export const FiscalPage: React.FC = () => {
   const taxes = useConfigStore((s) => s.taxes);
-  const [cfg, setCfg] = useState<FiscalConfig>(() => load());
+  const [cfg, setCfg] = useConfigBlob<FiscalConfig>('fiscal_config', DEFAULT);
   const [toast, setToast] = useState<string | null>(null);
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_fiscal');
 
-  useEffect(() => { if (canWrite) save(cfg); }, [cfg, canWrite]);
-
   function handleSave() {
     if (!canWrite) return;
-    save(cfg);
     logAudit({ action: 'module_inspected', module: 'finance_billing', detail: 'Paramètres fiscaux mis à jour' });
     setToast('Paramètres fiscaux enregistrés');
     window.setTimeout(() => setToast(null), 2500);

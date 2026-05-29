@@ -191,12 +191,13 @@ interface RmsAutomationState {
 }
 
 function newId(prefix: string): string {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  return `${prefix}-${Date.now().toString(36)}-${Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** Applique une fluctuation aléatoire bornée à un signal. */
 function jitter(value: number, amplitude: number, min: number, max: number): number {
-  const next = value + (Math.random() - 0.5) * 2 * amplitude;
+  const rand = crypto.getRandomValues(new Uint8Array(1))[0] / 255;
+  const next = value + (rand - 0.5) * 2 * amplitude;
   return Math.round(Math.min(max, Math.max(min, next)));
 }
 

@@ -18,6 +18,7 @@ import {
 import type { ReportDefinition } from './reports/registry';
 import { REPORT_CATEGORIES } from './reports/registry';
 import { isFavorite, toggleFavorite, saveView } from '../../services/analysis/report-prefs.service';
+import { toast } from '../../hooks/use-toast';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -80,7 +81,7 @@ export const ReportShell: React.FC<ReportShellProps> = ({
     setSavingView(true);
     try {
       saveView({ reportId: report.id, name: name.trim(), filters });
-      alert(`Vue "${name.trim()}" sauvegardée.`);
+      toast({ title: `Vue "${name.trim()}" sauvegardée`, variant: 'success' });
     } finally {
       setSavingView(false);
     }

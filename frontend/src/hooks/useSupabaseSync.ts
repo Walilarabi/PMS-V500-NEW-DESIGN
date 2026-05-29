@@ -164,6 +164,7 @@ function mapSupabaseReservationToContext(r: SupabaseReservation): Reservation {
 export function useSupabaseSync() {
   const { status, session } = useAuth();
   const updateRooms = useConfigStore((s) => s.updateRooms);
+  const setSyncStatus = useConfigStore((s) => s.setSyncStatus);
   const { replaceAll: replaceAllReservations } = useReservationContext();
   const tenantId = session?.tenantId ?? null;
 
@@ -194,6 +195,8 @@ export function useSupabaseSync() {
 
     let cancelled = false;
 
+    setSyncStatus('loading');
+
     async function syncAll() {
       try {
         // 1. ROOMS — toujours fetch depuis Supabase
@@ -209,15 +212,11 @@ export function useSupabaseSync() {
           console.warn('[useSupabaseSync] rooms fetch failed:', roomsError.message);
         } else {
           const supabaseRooms = (roomsData ?? []) as SupabaseRoom[];
-          if (supabaseRooms.length > 0) {
-            const mappedRooms = supabaseRooms.map(mapSupabaseRoomToStore);
-            updateRooms(mappedRooms);
-            console.info(
-              `[useSupabaseSync] ✅ Synced ${mappedRooms.length} rooms from Supabase for hotel ${tenantId}`
-            );
-          } else {
-            console.info('[useSupabaseSync] No rooms in DB, keeping current store rooms');
-          }
+          const mappedRooms = supabaseRooms.map(mapSupabaseRoomToStore);
+          updateRooms(mappedRooms);
+          console.info(
+            `[useSupabaseSync] ✅ Synced ${mappedRooms.length} rooms from Supabase for hotel ${tenantId}`
+          );
         }
 
         // 2. RESERVATIONS — toujours fetch
@@ -237,31 +236,20 @@ export function useSupabaseSync() {
           console.warn('[useSupabaseSync] reservations fetch failed:', resError.message);
         } else {
           const supabaseReservations = (resData ?? []) as SupabaseReservation[];
-          if (supabaseReservations.length > 0) {
-            const mapped = supabaseReservations.map(mapSupabaseReservationToContext);
-            replaceAllReservations(mapped);
-            console.info(
-              `[useSupabaseSync] ✅ Synced ${mapped.length} reservations from Supabase for hotel ${tenantId}`
-            );
-            // Debug : afficher un échantillon
-            if (mapped.length > 0) {
-              console.info('[useSupabaseSync] Sample reservation:', {
-                room: mapped[0].room,
-                client: mapped[0].client,
-                arrival: mapped[0].arrival,
-                departure: mapped[0].departure,
-                checkIn: mapped[0].checkIn,
-                checkOut: mapped[0].checkOut,
-              });
-            }
-          } else {
-            console.info('[useSupabaseSync] No reservations in DB, keeping mocks');
-          }
+          const mapped = supabaseReservations.map(mapSupabaseReservationToContext);
+          replaceAllReservations(mapped);
+          console.info(
+            `[useSupabaseSync] ✅ Synced ${mapped.length} reservations from Supabase for hotel ${tenantId}`
+          );
         }
 
-        lastSyncedRef.current = tenantId;
+        if (!cancelled) {
+          lastSyncedRef.current = tenantId;
+          setSyncStatus('done');
+        }
       } catch (e) {
         console.error('[useSupabaseSync] Unexpected error:', e);
+        if (!cancelled) setSyncStatus('error');
       }
     }
 
@@ -270,5 +258,5 @@ export function useSupabaseSync() {
     return () => {
       cancelled = true;
     };
-  }, [status, tenantId, updateRooms, replaceAllReservations]);
+  }, [status, tenantId, updateRooms, setSyncStatus, replaceAllReservations]);
 }

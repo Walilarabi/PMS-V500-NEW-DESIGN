@@ -43,7 +43,7 @@ function notify() {
 export const rmsAuditLogger = {
   log(event: Omit<AuditEvent, 'id' | 'timestamp'> & { timestamp?: string }): AuditEvent {
     const entry: AuditEvent = {
-      id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      id: `evt_${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(3))).map(b => b.toString(16).padStart(2, '0')).join('')}`,
       timestamp: event.timestamp ?? new Date().toISOString(),
       ...event,
     };

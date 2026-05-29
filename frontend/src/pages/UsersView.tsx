@@ -108,6 +108,18 @@ export const UsersView: React.FC = () => {
           </div>
         </header>
 
+        {(usersQ.isError || invitationsQ.isError) && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur de chargement des utilisateurs — vérifiez votre connexion et réessayez.
+          </div>
+        )}
+
+        {usersQ.isLoading && (
+          <div className="rounded-lg bg-white border border-gray-100 px-4 py-6 text-center text-[12px] text-gray-400">
+            Chargement des collaborateurs…
+          </div>
+        )}
+
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Kpi testid="users-kpi-total" label="Comptes" value={String(counts.total)} hint="Total" tone="indigo" icon={Users} />
           <Kpi testid="users-kpi-active" label="Actifs" value={String(counts.active)} hint="Connectables" tone="emerald" icon={CheckCircle2} />

@@ -15,8 +15,10 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useRmsAutomationStore } from '@/src/store/rmsAutomationStore';
-import { ROOM_TYPES, CHANNELS } from '@/src/data/rms/mockAutomationData';
+import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { STRATEGIES } from '@/src/lib/rms/strategies';
+
+const OTA_CHANNELS = ['Direct', 'Booking.com', 'Expedia', 'Airbnb', 'Hotels.com', 'Agoda', 'GDS'];
 import type { AutopilotParams } from '@/src/lib/rms/autoStrategyEngine';
 
 const Section: React.FC<{
@@ -105,6 +107,7 @@ const Chips: React.FC<{
 export const GuardrailsPanel: React.FC = () => {
   const params = useRmsAutomationStore((s) => s.params);
   const updateParams = useRmsAutomationStore((s) => s.updateParams);
+  const roomTypes = useRateCalendarStore((s) => s.roomTypes.map((r) => r.roomTypeName));
   const [draft, setDraft] = useState({ label: '', from: '', to: '' });
 
   const set = <K extends keyof AutopilotParams>(key: K, value: AutopilotParams[K]) =>
@@ -283,7 +286,7 @@ export const GuardrailsPanel: React.FC = () => {
         {/* Exception chambre */}
         <Section icon={BedDouble} title="Exceptions par type de chambre">
           <Chips
-            options={ROOM_TYPES}
+            options={roomTypes.length > 0 ? roomTypes : ['Standard', 'Supérieure', 'Deluxe', 'Suite']}
             selected={params.roomTypeExceptions}
             onToggle={(v) => toggleIn('roomTypeExceptions', v)}
           />
@@ -292,7 +295,7 @@ export const GuardrailsPanel: React.FC = () => {
         {/* Exception canal */}
         <Section icon={Radio} title="Exceptions par canal">
           <Chips
-            options={CHANNELS}
+            options={OTA_CHANNELS}
             selected={params.channelExceptions}
             onToggle={(v) => toggleIn('channelExceptions', v)}
           />

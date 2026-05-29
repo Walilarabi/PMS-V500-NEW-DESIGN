@@ -116,9 +116,12 @@ function EmailPreviewModal({
               <AlertTriangle size={16} /> {error}
             </div>
           ) : (
-            <div
-              className="border border-gray-100 rounded-2xl overflow-hidden"
-              dangerouslySetInnerHTML={{ __html: html }}
+            <iframe
+              title="Aperçu email"
+              srcDoc={html}
+              sandbox=""
+              className="w-full border-0 rounded-2xl"
+              style={{ minHeight: '480px' }}
             />
           )}
         </div>

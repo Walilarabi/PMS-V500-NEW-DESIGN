@@ -16,9 +16,16 @@
  *   - Saison (low / mid / high / very_high)
  *   - Stratégie active (aggressive / balanced / defensive)
  *
- * Persistance : localStorage (peut être étendu à Supabase plus tard).
+ * Persistance : localStorage (cache synchrone) + settings_config_blobs (source de vérité Supabase).
  * Défaut : +5% sur Lighthouse et Expedia, 0% sur direct/mix.
  */
+
+import {
+  syncConfigBlobToSupabase,
+  fetchConfigBlobFromSupabase,
+} from '@/src/services/settings/settingsPersistence';
+
+const SUPABASE_NS = 'rms_source_weighting';
 
 export type WeightingSource = 'lighthouse' | 'expedia' | 'mix' | 'direct';
 export type WeightingSeason = 'low' | 'mid' | 'high' | 'very_high';
@@ -107,7 +114,21 @@ function persist() {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   } catch {/* quota / disabled */}
+  // Best-effort Supabase sync — non-blocking
+  void syncConfigBlobToSupabase(SUPABASE_NS, config);
 }
+
+// Hydrate from Supabase on first load (Supabase = source of truth over localStorage)
+void fetchConfigBlobFromSupabase<WeightingConfig>(SUPABASE_NS).then(saved => {
+  if (!saved) return;
+  config = { ...DEFAULT_CONFIG, ...saved };
+  try {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    }
+  } catch {/* ignore */}
+  notify();
+});
 
 function notify() {
   version++;

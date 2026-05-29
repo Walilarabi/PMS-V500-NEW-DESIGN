@@ -25,7 +25,7 @@ const cn = (...classes: (string | boolean | undefined)[]) =>
 
 export const RevenueDashboard: React.FC = () => {
   const lighthouseImport = useLighthouseStore(s => s.importData);
-  const { roomTypes, loadData } = useRateCalendarStore();
+  const { roomTypes, isLoading, loadData } = useRateCalendarStore();
 
   // Real Supabase data — always fetched for the KPI fallback strip
   const { data: resData, isLoading: resLoading } = useReservations({ limit: 500 });
@@ -34,6 +34,7 @@ export const RevenueDashboard: React.FC = () => {
   // Charger calendrier
   useEffect(() => {
     if (roomTypes.length === 0) loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const hasLighthouse = lighthouseImport !== null && lighthouseImport.days.length > 0;
@@ -207,6 +208,17 @@ export const RevenueDashboard: React.FC = () => {
           icon={LayoutDashboard}
           title="Dashboard Revenue"
           subtitle={`Données réelles · ${lighthouseImport.fileName} · ${window30.length} jours analysés`}
+          actions={
+            <button
+              onClick={() => loadData()}
+              disabled={isLoading}
+              title="Rafraîchir les données"
+              className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold text-gray-500 bg-white border border-gray-200 rounded-xl hover:border-gray-300 disabled:opacity-50 transition-colors"
+            >
+              <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
+              Rafraîchir
+            </button>
+          }
         />
       </div>
 

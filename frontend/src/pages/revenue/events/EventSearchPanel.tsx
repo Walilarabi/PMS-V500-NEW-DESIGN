@@ -338,6 +338,41 @@ export const EventSearchPanel: React.FC<EventSearchPanelProps> = () => {
           Chaque synchronisation compare les données entrantes avec la base existante.
           Seuls les événements <strong className="text-slate-700">nouveaux</strong> ou <strong className="text-slate-700">modifiés</strong> sont proposés à la validation — aucun doublon.
         </span>
+              <ul className="space-y-1">
+                {recentLogs.map((l, i) => (
+                  <li key={i} className="text-[11.5px] text-slate-600 flex items-center justify-between">
+                    <span>{new Date(l.at).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="tabular-nums">{l.added} + · {l.updated} ↺ · {l.duplicates} ⛓</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-start gap-2 text-[12px] rounded-xl px-3 py-2 ring-1 bg-rose-50 ring-rose-100 text-rose-700">
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-100 rounded-lg"
+          >
+            Annuler
+          </button>
+          <button
+            onClick={handleSubmit}
+            className="px-4 py-2 text-[13px] font-medium text-white bg-gradient-to-r from-violet-600 to-violet-500 rounded-lg shadow-sm hover:shadow-md transition-all flex items-center gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" /> Ajouter la source
+          </button>
+        </div>
+>>>>>>> claude/amazing-sagan-NZbfi
       </div>
     </div>
   );

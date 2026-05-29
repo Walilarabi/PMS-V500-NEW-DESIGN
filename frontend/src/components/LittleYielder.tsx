@@ -48,7 +48,7 @@ const TYPE_COLORS: Record<RuleType, { color: string; bg: string }> = {
 };
 
 // ─── 13 règles identiques au HTML de référence ─────────────────────────────
-const uid = () => Math.random().toString(36).slice(2, 8);
+const uid = () => Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('');
 
 const INITIAL_RULES: YieldRule[] = [
   {

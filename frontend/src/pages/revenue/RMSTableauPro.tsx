@@ -71,6 +71,8 @@ import {
 import { centralPricingEngine } from '../../services/revenue/centralPricingEngine.service';
 import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
+import { toast } from '../../hooks/use-toast';
+import { useAuth } from '@/src/domains/auth/AuthContext';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -350,6 +352,7 @@ function generateSkeletonRMSData(startDate: Date, days: number): DayRMSData[] {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function RMSTableauPro() {
+  const { session } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [viewPeriod, setViewPeriod] = useState<ViewPeriod>('15days');
 
@@ -449,7 +452,7 @@ export function RMSTableauPro() {
     return { from, to: to.toISOString().slice(0, 10) };
   }, [startDate, viewPeriod]);
 
-  const { byDate: operationalByDate, totalCapacity, hasData: hasOperationalData } = useOperationalData(
+  const { byDate: operationalByDate, totalCapacity, hasData: hasOperationalData, error: operationalError } = useOperationalData(
     operationalRange.from,
     operationalRange.to,
     refreshToken, // bumped to force re-fetch
@@ -958,7 +961,7 @@ export function RMSTableauPro() {
     const validated = rmsData.filter((d) => d.finalPrice !== null);
 
     if (validated.length === 0) {
-      alert('Aucune validation à propager');
+      toast({ title: 'Aucune validation à propager', variant: 'default' });
       return;
     }
 
@@ -979,8 +982,8 @@ export function RMSTableauPro() {
 
       const result = await RMSPropagationService.propagateWithProgress(
         validations,
-        'tenant_demo',
-        'user_demo',
+        session?.tenantId ?? '',
+        session?.userId ?? '',
         (progress, message) => {
           setPropagationProgress(progress);
           setPropagationMessage(message);
@@ -988,14 +991,12 @@ export function RMSTableauPro() {
       );
 
       if (result.success) {
-        alert(
-          `✅ Propagation réussie!\n\n${result.validationsCount} tarifs propagés`
-        );
+        toast({ title: `Propagation réussie — ${result.validationsCount} tarifs propagés`, variant: 'success' });
       } else {
-        alert(`❌ Propagation échouée:\n${result.errors.join('\n')}`);
+        toast({ title: 'Propagation échouée', description: result.errors.join(' · '), variant: 'destructive' });
       }
-    } catch (error: any) {
-      alert(`❌ Erreur: ${error.message}`);
+    } catch (error: unknown) {
+      toast({ title: 'Erreur propagation', description: error instanceof Error ? error.message : String(error), variant: 'destructive' });
     } finally {
       setIsPropagating(false);
       setPropagationProgress(0);
@@ -1004,6 +1005,31 @@ export function RMSTableauPro() {
   }, [rmsData]);
 
   const validatedCount = rmsData.filter((d) => d.validationStatus !== 'En attente').length;
+
+  const handleExport = React.useCallback(() => {
+    if (rmsData.length === 0) return;
+    const header = 'Date;Jour;Occupation %;Prix actuel;Prix suggéré;Prix final;Stratégie;Recommandation;Confiance;Statut';
+    const rows = rmsData.map(d => [
+      d.date,
+      d.dayName,
+      d.occupancyRate,
+      d.currentPrice,
+      d.suggestedPrice,
+      d.finalPrice ?? '',
+      d.strategy,
+      d.recommendation,
+      d.confidenceScore,
+      d.validationStatus,
+    ].join(';'));
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rms_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [rmsData]);
 
   return (
     <div className="flex flex-col h-screen w-full bg-white overflow-hidden">
@@ -1142,7 +1168,11 @@ export function RMSTableauPro() {
             Filtres
           </button>
 
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 transition-colors">
+          <button
+            onClick={handleExport}
+            disabled={rmsData.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
             <Download className="w-3.5 h-3.5" />
             Exporter
           </button>
@@ -1188,6 +1218,13 @@ export function RMSTableauPro() {
       <div className="px-4 pt-2">
         <OverrideStatusBanner />
       </div>
+
+      {/* ERROR BANNER */}
+      {operationalError && (
+        <div className="mx-4 mt-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+          Erreur de chargement des données opérationnelles — {operationalError.message}
+        </div>
+      )}
 
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-auto">

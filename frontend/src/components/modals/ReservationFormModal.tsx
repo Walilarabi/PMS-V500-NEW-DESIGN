@@ -342,7 +342,7 @@ const ReservationFormModal: React.FC<Props> = ({
     guestName: '', email: '', phone: '',
     nationality: 'FR', nationalityLabel: 'France',
     adults: 2, children: 0, company: '',
-    reference: generatePMSRef(),
+    reference: `RES-${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
     partnerRef: '', partnerName: '',
     segment: 'Loisir',
     checkIn: todayISO(), checkOut: tomorrowISO(),
@@ -694,19 +694,21 @@ const ReservationFormModal: React.FC<Props> = ({
   const handleSendEmail = (data?: typeof form) => {
     const d = data || form;
     if (!d.guestName.trim()) { setNameErr(true); return; }
-    const link = generatePaymentLink(d);
-    const fmtD = (iso: string) => iso ? new Date(iso).toLocaleDateString('fr-FR') : '—';
-    // Simulation : log dans console + toast
-    console.log(`[Flowtym] Email envoyé à ${d.email || '(pas d\'email)'}`, {
-      to: d.email,
-      subject: `Confirmation ${d.reference}`,
-      body: `Bonjour ${d.guestName},\n\nRéservation ${d.reference}\nArrivée : ${fmtD(d.checkIn)} → Départ : ${fmtD(d.checkOut)}\nChambre : ${d.roomNumber || '—'}\nMontant : ${calc.ttc.toFixed(2)} €\n\nLien de paiement : ${link}\n\nCordialement, L'équipe Flowtym`,
-      paymentLink: link,
-    });
     // Toast visible
     const toast = document.createElement('div');
     toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;background:#1e293b;color:#fff;padding:12px 18px;border-radius:14px;font-family:Inter,sans-serif;font-size:12px;font-weight:600;display:flex;align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.2);animation:fadeIn .3s ease';
-    toast.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg> Email + lien de paiement envoyés à ${d.email || d.guestName}`;
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg');
+    svg.setAttribute('width', '16'); svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', '#10B981'); svg.setAttribute('stroke-width', '2');
+    const circle = document.createElementNS(svgNs, 'circle');
+    circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '10');
+    const path = document.createElementNS(svgNs, 'path');
+    path.setAttribute('d', 'm9 12 2 2 4-4');
+    svg.appendChild(circle); svg.appendChild(path);
+    const label = document.createTextNode(` Email + lien de paiement envoyés à ${d.email || d.guestName}`);
+    toast.appendChild(svg); toast.appendChild(label);
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3500);
   };
@@ -1200,7 +1202,7 @@ const ReservationFormModal: React.FC<Props> = ({
                       ))}
                     </div>
                     {/* Générer */}
-                    <button onClick={() => { if (!calc.ttc) return; const ref = 'FLTM-' + Math.random().toString(36).slice(2,8).toUpperCase(); setLinkUrl(`https://pay.flowtym.com/${form.processor}/${ref}?pct=${form.linkType}`); }}
+                    <button onClick={() => { if (!calc.ttc) return; const ref = 'FLTM-' + crypto.randomUUID().slice(0, 6).toUpperCase(); setLinkUrl(`https://pay.flowtym.com/${form.processor}/${ref}?pct=${form.linkType}`); }}
                       style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#8B5CF6,#6D28D9)', color: '#fff', fontFamily: 'Inter,sans-serif', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 14px rgba(139,92,246,.3)' }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                       Générer le lien de paiement

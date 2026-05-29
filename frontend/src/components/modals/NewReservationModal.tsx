@@ -128,7 +128,7 @@ export function NewReservationModal({ isOpen, onClose, prefill, onSave }: Props)
   const [countryQ,      setCountryQ]     = useState('');
   const [rooms,         setRooms]        = useState<any[]>([]);
 
-  const flowtymRef  = useRef(`RES-${Math.floor(1000 + Math.random() * 9000)}`);
+  const flowtymRef  = useRef(`RES-${crypto.randomUUID().slice(0, 6).toUpperCase()}`);
   const countryRef  = useRef<HTMLInputElement>(null);
   const saveAttemptRef = useRef(0);
   const totalRooms  = roomSels.reduce((s, r) => s + r.qty, 0);

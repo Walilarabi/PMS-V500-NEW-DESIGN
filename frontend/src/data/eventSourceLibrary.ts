@@ -960,7 +960,7 @@ const SEED_PARIS_SALONS: RMSMarketEvent[] = RAW_PARIS_2026.map((r, idx) => {
     sources: [sourceId],
     primarySource: source.name,
     rmsSynced: isPast || !['new', 'estimated'].includes(status),
-    syncedAt: isPast ? '2026-05-15T08:00:00Z' : undefined,
+    syncedAt: isPast ? new Date().toISOString() : undefined,
     history: [
       { at: '2026-03-25T00:00:00Z', action: 'imported' as const, source: 'DATES SALONS — MISE A JOUR 25-03-2026.xlsx' },
       { at: '2026-05-15T08:00:00Z', action: 'synced' as const, source: source.name },
@@ -1092,7 +1092,7 @@ const SEED_PARIS_CONCERTS: RMSMarketEvent[] = RAW_PARIS_CONCERTS.map((rc) => {
     sources: [rc.sourceId],
     primarySource: source.name,
     rmsSynced: true,
-    syncedAt: '2026-05-15T08:00:00Z',
+    syncedAt: new Date().toISOString(),
     history: [
       { at: '2026-04-01T10:00:00Z', action: 'imported', source: source.name },
       { at: '2026-05-15T08:00:00Z', action: 'synced', source: source.name },

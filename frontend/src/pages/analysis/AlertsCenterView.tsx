@@ -16,6 +16,7 @@ import {
   type AlertWatcher, type AlertTrigger,
   type AlertMetric, type AlertOperator, type AlertPeriod, type AlertSeverity,
 } from '../../services/analysis/alerts.service';
+import { toast } from '../../hooks/use-toast';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -57,7 +58,7 @@ export const AlertsCenterView: React.FC = () => {
       await evaluateWatchers();
       await reload();
     } catch (e) {
-      alert("Erreur lors de l'évaluation : " + (e instanceof Error ? e.message : String(e)));
+      toast({ title: "Erreur lors de l'évaluation", description: e instanceof Error ? e.message : String(e), variant: 'destructive' });
     } finally {
       setEvaluating(false);
     }

@@ -5,6 +5,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { FileText, Plus, Loader2, ArrowRight } from 'lucide-react';
 import { listProformas, type ProformaQuote } from '../../services/finance/finance.service';
+import { toast } from '../../hooks/use-toast';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
 const fmt = (n: number) => `${Math.round(n).toLocaleString('fr-FR')}€`;
@@ -54,7 +55,7 @@ export const ProformaView: React.FC = () => {
           Devis & proforma — workflow d'acceptation et conversion en facture
         </div>
         <button
-          onClick={() => alert('Création de proforma — module en cours de finalisation, vague F1+')}
+          onClick={() => toast({ title: 'Module en cours de finalisation', description: 'Création de proforma disponible prochainement (vague F1+)', variant: 'default' })}
           className="px-3 py-1.5 text-xs font-bold bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1.5"
         >
           <Plus className="w-3.5 h-3.5" />

@@ -70,7 +70,7 @@ function persistErrors(arr: CapturedError[]) {
 export function captureError(error: Error | unknown, context?: Record<string, unknown>): CapturedError {
   const err = error instanceof Error ? error : new Error(String(error));
   const entry: CapturedError = {
-    id: `err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `err_${Date.now()}_${Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')}`,
     at: new Date().toISOString(),
     message: err.message,
     stack: err.stack,

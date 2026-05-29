@@ -10,20 +10,23 @@
  */
 
 import React from 'react';
-import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+import { useDebounce } from '@/src/hooks/useDebounce';
 import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 import {
   Search, Filter, Download, FileSpreadsheet, Plus,
   Calendar, Clock, User, Zap, CheckCircle2, HelpCircle,
   ArrowUpRight, Eye, Copy, Trash2, Pencil,
   CreditCard, ChevronDown, ChevronLeft, ChevronRight,
-  BedDouble, TrendingUp, AlertTriangle,
+  BedDouble, TrendingUp, AlertTriangle, X,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton';
 import { cn } from '@/src/lib/utils';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useReservations as useContextReservations } from '@/src/contexts/ReservationContext';
 import { useReservations, useCreateReservation, useDeleteReservation } from '@/src/domains/reservations/hooks';
 import ReservationFormModal from '@/src/components/modals/ReservationFormModal';
@@ -151,6 +154,50 @@ const AVATAR_COLORS = [
 const avatarColor = (ref: string) =>
   AVATAR_COLORS[ref.charCodeAt(ref.length - 1) % AVATAR_COLORS.length];
 
+// ─── Export helpers ───────────────────────────────────────────────────────
+
+const EXPORT_HEADERS = ['Référence','Statut','Client','Email','Téléphone','Pers.','Check-in','Check-out','Nuits','Montant (€)','Solde (€)','Canal','Chambre','Type'];
+
+function rowsToCsvBlob(rows: ResTableRow[]): Blob {
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const lines = [
+    EXPORT_HEADERS.join(';'),
+    ...rows.map(r => [
+      r.ref, r.status, r.client, r.email, r.phone ?? '',
+      r.pers, r.checkin, r.checkout, r.nights,
+      r.amountRaw, r.soldeRaw, r.channel, r.room, r.roomType,
+    ].map(v => esc(String(v ?? ''))).join(';')),
+  ];
+  return new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportToXlsx(rows: ResTableRow[], filename: string) {
+  const data = [
+    EXPORT_HEADERS,
+    ...rows.map(r => [
+      r.ref, r.status, r.client, r.email, r.phone ?? '',
+      r.pers, r.checkin, r.checkout, r.nights,
+      r.amountRaw, r.soldeRaw, r.channel, r.room, r.roomType,
+    ]),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Réservations');
+  XLSX.writeFile(wb, filename);
+}
+
+const buildFilename = (ext: 'csv' | 'xlsx') => {
+  const d = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `reservations-${d}.${ext}`;
+};
+
 // ─── Status badge — pastel ────────────────────────────────────────────────
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
@@ -192,7 +239,7 @@ const FilterSelect: React.FC<{
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
-}> = ({ value, onChange, options }) => {
+}> = React.memo(({ value, onChange, options }) => {
   const label = options.find(o => o.value === value)?.label ?? options[0]?.label;
   return (
     <div className="relative flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-xl cursor-pointer hover:border-violet-300 transition-colors">
@@ -209,53 +256,96 @@ const FilterSelect: React.FC<{
       <ChevronDown size={13} className="text-gray-300 shrink-0" />
     </div>
   );
-};
+});
 
 // ─── Main Component ───────────────────────────────────────────────────────
 
 export const ReservationsView = () => {
   const { reservations: _ctxReservations } = useContextReservations(); // kept for potential write-back
-  const { data: supabaseData }             = useReservations({ limit: 500 });
   const createReservation                  = useCreateReservation();
-  const deleteMut                          = useDeleteReservation();
+  const deleteReservation                  = useDeleteReservation();
 
   // Modal state
-  const [isFormOpen,        setIsFormOpen]        = React.useState(false);
-  const [selectedDetail,    setSelectedDetail]    = React.useState<ResTableRow | null>(null);
-  const [editRow,           setEditRow]           = React.useState<ResTableRow | null>(null);
-  const [confirmDeleteRef,  setConfirmDeleteRef]  = React.useState<{ ref: string; id: string } | null>(null);
+  const [isFormOpen,     setIsFormOpen]     = React.useState(false);
+  const [selectedDetail, setSelectedDetail] = React.useState<ResTableRow | null>(null);
+  const [editRow,        setEditRow]        = React.useState<ResTableRow | null>(null);
+  const [confirmDelete,  setConfirmDelete]  = React.useState<{ id: string; ref: string } | null>(null);
 
   // Filter state
   const [searchQuery,    setSearchQuery]    = React.useState('');
+  const debouncedSearch = useDebounce(searchQuery, 300);
   const [statusFilter,   setStatusFilter]   = React.useState('ALL');
   const [channelFilter,  setChannelFilter]  = React.useState('ALL');
   const [roomTypeFilter, setRoomTypeFilter] = React.useState('ALL');
+  const [showDateFilter, setShowDateFilter] = React.useState(false);
+  const [dateFrom,       setDateFrom]       = React.useState('');
+  const [dateTo,         setDateTo]         = React.useState('');
 
   // Pagination
   const [page,    setPage]    = React.useState(1);
   const [perPage, setPerPage] = React.useState(25);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
-  // ── Build table rows — Supabase only, no mock fallback
+  // ── Wide query for KPIs and filter dropdowns (no pagination, no text filter)
+  const { data: kpiData } = useReservations({ limit: 1000 });
+
+  // ── Paginated + server-filtered query for the table
+  const serverStatus  = statusFilter  !== 'ALL' ? [STATUS_MODAL_KEY[statusFilter]].filter(Boolean) as string[] : undefined;
+  const serverSource  = channelFilter !== 'ALL' ? channelFilter.toLowerCase() : undefined;
+  const { data: tableData, isLoading, isError: tableIsError } = useReservations({
+    limit:    perPage,
+    offset:   (page - 1) * perPage,
+    search:   debouncedSearch || undefined,
+    status:   serverStatus,
+    source:   serverSource,
+    dateFrom: dateFrom || undefined,
+    dateTo:   dateTo   || undefined,
+  });
+
+  React.useEffect(() => { setPage(1); }, [debouncedSearch, statusFilter, channelFilter, roomTypeFilter, dateFrom, dateTo, perPage]);
+
+  // ── KPI source: wide unfiltered data
+  const kpiRawRows = kpiData?.rows ?? [];
+  const kpiRows    = React.useMemo(() => kpiRawRows.map(mapRow), [kpiRawRows]);
+
+  // ── Table rows: paginated server data, client-side roomType filter only
   const tableRows = React.useMemo<ResTableRow[]>(() => {
-    const liveRows = supabaseData?.rows ?? [];
-    return liveRows.map(mapRow);
-  }, [supabaseData]);
+    const rows = (tableData?.rows ?? []).map(mapRow);
+    return roomTypeFilter !== 'ALL'
+      ? rows.filter(r => r.roomType === roomTypeFilter)
+      : rows;
+  }, [tableData, roomTypeFilter]);
 
-  // ── KPI metrics from real data
+  const totalPages = Math.max(1, Math.ceil((tableData?.total ?? 0) / perPage));
+
+  // ── Virtualizer for the table body
+  const tableContainerRef = React.useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count:          tableRows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize:   () => 52,
+    overscan:       5,
+  });
+  const virtualItems    = rowVirtualizer.getVirtualItems();
+  const paddingTop      = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom   = virtualItems.length > 0
+    ? rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
+    : 0;
+
+  // ── KPI metrics from wide unfiltered data
   const kpis = React.useMemo(() => {
     const today    = todayISO();
     const tomorrow = tomorrowISO();
-    const liveRows = supabaseData?.rows ?? [];
 
-    const confirmed    = tableRows.filter(r => r.status === 'CONFIRMÉE').length;
-    const checkedIn    = tableRows.filter(r => r.status === 'CHECK-IN').length;
-    const totalCA      = liveRows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
-    const arrivals     = liveRows.filter(r => r.check_in  === tomorrow).length;
-    const departures   = liveRows.filter(r => r.check_out === today).length;
-    const unpaid       = liveRows.filter(r => (r.solde ?? 0) > 0 && !['cancelled','no_show'].includes(r.status ?? '')).length;
+    const confirmed    = kpiRows.filter(r => r.status === 'CONFIRMÉE').length;
+    const checkedIn    = kpiRows.filter(r => r.status === 'CHECK-IN').length;
+    const totalCA      = kpiRawRows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
+    const arrivals     = kpiRawRows.filter(r => r.check_in  === tomorrow).length;
+    const departures   = kpiRawRows.filter(r => r.check_out === today).length;
+    const unpaid       = kpiRawRows.filter(r => (r.solde ?? 0) > 0 && !['cancelled','no_show'].includes(r.status ?? '')).length;
 
     return [
-      { label: 'Dossiers actifs',   value: tableRows.length.toString(), sub: 'En base',         icon: BedDouble,      color: 'text-violet-600', bg: 'bg-violet-50'  },
+      { label: 'Dossiers actifs',   value: (kpiData?.total ?? kpiRows.length).toString(), sub: 'En base',         icon: BedDouble,      color: 'text-violet-600', bg: 'bg-violet-50'  },
       { label: 'Confirmées',        value: confirmed.toString(),         sub: 'Réservations',    icon: CheckCircle2,   color: 'text-emerald-600', bg: 'bg-emerald-50' },
       { label: 'En séjour',         value: checkedIn.toString(),         sub: 'Check-in actif',  icon: Clock,          color: 'text-blue-600',   bg: 'bg-blue-50'    },
       { label: 'CA total',          value: formatMoney(totalCA),         sub: 'Réservations',    icon: TrendingUp,     color: 'text-emerald-600', bg: 'bg-emerald-50' },
@@ -263,12 +353,12 @@ export const ReservationsView = () => {
       { label: 'Départs auj.',      value: departures.toString(),        sub: 'À libérer',       icon: HelpCircle,     color: 'text-orange-600', bg: 'bg-orange-50'  },
       { label: 'Soldes débiteurs',  value: unpaid.toString(),            sub: 'Paiements à vérif', icon: AlertTriangle, color: 'text-red-500',   bg: 'bg-red-50'     },
     ];
-  }, [supabaseData, tableRows]);
+  }, [kpiData, kpiRawRows, kpiRows]);
 
-  // ── Pie chart data from real data
+  // ── Pie chart data from wide data
   const pieData = React.useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const r of tableRows) {
+    for (const r of kpiRows) {
       counts[r.status] = (counts[r.status] ?? 0) + 1;
     }
     const COLORS: Record<string, string> = {
@@ -283,39 +373,18 @@ export const ReservationsView = () => {
     return Object.entries(counts)
       .filter(([, v]) => v > 0)
       .map(([name, value]) => ({ name, value, color: COLORS[name] ?? '#CBD5E1' }));
-  }, [tableRows]);
+  }, [kpiRows]);
 
-  // ── Dynamic filter options
+  // ── Dynamic filter options from wide data
   const channelOptions = React.useMemo(() => {
-    const channels = [...new Set(tableRows.map(r => r.channel))].sort();
+    const channels = [...new Set(kpiRows.map(r => r.channel))].sort();
     return [{ value: 'ALL', label: 'Tous canaux' }, ...channels.map(c => ({ value: c, label: c }))];
-  }, [tableRows]);
+  }, [kpiRows]);
 
   const roomTypeOptions = React.useMemo(() => {
-    const types = [...new Set(tableRows.map(r => r.roomType).filter(t => t !== '—'))].sort();
+    const types = [...new Set(kpiRows.map(r => r.roomType).filter(t => t !== '—'))].sort();
     return [{ value: 'ALL', label: 'Tout type' }, ...types.map(t => ({ value: t, label: t }))];
-  }, [tableRows]);
-
-  // ── Filter
-  const filteredRows = React.useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    return tableRows.filter(r => {
-      if (q && !r.client.toLowerCase().includes(q)  &&
-               !r.ref.toLowerCase().includes(q)       &&
-               !r.room.includes(q)                    &&
-               !r.email.toLowerCase().includes(q))    return false;
-      if (statusFilter  !== 'ALL' && r.status   !== statusFilter)  return false;
-      if (channelFilter !== 'ALL' && r.channel  !== channelFilter) return false;
-      if (roomTypeFilter !== 'ALL' && r.roomType !== roomTypeFilter) return false;
-      return true;
-    });
-  }, [tableRows, searchQuery, statusFilter, channelFilter, roomTypeFilter]);
-
-  React.useEffect(() => { setPage(1); }, [searchQuery, statusFilter, channelFilter, roomTypeFilter, perPage]);
-
-  // ── Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / perPage));
-  const pageRows   = filteredRows.slice((page - 1) * perPage, page * perPage);
+  }, [kpiRows]);
 
   // ── Handlers
   const openDetail = (row: ResTableRow) => setSelectedDetail(row);
@@ -354,11 +423,22 @@ export const ReservationsView = () => {
     } as any;
   }, [selectedDetail]);
 
-  const isLoading = supabaseData === undefined;
+  const serverTotal = tableData?.total ?? 0;
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#F8F9FD]">
+      {errorMsg && (
+        <div className="fixed bottom-6 right-6 z-50 rounded-xl bg-rose-700 text-white text-[12.5px] px-4 py-2.5 shadow-lg flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-200 shrink-0" />
+          {errorMsg}
+        </div>
+      )}
       <div className="p-6 space-y-5 max-w-[1800px] mx-auto">
+        {tableIsError && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur de chargement des réservations — vérifiez votre connexion et réessayez.
+          </div>
+        )}
         <LiveReservationsBanner />
 
         {/* ── Header ──────────────────────────────────────────────────── */}
@@ -366,18 +446,29 @@ export const ReservationsView = () => {
           <div>
             <h1 className="text-[22px] font-black text-gray-900 leading-tight tracking-tight">Réservations</h1>
             <p className="text-[13px] text-gray-400 font-medium mt-0.5">
-              {isLoading ? 'Chargement…' : `${tableRows.length} réservation${tableRows.length !== 1 ? 's' : ''} en base`}
+              {isLoading ? 'Chargement…' : `${serverTotal} réservation${serverTotal !== 1 ? 's' : ''}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]">
+            <Button
+              variant="outline" size="sm"
+              className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]"
+              onClick={() => downloadBlob(rowsToCsvBlob(tableRows), buildFilename('csv'))}
+              disabled={tableRows.length === 0}
+            >
               <Download size={14} className="text-gray-400" /> Exporter
             </Button>
-            <Button variant="outline" size="sm" className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]">
+            <Button
+              variant="outline" size="sm"
+              className="bg-white border-gray-200 font-semibold gap-1.5 shadow-sm text-[13px]"
+              onClick={() => exportToXlsx(tableRows, buildFilename('xlsx'))}
+              disabled={tableRows.length === 0}
+            >
               <FileSpreadsheet size={14} className="text-emerald-500" /> Excel
             </Button>
             <Button
               onClick={() => { setEditRow(null); setIsFormOpen(true); }}
+              data-testid="btn-new-reservation"
               className="bg-violet-600 hover:bg-violet-700 text-white font-semibold gap-2 px-4 py-2 rounded-xl shadow-md shadow-violet-200 text-[13px]"
             >
               <Plus size={15} /> Nouvelle réservation
@@ -470,8 +561,20 @@ export const ReservationsView = () => {
             <FilterSelect value={roomTypeFilter} onChange={setRoomTypeFilter} options={roomTypeOptions} />
           )}
 
-          <Button variant="outline" className="gap-1.5 font-semibold border-gray-200 text-violet-600 h-9 text-[13px]">
+          <Button
+            variant="outline"
+            className={cn(
+              'gap-1.5 font-semibold h-9 text-[13px]',
+              showDateFilter
+                ? 'border-violet-400 text-violet-700 bg-violet-50'
+                : 'border-gray-200 text-violet-600',
+            )}
+            onClick={() => setShowDateFilter(v => !v)}
+          >
             <Filter size={13} /> Filtres
+            {(dateFrom || dateTo) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-600 ml-0.5" />
+            )}
           </Button>
 
           {/* Date info */}
@@ -481,6 +584,43 @@ export const ReservationsView = () => {
           </div>
         </div>
 
+        {/* ── Date range filter panel ────────────────────────────────── */}
+        {showDateFilter && (
+          <div className="flex items-center gap-4 px-4 py-3 bg-white rounded-2xl border border-violet-100 shadow-sm">
+            <span className="text-[12px] font-bold text-gray-500 uppercase tracking-wider shrink-0">Période</span>
+            <div className="flex items-center gap-2">
+              <label className="text-[12px] text-gray-500 font-medium shrink-0">Du</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] font-medium text-gray-700 bg-white outline-none focus:border-violet-400 transition-colors"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[12px] text-gray-500 font-medium shrink-0">Au</label>
+              <input
+                type="date"
+                value={dateTo}
+                min={dateFrom || undefined}
+                onChange={e => setDateTo(e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] font-medium text-gray-700 bg-white outline-none focus:border-violet-400 transition-colors"
+              />
+            </div>
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); }}
+                className="flex items-center gap-1 text-[12px] text-red-400 hover:text-red-600 font-semibold transition-colors"
+              >
+                <X size={12} /> Effacer
+              </button>
+            )}
+            <span className="text-[12px] text-gray-400 ml-auto">
+              {serverTotal} résultat{serverTotal !== 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
+
         {/* ── Table pleine largeur ─────────────────────────────────────── */}
         <div className="space-y-3">
           {/* Table header row */}
@@ -488,7 +628,7 @@ export const ReservationsView = () => {
             <h3 className="text-[13px] font-bold text-gray-900 flex items-center gap-2">
               Toutes les réservations
               <span className="bg-violet-600 text-white text-[11px] px-2 py-0.5 rounded-full font-bold">
-                {filteredRows.length}
+                {serverTotal}
               </span>
             </h3>
             <div className="flex items-center gap-2 text-[12px] text-gray-500">
@@ -504,9 +644,13 @@ export const ReservationsView = () => {
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="overflow-x-auto">
+            <div
+              ref={tableContainerRef}
+              className="overflow-x-auto overflow-y-auto"
+              style={{ maxHeight: 'calc(100vh - 460px)', minHeight: '320px' }}
+            >
               <table className="w-full text-left border-collapse">
-                <thead className="bg-gray-50/80 border-b border-gray-100">
+                <thead className="bg-gray-50/80 border-b border-gray-100 sticky top-0 z-10">
                   <tr className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">
                     <th className="px-4 py-3">Réf. partenaire</th>
                     <th className="px-4 py-3 text-center">Statut</th>
@@ -525,14 +669,11 @@ export const ReservationsView = () => {
                 <tbody className="divide-y divide-gray-50">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={12} className="px-6 py-16 text-center">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="w-8 h-8 rounded-full border-2 border-violet-200 border-t-violet-600 animate-spin" />
-                          <span className="text-[13px] text-gray-400 font-medium">Chargement des réservations…</span>
-                        </div>
+                      <td colSpan={12} className="p-0">
+                        <TableSkeleton rows={perPage} cols={9} />
                       </td>
                     </tr>
-                  ) : pageRows.length === 0 ? (
+                  ) : tableRows.length === 0 ? (
                     <tr>
                       <td colSpan={12} className="px-6 py-16 text-center">
                         <div className="flex flex-col items-center gap-3">
@@ -540,11 +681,11 @@ export const ReservationsView = () => {
                             <BedDouble size={22} className="text-gray-300" />
                           </div>
                           <p className="text-[13px] font-semibold text-gray-500">
-                            {tableRows.length === 0
+                            {serverTotal === 0
                               ? 'Aucune réservation en base'
                               : 'Aucun résultat pour ces filtres'}
                           </p>
-                          {tableRows.length === 0 && (
+                          {serverTotal === 0 && (
                             <Button
                               size="sm"
                               onClick={() => { setEditRow(null); setIsFormOpen(true); }}
@@ -557,16 +698,23 @@ export const ReservationsView = () => {
                       </td>
                     </tr>
                   ) : (
-                    pageRows.map((row, idx) => (
-                      <ResRow
-                        key={`${row.id}-${idx}`}
-                        row={row}
-                        onView={() => openDetail(row)}
-                        onEdit={() => openEdit(row)}
-                        onDelete={() => setConfirmDeleteRef({ ref: row.ref, id: row.id })}
-                        onCopy={() => copyRef(row.ref)}
-                      />
-                    ))
+                    <>
+                      {paddingTop > 0 && <tr style={{ height: paddingTop }}><td /></tr>}
+                      {virtualItems.map((vRow) => {
+                        const row = tableRows[vRow.index];
+                        return (
+                          <ResRow
+                            key={row.id}
+                            row={row}
+                            onView={() => openDetail(row)}
+                            onEdit={() => openEdit(row)}
+                            onDelete={() => setConfirmDelete({ id: row.id, ref: row.ref })}
+                            onCopy={() => copyRef(row.ref)}
+                          />
+                        );
+                      })}
+                      {paddingBottom > 0 && <tr style={{ height: paddingBottom }}><td /></tr>}
+                    </>
                   )}
                 </tbody>
               </table>
@@ -575,9 +723,9 @@ export const ReservationsView = () => {
             {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/40">
               <span className="text-[12px] text-gray-400 font-medium">
-                {filteredRows.length === 0
+                {serverTotal === 0
                   ? '0 résultat'
-                  : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, filteredRows.length)} sur ${filteredRows.length}`}
+                  : `${(page - 1) * perPage + 1}–${Math.min(page * perPage, serverTotal)} sur ${serverTotal}`}
               </span>
               <div className="flex items-center gap-1">
                 <button
@@ -660,7 +808,7 @@ export const ReservationsView = () => {
           />
         )}
 
-        {confirmDeleteRef && (
+        {confirmDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
               <div className="flex items-center gap-3 mb-4">
@@ -669,31 +817,33 @@ export const ReservationsView = () => {
                 </div>
                 <div>
                   <h3 className="text-[13px] font-bold text-gray-900">Supprimer la réservation</h3>
-                  <p className="text-[12px] text-gray-400 font-mono">{confirmDeleteRef.ref}</p>
+                  <p className="text-[12px] text-gray-400 font-mono">{confirmDelete.ref}</p>
                 </div>
               </div>
               <p className="text-[13px] text-gray-600 mb-5">
                 Cette action est irréversible. La réservation sera définitivement supprimée.
               </p>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" onClick={() => setConfirmDeleteRef(null)}>Annuler</Button>
+                <Button variant="outline" size="sm" onClick={() => setConfirmDelete(null)} disabled={deleteReservation.isPending}>Annuler</Button>
                 <Button
                   size="sm"
-                  className="!bg-red-500 hover:!bg-red-600 !text-white"
-                  disabled={deleteMut.isPending}
-                  onClick={() => {
-                    if (!confirmDeleteRef) return;
-                    toast.promise(
-                      deleteMut.mutateAsync(confirmDeleteRef.id).then(() => setConfirmDeleteRef(null)),
-                      {
-                        loading: 'Suppression…',
-                        success: `Réservation ${confirmDeleteRef.ref} supprimée`,
-                        error: 'Erreur lors de la suppression',
-                      }
-                    );
+                  className="!bg-red-500 hover:!bg-red-600 !text-white gap-1.5"
+                  disabled={deleteReservation.isPending}
+                  onClick={async () => {
+                    try {
+                      await deleteReservation.mutateAsync(confirmDelete.id);
+                      setConfirmDelete(null);
+                    } catch (err) {
+                      console.error('[ReservationsView] delete failed:', err);
+                      setConfirmDelete(null);
+                      setErrorMsg(err instanceof Error ? err.message : 'Impossible de supprimer la réservation');
+                      window.setTimeout(() => setErrorMsg(null), 5000);
+                    }
                   }}
                 >
-                  {deleteMut.isPending ? 'Suppression…' : 'Supprimer'}
+                  {deleteReservation.isPending ? (
+                    <><span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Suppression…</>
+                  ) : 'Supprimer'}
                 </Button>
               </div>
             </div>
@@ -714,7 +864,7 @@ interface ResRowProps {
   onCopy: () => void;
 }
 
-const ResRow: React.FC<ResRowProps> = ({ row, onView, onEdit, onDelete, onCopy }) => (
+const ResRow: React.FC<ResRowProps> = React.memo(({ row, onView, onEdit, onDelete, onCopy }) => (
   <tr
     className="hover:bg-violet-50/20 transition-colors group cursor-pointer"
     onClick={onView}
@@ -769,4 +919,4 @@ const ResRow: React.FC<ResRowProps> = ({ row, onView, onEdit, onDelete, onCopy }
       </div>
     </td>
   </tr>
-);
+));

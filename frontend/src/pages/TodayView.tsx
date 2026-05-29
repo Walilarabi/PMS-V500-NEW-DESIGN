@@ -69,19 +69,23 @@ const KpiCard = ({ title, subtitle, highlight, icon: Icon, colorClass, bgColorCl
   </div>
 );
 
-const timelineArrivals = [
-  { left: '20%', count: 2, items: ['101 - Sophie Dubois', '105 - Thomas Leroy'] },
-  { left: '50%', count: 3, items: ['107 - Claire Martin', '203 - Laura Chen', '204 - Pierre Moreau'] },
-  { left: '80%', count: 2, items: ['301 - Marco Rinaldi', '302 - Karim Haddad'] },
-  { left: '95%', count: 1, items: ['305 - Yuki Tanaka'] },
-];
-
-const timelineDepartures = [
-  { left: '15%', count: 3, items: ['102 - Arathew Smith', '202 - Nathalie B.', '208 - Emma Petit'] },
-  { left: '45%', count: 2, items: ['110 - Robert King', '210 - Ines Morel'] },
-  { left: '65%', count: 1, items: ['117 - Luca Rossi'] },
-  { left: '80%', count: 2, items: ['401 - Amelia Green', '402 - Hugo Blanc'] },
-];
+function buildTimelineBubbles(rows: { room: string; guest: string }[]): { left: string; count: number; items: string[] }[] {
+  if (rows.length === 0) return [];
+  const SLOTS = Math.min(rows.length, 5);
+  const step = 80 / SLOTS;
+  const perSlot = Math.ceil(rows.length / SLOTS);
+  const bubbles: { left: string; count: number; items: string[] }[] = [];
+  for (let i = 0; i < SLOTS; i++) {
+    const chunk = rows.slice(i * perSlot, (i + 1) * perSlot);
+    if (chunk.length === 0) break;
+    bubbles.push({
+      left: `${10 + i * step}%`,
+      count: chunk.length,
+      items: chunk.map((r) => `${r.room} - ${r.guest}`),
+    });
+  }
+  return bubbles;
+}
 
 const TimelineBubble: React.FC<{ event: { left: string; count: number; items: string[] }; tone: 'arrival' | 'departure' }> = ({ event, tone }) => (
   <div className="group absolute top-1/2 z-20 -translate-y-1/2" style={{ left: event.left }}>
@@ -108,7 +112,8 @@ const TimelineBubble: React.FC<{ event: { left: string; count: number; items: st
   </div>
 );
 
-const Timeline = ({ onHide }: { onHide: () => void }) => {
+type TimelineBubbleData = { left: string; count: number; items: string[] };
+const Timeline = ({ onHide, timelineArrivals, timelineDepartures }: { onHide: () => void; timelineArrivals: TimelineBubbleData[]; timelineDepartures: TimelineBubbleData[] }) => {
   const hours = ['07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'];
   
   return (
@@ -191,10 +196,27 @@ function TodayView() {
   const [showRightPanel, setShowRightPanel] = useState(false);
   const [showRealtimeIndicators, setShowRealtimeIndicators] = useState(true);
   const [showTimeline, setShowTimeline] = useState(true);
+  const [showOptimizePanel, setShowOptimizePanel] = useState(false);
   const flowday = useFlowdayDataset();
   const hotelQ = useActiveHotel();
   const kpis: FlowdayKpis = flowday.kpis;
   const liveRows = flowday.rows as unknown as RoomRow[];
+
+  const timelineArrivals = React.useMemo(
+    () => buildTimelineBubbles(
+      (flowday.rows as { room: string; guest: string; movement?: string }[])
+        .filter((r) => r.movement === 'arrival')
+    ),
+    [flowday.rows],
+  );
+  const timelineDepartures = React.useMemo(
+    () => buildTimelineBubbles(
+      (flowday.rows as { room: string; guest: string; movement?: string }[])
+        .filter((r) => r.movement === 'departure')
+    ),
+    [flowday.rows],
+  );
+
   const fmtEUR0 = (n: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 
@@ -239,15 +261,24 @@ function TodayView() {
                 <BarChart2 size={18} className="mr-2 text-purple-500" />
                 {showRightPanel ? 'Masquer le volet' : 'Afficher KPIs'}
               </button>
-              <button className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-sm shadow-purple-600/20 flex items-center transition-all hover:scale-[1.02] active:scale-[0.98]">
+              <button
+                onClick={() => setShowOptimizePanel(true)}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-sm shadow-purple-600/20 flex items-center transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
                 <Zap size={18} className="mr-2" />
                 Optimiser la journée
               </button>
             </div>
           </div>
 
+          {flowday.error && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700 mb-4">
+              Erreur de chargement des données du jour — {flowday.error.message}
+            </div>
+          )}
+
           <div className="flex flex-col xl:flex-row gap-8">
-            
+
             {/* Main Content Area (Left/Center) */}
             <div className="flex-1 space-y-8 min-w-0">
               
@@ -294,7 +325,7 @@ function TodayView() {
               </div>}
 
               {/* Timeline */}
-              {showTimeline && <Timeline onHide={() => setShowTimeline(false)} />}
+              {showTimeline && <Timeline onHide={() => setShowTimeline(false)} timelineArrivals={timelineArrivals} timelineDepartures={timelineDepartures} />}
 
               {/* Operations Table */}
               <OperationsTable initialRooms={liveRows} />
@@ -303,9 +334,59 @@ function TodayView() {
 
             {/* Right Sidebar */}
             {showRightPanel && <RightSidebar onHide={() => setShowRightPanel(false)} />}
-            
+
           </div>
         </main>
+
+        {/* ── Optimiser la journée — panel ──────────────────────────── */}
+        {showOptimizePanel && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center">
+                    <Zap size={16} className="text-purple-600" />
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-[15px]">Priorités du jour</h3>
+                </div>
+                <button onClick={() => setShowOptimizePanel(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="p-5 space-y-3">
+                {[
+                  { icon: LogIn,       color: 'text-emerald-600 bg-emerald-50', label: 'Arrivées aujourd\'hui',   value: kpis.arrivalsToday, unit: 'check-in(s) à traiter' },
+                  { icon: LogOut,      color: 'text-blue-600 bg-blue-50',       label: 'Départs aujourd\'hui',    value: liveRows.filter(r => (r as any).movement === 'departure').length, unit: 'check-out(s) à finaliser' },
+                  { icon: Moon,        color: 'text-violet-600 bg-violet-50',   label: 'Chambres en séjour',      value: kpis.occupancy,   unit: `sur ${kpis.totalRooms} chambres` },
+                  { icon: CreditCard,  color: 'text-red-600 bg-red-50',         label: 'Soldes débiteurs',        value: kpis.unpaidCount, unit: 'paiements à régulariser' },
+                ].map(({ icon: Icon, color, label, value, unit }) => (
+                  <div key={label} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
+                      <Icon size={16} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-semibold text-gray-500">{label}</p>
+                      <p className="text-[13px] font-bold text-gray-900">
+                        {flowday.isLoading ? '…' : <><span className="text-[18px]">{value ?? 0}</span> <span className="text-[12px] text-gray-400 font-medium">{unit}</span></>}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 pb-4 flex gap-2">
+                <button
+                  onClick={() => { setShowOptimizePanel(false); setShowRightPanel(true); }}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-[13px] font-semibold px-4 py-2.5 rounded-xl transition-colors"
+                >
+                  Voir le tableau de bord
+                </button>
+                <button onClick={() => setShowOptimizePanel(false)} className="px-4 py-2.5 rounded-xl text-[13px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Reservation, useReservations, CardexDocument } from '../../contexts/ReservationContext';
+import { useConfigStore } from '../../store/configStore';
 import { FileText, CreditCard, Users, AlertCircle, Search, Star, Award, X, Edit, Plus, Check, Printer, Mail, Save, ChevronDown, Bed, Wine, Package, PlusCircle, Trash2, UploadCloud, Link as LinkIcon, History, TrendingUp, MapPin, Phone, Globe, Briefcase, Hash, Calendar, Shirt, Smartphone, File, Gem, MessageSquare, Reply, Share2, Tag, Box, Zap, Gift, Info, LogOut } from 'lucide-react';
 import { COUNTRIES, NatSelector, GUAR_ICONS, RATE_PLANS, GUAR_CFG, SEGMENTS } from './reservationConstants';
 import { CHANNELS } from '../../constants/channels';
@@ -153,7 +154,7 @@ const calcEarnedPoints = (amountEur: number, tier: string): number =>
 const calcRedeemValue = (points: number): number =>
   Math.floor(points / POINTS_TO_EURO) * EURO_VALUE_PER_1000;
 
-const uid = () => Math.random().toString(36).slice(2, 9);
+const uid = () => crypto.randomUUID().slice(0, 8);
 const TODAY = new Date().toISOString().split('T')[0];
 const fmtDate = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('fr-FR');
 const fmtEuro = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
@@ -184,37 +185,16 @@ const buildMockEliteStay = (reservations: any[], clientId?: string): EliteStayAc
 
   return {
     memberId, tier, totalPoints: earnedPts, availablePoints: Math.floor(earnedPts * 0.8),
-    lifetimeSpend: totalSpend, memberSince: '2024-01-15',
+    lifetimeSpend: totalSpend,
+    memberSince: clientResas.length > 0 ? clientResas[clientResas.length - 1].checkIn : '',
     staysCount: clientResas.length, nightsCount: totalNights, transactions,
-    redemptions: [{
-      id: uid(), date: '2025-12-10', pointsUsed: 5000, amountDiscount: 50,
-      reservationId: clientResas[0]?.id || 'RES-001', status: 'used',
-    }],
+    redemptions: [],
   };
 };
 
-const MOCK_INCIDENTS: Incident[] = [
-  { id: uid(), date: TODAY, time: '14:30', category: 'technique', severity: 'medium',
-    description: 'Climatisation chambre insuffisante — température maintenue à 26°C malgré réglage', status: 'in_progress', guestNotified: true, resolvedBy: 'Maintenance' },
-  { id: uid(), date: '2026-04-20', time: '22:15', category: 'bruit', severity: 'low',
-    description: 'Nuisances sonores signalées — chambre voisine', status: 'resolved', guestNotified: true,
-    resolvedAt: '2026-04-20T22:30:00', compensation: 'Coupes de champagne offertes' },
-];
-
-const MOCK_LOST_ITEMS: LostItem[] = [
-  { id: uid(), foundDate: TODAY, foundLocation: 'Chambre 103', description: 'Chargeur iPhone blanc + câble', category: 'electronique', status: 'found' },
-  { id: uid(), foundDate: '2026-04-18', foundLocation: 'Restaurant', description: 'Veste bleue Zara, taille M', category: 'vetement', status: 'claimed', claimedAt: '2026-04-19' },
-];
-
-const MOCK_REVIEWS: GuestReview[] = [
-  { id: uid(), date: '2026-03-28', source: 'direct', overallScore: 9, cleanliness: 9, comfort: 8, location: 10, service: 9, valueForMoney: 8,
-    comment: 'Excellent séjour, personnel aux petits soins. La suite panoramique valait largement l\'investissement.',
-    response: 'Merci pour votre confiance. Nous espérons vous accueillir à nouveau très prochainement. À bientôt !',
-    responseDate: '2026-03-29', sentiment: 'positive' },
-  { id: uid(), date: '2025-12-15', source: 'booking', overallScore: 7, cleanliness: 8, comfort: 7, service: 7,
-    comment: 'Bon séjour dans l\'ensemble. Climatisation un peu bruyante la nuit.',
-    sentiment: 'neutral' },
-];
+const EMPTY_INCIDENTS: Incident[] = [];
+const EMPTY_LOST_ITEMS: LostItem[] = [];
+const EMPTY_REVIEWS: GuestReview[] = [];
 
 // ─── STYLES PARTAGÉS ─────────────────────────────────────────────────────────
 const CARD = { background: 'white', borderRadius: 16, border: '1px solid #F1F5F9', padding: '16px 20px', boxShadow: '0 1px 4px rgba(0,0,0,.04)' } as const;
@@ -246,22 +226,13 @@ const Ico = {
 };
 
 // ─── ONGLET 1 : RÉSERVATION (MODE AVANCÉ) ──────────────────────────────────
-const ROOMS_DEFAULT = [
-  { number: '101', type: 'Double Classique', price: 99 },
-  { number: '102', type: 'Double Classique', price: 99 },
-  { number: '103', type: 'Suite Deluxe', price: 189 },
-  { number: '104', type: 'Simple', price: 69 },
-  { number: '201', type: 'Double Supérieure', price: 129 },
-  { number: '202', type: 'Twin', price: 115 },
-  { number: '203', type: 'Suite Panoramique', price: 249 },
-  { number: '301', type: 'Familiale', price: 185 },
-  { number: '302', type: 'Junior Suite', price: 165 },
-];
 
 const todayISO = () => new Date().toISOString().split('T')[0];
 
 const TabReservation: React.FC<{ res: Reservation; onUpdate?: (updated: Reservation) => void }> = ({ res, onUpdate }) => {
   const { reservations } = useReservations();
+  const configRooms = useConfigStore((s) => s.rooms);
+  const roomList = configRooms.map(r => ({ number: r.number, type: [r.type, r.category].filter(Boolean).join(' '), price: r.price ?? 0 }));
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -320,9 +291,9 @@ const TabReservation: React.FC<{ res: Reservation; onUpdate?: (updated: Reservat
   const availableRooms = useMemo(() => {
     const cin = new Date(editedRes.arrival || editedRes.checkIn).getTime();
     const cout = new Date(editedRes.departure || editedRes.checkOut).getTime();
-    if (isNaN(cin) || isNaN(cout) || cin >= cout) return ROOMS_DEFAULT;
+    if (isNaN(cin) || isNaN(cout) || cin >= cout) return roomList;
 
-    return ROOMS_DEFAULT.filter(room => {
+    return roomList.filter(room => {
       // SI C'EST LA CHAMBRE DÉJÀ ATTRIBUÉE, ON LA GARDE TOUJOURS (même si le type a changé)
       if (String(room.number) === String(res.room)) return true;
 
@@ -437,7 +408,8 @@ const TabReservation: React.FC<{ res: Reservation; onUpdate?: (updated: Reservat
   };
 
   const generatePaymentLink = (processor: string) => {
-     setPaymentLink(`https://pay.flowtym.com/${processor.toLowerCase()}/RES-${Math.floor(Math.random()*90000)}`);
+     const ref = reservation?.reference ?? crypto.randomUUID().slice(0, 8).toUpperCase();
+     setPaymentLink(`https://pay.flowtym.com/${processor.toLowerCase()}/${ref}`);
      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Lien de paiement ${processor} généré` } }));
   };
 
@@ -1594,7 +1566,7 @@ const TabCardex: React.FC<{ res: Reservation; allReservations: Reservation[] }> 
 
 // ─── ONGLET 4 : INCIDENTS ─────────────────────────────────────────────────────
 const TabIncidents: React.FC<{ res: Reservation }> = ({ res }) => {
-  const [incidents, setIncidents] = useState<Incident[]>(MOCK_INCIDENTS);
+  const [incidents, setIncidents] = useState<Incident[]>(EMPTY_INCIDENTS);
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState({ category: 'technique', severity: 'medium', description: '', guestNotified: false });
 
@@ -1757,7 +1729,7 @@ const TabIncidents: React.FC<{ res: Reservation }> = ({ res }) => {
 
 // ─── ONGLET 5 : OBJETS OUBLIÉS ────────────────────────────────────────────────
 const TabLostItems: React.FC = () => {
-  const [items, setItems] = useState<LostItem[]>(MOCK_LOST_ITEMS);
+  const [items, setItems] = useState<LostItem[]>(EMPTY_LOST_ITEMS);
   const [newOpen, setNewOpen] = useState(false);
   const [form, setForm] = useState({ description: '', foundLocation: '', category: 'autre' });
 
@@ -1876,7 +1848,7 @@ const TabLostItems: React.FC = () => {
 
 // ─── ONGLET 6 : AVIS ──────────────────────────────────────────────────────────
 const TabReviews: React.FC<{ res: Reservation }> = ({ res }) => {
-  const [reviews, setReviews] = useState<GuestReview[]>(MOCK_REVIEWS);
+  const [reviews, setReviews] = useState<GuestReview[]>(EMPTY_REVIEWS);
   const [replyOpen, setReplyOpen] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
 
@@ -2250,11 +2222,7 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
     const roomNum = String(r.room || r.roomNumber || '');
     
     // Inférence du type de chambre si manquant
-    let rType = r.roomType || r.category || r.typeChambre;
-    if (!rType && roomNum) {
-      const found = ROOMS_DEFAULT.find(rm => rm.number === roomNum);
-      if (found) rType = found.type;
-    }
+    const rType = r.roomType || r.category || r.typeChambre || '';
     
     return { 
       ...r, 

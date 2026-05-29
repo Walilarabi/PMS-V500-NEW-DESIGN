@@ -187,8 +187,6 @@ export function usePlanningData(): UsePlanningDataReturn {
           filter: `hotel_id=eq.${tenantId}`,
         },
         (payload) => {
-          console.log('[Planning Realtime]', payload.eventType, payload.new);
-
           if (payload.eventType === 'INSERT') {
             const newRes = mapReservation(payload.new as any);
             setReservations((prev) => [...prev, newRes]);

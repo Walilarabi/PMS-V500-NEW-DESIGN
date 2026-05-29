@@ -251,6 +251,12 @@ const AuditLogView: React.FC = () => {
           </div>
         </header>
 
+        {logsQ.isError && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur de chargement du journal d'audit — vérifiez votre connexion et réessayez.
+          </div>
+        )}
+
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="audit-kpis">
           <KpiCard label="Total événements" value={String(stats.total)} icon={ShieldCheck} tone="violet" />
           <KpiCard label="Créations" value={String(stats.created)} icon={ArrowUp} tone="emerald" />
@@ -315,6 +321,7 @@ const AuditLogView: React.FC = () => {
             <header className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
               <h2 className="text-sm font-bold text-gray-900">Événements ({filtered.length})</h2>
               {logsQ.isLoading && <span className="text-[11px] text-gray-400">Chargement…</span>}
+              {logsQ.isError && <span className="text-[11px] text-rose-500">Erreur de chargement</span>}
             </header>
             <div className="overflow-x-auto max-h-[600px]">
               <table className="min-w-full text-sm">

@@ -42,7 +42,8 @@ import type { HotelCluster, MarketSnapshot } from '../types/marketIntelligence';
 let _mockSnapshotsCache: MarketSnapshot[] | null = null;
 function mockSnapshots(): MarketSnapshot[] {
   if (!_mockSnapshotsCache) {
-    _mockSnapshotsCache = generateParisMarketSnapshots('2026-01-01', '2026-12-31');
+    const y = new Date().getFullYear();
+    _mockSnapshotsCache = generateParisMarketSnapshots(`${y}-01-01`, `${y}-12-31`);
   }
   return _mockSnapshotsCache;
 }

@@ -15,7 +15,9 @@ import {
   Filter, ArrowUpDown,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { useConfigStore, type Room } from '@/src/store/configStore';
+import type { Room } from '@/src/store/configStore';
+import { useRooms, useCreateRoom, useUpdateRoom, useDeleteRoom } from '@/src/domains/hotel/hooks';
+import { useAuth } from '@/src/domains/auth/AuthContext';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
 
@@ -40,9 +42,25 @@ const STATUS_TONE: Record<RoomStatus, string> = {
 const ROOM_CATEGORIES = ['Standard', 'Supérieure', 'Deluxe', 'Suite', 'Suite Junior', 'Penthouse'];
 const ROOM_TYPES = ['Simple', 'Double', 'Twin', 'Triple', 'Quadruple', 'Suite'];
 
+function toRoom(r: import('@/src/lib/supabase.types').RoomRow): Room {
+  return {
+    id: r.id,
+    number: r.number,
+    type: r.type ?? 'Double',
+    category: r.category ?? 'Standard',
+    floor: r.floor != null ? String(r.floor) : '',
+    status: (r.status as Room['status']) ?? 'clean',
+    price: r.base_price ?? undefined,
+  };
+}
+
 export const RoomsPage: React.FC = () => {
-  const rooms = useConfigStore((s) => s.rooms);
-  const updateRooms = useConfigStore((s) => s.updateRooms);
+  const { data: roomsRaw = [], isLoading } = useRooms();
+  const { session } = useAuth();
+  const createRoom = useCreateRoom();
+  const updateRoom = useUpdateRoom();
+  const deleteRoom = useDeleteRoom();
+  const rooms = useMemo(() => roomsRaw.map(toRoom), [roomsRaw]);
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rooms');
 
   const [search, setSearch] = useState('');
@@ -54,11 +72,11 @@ export const RoomsPage: React.FC = () => {
   const [draft, setDraft] = useState<Room>({
     id: '', number: '', type: 'Double', category: 'Standard', floor: '1', status: 'clean', price: 120,
   });
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; isError?: boolean } | null>(null);
 
-  function notify(msg: string) {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 2500);
+  function notify(msg: string, isError = false) {
+    setToast({ msg, isError });
+    window.setTimeout(() => setToast(null), isError ? 4000 : 2500);
   }
 
   // ─── Filtres & tri ────────────────────────────────────────────────────
@@ -86,8 +104,8 @@ export const RoomsPage: React.FC = () => {
   }, [rooms, search, filterStatus, filterFloor, sortBy]);
 
   // ─── Métriques ────────────────────────────────────────────────────────
-  const inventoryRooms = rooms.filter((r) => !r.isFictitious);
-  const fictitiousRooms = rooms.filter((r) => r.isFictitious);
+  const inventoryRooms = rooms;
+  const fictitiousRooms: Room[] = [];
   const orphans = rooms.filter((r) => !r.floor).length;
   const outOfService = rooms.filter((r) => r.status === 'out_of_order' || r.status === 'maintenance').length;
   const avgPrice = inventoryRooms.length === 0 ? 0
@@ -98,44 +116,34 @@ export const RoomsPage: React.FC = () => {
   const [bulkCount, setBulkCount] = useState<number>(20);
   const [bulkFloor, setBulkFloor] = useState<string>('8');
 
-  function createBulkFictitious() {
-    const newRooms = Array.from({ length: bulkCount }, (_, i) => ({
-      id: `room_fict_${Date.now()}_${i}`,
+  async function createBulkFictitious() {
+    if (!session?.tenantId) return;
+    const existingNumbers = new Set(rooms.map((r) => r.number));
+    const toCreate = Array.from({ length: bulkCount }, (_, i) => ({
+      hotel_id: session.tenantId!,
       number: String(bulkStart + i),
       type: 'Double',
       category: 'Fictive',
-      floor: bulkFloor,
-      status: 'clean' as const,
-      price: 0,
-      isFictitious: true,
-    }));
-    // Filtre les doublons de numéro
-    const existingNumbers = new Set(rooms.map((r) => r.number));
-    const toCreate = newRooms.filter((r) => !existingNumbers.has(r.number));
-    if (toCreate.length < newRooms.length) {
-      notify(`${newRooms.length - toCreate.length} numéro(s) déjà utilisé(s), ${toCreate.length} créés`);
-    } else {
-      notify(`${toCreate.length} chambres fictives créées (${bulkStart}–${bulkStart + bulkCount - 1})`);
+      floor: parseInt(bulkFloor, 10) || null,
+      status: 'clean',
+      base_price: 0,
+      active: true,
+    })).filter((r) => !existingNumbers.has(r.number));
+    if (toCreate.length === 0) { notify('Tous les numéros existent déjà'); setBulkCreating(false); return; }
+    try {
+      for (const r of toCreate) await createRoom.mutateAsync(r as Parameters<typeof createRoom.mutateAsync>[0]);
+      notify(`${toCreate.length} chambres créées (${bulkStart}–${bulkStart + bulkCount - 1})`);
+      logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Création en masse de ${toCreate.length} chambres fictives` });
+    } catch (e) {
+      notify(`Erreur lors de la création en masse : ${e instanceof Error ? e.message : 'Erreur inconnue'}`, true);
+    } finally {
+      setBulkCreating(false);
     }
-    if (toCreate.length > 0) {
-      updateRooms([...rooms, ...toCreate]);
-      logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Création en masse de ${toCreate.length} chambres fictives ${bulkStart}–${bulkStart + bulkCount - 1}` });
-    }
-    setBulkCreating(false);
   }
 
   function startAdd() {
     const nextNum = String(Math.max(0, ...rooms.map((r) => parseInt(r.number, 10) || 0)) + 1);
-    setDraft({
-      id: `room_${Date.now()}`,
-      number: nextNum,
-      type: 'Double',
-      category: 'Standard',
-      floor: floors[0] ?? '1',
-      status: 'clean',
-      price: 120,
-      isFictitious: false,
-    });
+    setDraft({ id: '', number: nextNum, type: 'Double', category: 'Standard', floor: floors[0] ?? '1', status: 'clean', price: 120 });
     setAdding(true);
     setEditing(null);
   }
@@ -151,36 +159,68 @@ export const RoomsPage: React.FC = () => {
     setAdding(false);
   }
 
-  function save() {
-    if (!draft.number.trim()) return;
+  async function save() {
+    if (!draft.number.trim() || !session?.tenantId) return;
     if (adding && rooms.some((r) => r.number === draft.number)) {
       notify(`La chambre ${draft.number} existe déjà`);
       return;
     }
-    if (adding) {
-      updateRooms([...rooms, draft]);
-      logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${draft.number} créée (${draft.type} ${draft.category}, étage ${draft.floor})` });
-      notify(`Chambre ${draft.number} créée`);
-    } else if (editing) {
-      updateRooms(rooms.map((r) => (r.id === editing.id ? draft : r)));
-      logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${draft.number} mise à jour` });
-      notify(`Chambre ${draft.number} mise à jour`);
+    try {
+      if (adding) {
+        await createRoom.mutateAsync({
+          hotel_id: session.tenantId,
+          number: draft.number,
+          type: draft.type,
+          category: draft.category,
+          floor: parseInt(draft.floor, 10) || null,
+          status: draft.status,
+          base_price: draft.price ?? null,
+          active: true,
+        } as Parameters<typeof createRoom.mutateAsync>[0]);
+        logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${draft.number} créée (${draft.type} ${draft.category}, étage ${draft.floor})` });
+        notify(`Chambre ${draft.number} créée`);
+      } else if (editing) {
+        await updateRoom.mutateAsync({
+          id: editing.id,
+          patch: {
+            number: draft.number,
+            type: draft.type,
+            category: draft.category,
+            floor: parseInt(draft.floor, 10) || null,
+            status: draft.status,
+            base_price: draft.price ?? null,
+          },
+        });
+        logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${draft.number} mise à jour` });
+        notify(`Chambre ${draft.number} mise à jour`);
+      }
+      cancel();
+    } catch (e) {
+      notify(`Erreur : ${e instanceof Error ? e.message : 'Impossible de sauvegarder'}`, true);
     }
-    cancel();
   }
 
-  function remove(r: Room) {
+  async function remove(r: Room) {
     if (!confirm(`Supprimer la chambre ${r.number} ? Cette action est irréversible.`)) return;
-    updateRooms(rooms.filter((x) => x.id !== r.id));
-    logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${r.number} supprimée` });
-    notify(`Chambre ${r.number} supprimée`);
+    try {
+      await deleteRoom.mutateAsync(r.id);
+      logAudit({ action: 'module_inspected', module: 'inventory_planning', detail: `Chambre ${r.number} supprimée` });
+      notify(`Chambre ${r.number} supprimée`);
+    } catch (e) {
+      notify(`Erreur : ${e instanceof Error ? e.message : 'Impossible de supprimer la chambre'}`, true);
+    }
   }
 
-  function quickStatus(r: Room, status: RoomStatus) {
-    updateRooms(rooms.map((x) => (x.id === r.id ? { ...x, status } : x)));
+  async function quickStatus(r: Room, status: RoomStatus) {
+    try {
+      await updateRoom.mutateAsync({ id: r.id, patch: { status } });
+    } catch (e) {
+      notify(`Erreur statut : ${e instanceof Error ? e.message : 'Échec'}`, true);
+    }
   }
 
   if (!canRead) return <DeniedBanner />;
+  if (isLoading) return <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Chargement…</div>;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
@@ -381,8 +421,15 @@ export const RoomsPage: React.FC = () => {
         </section>
 
         {toast && (
-          <div className="fixed bottom-6 right-6 rounded-xl bg-slate-900 text-white text-[12.5px] px-4 py-2.5 shadow-lg flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> {toast}
+          <div className={cn(
+            'fixed bottom-6 right-6 rounded-xl text-white text-[12.5px] px-4 py-2.5 shadow-lg flex items-center gap-2',
+            toast.isError ? 'bg-rose-700' : 'bg-slate-900',
+          )}>
+            {toast.isError
+              ? <AlertCircle className="w-4 h-4 text-rose-200 shrink-0" />
+              : <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            }
+            {toast.msg}
           </div>
         )}
       </div>

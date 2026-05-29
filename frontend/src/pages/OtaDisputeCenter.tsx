@@ -136,6 +136,18 @@ export const OtaDisputeCenter: React.FC = () => {
           </div>
         </header>
 
+        {(disputesQ.isError || reliabilityQ.isError) && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur de chargement des litiges — vérifiez votre connexion et réessayez.
+          </div>
+        )}
+
+        {disputesQ.isLoading && (
+          <div className="rounded-lg bg-white border border-gray-100 px-4 py-6 text-center text-[12px] text-gray-400">
+            Chargement des litiges…
+          </div>
+        )}
+
         {/* KPIs */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Kpi testid="odms-kpi-open" label="Litiges ouverts" value={String(kpis.open)} hint="En cours" icon={ShieldAlert} tone="amber" />
@@ -496,7 +508,7 @@ const DisputeDrawer: React.FC<{
               </span>
               <button
                 type="button"
-                onClick={() => togglePause.mutate({ id: dispute.id, paused: !dispute.auto_send_paused })}
+                onClick={() => togglePause.mutate({ id: dispute.id, paused: !dispute.auto_send_paused }, { onError: (err) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }) })}
                 disabled={togglePause.isPending}
                 data-testid="odms-dispute-toggle-pause"
                 title={dispute.auto_send_paused
@@ -508,7 +520,10 @@ const DisputeDrawer: React.FC<{
                     : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
                 }`}
               >
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${dispute.auto_send_paused ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                {togglePause.isPending
+                  ? <span className="w-2.5 h-2.5 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                  : <span className={`inline-block h-1.5 w-1.5 rounded-full ${dispute.auto_send_paused ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                }
                 {dispute.auto_send_paused ? 'Mode brouillon (auto-pause)' : 'Auto-relances actives'}
               </button>
             </div>
@@ -610,10 +625,17 @@ const DisputeDrawer: React.FC<{
                         : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                     }`}
                   >
-                    {to === 'SENT' && <Send size={11} />}
-                    {to === 'CORRECTED' && <CheckCircle2 size={11} />}
-                    {to === 'REJECTED' && <XCircle size={11} />}
-                    {STATUS_LABEL[to]}
+                    {change.isPending
+                      ? <span className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+                      : (
+                        <>
+                          {to === 'SENT' && <Send size={11} />}
+                          {to === 'CORRECTED' && <CheckCircle2 size={11} />}
+                          {to === 'REJECTED' && <XCircle size={11} />}
+                        </>
+                      )
+                    }
+                    {change.isPending ? '…' : STATUS_LABEL[to]}
                   </button>
                 ))}
                 <button
@@ -873,7 +895,7 @@ const RemindersQueueSection: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => skip.mutate(r.id)}
+                            onClick={() => skip.mutate(r.id, { onError: (err) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }) })}
                             data-testid={`odms-reminder-skip-${r.id}`}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 text-gray-600"
                           >

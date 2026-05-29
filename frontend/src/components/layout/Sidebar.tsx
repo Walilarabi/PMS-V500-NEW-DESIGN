@@ -347,6 +347,7 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
                     key={item.id}
                     onClick={() => setActivePage(item.id)}
                     title={isCollapsed ? item.label : undefined}
+                    data-testid={`nav-${item.id}`}
                     className={cn(
                       'relative w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-[13px] font-semibold transition-all text-left',
                       isActive

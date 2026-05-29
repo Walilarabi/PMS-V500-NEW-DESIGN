@@ -165,6 +165,7 @@ export const AdminSupport: React.FC = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('all');
   const [sortAsc, setSortAsc] = useState(false);
+  const [mutError, setMutError] = useState<string | null>(null);
 
   const filtered = tickets
     .filter(t => statusFilter === 'all' || t.status === statusFilter)
@@ -182,6 +183,12 @@ export const AdminSupport: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      {mutError && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700 flex items-center justify-between">
+          <span>{mutError}</span>
+          <button onClick={() => setMutError(null)} className="ml-2 text-rose-400 hover:text-rose-600">✕</button>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-bold text-gray-900">Support global</h2>
@@ -258,7 +265,7 @@ export const AdminSupport: React.FC = () => {
                   </td>
                   <td className="px-4 py-3.5">
                     <select value={t.status}
-                      onChange={e => updateStatus.mutate({ id: t.id, status: e.target.value as TicketStatus })}
+                      onChange={e => updateStatus.mutate({ id: t.id, status: e.target.value as TicketStatus }, { onError: (err) => setMutError(err.message) })}
                       className={cn('text-[11px] font-bold px-2 py-1 rounded-lg border cursor-pointer appearance-none outline-none', sm.colors)}>
                       {Object.entries(STATUS_META).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                     </select>

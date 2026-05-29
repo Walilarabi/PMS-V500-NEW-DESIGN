@@ -328,11 +328,7 @@ export const LostFoundPage: React.FC = () => (
     description="Suivi des objets oubliés par les clients et workflow de restitution."
     storageKey="flowtym.lost_found"
     module="housekeeping"
-    defaults={[
-      { id: 'lf_1', label: 'Chargeur iPhone', code: 'TEC', active: true, category: 'electronics', foundDate: '2026-05-12', roomNumber: '305', status: 'awaiting' },
-      { id: 'lf_2', label: 'Passeport français', code: 'DOC', active: true, category: 'document',  foundDate: '2026-05-10', roomNumber: '412', status: 'returned' },
-      { id: 'lf_3', label: 'Veste de costume', code: 'CLO', active: true, category: 'clothing',    foundDate: '2026-05-05', roomNumber: '201', status: 'awaiting' },
-    ]}
+    defaults={[]}
     extraColumns={[
       { header: 'Chambre', render: (it) => <span className="font-mono">{it.roomNumber}</span> },
       { header: 'Trouvé le', render: (it) => new Date(it.foundDate).toLocaleDateString('fr-FR') },

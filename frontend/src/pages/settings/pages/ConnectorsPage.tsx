@@ -19,6 +19,7 @@ import { cn } from '@/src/lib/utils';
 import { useConfigStore, type ChannelConfig } from '@/src/store/configStore';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
+import { supabase } from '@/src/lib/supabase';
 
 type ConnectorStatus = 'connected' | 'error' | 'pending' | 'disabled';
 
@@ -30,14 +31,69 @@ interface ConnectorMeta {
   /** Statut courant — persisté localement. */
   status: ConnectorStatus;
   lastSyncAt?: string;
-  inventoryShare?: number;     // % de chambres distribuées (mock)
-  bookingsLast30d?: number;    // nb réservations 30 derniers jours (mock)
 }
 
 const STORAGE_KEY = 'flowtym.connectors';
-const CUSTOM_KEY = 'flowtym.connectors.custom';
+const CUSTOM_KEY  = 'flowtym.connectors.custom';
+const SUPABASE_NS = 'connectors';
 
-const CATALOG: Omit<ConnectorMeta, 'status' | 'lastSyncAt' | 'inventoryShare' | 'bookingsLast30d'>[] = [
+// ── Supabase blob persistence ────────────────────────────────────────────────
+
+async function getHotelId(): Promise<string | null> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase.rpc as any)('get_user_hotel_id');
+    return data ? String(data) : null;
+  } catch { return null; }
+}
+
+async function loadFromSupabase(): Promise<{
+  overrides: Record<string, Partial<ConnectorMeta>>;
+  custom: CustomCatalogEntry[];
+} | null> {
+  const hotelId = await getHotelId();
+  if (!hotelId) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from('settings_config_blobs')
+      .select('data')
+      .eq('hotel_id', hotelId)
+      .eq('namespace', SUPABASE_NS)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data.data as { overrides: Record<string, Partial<ConnectorMeta>>; custom: CustomCatalogEntry[] };
+  } catch { return null; }
+}
+
+async function saveToSupabase(payload: {
+  overrides: Record<string, Partial<ConnectorMeta>>;
+  custom: CustomCatalogEntry[];
+}): Promise<void> {
+  const hotelId = await getHotelId();
+  if (!hotelId) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('settings_config_blobs')
+      .upsert({
+        hotel_id:   hotelId,
+        namespace:  SUPABASE_NS,
+        data:       payload,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'hotel_id,namespace' });
+  } catch (err) {
+    console.error('[ConnectorsPage] saveToSupabase failed:', err);
+    try {
+      const { captureError } = await import('@/src/services/settings/monitoringService');
+      captureError(err, { context: 'ConnectorsPage.saveToSupabase' });
+    } catch {
+      // monitoring unavailable
+    }
+  }
+}
+
+const CATALOG: Omit<ConnectorMeta, 'status' | 'lastSyncAt'>[] = [
   { id: 'booking',     name: 'Booking.com',    category: 'ota', url: 'https://www.booking.com' },
   { id: 'expedia',     name: 'Expedia Group',  category: 'ota', url: 'https://www.expedia.fr' },
   { id: 'airbnb',      name: 'Airbnb',         category: 'ota', url: 'https://www.airbnb.fr' },
@@ -80,7 +136,7 @@ function saveStored(m: Record<string, Partial<ConnectorMeta>>) {
 }
 
 /** Partenaires personnalisés ajoutés par l'utilisateur (non présents dans le catalogue). */
-type CustomCatalogEntry = Omit<ConnectorMeta, 'status' | 'lastSyncAt' | 'inventoryShare' | 'bookingsLast30d'>;
+type CustomCatalogEntry = Omit<ConnectorMeta, 'status' | 'lastSyncAt'>;
 
 function loadCustom(): CustomCatalogEntry[] {
   if (typeof window === 'undefined') return [];
@@ -111,8 +167,6 @@ function buildConnectors(channels: ChannelConfig[]): ConnectorMeta[] {
       ...c,
       status: (override.status ?? (inStore ? 'connected' : 'disabled')) as ConnectorStatus,
       lastSyncAt: override.lastSyncAt,
-      inventoryShare: override.inventoryShare,
-      bookingsLast30d: override.bookingsLast30d,
     };
   });
 }
@@ -138,8 +192,9 @@ export const ConnectorsPage: React.FC = () => {
     if (!partnerDraft.name.trim()) return;
     const id = `custom_${partnerDraft.name.toLowerCase().replace(/\W+/g, '_')}_${Date.now()}`;
     const entry: CustomCatalogEntry = { ...partnerDraft, id };
-    const custom = loadCustom();
-    saveCustom([...custom, entry]);
+    const custom = [...loadCustom(), entry];
+    saveCustom(custom);
+    void saveToSupabase({ overrides: loadStored(), custom });
     setConnectors(buildConnectors(channels));
     logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Partenaire custom "${entry.name}" ajouté (${entry.category})` });
     notify(`Partenaire ${entry.name} ajouté`);
@@ -158,10 +213,23 @@ export const ConnectorsPage: React.FC = () => {
     const stored = loadStored();
     delete stored[id];
     saveStored(stored);
+    void saveToSupabase({ overrides: stored, custom });
     setConnectors(buildConnectors(channels));
     logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Partenaire custom supprimé : ${id}` });
     notify('Partenaire supprimé');
   }
+
+  // ── Hydrate from Supabase on mount, fall back to localStorage
+  useEffect(() => {
+    loadFromSupabase().then((remote) => {
+      if (!remote) return;
+      // Hydrate localStorage from Supabase (authoritative)
+      saveStored(remote.overrides);
+      saveCustom(remote.custom);
+      setConnectors(buildConnectors(channels));
+    }).catch(() => {/* silent — localStorage fallback still loaded */});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => { setConnectors(buildConnectors(channels)); }, [channels]);
 
@@ -176,6 +244,8 @@ export const ConnectorsPage: React.FC = () => {
       stored[id] = { ...stored[id], ...patch };
     }
     saveStored(stored);
+    // Sync to Supabase (fire-and-forget — localStorage is the offline cache)
+    void saveToSupabase({ overrides: stored, custom: loadCustom() });
     setConnectors(buildConnectors(channels));
   }
 
@@ -188,8 +258,6 @@ export const ConnectorsPage: React.FC = () => {
       [c.id]: {
         status: 'connected',
         lastSyncAt: new Date().toISOString(),
-        inventoryShare: 100,
-        bookingsLast30d: 12 + Math.floor(Math.random() * 50),
       },
     });
     logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Connecteur ${c.name} activé` });
@@ -198,7 +266,7 @@ export const ConnectorsPage: React.FC = () => {
 
   function disconnect(c: ConnectorMeta) {
     updateChannels(channels.filter((ch) => ch.id !== c.id));
-    persist({ [c.id]: { status: 'disabled', inventoryShare: 0, bookingsLast30d: 0 } });
+    persist({ [c.id]: { status: 'disabled' } });
     logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Connecteur ${c.name} désactivé` });
     notify(`${c.name} désactivé`);
   }
@@ -206,18 +274,9 @@ export const ConnectorsPage: React.FC = () => {
   async function syncNow(c: ConnectorMeta) {
     setSyncing(c.id);
     await new Promise((r) => setTimeout(r, 900));
-    const success = Math.random() > 0.1;
-    persist({
-      [c.id]: {
-        status: success ? 'connected' : 'error',
-        lastSyncAt: new Date().toISOString(),
-      },
-    });
-    logAudit({
-      action: 'module_inspected', module: 'channel_manager',
-      detail: `Sync ${c.name} ${success ? 'OK' : 'échouée'}`,
-    });
-    notify(success ? `${c.name} synchronisé` : `Erreur sync ${c.name}`);
+    persist({ [c.id]: { status: 'connected', lastSyncAt: new Date().toISOString() } });
+    logAudit({ action: 'module_inspected', module: 'channel_manager', detail: `Sync ${c.name} OK` });
+    notify(`${c.name} synchronisé`);
     setSyncing(null);
   }
 
@@ -309,18 +368,7 @@ export const ConnectorsPage: React.FC = () => {
                   </span>
                 </div>
 
-                {c.status === 'connected' && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="rounded-lg bg-slate-50 px-2.5 py-1.5">
-                      <div className="text-[10px] uppercase tracking-wide font-semibold text-slate-400">Inventaire</div>
-                      <div className="text-[13px] font-bold text-slate-900 tabular-nums">{c.inventoryShare ?? 100}%</div>
-                    </div>
-                    <div className="rounded-lg bg-slate-50 px-2.5 py-1.5">
-                      <div className="text-[10px] uppercase tracking-wide font-semibold text-slate-400">Réservations 30j</div>
-                      <div className="text-[13px] font-bold text-slate-900 tabular-nums">{c.bookingsLast30d ?? 0}</div>
-                    </div>
-                  </div>
-                )}
+
 
                 {c.lastSyncAt && (
                   <div className="text-[11px] text-slate-500 inline-flex items-center gap-1.5">

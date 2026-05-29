@@ -257,6 +257,7 @@ export const LoginPage: React.FC = () => {
                 <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-200" style={{ color: emailFocused ? C.purple : C.textSubtle }} />
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} onFocus={() => setEmailFocused(true)} onBlur={() => setEmailFocused(false)}
                   placeholder="prenom.nom@hotel.com" autoComplete="email" required
+                  data-testid="login-email"
                   className="w-full pl-11 pr-4 py-3.5 bg-transparent text-[14px] transition-all" style={{ color: C.text, outline: 'none' }} />
               </div>
             </div>
@@ -271,6 +272,7 @@ export const LoginPage: React.FC = () => {
                 <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 transition-colors duration-200" style={{ color: pwFocused ? C.purple : C.textSubtle }} />
                 <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} onFocus={() => setPwFocused(true)} onBlur={() => setPwFocused(false)}
                   placeholder="••••••••••••" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required
+                  data-testid="login-password"
                   className="w-full pl-11 pr-12 py-3.5 bg-transparent text-[14px] transition-all" style={{ color: C.text, outline: 'none' }} />
                 <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg transition-all duration-200" style={{ color: C.textSubtle }}>
                   {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
@@ -299,6 +301,7 @@ export const LoginPage: React.FC = () => {
             {/* Submit */}
             <div className="pt-2">
               <button type="submit" disabled={isLoading}
+                data-testid="login-submit"
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-[14px] text-white transition-all duration-200"
                 style={{ background: isLoading ? 'rgba(124,58,237,0.7)' : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', boxShadow: isLoading ? 'none' : '0 4px 14px rgba(124,58,237,0.35)', letterSpacing: '-0.01em' }}>
                 {isLoading ? (

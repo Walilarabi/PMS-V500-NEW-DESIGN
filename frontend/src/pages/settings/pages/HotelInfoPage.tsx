@@ -12,7 +12,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Hotel, Save, Sparkles, AlertCircle, Building2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { useConfigStore } from '@/src/store/configStore';
+import { useActiveHotel, useUpdateHotel } from '@/src/domains/hotel/hooks';
 import type { PageId } from '@/src/types';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
@@ -40,16 +40,44 @@ const COUNTRIES = [
   { code: 'US', label: 'États-Unis' },
 ];
 
-export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
-  const stored = useConfigStore((s) => s.hotel);
-  const updateHotel = useConfigStore((s) => s.updateHotel);
+interface HotelDraft {
+  name: string;
+  address: string;
+  city: string;
+  zip: string;
+  country: string;
+  phone: string;
+  email: string;
+  logo: string;
+  stars: number;
+}
 
-  const [draft, setDraft] = useState(stored);
+function hotelToDraft(h: import('@/src/lib/supabase.types').HotelRow | null | undefined): HotelDraft {
+  return {
+    name: h?.name ?? '',
+    address: h?.address ?? '',
+    city: h?.city ?? '',
+    zip: h?.zip ?? '',
+    country: h?.country ?? 'FR',
+    phone: h?.phone ?? '',
+    email: h?.email ?? '',
+    logo: h?.logo_url ?? '',
+    stars: 0,
+  };
+}
+
+export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
+  const { data: hotel, isLoading } = useActiveHotel();
+  const updateHotel = useUpdateHotel();
+
+  const [draft, setDraft] = useState<HotelDraft>(() => hotelToDraft(null));
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_hotel');
 
-  // Si le store change ailleurs (réseau, autre onglet), on resynchronise
-  useEffect(() => { setDraft(stored); }, [stored.name, stored.email]);
+  // Sync depuis Supabase quand les données arrivent
+  useEffect(() => {
+    if (hotel) setDraft(hotelToDraft(hotel));
+  }, [hotel?.id]);
 
   const issues = useMemo<ValidationIssue[]>(() => {
     const out: ValidationIssue[] = [];
@@ -63,6 +91,7 @@ export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
     return out;
   }, [draft]);
 
+  const stored = hotelToDraft(hotel);
   const dirty = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(stored),
     [draft, stored],
@@ -74,23 +103,33 @@ export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
     return Math.round((filled / fields.length) * 100);
   }, [draft]);
 
-  function set<K extends keyof typeof draft>(key: K, value: typeof draft[K]) {
+  function set<K extends keyof HotelDraft>(key: K, value: HotelDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (issues.length > 0) return;
-    updateHotel(draft);
+    await updateHotel.mutateAsync({
+      name: draft.name,
+      address: draft.address || null,
+      city: draft.city || null,
+      zip: draft.zip || null,
+      country: draft.country || null,
+      phone: draft.phone || null,
+      email: draft.email || null,
+      logo_url: draft.logo || null,
+    });
     setSavedAt(new Date().toISOString());
     logAudit({ action: 'module_inspected', detail: `Profil hôtel mis à jour : ${draft.name}` });
     window.setTimeout(() => setSavedAt(null), 3000);
   }
 
   function handleReset() {
-    setDraft(stored);
+    setDraft(hotelToDraft(hotel));
   }
 
   if (!canRead) return <DeniedBanner />;
+  if (isLoading) return <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Chargement…</div>;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">

@@ -372,12 +372,7 @@ export const LegalDocsPage: React.FC = () => (
     description="Pièces administratives obligatoires : K-bis, licences, assurances, attestations sécurité."
     storageKey="flowtym.legal_docs"
     module="pms_reservations"
-    defaults={[
-      { id: 'kbis',     label: 'K-bis',                    code: 'KBIS', active: true, category: 'kbis',      fileUrl: '#', expiryDate: '2027-01-15' },
-      { id: 'lic4',     label: 'Licence IV',               code: 'LIC4', active: true, category: 'license',   fileUrl: '#', expiryDate: '2028-06-30' },
-      { id: 'assur',    label: 'Responsabilité civile',    code: 'RC',   active: true, category: 'insurance', fileUrl: '#', expiryDate: '2026-12-31' },
-      { id: 'erp',      label: 'Commission sécurité ERP', code: 'ERP',  active: true, category: 'safety',    fileUrl: '#', expiryDate: '2026-09-30' },
-    ]}
+    defaults={[]}
     extraColumns={[
       { header: 'Type', render: (it) => <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10.5px] font-semibold uppercase">{it.category}</span> },
       { header: 'Expiration', render: (it) => {

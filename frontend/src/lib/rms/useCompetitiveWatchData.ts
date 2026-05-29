@@ -39,25 +39,15 @@ import type {
   LighthouseDayData,
 } from '../../services/lighthouse-parser.service';
 import type { ExpediaImport } from '../../services/expedia-parser.service';
-import {
-  KPI_CARDS as MOCK_KPI_CARDS,
-  MARKET_MONTH as MOCK_MARKET_MONTH,
-  getVisibleMarketMonth as mockGetVisibleMarketMonth,
-  getComparisonData as mockGetComparisonData,
-  COMPARE_PERIODS as MOCK_COMPARE_PERIODS,
-  QUICK_COMPARISON as MOCK_QUICK_COMPARISON,
-  MINI_COMPARISONS as MOCK_MINI_COMPARISONS,
-  COMPSET_DISTRIBUTION as MOCK_COMPSET_DISTRIBUTION,
-  COMPSET_HOTELS as MOCK_COMPSET_HOTELS,
-  PAGE_META as MOCK_PAGE_META,
-  type ComparePeriodKey,
-  type ComparePeriodMeta,
-  type ComparisonDay,
-  type DistributionSegment,
-  type KpiDatum,
-  type MarketDay,
-  type MiniComparison,
-  type QuickComparisonRow,
+import type {
+  ComparePeriodKey,
+  ComparePeriodMeta,
+  ComparisonDay,
+  DistributionSegment,
+  KpiDatum,
+  MarketDay,
+  MiniComparison,
+  QuickComparisonRow,
 } from '../../data/rms/mockCompetitiveWatchData';
 
 /* ───────────────────────────────────────────────────────────────────────── */
@@ -238,77 +228,39 @@ function buildMixedDataset(
 /* MOCK FALLBACK                                                              */
 /* ───────────────────────────────────────────────────────────────────────── */
 
-/**
- * Construit un dataset mock qui respecte la fenêtre temporelle demandée.
- *
- * Le mock de référence (MARKET_MONTH) couvre juin 2026 (30 jours). Pour les
- * ranges 7/15/30/60/90 jours glissants, on génère des jours synthétiques en
- * rebouclant sur le pool de référence et en ajustant la date pour rester dans
- * la fenêtre. Les valeurs (ourPrice, médiane, écarts) sont préservées —
- * seules les dates / labels sont décalés.
- */
-function buildMockMarketDays(
-  windowStart: string,
-  windowEnd: string,
-): typeof MOCK_MARKET_MONTH {
-  const start = new Date(windowStart);
-  const end = new Date(windowEnd);
-  const days = Math.round((+end - +start) / 86_400_000) + 1;
-  if (days <= 0) return [];
-
-  const pool = MOCK_MARKET_MONTH;
-  if (pool.length === 0) return [];
-
-  const result: typeof MOCK_MARKET_MONTH = [];
-  for (let i = 0; i < days; i++) {
-    const date = new Date(start);
-    date.setDate(start.getDate() + i);
-    const iso = date.toISOString().slice(0, 10);
-    const template = pool[i % pool.length];
-    result.push({
-      ...template,
-      date: iso,
-      label: date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
-    });
-  }
-  return result;
-}
-
-function mockData(
+function emptyData(
   source: CompetitiveSource,
   range: CompetitiveRange,
-  window: { start: string; end: string; label: string }
+  window: { start: string; end: string; label: string },
+  traceOverrides?: Partial<CompetitiveWatchData['trace']>,
 ): CompetitiveWatchData {
-  // Génère un dataset respectant la fenêtre demandée (7/15/30/60/90/mois)
-  const days = buildMockMarketDays(window.start, window.end);
-  const visibleDays = days.length > 0 ? days : MOCK_MARKET_MONTH;
-
   return {
     isLive: false,
     source,
     range,
     window,
-    meta: MOCK_PAGE_META,
-    kpiCards: MOCK_KPI_CARDS,
-    marketMonth: visibleDays,
-    visibleMarketMonth: visibleDays,
-    getComparisonData: mockGetComparisonData,
-    comparePeriods: MOCK_COMPARE_PERIODS,
-    quickComparison: MOCK_QUICK_COMPARISON,
-    miniComparisons: MOCK_MINI_COMPARISONS,
-    compsetDistribution: MOCK_COMPSET_DISTRIBUTION,
-    compsetHotels: MOCK_COMPSET_HOTELS,
+    meta: { hotelName: '', compsetSize: 0, lastUpdate: '', marketPeriodLabel: window.label, comparisonDayLabel: '', rank: 0, rankTotal: 0 },
+    kpiCards: [],
+    marketMonth: [],
+    visibleMarketMonth: [],
+    getComparisonData: () => [],
+    comparePeriods: [],
+    quickComparison: [],
+    miniComparisons: [],
+    compsetDistribution: [],
+    compsetHotels: [],
     trace: {
       source,
       periodLabel: window.label,
       lighthouseImportedAt: null,
       expediaImportedAt: null,
-      totalCompetitors: MOCK_COMPSET_HOTELS.length,
-      keptCompetitors: MOCK_COMPSET_HOTELS.length,
-      keptDays: visibleDays.length,
+      totalCompetitors: 0,
+      keptCompetitors: 0,
+      keptDays: 0,
       excludedDays: 0,
       exclusionSummary: [],
       competitorScores: [],
+      ...traceOverrides,
     },
   };
 }
@@ -340,7 +292,7 @@ export function useCompetitiveWatchData(): CompetitiveWatchData {
     }
 
     if (effectiveSource === 'none') {
-      return mockData(source, range, window);
+      return emptyData(source, range, window);
     }
 
     // ─── Construction du dataset effectif ─────────────────────────────────
@@ -405,26 +357,18 @@ export function useCompetitiveWatchData(): CompetitiveWatchData {
       qualityReport.keptDays
     );
 
-    // Sécurité : si tout est filtré, on retombe sur le mock pour ne pas
-    // afficher un graphique vide qui ressemblerait à un bug.
     if (filteredDataset.days.length === 0) {
-      const mockFallback = mockData(source, range, window);
-      return {
-        ...mockFallback,
-        // On garde la traçabilité pour signaler "rien dans la fenêtre"
-        trace: {
-          ...mockFallback.trace,
-          source: effectiveSource as CompetitiveSource,
-          lighthouseImportedAt: lighthouseData?.importedAt ?? null,
-          expediaImportedAt: expediaData?.importedAt ?? null,
-          totalCompetitors: baseDataset.competitorNames.length,
-          keptCompetitors: 0,
-          keptDays: 0,
-          excludedDays: qualityReport.exclusions.length,
-          exclusionSummary: summarizeExclusions(qualityReport.exclusions),
-          competitorScores,
-        },
-      };
+      return emptyData(source, range, window, {
+        source: effectiveSource as CompetitiveSource,
+        lighthouseImportedAt: lighthouseData?.importedAt ?? null,
+        expediaImportedAt: expediaData?.importedAt ?? null,
+        totalCompetitors: baseDataset.competitorNames.length,
+        keptCompetitors: 0,
+        keptDays: 0,
+        excludedDays: qualityReport.exclusions.length,
+        exclusionSummary: summarizeExclusions(qualityReport.exclusions),
+        competitorScores,
+      });
     }
 
     // ─── Calcul des datasets enfants depuis le dataset filtré ──────────────

@@ -2,7 +2,7 @@
  * FLOWTYM — FacturationView
  * Module de facturation connecté à Supabase — invoices, folios, lignes, paiements.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   FileText, Plus, Eye, CheckCircle, XCircle, CreditCard,
   Download, Loader2, RefreshCcw, AlertCircle, RotateCcw,
@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '@/src/components/ui/Badge';
 import { Button } from '@/src/components/ui/Button';
 import { Card } from '@/src/components/ui/Card';
+import { TableSkeleton } from '@/src/components/ui/TableSkeleton';
 import { cn } from '@/src/lib/utils';
 import {
   useInvoices, useInvoice, useFolios, useInvoiceLines, usePayments,
@@ -60,6 +61,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
   const [payForm, setPayForm] = useState({ amount: '', method: 'card' as PaymentMethod, reference: '' });
   const [voidReason, setVoidReason] = useState('');
   const [showVoid, setShowVoid] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   if (isLoading || !invoice) {
     return (
@@ -100,6 +102,12 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
 
   return (
     <div className="flex flex-col h-full">
+      {actionError && (
+        <div className="mx-4 mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700 flex items-center justify-between">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="ml-2 text-rose-400 hover:text-rose-600">✕</button>
+        </div>
+      )}
       {/* Header */}
       <div className="p-6 border-b border-gray-100 flex items-start justify-between shrink-0">
         <div>
@@ -173,7 +181,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
                       {fmtEur(line.total_ttc ?? 0)}
                     </span>
                     {canEdit && line.source !== 'reversal' && (
-                      <button onClick={() => reverseLine.mutate({ lineId: line.id, invoiceId })} className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors" title="Annuler cette ligne">
+                      <button onClick={() => reverseLine.mutate({ lineId: line.id, invoiceId }, { onError: (err) => setActionError(`Annulation ligne échouée — ${err.message}`) })} className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors" title="Annuler cette ligne">
                         <RotateCcw size={12} />
                       </button>
                     )}
@@ -229,7 +237,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
                       {pay.status === 'reversed' ? 'Annulé' : 'OK'}
                     </Badge>
                     {pay.status === 'completed' && (
-                      <button onClick={() => { const r = prompt('Motif du remboursement ?'); if (r) reversePayment.mutate({ paymentId: pay.id, invoiceId, reason: r }); }} className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors" title="Rembourser">
+                      <button onClick={() => { const r = prompt('Motif du remboursement ?'); if (r) reversePayment.mutate({ paymentId: pay.id, invoiceId, reason: r }, { onError: (err) => setActionError(`Remboursement échoué — ${err.message}`) }); }} className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors" title="Rembourser">
                         <RotateCcw size={12} />
                       </button>
                     )}
@@ -244,7 +252,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
       {/* Actions */}
       <div className="p-4 border-t border-gray-100 flex gap-2 shrink-0">
         {canIssue && (
-          <Button onClick={() => issueInvoice.mutate(invoiceId)} disabled={issueInvoice.isPending} className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20">
+          <Button onClick={() => issueInvoice.mutate(invoiceId, { onError: (err) => setActionError(`Émission échouée — ${err.message}`) })} disabled={issueInvoice.isPending} className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20">
             {issueInvoice.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
             Émettre la facture
           </Button>
@@ -259,7 +267,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
       {showVoid && (
         <div className="p-4 border-t border-red-100 bg-red-50 space-y-3">
           <input value={voidReason} onChange={e => setVoidReason(e.target.value)} placeholder="Motif d'annulation obligatoire" className="w-full border border-red-200 rounded-xl px-3 py-2 text-sm focus:outline-none" />
-          <Button onClick={() => { if (voidReason) { voidInvoice.mutate({ id: invoiceId, reason: voidReason }); setShowVoid(false); } }} disabled={!voidReason || voidInvoice.isPending} className="w-full bg-red-500 text-white font-bold">
+          <Button onClick={() => { if (voidReason) { voidInvoice.mutate({ id: invoiceId, reason: voidReason }, { onError: (err) => setActionError(`Annulation échouée — ${err.message}`) }); setShowVoid(false); } }} disabled={!voidReason || voidInvoice.isPending} className="w-full bg-red-500 text-white font-bold">
             Confirmer l'annulation
           </Button>
         </div>
@@ -274,12 +282,22 @@ export const FacturationView = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [page, setPage] = useState(1);
+  const PER_PAGE = 50;
 
-  const { data: invoicesData, isLoading, refetch, isFetching } = useInvoices({ status: statusFilter || undefined });
+  const { data: invoicesData, isLoading, isError: invoicesIsError, refetch, isFetching } = useInvoices({
+    status: statusFilter || undefined,
+    limit:  PER_PAGE,
+    offset: (page - 1) * PER_PAGE,
+  });
   const { data: stats } = useBillingStats();
   const createInvoice = useCreateInvoice();
 
-  const invoices = invoicesData?.rows ?? [];
+  useEffect(() => { setPage(1); }, [statusFilter]);
+
+  const invoices   = invoicesData?.rows ?? [];
+  const totalInv   = invoicesData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalInv / PER_PAGE));
 
   return (
     <div className="flex h-full overflow-hidden bg-[#F9FAFB]">
@@ -293,7 +311,7 @@ export const FacturationView = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Facturation</h1>
-              <p className="text-xs text-gray-400 font-medium">{invoicesData?.total ?? 0} factures</p>
+              <p className="text-xs text-gray-400 font-medium">{totalInv} factures</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -305,6 +323,12 @@ export const FacturationView = () => {
             </Button>
           </div>
         </div>
+
+        {invoicesIsError && (
+          <div className="mx-6 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur de chargement des factures — vérifiez votre connexion et réessayez.
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-4 gap-4 p-6 shrink-0">
@@ -340,9 +364,7 @@ export const FacturationView = () => {
         <div className="flex-1 overflow-y-auto mx-6 mb-6">
           <Card className="bg-white border-transparent shadow-sm overflow-hidden">
             {isLoading ? (
-              <div className="flex items-center justify-center py-16 text-gray-400 gap-2">
-                <Loader2 size={18} className="animate-spin" /> Chargement…
-              </div>
+              <TableSkeleton rows={8} cols={7} />
             ) : invoices.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-gray-400">
                 <FileText size={32} className="mb-3 opacity-20" />
@@ -388,6 +410,31 @@ export const FacturationView = () => {
                 </table>
               </div>
             )}
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/40 text-xs text-gray-500">
+                <span>
+                  {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, totalInv)} sur {totalInv}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => p - 1)}
+                    className="p-1.5 rounded-lg hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight size={14} className="rotate-180" />
+                  </button>
+                  <span className="px-2 font-medium">{page} / {totalPages}</span>
+                  <button
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(p => p + 1)}
+                    className="p-1.5 rounded-lg hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </Card>
         </div>
       </div>
@@ -413,10 +460,15 @@ export const FacturationView = () => {
           <CreateInvoiceModal
             onClose={() => setShowCreate(false)}
             onCreate={async (input) => {
-              await createInvoice.mutateAsync(input);
-              setShowCreate(false);
+              try {
+                await createInvoice.mutateAsync(input);
+                setShowCreate(false);
+              } catch {
+                // error surfaced by isError prop below
+              }
             }}
             isLoading={createInvoice.isPending}
+            error={createInvoice.isError ? String(createInvoice.error) : undefined}
           />
         )}
       </AnimatePresence>
@@ -427,11 +479,12 @@ export const FacturationView = () => {
 // ─── Create Invoice Modal ─────────────────────────────────────────────────────
 
 function CreateInvoiceModal({
-  onClose, onCreate, isLoading,
+  onClose, onCreate, isLoading, error,
 }: {
   onClose: () => void;
   onCreate: (input: { billToName?: string; billToAddress?: string; billToVat?: string; notes?: string; dueDate?: string }) => Promise<void>;
   isLoading: boolean;
+  error?: string;
 }) {
   const [form, setForm] = useState({ billToName: '', billToAddress: '', billToVat: '', notes: '', dueDate: '' });
 
@@ -460,6 +513,9 @@ function CreateInvoiceModal({
             />
           </div>
         ))}
+        {error && (
+          <p className="text-xs text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>
+        )}
         <div className="flex gap-3 pt-2">
           <Button variant="ghost" onClick={onClose} className="flex-1 font-bold">Annuler</Button>
           <Button onClick={() => onCreate(form)} disabled={isLoading} className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20">

@@ -17,7 +17,6 @@
  *   - Errors are caught and logged; mock fallback returned to avoid breaking UI
  */
 import { supabase } from '@/src/lib/supabase';
-import { fetchCalendarData as fetchCalendarDataMock } from '../data/mockData';
 import type {
   RoomTypeData,
   DateColumn,
@@ -28,6 +27,7 @@ import type {
   CalcMode,
   PricingRules,
 } from '../types';
+import type { NewRatePlanPayload, UpdateRatePlanPayload } from '../types';
 
 interface FetchResult {
   roomTypes: RoomTypeData[];
@@ -97,8 +97,7 @@ export async function fetchCalendarDataFromSupabase(
   const hotelId = await getCurrentHotelId();
 
   if (!hotelId) {
-    // Not authenticated or RPC unavailable → return mocks
-    return fetchCalendarDataMock(startDate, viewMode);
+    return { roomTypes: [], dateColumns: buildDateColumns(startDate, viewMode) };
   }
 
   const from = toISO(startDate);
@@ -146,8 +145,7 @@ export async function fetchCalendarDataFromSupabase(
     ]);
 
     if (roomsRes.error || plansRes.error) {
-      console.warn('[rms-adapter] supabase error, falling back to mocks:', roomsRes.error || plansRes.error);
-      return fetchCalendarDataMock(startDate, viewMode);
+      throw new Error((roomsRes.error || plansRes.error)?.message ?? 'Supabase fetch failed');
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -314,7 +312,70 @@ export async function fetchCalendarDataFromSupabase(
 
     return { roomTypes, dateColumns };
   } catch (err) {
-    console.warn('[rms-adapter] unexpected error, falling back to mocks:', err);
-    return fetchCalendarDataMock(startDate, viewMode);
+    throw err;
   }
+}
+
+// ─── Rate plan mutations ─────────────────────────────────────────────────────
+
+export async function persistAddRatePlan(payload: NewRatePlanPayload): Promise<void> {
+  const hotelId = await getCurrentHotelId();
+  if (!hotelId) return;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).from('rate_plans').insert({
+    hotel_id:            hotelId,
+    plan_code:           payload.planCode,
+    plan_name:           payload.planName,
+    pension_type:        payload.pensionType,
+    channel_type:        payload.channelType,
+    calc_mode:           payload.calcMode,
+    calc_value:          payload.calcValue,
+    connectivity_type:   payload.connectivityType,
+    distribution_channels: payload.distributionChannels,
+    min_stay:            payload.minStay,
+    max_stay:            payload.maxStay,
+    cancellation_policy: payload.cancellationPolicy || null,
+    meal_plan:           payload.mealPlan || null,
+    is_active:           true,
+    is_reference:        false,
+  });
+
+  if (error) console.error('[RMS] persistAddRatePlan failed:', error.message);
+}
+
+export async function persistUpdateRatePlan(payload: UpdateRatePlanPayload): Promise<void> {
+  const hotelId = await getCurrentHotelId();
+  if (!hotelId) return;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).from('rate_plans')
+    .update({
+      plan_name:            payload.planName,
+      pension_type:         payload.pensionType,
+      channel_type:         payload.channelType,
+      calc_mode:            payload.calcMode,
+      calc_value:           payload.calcValue,
+      connectivity_type:    payload.connectivityType,
+      distribution_channels: payload.distributionChannels,
+      updated_at:           new Date().toISOString(),
+    })
+    .eq('hotel_id', hotelId)
+    .eq('plan_code', payload.planCode);
+
+  if (error) console.error('[RMS] persistUpdateRatePlan failed:', error.message);
+}
+
+export async function persistDeleteRatePlan(planCode: string): Promise<void> {
+  const hotelId = await getCurrentHotelId();
+  if (!hotelId) return;
+
+  // Soft-delete: preserve history (rate_prices reference rate_plans)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any).from('rate_plans')
+    .update({ deleted_at: new Date().toISOString(), is_active: false })
+    .eq('hotel_id', hotelId)
+    .eq('plan_code', planCode);
+
+  if (error) console.error('[RMS] persistDeleteRatePlan failed:', error.message);
 }

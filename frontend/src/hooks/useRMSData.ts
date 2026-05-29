@@ -157,8 +157,10 @@ export function useRMSEventImpactScore(date: string, city: string = 'Paris') {
   return useQuery({
     queryKey: ['rms-event-impact', date, city],
     queryFn: async () => {
+      const sessionResult = await supabase.auth.getSession();
+      const tenantId = sessionResult.data.session?.user.user_metadata?.tenant_id ?? '';
       const { data, error } = await supabase.rpc('rms_get_event_impact_score', {
-        p_tenant_id: supabase.auth.getSession().then(s => s.data.session?.user.user_metadata.tenant_id),
+        p_tenant_id: tenantId,
         p_date: date,
         p_city: city,
       });
@@ -230,8 +232,10 @@ export function useRMSCompsetStats(date: string) {
   return useQuery({
     queryKey: ['rms-compset-stats', date],
     queryFn: async () => {
+      const sessionResult = await supabase.auth.getSession();
+      const tenantId = sessionResult.data.session?.user.user_metadata?.tenant_id ?? '';
       const { data, error } = await supabase.rpc('rms_get_compset_stats', {
-        p_tenant_id: supabase.auth.getSession().then(s => s.data.session?.user.user_metadata.tenant_id),
+        p_tenant_id: tenantId,
         p_date: date,
       });
 

@@ -109,35 +109,9 @@ const ReservationContext = createContext<ReservationContextType | undefined>(und
 
 // ─── CONSTANTES ───────────────────────────────────────────────────────────────
 
-const STORAGE_KEY = 'pms-reservations-v1';
 const OPTION_EXPIRY_INTERVAL = 60_000; // 60 secondes
 
-// ─── PERSISTENCE ─────────────────────────────────────────────────────────
-
-/** Charge les réservations depuis localStorage */
-const loadFromStorage = (): Reservation[] | null => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Si les données viennent de Supabase (marqueur), les charger
-      // Sinon, ignorer les vieux mocks (ils seront écrasés par useSupabaseSync)
-      return Array.isArray(parsed) ? parsed : null;
-    }
-  } catch (e) {
-    console.warn('[ReservationContext] Failed to load from storage:', e);
-  }
-  return null;
-};
-
-/** Sauvegarde les réservations dans localStorage */
-const saveToStorage = (reservations: Reservation[]) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(reservations));
-  } catch (e) {
-    console.warn('[ReservationContext] Failed to save to storage:', e);
-  }
-};
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
 
 /** Résout le statut effectif (rétrocompatibilité avec anciennes réservations sans reservationStatus) */
 const resolveStatus = (res: Reservation): ReservationStatus => {
@@ -171,8 +145,9 @@ const appendLog = (res: Reservation, log: Omit<ReservationLog, 'timestamp'>): Re
 const calcNights = (arrival: string, departure: string): number => {
   // Try to extract date part if it's "DD MMM HH:mm"
   const parseSpecial = (s: string) => {
-    if (s.includes(' avr.')) return new Date(2026, 3, parseInt(s));
-    if (s.includes(' mai')) return new Date(2026, 4, parseInt(s));
+    const y = new Date().getFullYear();
+    if (s.includes(' avr.')) return new Date(y, 3, parseInt(s));
+    if (s.includes(' mai')) return new Date(y, 4, parseInt(s));
     return new Date(s);
   };
 
@@ -183,158 +158,13 @@ const calcNights = (arrival: string, departure: string): number => {
   return Math.max(1, diff);
 };
 
-// ─── DONNÉES INITIALES ────────────────────────────────────────────────────────
-
-const INITIAL_RESERVATIONS: Reservation[] = [
-  {
-    id: 'RES-001',
-    priority: 'Critique',
-    room: '101',
-    roomType: 'STD/DLX',
-    status: 'Non prête',
-    statusColor: 'text-red-500/80',
-    dotColor: 'bg-red-400',
-    client: 'Sophie Dubois',
-    arrival: '2026-04-27 16:00',
-    departure: '2026-04-30 11:00',
-    checkIn: '2026-04-27',
-    checkOut: '2026-04-30',
-    source: 'AIRBNB',
-    sourceColor: 'bg-rose-400',
-    action: 'Lancer ménage',
-    governess: 'À faire',
-    vip: true,
-    payment: 'Partiel',
-    totalAmount: 420.00,
-    ownerFeeRate: 0.20,
-    pmsFeeRate: 0.15,
-    cleaningFee: 45,
-    email: 'sophie.dubois@gmail.com',
-    partnerRef: 'ABN-8271049',
-    reservationStatus: 'confirmed',
-    logs: [{ timestamp: new Date().toISOString(), action: 'Création initiale', userId: 'system' }],
-  },
-  {
-    id: 'RES-002',
-    priority: 'Élevée',
-    room: '105',
-    roomType: 'SUP/SEA',
-    status: 'Ménage en cours',
-    statusColor: 'text-orange-500/80',
-    dotColor: 'bg-orange-400',
-    client: 'Thomas Leroy',
-    arrival: '2026-04-27 14:00',
-    departure: '2026-04-29 11:00',
-    checkIn: '2026-04-27',
-    checkOut: '2026-04-29',
-    source: 'BOOKING.COM',
-    sourceColor: 'bg-indigo-400',
-    action: 'Lancer ménage',
-    governess: 'En cours',
-    vip: false,
-    payment: 'Payé',
-    totalAmount: 360.00,
-    ownerFeeRate: 0.18,
-    pmsFeeRate: 0.12,
-    cleaningFee: 50,
-    email: 'thomas.leroy@yahoo.com',
-    partnerRef: 'BK-3904872691',
-    reservationStatus: 'confirmed',
-    logs: [{ timestamp: new Date().toISOString(), action: 'Création initiale', userId: 'system' }],
-  },
-  {
-    id: 'RES-003',
-    priority: 'Élevée',
-    room: '107',
-    roomType: 'STD/DLX',
-    status: 'Arrivée < 1h',
-    statusColor: 'text-orange-500/80',
-    dotColor: 'bg-orange-400',
-    client: 'Claire Martin',
-    arrival: '2026-04-27 14:30',
-    departure: '2026-04-28 11:00',
-    checkIn: '2026-04-27',
-    checkOut: '2026-04-28',
-    source: 'DIRECT',
-    sourceColor: 'bg-green-400',
-    action: 'Inspection',
-    governess: 'À faire',
-    vip: true,
-    payment: 'En attente',
-    totalAmount: 175.00,
-    ownerFeeRate: 0.20,
-    pmsFeeRate: 0.15,
-    cleaningFee: 40,
-    email: 'claire.martin@outlook.com',
-    reservationStatus: 'pending',
-    logs: [{ timestamp: new Date().toISOString(), action: 'Création initiale', userId: 'system' }],
-  },
-  {
-    id: 'RES-004',
-    priority: 'Moyenne',
-    room: '102',
-    roomType: 'SUP/SEA',
-    status: 'Occupée',
-    statusColor: 'text-blue-500',
-    dotColor: 'bg-blue-500',
-    client: 'Arathew Smith',
-    arrival: '2026-04-26 15:00',
-    departure: '2026-04-27 11:00',
-    checkIn: '2026-04-26',
-    checkOut: '2026-04-27',
-    source: 'BOOKING.COM',
-    sourceColor: 'bg-indigo-600',
-    action: 'Refus de service',
-    governess: 'Validé',
-    vip: false,
-    payment: 'Payé',
-    totalAmount: 400.50,
-    ownerFeeRate: 0.15,
-    pmsFeeRate: 0.10,
-    cleaningFee: 60,
-    email: 'smith.a@company.com',
-    partnerRef: 'BK-5012784930',
-    reservationStatus: 'confirmed',
-    logs: [{ timestamp: new Date().toISOString(), action: 'Création initiale', userId: 'system' }],
-  },
-  {
-    id: 'RES-005',
-    priority: 'Faible',
-    room: '202',
-    roomType: 'STD/DLX',
-    status: 'Check-out fait',
-    statusColor: 'text-green-500/80',
-    dotColor: 'bg-green-400',
-    client: 'Nathalie B.',
-    arrival: '2026-04-27 10:30',
-    departure: '2026-04-27 10:30',
-    checkIn: '2026-04-27',
-    checkOut: '2026-04-27',
-    source: 'DIRECT',
-    sourceColor: 'bg-green-400',
-    action: 'Inspection',
-    governess: 'Validé',
-    vip: true,
-    payment: 'Payé',
-    totalAmount: 120.00,
-    ownerFeeRate: 0.20,
-    pmsFeeRate: 0.15,
-    cleaningFee: 40,
-    email: 'nathalie.b@gmail.com',
-    reservationStatus: 'confirmed',
-    logs: [{ timestamp: new Date().toISOString(), action: 'Création initiale', userId: 'system' }],
-  },
-];
-
 // ─── PROVIDER ─────────────────────────────────────────────────────────────────
+// In-memory bridge: populated by useSupabaseSync after login.
+// No localStorage — PMS data (guest PII, amounts) must not be cached client-side.
 
 export const ReservationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [baseReservations, setReservations] = useState<Reservation[]>(() => {
-    // Charger depuis localStorage si présent, sinon tableau vide
-    // useSupabaseSync va injecter les vraies données après login
-    const stored = loadFromStorage();
-    return stored ?? [];  // ← Plus de INITIAL_RESERVATIONS (mocks)
-  });
+  // Start empty; useSupabaseSync injects real Supabase data via replaceAll()
+  const [baseReservations, setReservations] = useState<Reservation[]>([]);
   const setRoomStatus = useConfigStore(state => state.setRoomStatus);
 
   // ── Enrichissement ──
@@ -368,11 +198,6 @@ export const ReservationProvider: React.FC<{ children: ReactNode }> = ({ childre
 
   const reservations = baseReservations.map(enrichReservation);
 
-  // ── Persistence: sauvegarder dans localStorage à chaque changement ──
-  useEffect(() => {
-    saveToStorage(baseReservations);
-  }, [baseReservations]);
-
   // ── Expiration automatique des options (toutes les 60 secondes) ──
   useEffect(() => {
     const interval = setInterval(() => {
@@ -394,7 +219,7 @@ export const ReservationProvider: React.FC<{ children: ReactNode }> = ({ childre
         });
         return changed ? updated : prev;
       });
-    }, 60_000);
+    }, OPTION_EXPIRY_INTERVAL);
     return () => clearInterval(interval);
   }, []);
 
@@ -463,33 +288,30 @@ export const ReservationProvider: React.FC<{ children: ReactNode }> = ({ childre
   }, []);
 
   const doCheckin = useCallback((id: string) => {
-    updateReservation(id, { 
+    updateReservation(id, {
       status: 'En séjour',
       statusColor: 'text-indigo-500',
       dotColor: 'bg-indigo-500',
       action: 'Check-out',
       reservationStatus: 'confirmed',
-      logs: [{ timestamp: new Date().toISOString(), action: 'Check-in effectué', userId: 'user' }]
+      logs: [{ timestamp: new Date().toISOString(), action: 'Check-in effectué', userId: 'user' }],
     });
   }, [updateReservation]);
 
   const doCheckout = useCallback((id: string) => {
     const res = baseReservations.find(r => r.id === id);
     if (res) {
-      updateReservation(id, { 
+      updateReservation(id, {
         status: 'Check-out fait',
         statusColor: 'text-gray-500',
         dotColor: 'bg-gray-400',
         action: 'Archivé',
         reservationStatus: 'confirmed',
-        logs: [{ timestamp: new Date().toISOString(), action: 'Check-out effectué', userId: 'user' }]
+        logs: [{ timestamp: new Date().toISOString(), action: 'Check-out effectué', userId: 'user' }],
       });
-      // Mettre la chambre en "dirty"
       setRoomStatus(res.room, 'dirty');
-      
-      // Simuler la création d'une facture
-      window.dispatchEvent(new CustomEvent('app-toast', { 
-        detail: { message: `Facture FA-${new Date().getFullYear()}-${id.split('-')[1]} générée pour ${res.client}` } 
+      window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: `Facture FA-${new Date().getFullYear()}-${id.split('-')[1]} générée pour ${res.client}` },
       }));
     }
   }, [updateReservation, baseReservations, setRoomStatus]);
@@ -514,10 +336,6 @@ export const ReservationProvider: React.FC<{ children: ReactNode }> = ({ childre
       .sort((a, b) => (b.overbookingPriority ?? 0) - (a.overbookingPriority ?? 0));
   }, [reservations]);
 
-  /**
-   * Remplace tout le tableau de réservations (utilisé par useSupabaseSync
-   * pour injecter les données Supabase au login).
-   */
   const replaceAll = useCallback((newReservations: Reservation[]) => {
     setReservations(newReservations);
   }, []);

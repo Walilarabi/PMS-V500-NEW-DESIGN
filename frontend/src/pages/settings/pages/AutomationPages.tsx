@@ -326,11 +326,7 @@ export const DistributionLogsPage: React.FC = () => (
     description="Historique des opérations de push/pull avec les channel managers et OTAs."
     storageKey="flowtym.distribution.logs"
     module="channel_manager"
-    defaults={[
-      { id: 'l1', label: 'Push tarifs Booking', code: 'PUSH', active: true, ota: 'Booking.com', eventType: 'push', timestamp: '2026-05-15T10:30:00Z', detail: '147 dates × 5 types' },
-      { id: 'l2', label: 'Pull dispo Expedia', code: 'PULL', active: true, ota: 'Expedia', eventType: 'pull', timestamp: '2026-05-15T10:25:00Z', detail: '147 dates' },
-      { id: 'l3', label: 'Erreur sync Airbnb', code: 'ERR', active: false, ota: 'Airbnb', eventType: 'error', timestamp: '2026-05-15T09:12:00Z', detail: 'Token API expiré' },
-    ]}
+    defaults={[]}
     extraColumns={[
       { header: 'OTA', render: (it) => it.ota },
       { header: 'Type', render: (it) => <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10.5px] font-semibold uppercase">{it.eventType}</span> },

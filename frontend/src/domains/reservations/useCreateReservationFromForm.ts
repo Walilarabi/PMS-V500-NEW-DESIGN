@@ -22,7 +22,8 @@ function generateReference(): string {
     String(now.getMonth() + 1).padStart(2, '0'),
     String(now.getDate()).padStart(2, '0'),
   ].join('');
-  const randPart = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const buf = crypto.getRandomValues(new Uint8Array(3));
+  const randPart = Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 4).toUpperCase();
   return `RES-${datePart}-${randPart}`;
 }
 

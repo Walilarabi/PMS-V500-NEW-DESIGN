@@ -32,7 +32,8 @@ import {
   Activity,
   TrendingDown,
   Target,
-  ZapOff
+  ZapOff,
+  X,
 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
@@ -108,7 +109,7 @@ const getRoomCode = (type: string, category: string): string => {
 
 export const PlanningView = () => {
   const { addReservation, updateReservation, reservations: contextReservations } = useReservations();
-  const { rooms: storeRooms, events: storeEvents, channels: storeChannels } = useConfigStore();
+  const { rooms: storeRooms, events: storeEvents, channels: storeChannels, syncStatus } = useConfigStore();
   const rmsEvents = useEventsStore((s) => s.events);
   
   // Calcul KPI temps réel automatique
@@ -193,6 +194,7 @@ export const PlanningView = () => {
 
   const [monthDate, setMonthDate] = React.useState(new Date());
   const [showMonthPicker, setShowMonthPicker] = React.useState(false);
+  const [showSettingsPanel, setShowSettingsPanel] = React.useState(false);
   const monthPickerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -362,8 +364,9 @@ export const PlanningView = () => {
     setIsCustomizingMove(false);
   };
   const handleToday = () => {
-    setCurrentDate(new Date(2026, 4, 1));
-    setMonthDate(new Date(2026, 4, 1));
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    setCurrentDate(today);
+    setMonthDate(today);
   };
 
   const viewLength = activeView === '7J' ? 7 : activeView === '15J' ? 15 : 31;
@@ -677,6 +680,25 @@ export const PlanningView = () => {
     }));
   }, [storeRooms, contextReservations]);
 
+  if (syncStatus === 'loading') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#F8FAFC] gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+        <p className="text-sm text-slate-500">Chargement du planning…</p>
+      </div>
+    );
+  }
+
+  if (syncStatus === 'error') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#F8FAFC] gap-3">
+        <AlertCircle className="w-8 h-8 text-rose-500" />
+        <p className="text-sm text-slate-700 font-medium">Impossible de charger le planning</p>
+        <p className="text-xs text-slate-400">Vérifiez votre connexion et rechargez la page.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col h-full bg-[#F8FAFC] overflow-hidden font-sans select-none" onMouseMove={handleMouseMove}>
       {/* Top Header Bar */}
@@ -741,7 +763,7 @@ export const PlanningView = () => {
                 >
                   <div className="grid grid-cols-3 gap-1 p-3">
                     {Array.from({ length: 12 }).map((_, i) => {
-                      const d = new Date(2026, i, 1);
+                      const d = new Date(new Date().getFullYear(), i, 1);
                       const isCurrent = i === (displayMode === 'Gantt' ? currentDate.getMonth() : monthDate.getMonth());
                       return (
                         <button
@@ -817,9 +839,17 @@ export const PlanningView = () => {
           </div>
 
           <div className="flex items-center gap-1">
+             {displayMode === 'Gantt' && (
+               <button
+                 onClick={() => setShowRightSidebar(!showRightSidebar)}
+                 className={cn("p-2.5 rounded-xl transition-all", showRightSidebar ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
+               >
+                 <Eye size={18} />
+               </button>
+             )}
              <button
-               onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Paramètres du planning ouverts' } }))}
-               className="p-2.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+               onClick={() => setShowSettingsPanel(true)}
+               className={cn("p-2.5 rounded-xl transition-all", showSettingsPanel ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
              >
                <Settings2 size={18} />
              </button>
@@ -2021,12 +2051,97 @@ export const PlanningView = () => {
       </AnimatePresence>
       
       {/* Modal Disponibilité par catégorie */}
-      <AvailabilityModal 
+      <AvailabilityModal
         isOpen={isAvailabilityModalOpen}
         onClose={() => setIsAvailabilityModalOpen(false)}
         dateRange={days.map(d => new Date(d.id))}
         roomsByCategory={availabilityData}
       />
+
+      {/* ── Paramètres du planning ────────────────────────────────── */}
+      {showSettingsPanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Settings2 size={16} className="text-indigo-600" />
+                <h3 className="font-bold text-gray-900 text-[14px]">Paramètres du planning</h3>
+              </div>
+              <button onClick={() => setShowSettingsPanel(false)} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Vue par défaut</p>
+                <div className="flex gap-1.5">
+                  {(['7J', '15J', 'Mois'] as const).map(v => (
+                    <button
+                      key={v}
+                      onClick={() => setActiveView(v)}
+                      className={cn(
+                        'flex-1 py-2 rounded-lg text-[12px] font-bold transition-colors',
+                        activeView === v ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                      )}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Mode d'affichage</p>
+                <div className="flex gap-1.5">
+                  {(['Gantt', 'Revenue'] as const).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => setDisplayMode(m)}
+                      className={cn(
+                        'flex-1 py-2 rounded-lg text-[12px] font-bold transition-colors',
+                        displayMode === m ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
+                      )}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-gray-700">Volet latéral</span>
+                <button
+                  onClick={() => setShowRightSidebar(v => !v)}
+                  className={cn(
+                    'w-10 h-6 rounded-full transition-colors relative',
+                    showRightSidebar ? 'bg-indigo-600' : 'bg-gray-200',
+                  )}
+                >
+                  <span className={cn('absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform', showRightSidebar ? 'translate-x-4' : 'translate-x-0.5')} />
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-semibold text-gray-700">Colonne chambre réduite</span>
+                <button
+                  onClick={() => setIsSidebarCollapsed(v => !v)}
+                  className={cn(
+                    'w-10 h-6 rounded-full transition-colors relative',
+                    isSidebarCollapsed ? 'bg-indigo-600' : 'bg-gray-200',
+                  )}
+                >
+                  <span className={cn('absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform', isSidebarCollapsed ? 'translate-x-4' : 'translate-x-0.5')} />
+                </button>
+              </div>
+            </div>
+            <div className="px-5 pb-4">
+              <button
+                onClick={() => setShowSettingsPanel(false)}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] font-semibold py-2.5 rounded-xl transition-colors"
+              >
+                Appliquer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   </div>
 );
