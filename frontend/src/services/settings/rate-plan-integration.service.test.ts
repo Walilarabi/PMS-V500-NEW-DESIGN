@@ -16,6 +16,7 @@ vi.mock('@/src/components/rms/store/rateCalendarStore', () => ({
 import {
   suggestRoomMapping,
   suggestMealPlanMapping,
+  suggestRoomMappingFromRows,
 } from './rate-plan-integration.service';
 import type { RoomTypeData } from '@/src/components/rms/types';
 
@@ -113,5 +114,52 @@ describe('suggestMealPlanMapping', () => {
   it('fallback sur RO pour les libellés inconnus', () => {
     const m = suggestMealPlanMapping(['Unknown meal plan']);
     expect(m['Unknown meal plan']).toBe('RO');
+  });
+});
+
+describe('suggestRoomMappingFromRows', () => {
+  const rows = [
+    { id: 'rt_std', room_type_code: 'STD', room_type_name: 'Standard' },
+    { id: 'rt_sup', room_type_code: 'SUP', room_type_name: 'Supérieure' },
+    { id: 'rt_jr', room_type_code: 'JR', room_type_name: 'Junior Suite' },
+  ];
+
+  it('matche les noms exacts', () => {
+    const m = suggestRoomMappingFromRows(['Standard', 'Supérieure'], rows);
+    expect(m['Standard']).toBe('rt_std');
+    expect(m['Supérieure']).toBe('rt_sup');
+  });
+
+  it('matche insensible à la casse / aux accents', () => {
+    const m = suggestRoomMappingFromRows(['SUPERIEURE', 'standard'], rows);
+    expect(m['SUPERIEURE']).toBe('rt_sup');
+    expect(m['standard']).toBe('rt_std');
+  });
+
+  it('matche par code de chambre', () => {
+    const m = suggestRoomMappingFromRows(['STD', 'JR'], rows);
+    expect(m['STD']).toBe('rt_std');
+    expect(m['JR']).toBe('rt_jr');
+  });
+
+  it('matche le libellé contenant le nom de la chambre', () => {
+    const m = suggestRoomMappingFromRows(['Standard Double', 'Supérieure Vue Mer'], rows);
+    expect(m['Standard Double']).toBe('rt_std');
+    expect(m['Supérieure Vue Mer']).toBe('rt_sup');
+  });
+
+  it('ignore les libellés inconnus (pas de clé dans le résultat)', () => {
+    const m = suggestRoomMappingFromRows(['Penthouse'], rows);
+    expect(m['Penthouse']).toBeUndefined();
+  });
+
+  it('retourne un objet vide pour un tableau vide de chambres', () => {
+    const m = suggestRoomMappingFromRows(['Standard'], []);
+    expect(Object.keys(m)).toHaveLength(0);
+  });
+
+  it('retourne un objet vide pour un tableau vide d\'entrées Excel', () => {
+    const m = suggestRoomMappingFromRows([], rows);
+    expect(Object.keys(m)).toHaveLength(0);
   });
 });
