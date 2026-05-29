@@ -31,6 +31,7 @@
  */
 
 import { emitRmsEvent } from '@/src/lib/rms/eventBus';
+import { recordRmsDecision } from '@/src/services/rms-decisions.service';
 
 export type PricingStatus = 'pending' | 'accepted' | 'rejected' | 'maintained';
 export type PricingSource = 'veille' | 'rms-table' | 'rms-reco' | 'rms-analyse' | 'calendar' | 'autopilot' | 'api';
@@ -234,6 +235,17 @@ export const centralPricingEngine = {
     };
     records.set(key, updated);
     notify();
+    recordRmsDecision({
+      stayDate: date,
+      roomTypeCode: opts.roomTypeCode ?? null,
+      action: 'accepted',
+      currentPrice: r.currentPrice,
+      suggestedPrice: r.suggestedPrice,
+      finalPrice,
+      strategy: r.strategy ?? '',
+      recommendation: 'accepted',
+      confidenceScore: r.confidence ?? null,
+    }).catch(() => {/* best-effort */});
     try {
       emitRmsEvent('rms-decision:accepted', {
         decisionId: `${date}-${opts.roomTypeCode ?? 'all'}-${Date.now()}`,
@@ -289,6 +301,17 @@ export const centralPricingEngine = {
     };
     records.set(key, updated);
     notify();
+    recordRmsDecision({
+      stayDate: date,
+      roomTypeCode: opts.roomTypeCode ?? null,
+      action: 'rejected',
+      currentPrice: r.currentPrice,
+      suggestedPrice: r.suggestedPrice,
+      finalPrice,
+      strategy: r.strategy ?? '',
+      recommendation: 'rejected',
+      confidenceScore: r.confidence ?? null,
+    }).catch(() => {/* best-effort */});
     try {
       emitRmsEvent('rms-decision:rejected', {
         decisionId: `${date}-${opts.roomTypeCode ?? 'all'}-${Date.now()}`,
@@ -340,6 +363,17 @@ export const centralPricingEngine = {
     };
     records.set(key, updated);
     notify();
+    recordRmsDecision({
+      stayDate: date,
+      roomTypeCode: opts.roomTypeCode ?? null,
+      action: 'maintained',
+      currentPrice: r.currentPrice,
+      suggestedPrice: r.suggestedPrice,
+      finalPrice,
+      strategy: r.strategy ?? '',
+      recommendation: 'maintained',
+      confidenceScore: r.confidence ?? null,
+    }).catch(() => {/* best-effort */});
     try {
       emitRmsEvent('rms-decision:accepted', {
         decisionId: `${date}-${opts.roomTypeCode ?? 'all'}-${Date.now()}`,
