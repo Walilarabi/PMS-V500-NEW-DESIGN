@@ -57,7 +57,6 @@ interface RatePlanFull {
   cancellation_policy_id: string | null;
   guarantee_policy: string | null;
   prepayment_percent: number | null;
-  room_type_id: string | null;
   distribution_channels: string[];
   created_at: string | null;
   updated_at: string | null;
@@ -91,7 +90,6 @@ const BLANK: Omit<RatePlanFull, 'id' | 'created_at' | 'updated_at'> = {
   cancellation_policy_id: null,
   guarantee_policy: null,
   prepayment_percent: null,
-  room_type_id: null,
   distribution_channels: [],
 };
 
@@ -142,7 +140,11 @@ export const RatePlanSheet: React.FC<Props> = ({ planId, canWrite, onClose, onSa
 
       if (planId) {
         const hid = await resolveHotelId();
-        const { data } = await sb.from('rate_plans').select('*').eq('id', planId).eq('hotel_id', hid).maybeSingle();
+        const [{ data }, { data: roomAssignments }, { data: partnerMappings }] = await Promise.all([
+          sb.from('rate_plans').select('*').eq('id', planId).eq('hotel_id', hid).maybeSingle(),
+          sb.from('rate_plan_room_type_assignments').select('room_type_id').eq('rate_plan_id', planId).eq('hotel_id', hid),
+          sb.from('rate_plan_partner_mappings').select('partner_id').eq('rate_plan_id', planId).eq('is_active', true),
+        ]);
         if (data) {
           setForm({
             plan_code: data.plan_code ?? '',
@@ -172,20 +174,14 @@ export const RatePlanSheet: React.FC<Props> = ({ planId, canWrite, onClose, onSa
             cancellation_policy_id: data.cancellation_policy_id ?? null,
             guarantee_policy: data.guarantee_policy ?? null,
             prepayment_percent: data.prepayment_percent ?? null,
-            room_type_id: data.room_type_id ?? null,
             distribution_channels: data.distribution_channels ?? [],
           });
-          setSelectedRooms(data.room_type_id ? new Set([data.room_type_id]) : new Set());
-          setSelectedPartners(new Set(data.distribution_channels ?? []));
-        }
-
-        // Load partner mappings
-        const { data: mappings } = await sb.from('rate_plan_partner_mappings')
-          .select('partner_id')
-          .eq('rate_plan_id', planId)
-          .eq('is_active', true);
-        if (mappings?.length) {
-          setSelectedPartners(new Set((mappings as { partner_id: string }[]).map((m) => m.partner_id)));
+          setSelectedRooms(new Set((roomAssignments ?? []).map((r: { room_type_id: string }) => r.room_type_id)));
+          if (partnerMappings?.length) {
+            setSelectedPartners(new Set((partnerMappings as { partner_id: string }[]).map((m) => m.partner_id)));
+          } else {
+            setSelectedPartners(new Set(data.distribution_channels ?? []));
+          }
         }
       }
     } catch (err) {
@@ -212,32 +208,16 @@ export const RatePlanSheet: React.FC<Props> = ({ planId, canWrite, onClose, onSa
         hotel_id: hid,
         plan_code: form.plan_code.trim(),
         plan_name: form.plan_name.trim(),
-        description: form.description || null,
         pension_type: form.pension_type,
         channel_type: form.channel_type,
         connectivity_type: form.connectivity_type,
         calc_mode: form.calc_mode,
         calc_value: form.calc_value ?? 0,
-        calc_percent: form.calc_percent ?? 0,
         reference_plan_id: form.reference_plan_id || null,
-        rounding_rule: form.rounding_rule,
-        min_price: form.min_price,
-        max_price: form.max_price,
-        currency: form.currency ?? 'EUR',
         is_reference: form.is_reference,
         is_active: form.is_active,
-        display_order: form.display_order,
         min_stay: form.min_stay,
         max_stay: form.max_stay,
-        cta: form.cta,
-        ctd: form.ctd,
-        release_days: form.release_days,
-        advance_booking_min: form.advance_booking_min,
-        advance_booking_max: form.advance_booking_max,
-        cancellation_policy_id: form.cancellation_policy_id || null,
-        guarantee_policy: form.guarantee_policy || null,
-        prepayment_percent: form.prepayment_percent,
-        room_type_id: selectedRooms.size > 0 ? [...selectedRooms][0] : null,
         distribution_channels: [...selectedPartners],
         updated_at: new Date().toISOString(),
       };
@@ -251,8 +231,26 @@ export const RatePlanSheet: React.FC<Props> = ({ planId, canWrite, onClose, onSa
       const newId = data?.id ?? savedId;
       setSavedId(newId);
 
-      // Sync partner mappings
       if (newId) {
+        // Sync room type assignments (delta)
+        const { data: existingRooms } = await sb.from('rate_plan_room_type_assignments')
+          .select('id, room_type_id').eq('rate_plan_id', newId).eq('hotel_id', hid);
+        const existingRoomRows: { id: string; room_type_id: string }[] = existingRooms ?? [];
+        const existingRoomSet = new Set(existingRoomRows.map((r) => r.room_type_id));
+        const roomsToAdd = [...selectedRooms].filter((rid) => !existingRoomSet.has(rid));
+        const roomsToRemove = existingRoomRows.filter((r) => !selectedRooms.has(r.room_type_id)).map((r) => r.id);
+        if (roomsToAdd.length) {
+          const { error: raErr } = await sb.from('rate_plan_room_type_assignments').upsert(
+            roomsToAdd.map((rid) => ({ hotel_id: hid, rate_plan_id: newId, room_type_id: rid })),
+            { onConflict: 'hotel_id,rate_plan_id,room_type_id' },
+          );
+          if (raErr) throw new Error(raErr.message);
+        }
+        if (roomsToRemove.length) {
+          await sb.from('rate_plan_room_type_assignments').delete().in('id', roomsToRemove);
+        }
+
+        // Sync partner mappings (delta)
         const { data: existing } = await sb.from('rate_plan_partner_mappings')
           .select('id, partner_id').eq('rate_plan_id', newId);
         const existingRows: { id: string; partner_id: string }[] = existing ?? [];
@@ -593,23 +591,68 @@ const TabAnnulation: React.FC<{ form: typeof BLANK; f: FormUpdater; canWrite: bo
 );
 
 const TabChambres: React.FC<{ opts: RoomTypeRow[]; selected: Set<string>; onChange: (s: Set<string>) => void; canWrite: boolean }> = ({ opts, selected, onChange, canWrite }) => {
-  const toggle = (id: string) => onChange(new Set([id]));
+  const allSelected = opts.length > 0 && opts.every((o) => selected.has(o.id));
+  const someSelected = !allSelected && opts.some((o) => selected.has(o.id));
+
+  const toggleAll = () => {
+    if (!canWrite) return;
+    onChange(allSelected ? new Set() : new Set(opts.map((o) => o.id)));
+  };
+
+  const toggle = (id: string) => {
+    if (!canWrite) return;
+    onChange((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
   if (opts.length === 0) return <div className="text-[12.5px] text-slate-400 py-8 text-center">Aucune chambre active.</div>;
+
   return (
-    <div className="space-y-2">
-      <p className="text-[12px] text-slate-500 mb-3">Sélectionnez la chambre associée à ce plan tarifaire (1 seule).</p>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <label className={cn('flex items-center gap-2 text-[13px] font-semibold rounded-lg px-3 py-2 ring-1 cursor-pointer select-none', allSelected ? 'bg-violet-50 ring-violet-200 text-violet-700' : 'bg-white ring-slate-200 text-slate-700')}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            ref={(el) => { if (el) el.indeterminate = someSelected; }}
+            onChange={toggleAll}
+            disabled={!canWrite}
+          />
+          Toutes les chambres
+        </label>
+        <span className="text-[12px] text-slate-500 tabular-nums">{selected.size} / {opts.length} sélectionnée{selected.size > 1 ? 's' : ''}</span>
+      </div>
+
       <div className="rounded-xl ring-1 ring-slate-100 divide-y divide-slate-50 max-h-[50vh] overflow-y-auto">
         {opts.map((o) => (
-          <label key={o.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50/60 cursor-pointer">
-            <input type="radio" name="room_type" checked={selected.has(o.id)} onChange={() => toggle(o.id)} disabled={!canWrite} />
-            <span className="text-[13px] text-slate-800 flex-1">{o.room_type_name}</span>
-            <span className="text-[11px] font-mono text-slate-400">{o.room_type_code}</span>
+          <label key={o.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50/60 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={selected.has(o.id)}
+              onChange={() => toggle(o.id)}
+              disabled={!canWrite}
+              className="accent-violet-600"
+            />
+            <div className="flex-1 min-w-0">
+              <span className="text-[13px] text-slate-800">{o.room_type_name}</span>
+            </div>
+            <span className="text-[11px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">{o.room_type_code}</span>
+            {selected.has(o.id) && (
+              <span className="text-[10px] font-semibold text-violet-600 bg-violet-50 px-1.5 py-0.5 rounded-full">Assignée</span>
+            )}
           </label>
         ))}
       </div>
-      {selected.size > 0 && (
-        <button onClick={() => onChange(new Set())} disabled={!canWrite} className="text-[11.5px] text-rose-500 hover:underline disabled:opacity-40">
-          Retirer l'association
+
+      {selected.size > 0 && canWrite && (
+        <button
+          onClick={() => onChange(new Set())}
+          className="text-[11.5px] text-rose-500 hover:underline"
+        >
+          Tout désélectionner
         </button>
       )}
     </div>
