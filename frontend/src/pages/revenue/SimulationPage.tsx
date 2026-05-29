@@ -112,6 +112,11 @@ export const SimulationPage: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto bg-[#F9FAFB] custom-scrollbar">
       <div className="p-6">
+        {reservationsQ.isError && (
+          <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur lors du chargement des données de réservation — simulation basée sur les valeurs de référence.
+          </div>
+        )}
         <RevenueHeader
           icon={Activity}
           title="Simulation RMS"

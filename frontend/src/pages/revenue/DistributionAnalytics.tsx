@@ -482,6 +482,11 @@ export function DistributionAnalytics() {
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto bg-gradient-to-b from-slate-50 to-white">
+      {reservationsQ.isError && (
+        <div className="mx-6 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+          Erreur lors du chargement des réservations — données partielles affichées.
+        </div>
+      )}
       <div className="space-y-6 px-6 py-5">
         <PremiumHeader
           icon={Network}
