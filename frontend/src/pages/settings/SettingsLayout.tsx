@@ -57,6 +57,7 @@ import { RoomsPage } from './pages/RoomsPage';
 import { RolesAccessPage } from './pages/RolesAccessPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { RatePlansPage } from './pages/RatePlansPage';
+import { PartnersPage } from './pages/PartnersPage';
 import { PaymentModesPage } from './pages/PaymentModesPage';
 // Wave 9 — Inventaire
 import { RoomTypesPage } from './pages/RoomTypesPage';
@@ -338,6 +339,7 @@ const SettingsContent: React.FC<{
   if (activePage === 'settings_roles') return <RolesAccessPage />;
   if (activePage === 'settings_sessions') return <SessionsPage />;
   if (activePage === 'settings_rate_plans') return <RatePlansPage onNavigate={onNavigate} />;
+  if (activePage === 'settings_partners') return <PartnersPage />;
   if (activePage === 'settings_payment_modes') return <PaymentModesPage />;
 
   // ─── Wave 9 — Inventaire ──────────────────────────────────────────────

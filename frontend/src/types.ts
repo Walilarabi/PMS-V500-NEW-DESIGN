@@ -114,6 +114,7 @@ export type PageId =
   | 'settings_conditions'
   | 'settings_seasons'
   | 'settings_age_categories'
+  | 'settings_partners'
   | 'settings_invoice'
   | 'settings_numbering'
   | 'settings_payment_modes'

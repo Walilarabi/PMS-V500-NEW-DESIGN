@@ -150,7 +150,9 @@ export async function importPartnerRatePlans(report: PartnerRateImportReport): P
     seenPairs.add(pair);
     mappingPayload.push({
       hotel_id: hotelId, rate_plan_id: ratePlanId, partner_id: partnerId,
-      partner_rate_code: pl.code, is_active: pl.isActive,
+      partner_rate_code: pl.code, partner_rate_name: pl.name,
+      meal_plan: pl.mealPlan, cancellation_type: pl.cancellationType, occupancy: pl.occupancy,
+      is_active: pl.isActive,
     });
     if (existingMappingPairs.has(pair)) result.mappingsUpdated++;
     else result.mappingsCreated++;

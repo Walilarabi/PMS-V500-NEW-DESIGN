@@ -82,6 +82,14 @@ export const SETTINGS_NAVIGATION: SettingsDomain[] = [
     ],
   },
   {
+    id: 'partners',
+    label: 'Partenaires',
+    icon: Network,
+    items: [
+      { id: 'settings_partners', label: 'Partenaires de distribution', icon: Network },
+    ],
+  },
+  {
     id: 'distribution',
     label: 'Distribution & OTA',
     icon: Share2,
