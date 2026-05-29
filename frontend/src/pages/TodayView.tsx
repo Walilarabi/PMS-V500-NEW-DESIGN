@@ -271,8 +271,14 @@ function TodayView() {
             </div>
           </div>
 
+          {flowday.error && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700 mb-4">
+              Erreur de chargement des données du jour — {flowday.error.message}
+            </div>
+          )}
+
           <div className="flex flex-col xl:flex-row gap-8">
-            
+
             {/* Main Content Area (Left/Center) */}
             <div className="flex-1 space-y-8 min-w-0">
               

@@ -452,7 +452,7 @@ export function RMSTableauPro() {
     return { from, to: to.toISOString().slice(0, 10) };
   }, [startDate, viewPeriod]);
 
-  const { byDate: operationalByDate, totalCapacity, hasData: hasOperationalData } = useOperationalData(
+  const { byDate: operationalByDate, totalCapacity, hasData: hasOperationalData, error: operationalError } = useOperationalData(
     operationalRange.from,
     operationalRange.to,
     refreshToken, // bumped to force re-fetch
@@ -1189,6 +1189,13 @@ export function RMSTableauPro() {
       <div className="px-4 pt-2">
         <OverrideStatusBanner />
       </div>
+
+      {/* ERROR BANNER */}
+      {operationalError && (
+        <div className="mx-4 mt-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+          Erreur de chargement des données opérationnelles — {operationalError.message}
+        </div>
+      )}
 
       {/* MAIN CONTENT */}
       <div className="flex-1 overflow-auto">

@@ -251,6 +251,12 @@ const AuditLogView: React.FC = () => {
           </div>
         </header>
 
+        {logsQ.isError && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur de chargement du journal d'audit — vérifiez votre connexion et réessayez.
+          </div>
+        )}
+
         <section className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="audit-kpis">
           <KpiCard label="Total événements" value={String(stats.total)} icon={ShieldCheck} tone="violet" />
           <KpiCard label="Créations" value={String(stats.created)} icon={ArrowUp} tone="emerald" />

@@ -278,7 +278,7 @@ export const FacturationView = () => {
   const [page, setPage] = useState(1);
   const PER_PAGE = 50;
 
-  const { data: invoicesData, isLoading, refetch, isFetching } = useInvoices({
+  const { data: invoicesData, isLoading, isError: invoicesIsError, refetch, isFetching } = useInvoices({
     status: statusFilter || undefined,
     limit:  PER_PAGE,
     offset: (page - 1) * PER_PAGE,
@@ -316,6 +316,12 @@ export const FacturationView = () => {
             </Button>
           </div>
         </div>
+
+        {invoicesIsError && (
+          <div className="mx-6 mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur de chargement des factures — vérifiez votre connexion et réessayez.
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-4 gap-4 p-6 shrink-0">

@@ -292,7 +292,7 @@ export const ReservationsView = () => {
   // ── Paginated + server-filtered query for the table
   const serverStatus  = statusFilter  !== 'ALL' ? [STATUS_MODAL_KEY[statusFilter]].filter(Boolean) as string[] : undefined;
   const serverSource  = channelFilter !== 'ALL' ? channelFilter.toLowerCase() : undefined;
-  const { data: tableData, isLoading } = useReservations({
+  const { data: tableData, isLoading, isError: tableIsError } = useReservations({
     limit:    perPage,
     offset:   (page - 1) * perPage,
     search:   debouncedSearch || undefined,
@@ -434,6 +434,11 @@ export const ReservationsView = () => {
         </div>
       )}
       <div className="p-6 space-y-5 max-w-[1800px] mx-auto">
+        {tableIsError && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur de chargement des réservations — vérifiez votre connexion et réessayez.
+          </div>
+        )}
         <LiveReservationsBanner />
 
         {/* ── Header ──────────────────────────────────────────────────── */}

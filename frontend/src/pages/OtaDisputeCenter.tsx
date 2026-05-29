@@ -136,6 +136,18 @@ export const OtaDisputeCenter: React.FC = () => {
           </div>
         </header>
 
+        {(disputesQ.isError || reliabilityQ.isError) && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-[12px] text-rose-700">
+            Erreur de chargement des litiges — vérifiez votre connexion et réessayez.
+          </div>
+        )}
+
+        {disputesQ.isLoading && (
+          <div className="rounded-lg bg-white border border-gray-100 px-4 py-6 text-center text-[12px] text-gray-400">
+            Chargement des litiges…
+          </div>
+        )}
+
         {/* KPIs */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Kpi testid="odms-kpi-open" label="Litiges ouverts" value={String(kpis.open)} hint="En cours" icon={ShieldAlert} tone="amber" />
