@@ -17,6 +17,7 @@
  *   - Errors are caught and logged; mock fallback returned to avoid breaking UI
  */
 import { supabase } from '@/src/lib/supabase';
+import { resolveHotelId } from '@/src/lib/hotelId';
 import type {
   RoomTypeData,
   DateColumn,
@@ -77,12 +78,8 @@ function buildDateColumns(start: Date, viewMode: ViewMode): DateColumn[] {
 async function getCurrentHotelId(): Promise<string | null> {
   const timeoutMs = 2_000;
   try {
-    const rpcPromise = (async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase.rpc as any)('get_user_hotel_id');
-      if (error || !data) return null;
-      return String(data);
-    })();
+    // Résolveur mémoïsé : instantané après le 1er appel (1 seul RPC/session).
+    const rpcPromise = resolveHotelId();
     const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
     return await Promise.race([rpcPromise, timeoutPromise]);
   } catch {

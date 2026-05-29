@@ -15,6 +15,7 @@ import { CascadePricingEngine } from "../engines/CascadePricingEngine";
 import { propagateVirtualRoomCascade, rebuildAllVirtualInventories } from "../engines/VirtualRoomCascadeEngine";
 import { dedupRoomTypes } from "../engines/RateCalendarDedupEngine";
 import { supabase } from "@/src/lib/supabase";
+import { resolveHotelId } from "@/src/lib/hotelId";
 import {
   upsertRoomTypeToSupabase, deleteRoomTypeFromSupabase,
   upsertRatePlanToSupabase, deleteRatePlanFromSupabase,
@@ -48,15 +49,9 @@ async function persistReferencePriceCascade(
   }
 }
 
+// Délègue au résolveur mémoïsé (1 RPC par session au lieu d'1 par écriture).
 async function getCurrentHotelIdSafe(): Promise<string | null> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase.rpc as any)('get_user_hotel_id');
-    if (error || !data) return null;
-    return String(data);
-  } catch {
-    return null;
-  }
+  return resolveHotelId();
 }
 
 let _internalIdCounter = 2000;
@@ -638,7 +633,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         set({ roomTypes: prev });   // rollback
         return { error };
       }
-      await get().loadData();
+      // Pas de loadData() : l'état optimiste est déjà exact (évite un refetch complet).
       return { error: null };
     },
 
@@ -721,7 +716,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         set({ roomTypes: prev });   // rollback
         return { error };
       }
-      await get().loadData();
+      // Pas de loadData() : l'état optimiste reflète déjà la modification.
       return { error: null };
     },
 

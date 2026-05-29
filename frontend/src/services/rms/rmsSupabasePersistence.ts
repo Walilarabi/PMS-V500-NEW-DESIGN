@@ -14,6 +14,7 @@
  */
 
 import { supabase } from '@/src/lib/supabase';
+import { resolveHotelId } from '@/src/lib/hotelId';
 import type { RoomTypeData, RatePlanData } from '@/src/components/rms/types';
 
 export interface PersistResult {
@@ -22,16 +23,7 @@ export interface PersistResult {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function getHotelId(): Promise<string | null> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase.rpc as any)('get_user_hotel_id');
-    if (error || !data) return null;
-    return String(data);
-  } catch {
-    return null;
-  }
-}
+const getHotelId = resolveHotelId; // résolveur mémoïsé (évite 1 RPC par écriture)
 
 // ─── Room Types ───────────────────────────────────────────────────────────────
 

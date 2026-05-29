@@ -8,6 +8,7 @@
  * Aucune donnée fake, aucun localStorage.
  */
 import { supabase } from '@/src/lib/supabase';
+import { resolveHotelId } from '@/src/lib/hotelId';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sb = supabase as any;
@@ -55,14 +56,50 @@ export interface Promotion {
   start_date: string | null; end_date: string | null; is_stackable: boolean; is_active: boolean;
 }
 
-export interface Option { id: string; code: string; name: string; }
+export interface Option { id: string; code: string; name: string; isVirtual?: boolean; }
 
-/** Types de chambres (id UUID + code + nom) pour les dropdowns de mapping. */
+/** Types de chambres ACTIVES (id UUID + code + nom) pour les mappings.
+ *  Inclut les chambres virtuelles (distribuables) ; exclut les inactives. */
 export async function listRoomTypeOptions(): Promise<Option[]> {
   const hid = await hotelId();
   if (!hid) return [];
-  const { data } = await sb.from('room_types').select('id, room_type_code, room_type_name').eq('hotel_id', hid).order('room_type_name');
-  return (data ?? []).map((r: { id: string; room_type_code: string; room_type_name: string }) => ({ id: r.id, code: r.room_type_code, name: r.room_type_name }));
+  const { data } = await sb.from('room_types')
+    .select('id, room_type_code, room_type_name, is_virtual')
+    .eq('hotel_id', hid).eq('is_active', true).order('room_type_name');
+  return (data ?? []).map((r: { id: string; room_type_code: string; room_type_name: string; is_virtual: boolean }) =>
+    ({ id: r.id, code: r.room_type_code, name: r.room_type_name, isVirtual: !!r.is_virtual }));
+}
+
+/**
+ * Synchronise en une fois les chambres mappées d'un partenaire :
+ * upsert (dédup hotel_id+partner_id+room_type_id) pour les sélectionnées,
+ * suppression pour celles décochées. Évite les doublons.
+ */
+export async function setPartnerRoomMappings(partnerId: string, roomTypeIds: string[]): Promise<{ error: string | null }> {
+  const hid = await hotelId();
+  if (!hid) return { error: 'Hôtel introuvable — reconnectez-vous.' };
+  const { data: existing } = await sb.from('partner_room_mappings').select('id, room_type_id').eq('partner_id', partnerId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existingRows: { id: string; room_type_id: string }[] = existing ?? [];
+  const selected = new Set(roomTypeIds);
+  const existingIds = new Set(existingRows.map((r) => r.room_type_id));
+  const toAdd = roomTypeIds.filter((id) => !existingIds.has(id));
+  const toRemove = existingRows.filter((r) => !selected.has(r.room_type_id)).map((r) => r.id);
+
+  if (toAdd.length) {
+    const payload = toAdd.map((rid) => ({ hotel_id: hid, partner_id: partnerId, room_type_id: rid, is_active: true }));
+    const { error } = await sb.from('partner_room_mappings').upsert(payload, { onConflict: 'hotel_id,partner_id,room_type_id' });
+    if (error) return { error: error.message };
+  }
+  if (roomTypeIds.length) {
+    await sb.from('partner_room_mappings').update({ is_active: true, updated_at: new Date().toISOString() })
+      .eq('partner_id', partnerId).in('room_type_id', roomTypeIds);
+  }
+  if (toRemove.length) {
+    const { error } = await sb.from('partner_room_mappings').delete().in('id', toRemove);
+    if (error) return { error: error.message };
+  }
+  return { error: null };
 }
 /** Plans tarifaires (id UUID + code + nom) pour les dropdowns de mapping. */
 export async function listRatePlanOptions(): Promise<Option[]> {
@@ -72,12 +109,7 @@ export async function listRatePlanOptions(): Promise<Option[]> {
   return (data ?? []).map((r: { id: string; plan_code: string; plan_name: string }) => ({ id: r.id, code: r.plan_code, name: r.plan_name }));
 }
 
-async function hotelId(): Promise<string | null> {
-  try {
-    const { data, error } = await sb.rpc('get_user_hotel_id');
-    return error || !data ? null : String(data);
-  } catch { return null; }
-}
+const hotelId = resolveHotelId; // résolveur mémoïsé partagé
 
 // ─── Partners list (with counts) ──────────────────────────────────────────────
 export async function listPartners(): Promise<PartnerSummary[]> {

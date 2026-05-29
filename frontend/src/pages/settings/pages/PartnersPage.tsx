@@ -250,46 +250,71 @@ const Field: React.FC<{ label: string; children: React.ReactNode }> = ({ label, 
   <label className="block"><span className="text-[11px] uppercase tracking-wide font-semibold text-slate-500">{label}</span>{children}</label>
 );
 
-// ─── Section : Mapping chambres ───────────────────────────────────────────────
+// ─── Section : Mapping chambres (multi-sélection + "Toutes les chambres") ─────
 const RoomMappingSection: React.FC<{ partnerId: string; canWrite: boolean }> = ({ partnerId, canWrite }) => {
-  const [rows, setRows] = useState<svc.RoomMapping[]>([]);
   const [opts, setOpts] = useState<svc.Option[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [roomTypeId, setRoomTypeId] = useState('');
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [m, o] = await Promise.all([svc.getRoomMappings(partnerId), svc.listRoomTypeOptions()]);
-    setRows(m); setOpts(o); setLoading(false);
+    setOpts(o);
+    setSelected(new Set(m.filter((r) => r.is_active).map((r) => r.room_type_id)));
+    setLoading(false);
   }, [partnerId]);
   useEffect(() => { void load(); }, [load]);
 
-  const add = async () => {
-    if (!roomTypeId) { toast('Sélectionnez une chambre', 'error'); return; }
-    const { error } = await svc.upsertRoomMapping({ partner_id: partnerId, room_type_id: roomTypeId, partner_room_code: code || null, partner_room_name: name || null, is_active: true });
-    if (error) { toast(`Échec — ${error}`, 'error'); return; }
-    setRoomTypeId(''); setCode(''); setName(''); toast('Mapping chambre enregistré'); void load();
+  const allSelected = opts.length > 0 && opts.every((o) => selected.has(o.id));
+
+  const toggleAll = () => {
+    setSelected(allSelected ? new Set() : new Set(opts.map((o) => o.id)));
   };
-  const del = async (id: string) => { const { error } = await svc.deleteRow('partner_room_mappings', id); if (error) toast(error, 'error'); else void load(); };
-  const nameOf = (id: string) => opts.find((o) => o.id === id)?.name ?? id;
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await svc.setPartnerRoomMappings(partnerId, [...selected]);
+    setSaving(false);
+    if (error) { toast(`Échec — ${error}`, 'error'); return; }
+    toast(`${selected.size} chambre(s) distribuée(s) enregistrée(s)`); void load();
+  };
 
   if (loading) return <Loader2 className="w-4 h-4 animate-spin text-slate-400" />;
+  if (opts.length === 0) return <div className="text-[12.5px] text-slate-400 py-6 text-center">Aucune chambre active. Créez d'abord des chambres.</div>;
+
   return (
     <div className="space-y-3">
-      <MapTable rows={rows.map((r) => ({ id: r.id, c1: nameOf(r.room_type_id), c2: r.partner_room_code ?? '—', c3: r.partner_room_name ?? '—', active: r.is_active }))}
-        headers={['Chambre Flowtym', 'Code partenaire', 'Nom partenaire']} canWrite={canWrite} onDelete={del} />
+      <div className="flex items-center justify-between">
+        <label className={cn('flex items-center gap-2 text-[13px] font-semibold rounded-lg px-3 py-2 ring-1', allSelected ? 'bg-violet-50 ring-violet-200 text-violet-700' : 'bg-white ring-slate-200 text-slate-700')}>
+          <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={!canWrite} />
+          Toutes les chambres
+        </label>
+        <span className="text-[12px] text-slate-500 tabular-nums">{selected.size} / {opts.length} sélectionnée(s)</span>
+      </div>
+
+      <div className="rounded-xl ring-1 ring-slate-100 divide-y divide-slate-50 max-h-[46vh] overflow-y-auto">
+        {opts.map((o) => (
+          <label key={o.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50/60 cursor-pointer">
+            <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggleOne(o.id)} disabled={!canWrite} />
+            <span className="text-[13px] text-slate-800 flex-1">{o.name}</span>
+            {o.isVirtual && <span className="text-[10px] font-semibold uppercase tracking-wider bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded">Virtuelle</span>}
+            <span className="text-[11px] font-mono text-slate-400">{o.code}</span>
+          </label>
+        ))}
+      </div>
+
       {canWrite && (
-        <AddRow>
-          <select value={roomTypeId} onChange={(e) => setRoomTypeId(e.target.value)} className={inputCls}>
-            <option value="">— Chambre Flowtym —</option>
-            {opts.map((o) => <option key={o.id} value={o.id}>{o.name} ({o.code})</option>)}
-          </select>
-          <input placeholder="Code partenaire" value={code} onChange={(e) => setCode(e.target.value)} className={inputCls} />
-          <input placeholder="Nom partenaire" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
-          <AddBtn onClick={add} />
-        </AddRow>
+        <button onClick={save} disabled={saving} className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-50">
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Enregistrer les chambres distribuées
+        </button>
       )}
     </div>
   );

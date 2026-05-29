@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { useQueryClient } from '@tanstack/react-query';
 
 import { supabase } from '@/src/lib/supabase';
+import { clearHotelIdCache } from '@/src/lib/hotelId';
 import * as authRepo from './repository';
 import type { AuthSession, LoginInput, SignUpInput } from './schemas';
 
@@ -93,6 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       logout: async () => {
         await authRepo.signOut();
+        clearHotelIdCache();
         setSession(null);
         setStatus('unauthenticated');
       },
@@ -101,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsSwitchingHotel(true);
         try {
           await authRepo.switchActiveHotel(hotelId);
+          clearHotelIdCache(); // l'hôtel actif change → invalider le cache mémoïsé
           // Refetch session to get the new accessibleHotels with is_active updated
           const refreshed = await authRepo.refreshSession();
           if (refreshed) setSession(refreshed);
