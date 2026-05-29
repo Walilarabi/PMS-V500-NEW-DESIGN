@@ -320,46 +320,70 @@ const RoomMappingSection: React.FC<{ partnerId: string; canWrite: boolean }> = (
   );
 };
 
-// ─── Section : Mapping plans ──────────────────────────────────────────────────
+// ─── Section : Mapping plans (multi-sélection + "Tous les plans") ─────────────
 const PlanMappingSection: React.FC<{ partnerId: string; canWrite: boolean }> = ({ partnerId, canWrite }) => {
-  const [rows, setRows] = useState<svc.PlanMapping[]>([]);
   const [opts, setOpts] = useState<svc.Option[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [planId, setPlanId] = useState('');
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [m, o] = await Promise.all([svc.getPlanMappings(partnerId), svc.listRatePlanOptions()]);
-    setRows(m); setOpts(o); setLoading(false);
+    setOpts(o);
+    setSelected(new Set(m.filter((r) => r.is_active).map((r) => r.rate_plan_id)));
+    setLoading(false);
   }, [partnerId]);
   useEffect(() => { void load(); }, [load]);
 
-  const add = async () => {
-    if (!planId) { toast('Sélectionnez un plan tarifaire', 'error'); return; }
-    const { error } = await svc.upsertPlanMapping({ partner_id: partnerId, rate_plan_id: planId, partner_rate_code: code || null, partner_rate_name: name || null, is_active: true });
-    if (error) { toast(`Échec — ${error}`, 'error'); return; }
-    setPlanId(''); setCode(''); setName(''); toast('Mapping plan enregistré'); void load();
+  const allSelected = opts.length > 0 && opts.every((o) => selected.has(o.id));
+
+  const toggleAll = () => {
+    setSelected(allSelected ? new Set() : new Set(opts.map((o) => o.id)));
   };
-  const del = async (id: string) => { const { error } = await svc.deleteRow('rate_plan_partner_mappings', id); if (error) toast(error, 'error'); else void load(); };
-  const nameOf = (id: string) => opts.find((o) => o.id === id)?.name ?? id;
+  const toggleOne = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await svc.setPartnerRatePlanMappings(partnerId, [...selected]);
+    setSaving(false);
+    if (error) { toast(`Échec — ${error}`, 'error'); return; }
+    toast(`${selected.size} plan(s) distribué(s) enregistré(s)`); void load();
+  };
 
   if (loading) return <Loader2 className="w-4 h-4 animate-spin text-slate-400" />;
+  if (opts.length === 0) return <div className="text-[12.5px] text-slate-400 py-6 text-center">Aucun plan tarifaire actif. Créez d'abord des plans dans le Calendrier tarifaire.</div>;
+
   return (
     <div className="space-y-3">
-      <MapTable rows={rows.map((r) => ({ id: r.id, c1: nameOf(r.rate_plan_id), c2: r.partner_rate_code ?? '—', c3: r.partner_rate_name ?? '—', active: r.is_active }))}
-        headers={['Plan Flowtym', 'Code partenaire', 'Nom partenaire']} canWrite={canWrite} onDelete={del} />
+      <div className="flex items-center justify-between">
+        <label className={cn('flex items-center gap-2 text-[13px] font-semibold rounded-lg px-3 py-2 ring-1', allSelected ? 'bg-violet-50 ring-violet-200 text-violet-700' : 'bg-white ring-slate-200 text-slate-700')}>
+          <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={!canWrite} />
+          Tous les plans tarifaires
+        </label>
+        <span className="text-[12px] text-slate-500 tabular-nums">{selected.size} / {opts.length} sélectionné(s)</span>
+      </div>
+
+      <div className="rounded-xl ring-1 ring-slate-100 divide-y divide-slate-50 max-h-[46vh] overflow-y-auto">
+        {opts.map((o) => (
+          <label key={o.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50/60 cursor-pointer">
+            <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggleOne(o.id)} disabled={!canWrite} />
+            <span className="text-[13px] text-slate-800 flex-1">{o.name}</span>
+            <span className="text-[11px] font-mono text-slate-400">{o.code}</span>
+          </label>
+        ))}
+      </div>
+
       {canWrite && (
-        <AddRow>
-          <select value={planId} onChange={(e) => setPlanId(e.target.value)} className={inputCls}>
-            <option value="">— Plan Flowtym —</option>
-            {opts.map((o) => <option key={o.id} value={o.id}>{o.name} ({o.code})</option>)}
-          </select>
-          <input placeholder="Code partenaire" value={code} onChange={(e) => setCode(e.target.value)} className={inputCls} />
-          <input placeholder="Nom partenaire" value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
-          <AddBtn onClick={add} />
-        </AddRow>
+        <button onClick={save} disabled={saving} className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-50">
+          {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Enregistrer les plans distribués
+        </button>
       )}
     </div>
   );

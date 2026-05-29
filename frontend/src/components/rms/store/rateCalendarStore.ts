@@ -273,26 +273,8 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       const { startDate, viewMode } = get();
       set({ isLoading: true, loadError: null });
 
-      // Timeout 3s : évite que la page « mouline dans le vide » si Supabase
-      // / le RPC get_user_hotel_id ne répond jamais. On retombe sur les mocks
-      // ou on signale l'erreur à l'utilisateur. 3s est un compromis UX :
-      // suffisant pour un RPC sain (< 500ms typique), trop court pour qu'un
-      // utilisateur perçoive un mouline.
-      const timeoutMs = 3_000;
-      const fetchWithTimeout = (): Promise<Awaited<ReturnType<typeof fetchCalendarData>>> =>
-        new Promise((resolve, reject) => {
-          const timer = setTimeout(
-            () => reject(new Error(`Chargement du calendrier > ${timeoutMs / 1000}s — délai dépassé`)),
-            timeoutMs,
-          );
-          fetchCalendarData(startDate, viewMode).then(
-            (v) => { clearTimeout(timer); resolve(v); },
-            (e) => { clearTimeout(timer); reject(e); },
-          );
-        });
-
       try {
-        let { roomTypes, dateColumns } = await fetchWithTimeout();
+        let { roomTypes, dateColumns } = await fetchCalendarData(startDate, viewMode);
 
         // ✅ Appliquer ordre sauvegardé utilisateur (rooms)
         const savedOrder = localStorage.getItem('flowtym_room_order');

@@ -101,6 +101,38 @@ export async function setPartnerRoomMappings(partnerId: string, roomTypeIds: str
   }
   return { error: null };
 }
+/**
+ * Synchronise en une fois les plans distribués d'un partenaire :
+ * upsert pour les sélectionnés, suppression pour ceux décochés.
+ * Clé de dédup : hotel_id + partner_id + rate_plan_id.
+ */
+export async function setPartnerRatePlanMappings(partnerId: string, ratePlanIds: string[]): Promise<{ error: string | null }> {
+  const hid = await hotelId();
+  if (!hid) return { error: 'Hôtel introuvable — reconnectez-vous.' };
+  const { data: existing } = await sb.from('rate_plan_partner_mappings').select('id, rate_plan_id').eq('partner_id', partnerId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existingRows: { id: string; rate_plan_id: string }[] = existing ?? [];
+  const selected = new Set(ratePlanIds);
+  const existingIds = new Set(existingRows.map((r) => r.rate_plan_id));
+  const toAdd = ratePlanIds.filter((id) => !existingIds.has(id));
+  const toRemove = existingRows.filter((r) => !selected.has(r.rate_plan_id)).map((r) => r.id);
+
+  if (toAdd.length) {
+    const payload = toAdd.map((rid) => ({ hotel_id: hid, partner_id: partnerId, rate_plan_id: rid, is_active: true }));
+    const { error } = await sb.from('rate_plan_partner_mappings').upsert(payload, { onConflict: 'hotel_id,rate_plan_id,partner_id' });
+    if (error) return { error: error.message };
+  }
+  if (ratePlanIds.length) {
+    await sb.from('rate_plan_partner_mappings').update({ is_active: true, updated_at: new Date().toISOString() })
+      .eq('partner_id', partnerId).in('rate_plan_id', ratePlanIds);
+  }
+  if (toRemove.length) {
+    const { error } = await sb.from('rate_plan_partner_mappings').delete().in('id', toRemove);
+    if (error) return { error: error.message };
+  }
+  return { error: null };
+}
+
 /** Plans tarifaires (id UUID + code + nom) pour les dropdowns de mapping. */
 export async function listRatePlanOptions(): Promise<Option[]> {
   const hid = await hotelId();

@@ -44,6 +44,7 @@ export type MealPlanMapping = Record<string, PensionType>;
 /**
  * Suggère un mapping automatique en cherchant la correspondance par
  * normalisation des libellés (insensible à la casse, sans accents).
+ * Version pour RoomTypeData[] (store RMS).
  */
 export function suggestRoomMapping(uniqueRooms: string[], roomTypes: RoomTypeData[]): RoomTypeMapping {
   const map: RoomTypeMapping = {};
@@ -56,6 +57,28 @@ export function suggestRoomMapping(uniqueRooms: string[], roomTypes: RoomTypeDat
       norm(rt.roomTypeCode) === n,
     );
     if (found) map[excelRoom] = found.roomTypeId;
+  }
+  return map;
+}
+
+/**
+ * Même logique que suggestRoomMapping mais accepte les RoomTypeRow[] du
+ * service rate-plans.service (sans dépendance au store RMS).
+ */
+export function suggestRoomMappingFromRows(
+  uniqueRooms: string[],
+  rows: { id: string; room_type_code: string; room_type_name: string }[],
+): RoomTypeMapping {
+  const map: RoomTypeMapping = {};
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  for (const excelRoom of uniqueRooms) {
+    const n = norm(excelRoom);
+    const found = rows.find((r) =>
+      norm(r.room_type_name).includes(n) ||
+      n.includes(norm(r.room_type_name)) ||
+      norm(r.room_type_code) === n,
+    );
+    if (found) map[excelRoom] = found.id;
   }
   return map;
 }
