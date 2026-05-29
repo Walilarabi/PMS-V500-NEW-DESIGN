@@ -24,7 +24,6 @@ import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarSto
 import { RateManagerPanel } from '@/src/components/rms/calendar/RateManagerPanel';
 import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
 import { PARTNERS, PARTNERS_BY_ID } from '@/src/constants/partners';
-import { deleteRatePlanFromSupabase } from '@/src/services/rms/rmsSupabasePersistence';
 import type { RatePlanData, PensionType } from '@/src/components/rms/types';
 import type { PageId } from '@/src/types';
 import {
@@ -154,11 +153,11 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
     window.setTimeout(() => setToast(null), 2500);
   }
 
-  function handleDeletePlan(roomTypeId: string, plan: RatePlanData) {
+  async function handleDeletePlan(roomTypeId: string, plan: RatePlanData) {
     if (!canWrite) return;
     if (!window.confirm(`Supprimer le plan "${plan.planName}" ? Cette action est irréversible.`)) return;
-    deleteRatePlan(roomTypeId, plan.planId);
-    void deleteRatePlanFromSupabase(plan.planCode);
+    const { error } = await deleteRatePlan(roomTypeId, plan.planId);
+    if (error) { notify(`Suppression échouée — ${error}`); return; }
     audit({
       action: 'rate_plan_deleted',
       module: 'rms_revenue',

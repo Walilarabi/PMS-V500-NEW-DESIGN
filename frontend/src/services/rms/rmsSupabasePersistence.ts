@@ -1,18 +1,24 @@
 /**
  * FLOWTYM — Persistance Supabase pour les entités RMS
  *
- * Helpers fire-and-forget pour persister les mutations du store
+ * Helpers pour persister les mutations du store
  * (addRoomType / updateRoomType / addRatePlan / updateRatePlan…)
  * dans les tables Supabase.
  *
  * Stratégie :
- *   - best-effort : une erreur réseau ne bloque jamais l'UI
- *   - upsert sur `room_type_code` / `plan_code` + `hotel_id`
- *   - hotel_id récupéré via RPC `get_user_hotel_id` (déjà utilisé dans le store)
+ *   - chaque fonction renvoie { error: string | null } ; AUCUNE erreur
+ *     n'est avalée silencieusement (le store l'affiche en toast et
+ *     annule l'ajout optimiste si la persistance échoue) ;
+ *   - upsert sur `room_type_code` / `plan_code` + `hotel_id` ;
+ *   - hotel_id récupéré via RPC `get_user_hotel_id`.
  */
 
 import { supabase } from '@/src/lib/supabase';
 import type { RoomTypeData, RatePlanData } from '@/src/components/rms/types';
+
+export interface PersistResult {
+  error: string | null;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,12 +39,11 @@ async function getHotelId(): Promise<string | null> {
  * Upsert une chambre dans `public.room_types`.
  * Identifié par `(hotel_id, room_type_code)`.
  */
-export async function upsertRoomTypeToSupabase(room: RoomTypeData): Promise<void> {
+export async function upsertRoomTypeToSupabase(room: RoomTypeData): Promise<PersistResult> {
   try {
     const hotelId = await getHotelId();
     if (!hotelId) {
-      console.warn('[rms-persist] No hotel_id — skipping room upsert');
-      return;
+      return { error: "Hôtel introuvable (session expirée ?) — reconnectez-vous." };
     }
 
     const payload = {
@@ -57,7 +62,6 @@ export async function upsertRoomTypeToSupabase(room: RoomTypeData): Promise<void
       partner_ids:      room.partnerIds ?? room.distributionChannels ?? [],
       is_virtual:       room.isVirtual ?? false,
       virtual_kind:     room.virtualKind ?? null,
-      // Stocker les IDs composants si chambre virtuelle
       virtual_component_ids: room.virtualComposition?.componentRoomTypeIds ?? null,
       virtual_components_required: room.virtualComposition?.componentsRequired ?? null,
     };
@@ -68,22 +72,24 @@ export async function upsertRoomTypeToSupabase(room: RoomTypeData): Promise<void
       .upsert(payload, { onConflict: 'hotel_id,room_type_code' });
 
     if (error) {
-      console.warn('[rms-persist] upsertRoomType failed:', error.message);
-    } else {
-      console.info(`[rms-persist] ✅ Room upserted: ${room.roomTypeCode}`);
+      console.error('[rms-persist] upsertRoomType failed:', error.message);
+      return { error: error.message };
     }
+    return { error: null };
   } catch (err) {
-    console.warn('[rms-persist] upsertRoomType threw:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[rms-persist] upsertRoomType threw:', msg);
+    return { error: msg };
   }
 }
 
 /**
  * Supprime une chambre de `public.room_types`.
  */
-export async function deleteRoomTypeFromSupabase(roomTypeCode: string): Promise<void> {
+export async function deleteRoomTypeFromSupabase(roomTypeCode: string): Promise<PersistResult> {
   try {
     const hotelId = await getHotelId();
-    if (!hotelId) return;
+    if (!hotelId) return { error: "Hôtel introuvable — reconnectez-vous." };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
@@ -93,12 +99,14 @@ export async function deleteRoomTypeFromSupabase(roomTypeCode: string): Promise<
       .eq('room_type_code', roomTypeCode);
 
     if (error) {
-      console.warn('[rms-persist] deleteRoomType failed:', error.message);
-    } else {
-      console.info(`[rms-persist] ✅ Room deleted: ${roomTypeCode}`);
+      console.error('[rms-persist] deleteRoomType failed:', error.message);
+      return { error: error.message };
     }
+    return { error: null };
   } catch (err) {
-    console.warn('[rms-persist] deleteRoomType threw:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[rms-persist] deleteRoomType threw:', msg);
+    return { error: msg };
   }
 }
 
@@ -108,12 +116,11 @@ export async function deleteRoomTypeFromSupabase(roomTypeCode: string): Promise<
  * Upsert un plan tarifaire dans `public.rate_plans`.
  * Identifié par `(hotel_id, plan_code)`.
  */
-export async function upsertRatePlanToSupabase(plan: RatePlanData): Promise<void> {
+export async function upsertRatePlanToSupabase(plan: RatePlanData): Promise<PersistResult> {
   try {
     const hotelId = await getHotelId();
     if (!hotelId) {
-      console.warn('[rms-persist] No hotel_id — skipping rate plan upsert');
-      return;
+      return { error: "Hôtel introuvable (session expirée ?) — reconnectez-vous." };
     }
 
     const payload = {
@@ -137,22 +144,24 @@ export async function upsertRatePlanToSupabase(plan: RatePlanData): Promise<void
       .upsert(payload, { onConflict: 'hotel_id,plan_code' });
 
     if (error) {
-      console.warn('[rms-persist] upsertRatePlan failed:', error.message);
-    } else {
-      console.info(`[rms-persist] ✅ Rate plan upserted: ${plan.planCode}`);
+      console.error('[rms-persist] upsertRatePlan failed:', error.message);
+      return { error: error.message };
     }
+    return { error: null };
   } catch (err) {
-    console.warn('[rms-persist] upsertRatePlan threw:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[rms-persist] upsertRatePlan threw:', msg);
+    return { error: msg };
   }
 }
 
 /**
  * Supprime un plan tarifaire de `public.rate_plans`.
  */
-export async function deleteRatePlanFromSupabase(planCode: string): Promise<void> {
+export async function deleteRatePlanFromSupabase(planCode: string): Promise<PersistResult> {
   try {
     const hotelId = await getHotelId();
-    if (!hotelId) return;
+    if (!hotelId) return { error: "Hôtel introuvable — reconnectez-vous." };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
@@ -162,11 +171,13 @@ export async function deleteRatePlanFromSupabase(planCode: string): Promise<void
       .eq('plan_code', planCode);
 
     if (error) {
-      console.warn('[rms-persist] deleteRatePlan failed:', error.message);
-    } else {
-      console.info(`[rms-persist] ✅ Rate plan deleted: ${planCode}`);
+      console.error('[rms-persist] deleteRatePlan failed:', error.message);
+      return { error: error.message };
     }
+    return { error: null };
   } catch (err) {
-    console.warn('[rms-persist] deleteRatePlan threw:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[rms-persist] deleteRatePlan threw:', msg);
+    return { error: msg };
   }
 }

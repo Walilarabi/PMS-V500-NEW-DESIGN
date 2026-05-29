@@ -130,15 +130,15 @@ interface RateCalendarStore {
   resetRatePlansOrder: (roomTypeId?: string) => void;
   resetRoomTypesOrder: () => void;
 
-  // CRUD
-  addRoomType: (payload: NewRoomPayload) => void;
-  updateRoomType: (payload: UpdateRoomPayload) => void;
-  deleteRoomType: (roomTypeId: string) => void;
+  // CRUD — les mutations persistées renvoient { error } (null = succès)
+  addRoomType: (payload: NewRoomPayload) => Promise<{ error: string | null }>;
+  updateRoomType: (payload: UpdateRoomPayload) => Promise<{ error: string | null }>;
+  deleteRoomType: (roomTypeId: string) => Promise<{ error: string | null }>;
   toggleRoomActive: (roomTypeId: string) => void;
   setRoomAsReference: (roomTypeId: string) => void;
-  addRatePlan: (payload: NewRatePlanPayload) => void;
-  updateRatePlan: (payload: UpdateRatePlanPayload) => void;
-  deleteRatePlan: (roomTypeId: string, planId: string) => void;
+  addRatePlan: (payload: NewRatePlanPayload) => Promise<{ error: string | null }>;
+  updateRatePlan: (payload: UpdateRatePlanPayload) => Promise<{ error: string | null }>;
+  deleteRatePlan: (roomTypeId: string, planId: string) => Promise<{ error: string | null }>;
   toggleRatePlanActive: (roomTypeId: string, planId: string) => void;
   duplicateRatePlan: (roomTypeId: string, planId: string) => void;
 
@@ -558,53 +558,75 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       get().loadData();
     },
 
-    addRoomType: (payload) => {
+    // Persiste D'ABORD en base, puis recharge depuis la DB (source de vérité).
+    // Ajout optimiste pour un retour visuel instantané, ANNULÉ si l'écriture
+    // Supabase échoue → plus de "chambre fantôme" qui disparaît au reload.
+    addRoomType: async (payload) => {
       const roomTypeId = `rt_${payload.roomCode.toLowerCase()}`;
-      let newRoom!: RoomTypeData;
-      set((state) => {
-        const statuses = state.dateColumns.map(dc => ({
-          date: dc.date, status: "open" as const, label: "Disponible", capacity: payload.capacity,
-          inventory: payload.capacity, sold: 0, override: null, minStay: null, maxStay: null, cta: false, ctd: false,
-        }));
-        newRoom = {
-          internalId: nextInternalId(), roomTypeId, roomTypeName: payload.roomName, roomTypeCode: payload.roomCode,
-          capacity: payload.capacity, bathroom: payload.bathroom, equipment: payload.equipment, view: payload.view,
-          description: payload.description, isReference: payload.isReference, isActive: true,
-          assignedRatePlanIds: payload.assignedRatePlanIds,
-          distributionChannels: payload.partnerIds ?? payload.distributionChannels,
-          partnerIds: payload.partnerIds ?? payload.distributionChannels,
-          diffFromRef: payload.diffFromRef, diffType: payload.diffType, statuses, ratePlans: [],
-          isVirtual: payload.isVirtual,
-          virtualKind: payload.virtualKind,
-          virtualComposition: payload.virtualComposition,
-        };
-        return { roomTypes: [...state.roomTypes, newRoom], expandedRooms: { ...state.expandedRooms, [roomTypeId]: true } };
-      });
-      // Persistance Supabase best-effort (non bloquant)
-      if (newRoom) void upsertRoomTypeToSupabase(newRoom);
+      const statuses = get().dateColumns.map(dc => ({
+        date: dc.date, status: "open" as const, label: "Disponible", capacity: payload.capacity,
+        inventory: payload.capacity, sold: 0, override: null, minStay: null, maxStay: null, cta: false, ctd: false,
+      }));
+      const newRoom: RoomTypeData = {
+        internalId: nextInternalId(), roomTypeId, roomTypeName: payload.roomName, roomTypeCode: payload.roomCode,
+        capacity: payload.capacity, bathroom: payload.bathroom, equipment: payload.equipment, view: payload.view,
+        description: payload.description, isReference: payload.isReference, isActive: true,
+        assignedRatePlanIds: payload.assignedRatePlanIds,
+        distributionChannels: payload.partnerIds ?? payload.distributionChannels,
+        partnerIds: payload.partnerIds ?? payload.distributionChannels,
+        diffFromRef: payload.diffFromRef, diffType: payload.diffType, statuses, ratePlans: [],
+        isVirtual: payload.isVirtual,
+        virtualKind: payload.virtualKind,
+        virtualComposition: payload.virtualComposition,
+      };
+      // Optimiste
+      set((state) => ({ roomTypes: [...state.roomTypes, newRoom], expandedRooms: { ...state.expandedRooms, [roomTypeId]: true } }));
+      // Persistance bloquante + observable
+      const { error } = await upsertRoomTypeToSupabase(newRoom);
+      if (error) {
+        // Annule l'ajout optimiste
+        set((state) => ({ roomTypes: state.roomTypes.filter(r => r.roomTypeId !== roomTypeId) }));
+        return { error };
+      }
+      // Recharge depuis la DB → la liste reflète exactement ce qui est persisté
+      await get().loadData();
+      return { error: null };
     },
 
-    updateRoomType: (payload) => {
+    updateRoomType: async (payload) => {
+      const prev = get().roomTypes;
       set((state) => ({
         roomTypes: state.roomTypes.map(r => {
           if (r.roomTypeId !== payload.roomTypeId) return r;
-          const updated = {
+          return {
             ...r, ...payload,
             partnerIds: payload.partnerIds ?? payload.distributionChannels ?? r.partnerIds,
             distributionChannels: payload.partnerIds ?? payload.distributionChannels ?? r.distributionChannels,
           };
-          return updated;
         }),
       }));
-      // Persistance Supabase best-effort
       const updated = get().roomTypes.find(r => r.roomTypeId === payload.roomTypeId);
-      if (updated) void upsertRoomTypeToSupabase(updated);
+      if (!updated) return { error: 'Chambre introuvable.' };
+      const { error } = await upsertRoomTypeToSupabase(updated);
+      if (error) {
+        set({ roomTypes: prev });   // rollback
+        return { error };
+      }
+      await get().loadData();
+      return { error: null };
     },
 
-    deleteRoomType: (roomTypeId) => {
+    deleteRoomType: async (roomTypeId) => {
       const room = get().roomTypes.find(r => r.roomTypeId === roomTypeId);
+      if (!room) return { error: 'Chambre introuvable.' };
+      const prev = get().roomTypes;
       set((s) => ({ roomTypes: s.roomTypes.filter(r => r.roomTypeId !== roomTypeId) }));
-      if (room) void deleteRoomTypeFromSupabase(room.roomTypeCode);
+      const { error } = await deleteRoomTypeFromSupabase(room.roomTypeCode);
+      if (error) {
+        set({ roomTypes: prev });   // rollback
+        return { error };
+      }
+      return { error: null };
     },
     toggleRoomActive: (roomTypeId) => set((s) => ({ roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, isActive: !r.isActive } : r) })),
     setRoomAsReference: (roomTypeId) => set((s) => {
@@ -621,28 +643,33 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       return { roomTypes: next };
     }),
 
-    addRatePlan: (payload) => {
+    addRatePlan: async (payload) => {
       const planId = `plan_${payload.planCode.toLowerCase()}`;
-      let newPlan!: RatePlanData;
-      set((state) => {
-        newPlan = {
-          internalId: nextInternalId(), planId, planName: payload.planName, planCode: payload.planCode,
-          pensionType: payload.pensionType, channelType: payload.channelType, calcMode: payload.calcMode,
-          calcValue: payload.calcValue, referencePlanId: payload.referencePlanId, isReference: false,
-          isActive: true, connectivityType: payload.connectivityType, isConnectivityLocked: false,
-          assignedRoomTypeIds: payload.assignedRoomTypeIds,
-          distributionChannels: payload.partnerIds ?? payload.distributionChannels,
-          partnerIds: payload.partnerIds ?? payload.distributionChannels,
-          primaryPartnerId: payload.primaryPartnerId,
-          prices: [],
-        };
-        (newPlan as any).calcPercent = (payload as any).calcPercent || 0;
-        return { roomTypes: state.roomTypes.map(r => payload.assignedRoomTypeIds.includes(r.roomTypeId) ? { ...r, ratePlans: [...r.ratePlans, newPlan] } : r) };
-      });
-      if (newPlan) void upsertRatePlanToSupabase(newPlan);
+      const newPlan: RatePlanData = {
+        internalId: nextInternalId(), planId, planName: payload.planName, planCode: payload.planCode,
+        pensionType: payload.pensionType, channelType: payload.channelType, calcMode: payload.calcMode,
+        calcValue: payload.calcValue, referencePlanId: payload.referencePlanId, isReference: false,
+        isActive: true, connectivityType: payload.connectivityType, isConnectivityLocked: false,
+        assignedRoomTypeIds: payload.assignedRoomTypeIds,
+        distributionChannels: payload.partnerIds ?? payload.distributionChannels,
+        partnerIds: payload.partnerIds ?? payload.distributionChannels,
+        primaryPartnerId: payload.primaryPartnerId,
+        prices: [],
+      };
+      (newPlan as any).calcPercent = (payload as any).calcPercent || 0;
+      const prev = get().roomTypes;
+      set((state) => ({ roomTypes: state.roomTypes.map(r => payload.assignedRoomTypeIds.includes(r.roomTypeId) ? { ...r, ratePlans: [...r.ratePlans, newPlan] } : r) }));
+      const { error } = await upsertRatePlanToSupabase(newPlan);
+      if (error) {
+        set({ roomTypes: prev });   // rollback optimiste
+        return { error };
+      }
+      await get().loadData();       // recharge depuis la DB (visible calendrier + résa)
+      return { error: null };
     },
 
-    updateRatePlan: (payload) => {
+    updateRatePlan: async (payload) => {
+      const prev = get().roomTypes;
       set((state) => ({
         roomTypes: state.roomTypes.map(r => ({
           ...r,
@@ -657,22 +684,36 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
           }),
         })),
       }));
-      // Trouver le plan mis à jour pour la persistance
+      let updated: RatePlanData | undefined;
       for (const rt of get().roomTypes) {
-        const updated = rt.ratePlans.find(rp => rp.planId === payload.planId);
-        if (updated) { void upsertRatePlanToSupabase(updated); break; }
+        const u = rt.ratePlans.find(rp => rp.planId === payload.planId);
+        if (u) { updated = u; break; }
       }
+      if (!updated) return { error: 'Plan tarifaire introuvable.' };
+      const { error } = await upsertRatePlanToSupabase(updated);
+      if (error) {
+        set({ roomTypes: prev });   // rollback
+        return { error };
+      }
+      await get().loadData();
+      return { error: null };
     },
 
-    deleteRatePlan: (roomTypeId, planId) => {
-      // Extract planCode from planId before removing from state
+    deleteRatePlan: async (roomTypeId, planId) => {
       const plan = get().roomTypes
         .find(r => r.roomTypeId === roomTypeId)
         ?.ratePlans.find(p => p.planId === planId);
+      if (!plan) return { error: 'Plan tarifaire introuvable.' };
+      const prev = get().roomTypes;
       set((s) => ({
         roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, ratePlans: r.ratePlans.filter(p => p.planId !== planId) } : r)
       }));
-      if (plan) void deleteRatePlanFromSupabase(plan.planCode);
+      const { error } = await deleteRatePlanFromSupabase(plan.planCode);
+      if (error) {
+        set({ roomTypes: prev });   // rollback
+        return { error };
+      }
+      return { error: null };
     },
 
     toggleRatePlanActive: (roomTypeId, planId) => {

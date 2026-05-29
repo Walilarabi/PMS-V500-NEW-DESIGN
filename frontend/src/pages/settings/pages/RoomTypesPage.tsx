@@ -15,7 +15,6 @@ import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarSto
 import { RoomManagerPanel } from '@/src/components/rms/calendar/RoomManagerPanel';
 import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 import { deleteVirtualRoomFromSupabase } from '@/src/services/settings/settingsPersistence';
-import { deleteRoomTypeFromSupabase } from '@/src/services/rms/rmsSupabasePersistence';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
 import { PARTNERS_BY_ID } from '@/src/constants/partners';
 import type { PageId } from '@/src/types';
@@ -42,12 +41,16 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rooms');
   const audit = useAuditLogger();
 
-  /** Suppression d'une chambre physique avec persist Supabase */
-  function handleDeletePhysical(rt: { roomTypeId: string; roomTypeName: string; roomTypeCode: string }) {
+  /** Suppression d'une chambre physique — la persistance Supabase est gérée
+   *  dans le store (deleteRoomType → room_types), avec rollback si échec. */
+  async function handleDeletePhysical(rt: { roomTypeId: string; roomTypeName: string; roomTypeCode: string }) {
     if (!canWrite) return;
     if (!window.confirm(`Supprimer la chambre "${rt.roomTypeName}" ? Cette action est irréversible.`)) return;
-    deleteRoomType(rt.roomTypeId);
-    void deleteRoomTypeFromSupabase(rt.roomTypeCode);
+    const { error } = await deleteRoomType(rt.roomTypeId);
+    if (error) {
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Suppression échouée — ${error}`, type: 'error' } }));
+      return;
+    }
     audit({
       action: 'room_type_deleted',
       module: 'inventory_planning',
@@ -56,10 +59,15 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
     });
   }
 
-  function handleDeleteVirtual(rt: { roomTypeId: string; roomTypeName: string; roomTypeCode: string }) {
+  async function handleDeleteVirtual(rt: { roomTypeId: string; roomTypeName: string; roomTypeCode: string }) {
     if (!canWrite) return;
     if (!window.confirm(`Supprimer la chambre virtuelle "${rt.roomTypeName}" ? Cette action est irréversible.`)) return;
-    deleteRoomType(rt.roomTypeId);
+    const { error } = await deleteRoomType(rt.roomTypeId);
+    if (error) {
+      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Suppression échouée — ${error}`, type: 'error' } }));
+      return;
+    }
+    // Nettoyage best-effort de l'ancienne table legacy settings_virtual_rooms
     void deleteVirtualRoomFromSupabase(rt.roomTypeCode);
     audit({
       action: 'virtual_room_deleted',

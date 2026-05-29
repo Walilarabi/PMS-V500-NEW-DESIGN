@@ -20,7 +20,6 @@ import { Layers, X, Link2, Plus, Check, AlertCircle } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import type { RoomTypeData, VirtualRoomKind, BathroomType } from '@/src/components/rms/types';
-import { syncVirtualRoomToSupabase } from '@/src/services/settings/settingsPersistence';
 import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 
 type Preset = {
@@ -140,7 +139,9 @@ export const VirtualRoomModal: React.FC<VirtualRoomModalProps> = ({ open, onClos
     return components.reduce((s, c) => s + (c.capacity ?? 0), 0);
   }, [components, componentsRequired]);
 
-  function handleCreate() {
+  const [saving, setSaving] = useState(false);
+
+  async function handleCreate() {
     setError(null);
     if (!name.trim()) { setError('Nom de la chambre virtuelle requis'); return; }
     if (!code.trim()) { setError('Code de la chambre virtuelle requis'); return; }
@@ -158,7 +159,10 @@ export const VirtualRoomModal: React.FC<VirtualRoomModalProps> = ({ open, onClos
     const finalDescription = description.trim() || `Chambre virtuelle composée de ${components.map((c) => c.roomTypeName).join(' + ')}.`;
     const componentIds = [...selectedIds];
 
-    addRoomType({
+    setSaving(true);
+    // Persistance BLOQUANTE — n'affiche le succès / ne ferme que si l'écriture
+    // Supabase a réellement abouti.
+    const { error: saveError } = await addRoomType({
       roomName: name.trim(),
       roomCode: trimmedCode,
       capacity: computedCapacity,
@@ -178,20 +182,12 @@ export const VirtualRoomModal: React.FC<VirtualRoomModalProps> = ({ open, onClos
         componentsRequired,
       },
     });
+    setSaving(false);
 
-    // Synchro Supabase best-effort — n'altère pas l'UX si offline
-    void syncVirtualRoomToSupabase({
-      roomTypeId: `rt_${trimmedCode.toLowerCase()}`,
-      roomTypeName: name.trim(),
-      roomTypeCode: trimmedCode,
-      virtualKind: preset.kind,
-      componentRoomTypeIds: componentIds,
-      componentsRequired,
-      capacity: computedCapacity,
-      bathroom,
-      description: finalDescription,
-      isActive: true,
-    });
+    if (saveError) {
+      setError(`Échec de l'enregistrement — ${saveError}`);
+      return; // la modale reste ouverte
+    }
 
     audit({
       action: 'virtual_room_created',
@@ -206,6 +202,9 @@ export const VirtualRoomModal: React.FC<VirtualRoomModalProps> = ({ open, onClos
       },
     });
 
+    window.dispatchEvent(new CustomEvent('app-toast', {
+      detail: { message: `Chambre virtuelle "${name.trim()}" créée`, type: 'success' },
+    }));
     onCreated?.(`rt_${code.toLowerCase()}`);
     handleClose();
   }
@@ -438,9 +437,10 @@ export const VirtualRoomModal: React.FC<VirtualRoomModalProps> = ({ open, onClos
           </button>
           <button
             onClick={handleCreate}
-            className="px-4 py-2 text-[13px] font-medium text-white bg-gradient-to-r from-violet-600 to-violet-500 rounded-lg shadow-sm hover:shadow-md transition-all flex items-center gap-1.5"
+            disabled={saving}
+            className="px-4 py-2 text-[13px] font-medium text-white bg-gradient-to-r from-violet-600 to-violet-500 rounded-lg shadow-sm hover:shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Plus className="w-3.5 h-3.5" /> Créer la chambre virtuelle
+            <Plus className="w-3.5 h-3.5" /> {saving ? 'Enregistrement…' : 'Créer la chambre virtuelle'}
           </button>
         </div>
       </div>

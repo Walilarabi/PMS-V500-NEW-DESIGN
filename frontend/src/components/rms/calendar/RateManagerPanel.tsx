@@ -304,16 +304,20 @@ export function RateManagerPanel() {
         primaryPartnerId:     form.primaryPartnerId || undefined,
       };
 
-      if (selectedKey) {
-        updateRatePlan({ ...payload, planId: selectedKey });
-      } else {
-        addRatePlan({
-          ...payload,
-          minStay:             null,
-          maxStay:             null,
-          cancellationPolicy:  "",
-          mealPlan:            form.pensionType,
-        } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+      // Persistance Supabase BLOQUANTE — succès affiché seulement si l'écriture aboutit.
+      const { error } = selectedKey
+        ? await updateRatePlan({ ...payload, planId: selectedKey })
+        : await addRatePlan({
+            ...payload,
+            minStay:             null,
+            maxStay:             null,
+            cancellationPolicy:  "",
+            mealPlan:            form.pensionType,
+          } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+      if (error) {
+        setToast({ type: "error", msg: `Échec de l'enregistrement — ${error}` });
+        return; // le formulaire reste ouvert
       }
 
       setToast({
@@ -321,8 +325,9 @@ export function RateManagerPanel() {
         msg:  selectedKey ? "Plan tarifaire mis à jour ✓" : "Plan tarifaire créé ✓",
       });
       setTimeout(() => setShowForm(false), 1000);
-    } catch {
-      setToast({ type: "error", msg: "Une erreur est survenue" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Une erreur est survenue';
+      setToast({ type: "error", msg });
     } finally {
       setIsSaving(false);
     }
@@ -331,11 +336,12 @@ export function RateManagerPanel() {
   // ── Delete ───────────────────────────────────────────────────────────────
 
   const handleDelete = useCallback(
-    (roomId: string, planId: string, planName: string) => {
+    async (roomId: string, planId: string, planName: string) => {
       if (!window.confirm(`Supprimer "${planName}" ? Cette action est irréversible.`)) return;
       setDeletingId(planId);
       try {
-        deleteRatePlan(roomId, planId);
+        const { error } = await deleteRatePlan(roomId, planId);
+        if (error) { setToast({ type: "error", msg: `Suppression échouée — ${error}` }); return; }
         setToast({ type: "success", msg: `Plan "${planName}" supprimé` });
         if (selectedKey === planId) {
           setShowForm(false);

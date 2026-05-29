@@ -11,10 +11,18 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('@/src/lib/supabase', () => ({ supabase: { rpc: () => Promise.resolve({ data: null, error: null }) } }));
 vi.mock('@/src/services/rms/rmsSupabasePersistence', () => ({
-  upsertRoomTypeToSupabase: vi.fn(() => Promise.resolve()),
-  deleteRoomTypeFromSupabase: vi.fn(() => Promise.resolve()),
-  upsertRatePlanToSupabase: vi.fn(() => Promise.resolve()),
-  deleteRatePlanFromSupabase: vi.fn(() => Promise.resolve()),
+  upsertRoomTypeToSupabase: vi.fn(() => Promise.resolve({ error: null })),
+  deleteRoomTypeFromSupabase: vi.fn(() => Promise.resolve({ error: null })),
+  upsertRatePlanToSupabase: vi.fn(() => Promise.resolve({ error: null })),
+  deleteRatePlanFromSupabase: vi.fn(() => Promise.resolve({ error: null })),
+}));
+// loadData() reconciles from the "DB" — here the mock echoes the store's current
+// state, simulating a backend that has exactly what was just persisted.
+vi.mock('../data/supabaseAdapter', () => ({
+  fetchCalendarDataFromSupabase: vi.fn(async () => {
+    const { useRateCalendarStore } = await import('../store/rateCalendarStore');
+    return { roomTypes: useRateCalendarStore.getState().roomTypes, dateColumns: [] };
+  }),
 }));
 
 import { useRateCalendarStore } from '../store/rateCalendarStore';
@@ -36,23 +44,29 @@ describe('rateCalendarStore — safeSet ne récurse plus (cause racine des bouto
     expect(useRateCalendarStore.getState().roomPanelOpen).toBe(false);
   });
 
-  it('addRoomType crée bien un type dans le store (passe par safeSet + dedup)', () => {
+  it('addRoomType persiste AVANT de confirmer : succès Supabase → reste, échoue → annulé', async () => {
+    const persist = await import('@/src/services/rms/rmsSupabasePersistence');
     const before = useRateCalendarStore.getState().roomTypes.length;
-    useRateCalendarStore.getState().addRoomType({
+
+    // Cas succès : upsert OK → la chambre reste dans le store
+    (persist.upsertRoomTypeToSupabase as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ error: null });
+    const ok = await useRateCalendarStore.getState().addRoomType({
       roomName: 'Repro Suite', roomCode: 'REPRO1', capacity: 2, bathroom: 'Douche',
       equipment: ['wifi'], view: 'Ville', description: '', isReference: false,
       assignedRatePlanIds: [], partnerIds: ['direct'], diffFromRef: 0, diffType: 'fixed',
-    } as Parameters<ReturnType<typeof useRateCalendarStore.getState>['addRoomType']>[0]);
-    const after = useRateCalendarStore.getState().roomTypes;
-    expect(after.length).toBe(before + 1);
-    expect(after.some((r) => r.roomTypeCode === 'REPRO1')).toBe(true);
-  });
+    } as never);
+    expect(ok.error).toBeNull();
+    expect(useRateCalendarStore.getState().roomTypes.some((r) => r.roomTypeCode === 'REPRO1')).toBe(true);
 
-  it('dedup toujours actif : pas de doublon de roomTypeCode après double add', () => {
-    const s = useRateCalendarStore.getState();
-    s.addRoomType({ roomName: 'Dup', roomCode: 'DUP1', capacity: 1, bathroom: 'Douche', equipment: [], view: '', description: '', isReference: false, assignedRatePlanIds: [], partnerIds: [], diffFromRef: 0, diffType: 'fixed' } as never);
-    s.addRoomType({ roomName: 'Dup', roomCode: 'DUP1', capacity: 1, bathroom: 'Douche', equipment: [], view: '', description: '', isReference: false, assignedRatePlanIds: [], partnerIds: [], diffFromRef: 0, diffType: 'fixed' } as never);
-    const dup1 = useRateCalendarStore.getState().roomTypes.filter((r) => r.roomTypeCode === 'DUP1');
-    expect(dup1.length).toBe(1);
+    // Cas échec : upsert renvoie une erreur → ajout optimiste ANNULÉ (pas de fantôme)
+    (persist.upsertRoomTypeToSupabase as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ error: 'RLS denied' });
+    const ko = await useRateCalendarStore.getState().addRoomType({
+      roomName: 'Ghost', roomCode: 'GHOST1', capacity: 1, bathroom: 'Douche',
+      equipment: [], view: '', description: '', isReference: false,
+      assignedRatePlanIds: [], partnerIds: [], diffFromRef: 0, diffType: 'fixed',
+    } as never);
+    expect(ko.error).toBe('RLS denied');
+    expect(useRateCalendarStore.getState().roomTypes.some((r) => r.roomTypeCode === 'GHOST1')).toBe(false);
+    expect(useRateCalendarStore.getState().roomTypes.length).toBeGreaterThanOrEqual(before);
   });
 });

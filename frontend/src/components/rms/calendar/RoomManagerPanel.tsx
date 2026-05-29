@@ -366,10 +366,18 @@ export function RoomManagerPanel() {
         diffType: form.diffType,
       };
 
-      if (editingId) {
-        updateRoomType({ roomTypeId: editingId, ...payload });
-      } else {
-        addRoomType(payload);
+      // Persistance Supabase BLOQUANTE — on n'affiche le succès que si l'écriture
+      // a réellement abouti (plus de "chambre fantôme" qui disparaît au reload).
+      const { error } = editingId
+        ? await updateRoomType({ roomTypeId: editingId, ...payload })
+        : await addRoomType(payload);
+
+      if (error) {
+        setToast({ type: 'error', msg: `Échec de l'enregistrement — ${error}` });
+        window.dispatchEvent(new CustomEvent('app-toast', {
+          detail: { message: `Échec de l'enregistrement de la chambre — ${error}`, type: 'error' },
+        }));
+        return; // formulaire reste ouvert, l'utilisateur peut réessayer
       }
 
       // Toast global pour notifier le reste de l'app (Planning, Calendrier tarifaire)
@@ -394,9 +402,10 @@ export function RoomManagerPanel() {
       }, 1000);
     } catch (err) {
       console.error('[RoomManagerPanel] save failed:', err);
-      setToast({ type: "error", msg: "Erreur lors de la sauvegarde" });
+      const msg = err instanceof Error ? err.message : 'Erreur inconnue';
+      setToast({ type: "error", msg: `Erreur lors de la sauvegarde — ${msg}` });
       window.dispatchEvent(new CustomEvent('app-toast', {
-        detail: { message: 'Erreur lors de la sauvegarde de la chambre', type: 'error' },
+        detail: { message: `Erreur lors de la sauvegarde de la chambre — ${msg}`, type: 'error' },
       }));
     } finally {
       setIsSaving(false);
@@ -414,8 +423,9 @@ export function RoomManagerPanel() {
 
       setDeletingId(room.roomTypeId);
       try {
-        deleteRoomType(room.roomTypeId);
-        setToast({ type: "success", msg: `"${room.roomTypeName}" supprimée` });
+        const { error } = await deleteRoomType(room.roomTypeId);
+        if (error) setToast({ type: "error", msg: `Suppression échouée — ${error}` });
+        else setToast({ type: "success", msg: `"${room.roomTypeName}" supprimée` });
       } catch {
         setToast({ type: "error", msg: "Impossible de supprimer cette chambre" });
       } finally {
