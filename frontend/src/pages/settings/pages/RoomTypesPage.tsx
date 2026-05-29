@@ -19,6 +19,7 @@ import { usePagePermission } from '@/src/services/settings/permissionsService';
 import { PARTNERS_BY_ID } from '@/src/constants/partners';
 import type { PageId } from '@/src/types';
 import { VirtualRoomModal } from './VirtualRoomModal';
+import { RoomTypeSheet } from './RoomTypeSheet';
 
 const VIRTUAL_KIND_LABELS: Record<string, string> = {
   adjacent: 'Adjacentes',
@@ -37,6 +38,7 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
   const { roomTypes, loadData, deleteRoomType, openRoomPanel, isLoading: storeLoading, loadError } = useRateCalendarStore();
   const [search, setSearch] = useState('');
   const [virtualOpen, setVirtualOpen] = useState(false);
+  const [sheetRoomId, setSheetRoomId] = useState<string | 'new' | null>(null);
   const virtualCount = roomTypes.filter((rt) => rt.isVirtual).length;
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_rooms');
   const audit = useAuditLogger();
@@ -78,7 +80,7 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
   }
 
   function handleEditRoom(roomTypeId: string) {
-    openRoomPanel(roomTypeId);
+    setSheetRoomId(roomTypeId);
   }
 
   React.useEffect(() => { if (roomTypes.length === 0) loadData(); }, []); // eslint-disable-line
@@ -116,7 +118,7 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => canWrite && openRoomPanel(null)}
+              onClick={() => canWrite && setSheetRoomId('new')}
               disabled={!canWrite}
               title={!canWrite ? 'Permission requise : set_rooms (write)' : 'Créer un nouveau type de chambre'}
               className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
@@ -274,6 +276,15 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
       </div>
 
       <VirtualRoomModal open={virtualOpen} onClose={() => setVirtualOpen(false)} />
+
+      {sheetRoomId !== null && (
+        <RoomTypeSheet
+          roomId={sheetRoomId === 'new' ? null : sheetRoomId}
+          canWrite={canWrite}
+          onClose={() => setSheetRoomId(null)}
+          onSaved={() => { setSheetRoomId(null); void loadData(); }}
+        />
+      )}
     </div>
   );
 };

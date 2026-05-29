@@ -12,12 +12,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Grid, Search, Settings as SettingsIcon, ExternalLink, Star, Power, CheckCircle2,
   AlertCircle, Plug, Tag, Upload, FileSpreadsheet, Trash2, X, Zap, ArrowRight, Wand2,
-  RefreshCw, Plus,
+  RefreshCw, Plus, Pencil,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { RateManagerPanel } from '@/src/components/rms/calendar/RateManagerPanel';
 import { RatePlanImportModal } from './RatePlanImportModal';
+import { RatePlanSheet } from './RatePlanSheet';
 import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
 import type { PensionType } from '@/src/components/rms/types';
 import type { PageId } from '@/src/types';
@@ -55,6 +56,7 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [filterRoom, setFilterRoom] = useState<string>('all');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [sheetPlanId, setSheetPlanId] = useState<string | 'new' | null>(null);
   const audit = useAuditLogger();
 
   const canRead = usePermission('rev_pricing', 'read');
@@ -221,7 +223,7 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
           <div className="flex items-center gap-2 flex-wrap">
             <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
             <button
-              onClick={() => { if (canWrite) openRatePanel(null); }}
+              onClick={() => canWrite && setSheetPlanId('new')}
               disabled={!canWrite}
               title={!canWrite ? 'Permission requise : rev_pricing (write)' : 'Créer un plan tarifaire'}
               className="px-3 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-semibold hover:bg-violet-700 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
@@ -431,7 +433,7 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
                   </thead>
                   <tbody>
                     {filtered.map((plan) => (
-                      <tr key={plan.id} className="border-t border-slate-100 hover:bg-slate-50/60 group">
+                      <tr key={plan.id} className="border-t border-slate-100 hover:bg-slate-50/60 group cursor-pointer" onClick={() => setSheetPlanId(plan.id)}>
                         <td className="px-5 py-2.5">
                           <div className="flex items-center gap-2 min-w-0">
                             {plan.is_reference && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" aria-label="Plan de référence" />}
@@ -462,13 +464,18 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
                           </span>
                         </td>
                         <td className="px-3 py-2.5 text-right">
-                          {canWrite && (
-                            <button onClick={(e) => { e.stopPropagation(); void handleDeletePlan(plan); }}
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-50 text-rose-500 transition-opacity"
-                              title="Supprimer ce plan">
-                              <Trash2 className="w-3.5 h-3.5" />
+                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={(e) => { e.stopPropagation(); setSheetPlanId(plan.id); }}
+                              className="p-1 rounded hover:bg-violet-50 text-violet-500" title="Modifier ce plan">
+                              <Pencil className="w-3.5 h-3.5" />
                             </button>
-                          )}
+                            {canWrite && (
+                              <button onClick={(e) => { e.stopPropagation(); void handleDeletePlan(plan); }}
+                                className="p-1 rounded hover:bg-rose-50 text-rose-500" title="Supprimer ce plan">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -532,6 +539,16 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
         <div className="fixed bottom-6 right-6 rounded-xl bg-slate-900 text-white text-[12.5px] px-4 py-2.5 shadow-lg flex items-center gap-2 z-50">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" /> {toastMsg}
         </div>
+      )}
+
+      {/* Fiche plan tarifaire (premium drawer) */}
+      {sheetPlanId && (
+        <RatePlanSheet
+          planId={sheetPlanId === 'new' ? null : sheetPlanId}
+          canWrite={canWrite}
+          onClose={() => setSheetPlanId(null)}
+          onSaved={() => { void refresh(); notify('Plan enregistré'); }}
+        />
       )}
 
       {/* Modal intégration */}
