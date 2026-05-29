@@ -1006,6 +1006,31 @@ export function RMSTableauPro() {
 
   const validatedCount = rmsData.filter((d) => d.validationStatus !== 'En attente').length;
 
+  const handleExport = React.useCallback(() => {
+    if (rmsData.length === 0) return;
+    const header = 'Date;Jour;Occupation %;Prix actuel;Prix suggéré;Prix final;Stratégie;Recommandation;Confiance;Statut';
+    const rows = rmsData.map(d => [
+      d.date,
+      d.dayName,
+      d.occupancyRate,
+      d.currentPrice,
+      d.suggestedPrice,
+      d.finalPrice ?? '',
+      d.strategy,
+      d.recommendation,
+      d.confidenceScore,
+      d.validationStatus,
+    ].join(';'));
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rms_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [rmsData]);
+
   return (
     <div className="flex flex-col h-screen w-full bg-white overflow-hidden">
       <RevenueHeader
@@ -1143,7 +1168,11 @@ export function RMSTableauPro() {
             Filtres
           </button>
 
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 transition-colors">
+          <button
+            onClick={handleExport}
+            disabled={rmsData.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500 text-white text-sm font-semibold rounded-md hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
             <Download className="w-3.5 h-3.5" />
             Exporter
           </button>

@@ -61,6 +61,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
   const [payForm, setPayForm] = useState({ amount: '', method: 'card' as PaymentMethod, reference: '' });
   const [voidReason, setVoidReason] = useState('');
   const [showVoid, setShowVoid] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   if (isLoading || !invoice) {
     return (
@@ -101,6 +102,12 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
 
   return (
     <div className="flex flex-col h-full">
+      {actionError && (
+        <div className="mx-4 mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700 flex items-center justify-between">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="ml-2 text-rose-400 hover:text-rose-600">✕</button>
+        </div>
+      )}
       {/* Header */}
       <div className="p-6 border-b border-gray-100 flex items-start justify-between shrink-0">
         <div>
@@ -174,7 +181,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
                       {fmtEur(line.total_ttc ?? 0)}
                     </span>
                     {canEdit && line.source !== 'reversal' && (
-                      <button onClick={() => reverseLine.mutate({ lineId: line.id, invoiceId })} className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors" title="Annuler cette ligne">
+                      <button onClick={() => reverseLine.mutate({ lineId: line.id, invoiceId }, { onError: (err) => setActionError(`Annulation ligne échouée — ${err.message}`) })} className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors" title="Annuler cette ligne">
                         <RotateCcw size={12} />
                       </button>
                     )}
@@ -230,7 +237,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
                       {pay.status === 'reversed' ? 'Annulé' : 'OK'}
                     </Badge>
                     {pay.status === 'completed' && (
-                      <button onClick={() => { const r = prompt('Motif du remboursement ?'); if (r) reversePayment.mutate({ paymentId: pay.id, invoiceId, reason: r }); }} className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors" title="Rembourser">
+                      <button onClick={() => { const r = prompt('Motif du remboursement ?'); if (r) reversePayment.mutate({ paymentId: pay.id, invoiceId, reason: r }, { onError: (err) => setActionError(`Remboursement échoué — ${err.message}`) }); }} className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors" title="Rembourser">
                         <RotateCcw size={12} />
                       </button>
                     )}
@@ -245,7 +252,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
       {/* Actions */}
       <div className="p-4 border-t border-gray-100 flex gap-2 shrink-0">
         {canIssue && (
-          <Button onClick={() => issueInvoice.mutate(invoiceId)} disabled={issueInvoice.isPending} className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20">
+          <Button onClick={() => issueInvoice.mutate(invoiceId, { onError: (err) => setActionError(`Émission échouée — ${err.message}`) })} disabled={issueInvoice.isPending} className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20">
             {issueInvoice.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
             Émettre la facture
           </Button>
@@ -260,7 +267,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
       {showVoid && (
         <div className="p-4 border-t border-red-100 bg-red-50 space-y-3">
           <input value={voidReason} onChange={e => setVoidReason(e.target.value)} placeholder="Motif d'annulation obligatoire" className="w-full border border-red-200 rounded-xl px-3 py-2 text-sm focus:outline-none" />
-          <Button onClick={() => { if (voidReason) { voidInvoice.mutate({ id: invoiceId, reason: voidReason }); setShowVoid(false); } }} disabled={!voidReason || voidInvoice.isPending} className="w-full bg-red-500 text-white font-bold">
+          <Button onClick={() => { if (voidReason) { voidInvoice.mutate({ id: invoiceId, reason: voidReason }, { onError: (err) => setActionError(`Annulation échouée — ${err.message}`) }); setShowVoid(false); } }} disabled={!voidReason || voidInvoice.isPending} className="w-full bg-red-500 text-white font-bold">
             Confirmer l'annulation
           </Button>
         </div>

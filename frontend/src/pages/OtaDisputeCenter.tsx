@@ -508,7 +508,7 @@ const DisputeDrawer: React.FC<{
               </span>
               <button
                 type="button"
-                onClick={() => togglePause.mutate({ id: dispute.id, paused: !dispute.auto_send_paused })}
+                onClick={() => togglePause.mutate({ id: dispute.id, paused: !dispute.auto_send_paused }, { onError: (err) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }) })}
                 disabled={togglePause.isPending}
                 data-testid="odms-dispute-toggle-pause"
                 title={dispute.auto_send_paused
@@ -895,7 +895,7 @@ const RemindersQueueSection: React.FC = () => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => skip.mutate(r.id)}
+                            onClick={() => skip.mutate(r.id, { onError: (err) => toast({ title: 'Erreur', description: err.message, variant: 'destructive' }) })}
                             data-testid={`odms-reminder-skip-${r.id}`}
                             className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-gray-100 hover:bg-gray-200 text-gray-600"
                           >
