@@ -26,6 +26,8 @@ import type {
   CellStatus,
   CalcMode,
   PricingRules,
+  BathroomType,
+  VirtualRoomKind,
 } from '../types';
 import type { NewRatePlanPayload, UpdateRatePlanPayload } from '../types';
 
@@ -104,8 +106,16 @@ export async function fetchCalendarDataFromSupabase(
   const to = toISO(endOfWindow(startDate, viewMode));
 
   try {
-    // Parallel fetch — rooms, plans, prices, restrictions, pricing_rules
-    const [roomsRes, plansRes, pricesRes, restrictionsRes, rulesRes] = await Promise.all([
+    // Parallel fetch — room_types (primary), rooms (capacity), plans, prices, restrictions, rules
+    const [roomTypesRes, roomsRes, plansRes, pricesRes, restrictionsRes, rulesRes] = await Promise.all([
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any)
+        .from('room_types')
+        .select('id, room_type_code, room_type_name, capacity, bathroom, equipment, view, description, is_reference, is_active, diff_from_ref, diff_type, partner_ids, is_virtual, virtual_kind, virtual_component_ids, virtual_components_required')
+        .eq('hotel_id', hotelId)
+        .eq('is_active', true)
+        .order('is_reference', { ascending: false })
+        .order('room_type_code'),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any)
         .from('rooms')
@@ -144,27 +154,26 @@ export async function fetchCalendarDataFromSupabase(
         .maybeSingle(),
     ]);
 
-    if (roomsRes.error || plansRes.error) {
-      throw new Error((roomsRes.error || plansRes.error)?.message ?? 'Supabase fetch failed');
+    if (roomTypesRes.error) {
+      throw new Error(roomTypesRes.error.message ?? 'room_types fetch failed');
+    }
+    if (plansRes.error) {
+      throw new Error(plansRes.error.message ?? 'rate_plans fetch failed');
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const roomTypesFromDB = (roomTypesRes.data ?? []) as any[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rooms = (roomsRes.data ?? []) as any[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const plansRaw = (plansRes.data ?? []) as any[];
 
-    // ─── Déduplication des plans tarifaires en provenance Supabase ───────
-    // Bug fix Phase 4 : si la table `rate_plans` contient plusieurs lignes
-    // pour le même plan_code (legacy import / sync défaillante), on
-    // n'en garde qu'une (la plus récente par created_at descendant). Évite
-    // l'affichage "3 lignes tarifaires dupliquées" dans le calendrier.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // ─── Déduplication des plans tarifaires ─────────────────────────────
     const seenPlanCodes = new Set<string>();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const plans = plansRaw.filter((p: any) => {
       const key = String(p.plan_code ?? p.id ?? '').toLowerCase().trim();
-      if (!key) return false;
-      if (seenPlanCodes.has(key)) return false;
+      if (!key || seenPlanCodes.has(key)) return false;
       seenPlanCodes.add(key);
       return true;
     });
@@ -175,18 +184,15 @@ export async function fetchCalendarDataFromSupabase(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rules = (rulesRes.data ?? null) as any;
 
-    if (rooms.length === 0) {
-      // Hotel has no rooms with room_type_code yet → return empty grid (not mocks)
-      return {
-        roomTypes: [],
-        dateColumns: buildDateColumns(startDate, viewMode),
-      };
+    // Both sources empty → hotel genuinely has no configuration yet
+    if (roomTypesFromDB.length === 0 && rooms.length === 0) {
+      return { roomTypes: [], dateColumns: buildDateColumns(startDate, viewMode) };
     }
 
     const dateColumns = buildDateColumns(startDate, viewMode);
     const dateList = dateColumns.map((c) => c.date);
 
-    // Group rooms by room_type_code to count capacity
+    // Group rooms by room_type_code for physical capacity counts
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const roomGroups = new Map<string, any[]>();
     for (const r of rooms) {
@@ -195,120 +201,139 @@ export async function fetchCalendarDataFromSupabase(
       roomGroups.get(code)!.push(r);
     }
 
-    // Build RoomTypeData[]
     const referenceRoomCode = rules?.reference_room_type_code ?? null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const roomRulesMap = new Map<string, any>();
     if (rules?.room_rules && Array.isArray(rules.room_rules)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const rr of rules.room_rules as any[]) {
-        roomRulesMap.set(rr.room_type_code, rr);
-      }
+      for (const rr of rules.room_rules as any[]) roomRulesMap.set(rr.room_type_code, rr);
     }
 
-    const roomTypes: RoomTypeData[] = Array.from(roomGroups.entries()).map(
-      ([code, groupRooms], idx) => {
-        const sample = groupRooms[0];
-        const capacity = groupRooms.length;
-        const isReference = code === referenceRoomCode;
-        const roomRule = roomRulesMap.get(code);
+    // ─── Helper: build one RoomTypeData from a code + metadata ─────────
+    function buildRoomTypeData(
+      code: string,
+      idx: number,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      meta: { name: string; capacity: number; bathroom: string; equipment: any[]; view: string; description: string; isReference: boolean; isActive: boolean; diffFromRef: number; diffType: string; partnerIds: any[]; isVirtual: boolean; virtualKind: string | null; virtualComponentIds: string[] | null; virtualComponentsRequired: string | null },
+    ): RoomTypeData {
+      const physicalCount = roomGroups.get(code)?.length ?? meta.capacity;
+      const capacity = physicalCount > 0 ? physicalCount : meta.capacity;
+      const isReference = meta.isReference || code === referenceRoomCode;
+      const roomRule = roomRulesMap.get(code);
 
-        // Build statuses per date
-        const restrictionsForRoom = restrictions.filter(
-          (r) => r.room_type_code === code,
-        );
-        const statuses: RoomStatus[] = dateList.map((d) => {
-          const r = restrictionsForRoom.find((x) => x.stay_date === d);
-          return {
-            date: d,
-            status: 'open' as CellStatus,
-            label: '',
-            capacity,
-            inventory: r?.inventory ?? capacity,
-            sold: r?.sold ?? 0,
-            override: r?.inventory_override ?? undefined,
-            minStay: r?.min_stay ?? null,
-            maxStay: r?.max_stay ?? null,
-            cta: r?.cta ?? false,
-            ctd: r?.ctd ?? false,
-            // restrictionId + version (typed in RoomStatus):
-            restrictionId: r?.id,
-            restrictionVersion: r?.version,
-          } as RoomStatus;
-        });
-
-        // Build ratePlans for THIS room type
-        const ratePlans: RatePlanData[] = plans.map((p) => {
-          // Phase 8 — déduplication par date (bug "3 lignes tarifaires
-          // dupliquées" après push RMS répétés). On garde l'entrée avec
-          // la version la plus récente (priceVersion descendant).
-          const rawPrices = prices.filter(
-            (px) => px.room_type_code === code && px.plan_id === p.id,
-          );
-          const pricesByDate = new Map<string, typeof rawPrices[number]>();
-          for (const px of rawPrices) {
-            const existing = pricesByDate.get(px.stay_date);
-            if (!existing) { pricesByDate.set(px.stay_date, px); continue; }
-            const vNew = Number(px.version ?? 0);
-            const vOld = Number(existing.version ?? 0);
-            if (vNew > vOld) pricesByDate.set(px.stay_date, px);
-          }
-          const pricesForCell = Array.from(pricesByDate.values());
-          return {
-            internalId: idx * 1000 + plans.indexOf(p),
-            planId: p.id,
-            planCode: p.plan_code,
-            planName: p.plan_name,
-            pensionType: p.pension_type,
-            channelType: p.channel_type,
-            calcMode: (p.calc_mode as CalcMode) ?? 'derived',
-            calcValue: Number(p.calc_value ?? 0),
-            isReference: !!p.is_reference,
-            isActive: !!p.is_active,
-            connectivityType: p.connectivity_type,
-            isConnectivityLocked: !!p.is_connectivity_locked,
-            distributionChannels: Array.isArray(p.distribution_channels)
-              ? p.distribution_channels
-              : [],
-            minStay: p.min_stay ?? null,
-            maxStay: p.max_stay ?? null,
-            cancellationPolicy: p.cancellation_policy ?? null,
-            mealPlan: p.meal_plan ?? null,
-            prices: dateList.map((d) => {
-              const cell = pricesForCell.find((px) => px.stay_date === d);
-              return {
-                date: d,
-                price: Number(cell?.price ?? 0),
-                planClosed: !!cell?.plan_closed,
-                priceId: cell?.id,
-                priceVersion: cell?.version,
-                priceSource: cell?.source,
-              };
-            }),
-          } as RatePlanData;
-        });
-
+      const restrictionsForRoom = restrictions.filter((r) => r.room_type_code === code);
+      const statuses: RoomStatus[] = dateList.map((d) => {
+        const r = restrictionsForRoom.find((x) => x.stay_date === d);
         return {
-          internalId: idx + 1,
-          roomTypeId: code,
-          roomTypeName: sample.type ?? code,
-          roomTypeCode: code,
-          capacity,
-          bathroom: 'private' as const,
+          date: d, status: 'open' as CellStatus, label: '',
+          capacity, inventory: r?.inventory ?? capacity,
+          sold: r?.sold ?? 0, override: r?.inventory_override ?? undefined,
+          minStay: r?.min_stay ?? null, maxStay: r?.max_stay ?? null,
+          cta: r?.cta ?? false, ctd: r?.ctd ?? false,
+          restrictionId: r?.id, restrictionVersion: r?.version,
+        } as RoomStatus;
+      });
+
+      const ratePlans: RatePlanData[] = plans.map((p, pIdx) => {
+        const rawPrices = prices.filter((px) => px.room_type_code === code && px.plan_id === p.id);
+        const pricesByDate = new Map<string, typeof rawPrices[number]>();
+        for (const px of rawPrices) {
+          const existing = pricesByDate.get(px.stay_date);
+          if (!existing) { pricesByDate.set(px.stay_date, px); continue; }
+          if (Number(px.version ?? 0) > Number(existing.version ?? 0)) pricesByDate.set(px.stay_date, px);
+        }
+        const pricesForCell = Array.from(pricesByDate.values());
+        return {
+          internalId: idx * 1000 + pIdx,
+          planId: p.id, planCode: p.plan_code, planName: p.plan_name,
+          pensionType: p.pension_type, channelType: p.channel_type,
+          calcMode: (p.calc_mode as CalcMode) ?? 'derived',
+          calcValue: Number(p.calc_value ?? 0),
+          isReference: !!p.is_reference, isActive: !!p.is_active,
+          connectivityType: p.connectivity_type, isConnectivityLocked: !!p.is_connectivity_locked,
+          distributionChannels: Array.isArray(p.distribution_channels) ? p.distribution_channels : [],
+          minStay: p.min_stay ?? null, maxStay: p.max_stay ?? null,
+          cancellationPolicy: p.cancellation_policy ?? null, mealPlan: p.meal_plan ?? null,
+          prices: dateList.map((d) => {
+            const cell = pricesForCell.find((px) => px.stay_date === d);
+            return { date: d, price: Number(cell?.price ?? 0), planClosed: !!cell?.plan_closed, priceId: cell?.id, priceVersion: cell?.version, priceSource: cell?.source };
+          }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as unknown as RatePlanData;
+      });
+
+      return {
+        internalId: idx + 1,
+        roomTypeId: code,
+        roomTypeName: meta.name,
+        roomTypeCode: code,
+        capacity,
+        bathroom: (meta.bathroom ?? 'Douche') as BathroomType,
+        equipment: Array.isArray(meta.equipment) ? meta.equipment : [],
+        view: meta.view ?? '',
+        description: meta.description ?? '',
+        isReference,
+        isActive: meta.isActive,
+        assignedRatePlanIds: plans.map((p) => p.id),
+        distributionChannels: Array.isArray(meta.partnerIds) ? meta.partnerIds : [],
+        partnerIds: Array.isArray(meta.partnerIds) ? meta.partnerIds : [],
+        diffFromRef: Number(roomRule?.diff_value ?? meta.diffFromRef ?? 0),
+        diffType: ((roomRule?.diff_type ?? meta.diffType) as 'fixed' | 'percent') ?? 'fixed',
+        isVirtual: meta.isVirtual ?? false,
+        virtualKind: meta.virtualKind as VirtualRoomKind | undefined ?? undefined,
+        virtualComposition: meta.virtualComponentIds?.length
+          ? { componentRoomTypeIds: meta.virtualComponentIds, componentsRequired: (meta.virtualComponentsRequired ?? 'all') as 'all' | 'any' }
+          : undefined,
+        statuses,
+        ratePlans,
+      };
+    }
+
+    let roomTypes: RoomTypeData[];
+
+    if (roomTypesFromDB.length > 0) {
+      // ── Primary path: room_types table (Settings-managed) ──────────
+      roomTypes = roomTypesFromDB.map((rt, idx) =>
+        buildRoomTypeData(rt.room_type_code, idx, {
+          name: rt.room_type_name ?? rt.room_type_code,
+          capacity: Number(rt.capacity ?? 2),
+          bathroom: rt.bathroom ?? 'Douche',
+          equipment: Array.isArray(rt.equipment) ? rt.equipment : [],
+          view: rt.view ?? '',
+          description: rt.description ?? '',
+          isReference: !!rt.is_reference,
+          isActive: !!rt.is_active,
+          diffFromRef: Number(rt.diff_from_ref ?? 0),
+          diffType: rt.diff_type ?? 'fixed',
+          partnerIds: Array.isArray(rt.partner_ids) ? rt.partner_ids : [],
+          isVirtual: !!rt.is_virtual,
+          virtualKind: rt.virtual_kind ?? null,
+          virtualComponentIds: rt.virtual_component_ids ?? null,
+          virtualComponentsRequired: rt.virtual_components_required ?? null,
+        }),
+      );
+    } else {
+      // ── Fallback: build room types from physical rooms grouping ─────
+      roomTypes = Array.from(roomGroups.entries()).map(([code, groupRooms], idx) => {
+        const sample = groupRooms[0];
+        return buildRoomTypeData(code, idx, {
+          name: sample.type ?? code,
+          capacity: groupRooms.length,
+          bathroom: 'Douche',
           equipment: [],
           view: '',
           description: sample.category ?? '',
-          isReference,
+          isReference: false,
           isActive: true,
-          assignedRatePlanIds: plans.map((p) => p.id),
-          distributionChannels: [],
-          diffFromRef: Number(roomRule?.diff_value ?? 0),
-          diffType: (roomRule?.diff_type ?? 'fixed') as 'fixed' | 'percent',
-          statuses,
-          ratePlans,
-        };
-      },
-    );
+          diffFromRef: 0,
+          diffType: 'fixed',
+          partnerIds: [],
+          isVirtual: false,
+          virtualKind: null,
+          virtualComponentIds: null,
+          virtualComponentsRequired: null,
+        });
+      });
+    }
 
     return { roomTypes, dateColumns };
   } catch (err) {

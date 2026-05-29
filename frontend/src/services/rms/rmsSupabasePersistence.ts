@@ -124,15 +124,11 @@ export async function upsertRatePlanToSupabase(plan: RatePlanData): Promise<void
       channel_type:          plan.channelType,
       calc_mode:             plan.calcMode,
       calc_value:            plan.calcValue ?? 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      calc_percent:          (plan as any).calcPercent ?? 0,
       reference_plan_id:     plan.referencePlanId ?? null,
       connectivity_type:     plan.connectivityType,
       is_reference:          plan.isReference,
       is_active:             plan.isActive,
-      assigned_room_type_ids: plan.assignedRoomTypeIds ?? [],
-      partner_ids:           plan.partnerIds ?? plan.distributionChannels ?? [],
-      primary_partner_id:    plan.primaryPartnerId ?? null,
+      distribution_channels: plan.partnerIds ?? plan.distributionChannels ?? [],
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

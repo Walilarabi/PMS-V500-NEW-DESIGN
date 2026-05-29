@@ -155,7 +155,7 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
           </div>
           {filtered.length === 0 ? (
             <div className="px-5 py-12 text-center text-slate-400 text-[12.5px]">
-              {roomTypes.length === 0 ? 'Calendrier en cours de chargement…' : 'Aucun résultat.'}
+              {roomTypes.length === 0 ? 'Aucun type de chambre configuré. Cliquez sur « Créer une chambre » pour commencer.' : 'Aucun résultat pour cette recherche.'}
             </div>
           ) : (
             <ul className="divide-y divide-slate-100">
