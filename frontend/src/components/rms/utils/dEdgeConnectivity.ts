@@ -35,7 +35,6 @@ const DEDGE_CONFIG = {
  */
 export async function pushToDEdge(payload: DEdgePayload): Promise<DEdgeResponse> {
   if (!DEDGE_CONFIG.enabled) {
-    console.log("[D-EDGE] Sync désactivée - modification locale uniquement");
     return { success: true, messageId: "local_only", timestamp: new Date().toISOString() };
   }
 
@@ -54,7 +53,6 @@ export async function pushToDEdge(payload: DEdgePayload): Promise<DEdgeResponse>
 
     // Simulation pour démo
     await new Promise(r => setTimeout(r, 300));
-    console.log("[D-EDGE] Push:", payload);
     return {
       success: true,
       messageId: `msg_${Date.now()}`,
@@ -130,8 +128,7 @@ export function isRateLockedByDEdge(plan: RatePlanData): boolean {
 export async function unlockDERate(planId: string): Promise<boolean> {
   if (!DEDGE_CONFIG.enabled) return true;
 
-  // En production: appel API pour délier le tarif
-  console.log("[D-EDGE] Demande de déliaison pour:", planId);
+  // TODO: implement D-EDGE rate unlock API call
   await new Promise(r => setTimeout(r, 500));
   return true;
 }
