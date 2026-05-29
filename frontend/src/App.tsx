@@ -48,7 +48,6 @@ const AlertsPage          = lz(() => import('@/src/pages/revenue/AlertsPage'),  
 
 // Finance
 const FinanceLayout       = lz(() => import('@/src/pages/finance/FinanceLayout'),          'FinanceLayout');
-const FinanceView         = lz(() => import('@/src/pages/FinanceView'),                    'FinanceView');
 const FacturationView     = lz(() => import('@/src/pages/finance/FacturationView'),        'FacturationView');
 const AuditLogView        = lz(() => import('@/src/pages/finance/AuditLogView'),           'AuditLogView');
 const ReconciliationView  = lz(() => import('@/src/pages/finance/ReconciliationView'),     'ReconciliationView');
