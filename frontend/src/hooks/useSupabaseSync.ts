@@ -212,15 +212,11 @@ export function useSupabaseSync() {
           console.warn('[useSupabaseSync] rooms fetch failed:', roomsError.message);
         } else {
           const supabaseRooms = (roomsData ?? []) as SupabaseRoom[];
-          if (supabaseRooms.length > 0) {
-            const mappedRooms = supabaseRooms.map(mapSupabaseRoomToStore);
-            updateRooms(mappedRooms);
-            console.info(
-              `[useSupabaseSync] ✅ Synced ${mappedRooms.length} rooms from Supabase for hotel ${tenantId}`
-            );
-          } else {
-            console.info('[useSupabaseSync] No rooms in DB, keeping current store rooms');
-          }
+          const mappedRooms = supabaseRooms.map(mapSupabaseRoomToStore);
+          updateRooms(mappedRooms);
+          console.info(
+            `[useSupabaseSync] ✅ Synced ${mappedRooms.length} rooms from Supabase for hotel ${tenantId}`
+          );
         }
 
         // 2. RESERVATIONS — toujours fetch
@@ -240,15 +236,11 @@ export function useSupabaseSync() {
           console.warn('[useSupabaseSync] reservations fetch failed:', resError.message);
         } else {
           const supabaseReservations = (resData ?? []) as SupabaseReservation[];
-          if (supabaseReservations.length > 0) {
-            const mapped = supabaseReservations.map(mapSupabaseReservationToContext);
-            replaceAllReservations(mapped);
-            console.info(
-              `[useSupabaseSync] ✅ Synced ${mapped.length} reservations from Supabase for hotel ${tenantId}`
-            );
-          } else {
-            console.info('[useSupabaseSync] No reservations in DB.');
-          }
+          const mapped = supabaseReservations.map(mapSupabaseReservationToContext);
+          replaceAllReservations(mapped);
+          console.info(
+            `[useSupabaseSync] ✅ Synced ${mapped.length} reservations from Supabase for hotel ${tenantId}`
+          );
         }
 
         if (!cancelled) {
