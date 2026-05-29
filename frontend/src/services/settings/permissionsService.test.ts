@@ -148,6 +148,44 @@ describe('permissionsService — capabilities Phase 5 (set_rooms, set_integratio
   });
 });
 
+describe('permissionsService — rôles DB (admin_user_role) → accès', () => {
+  beforeEach(() => {
+    if (typeof window !== 'undefined') window.localStorage.clear();
+  });
+
+  // Régression : le rôle DB stocké pour le super admin est 'direction'
+  // (enum admin_user_role), PAS 'admin'. Si cette correspondance casse, le
+  // super admin se retrouve en moindre privilège (reader) → boutons grisés.
+  it("'direction' (super admin DB) a accès complet partout", () => {
+    expect(hasPermission('direction', 'set_rooms', 'write')).toBe(true);
+    expect(hasPermission('direction', 'set_rooms', 'admin')).toBe(true);
+    expect(hasPermission('direction', 'rev_pricing', 'write')).toBe(true);
+    expect(hasPermission('direction', 'fin_invoice', 'write')).toBe(true);
+    expect(hasPermission('direction', 'set_users', 'admin')).toBe(true);
+    // Insensible à la casse
+    expect(hasPermission('DIRECTION', 'set_rooms', 'write')).toBe(true);
+  });
+
+  it("'reception' = profil réceptionniste (création résa, pas de tarifs)", () => {
+    expect(hasPermission('reception', 'res_create', 'write')).toBe(true);
+    expect(hasPermission('reception', 'rev_pricing', 'write')).toBe(false);
+  });
+
+  it("'gouvernante' / 'femme_de_chambre' = profil housekeeping", () => {
+    expect(hasPermission('gouvernante', 'hk_status', 'admin')).toBe(true);
+    expect(hasPermission('gouvernante', 'set_rooms', 'write')).toBe(false);
+    expect(hasPermission('femme_de_chambre', 'hk_status', 'admin')).toBe(true);
+  });
+
+  // Prestations (ProductsPage) doit se câbler sur rev_pricing, pas fin_invoice.
+  // Le super admin reste autorisé dans les deux cas, mais un non-admin du
+  // domaine "Tarifs & Prestations" ne doit pas dépendre d'une capability
+  // de facturation hors sujet.
+  it("manager (Tarifs & Prestations) accède aux prestations via rev_pricing", () => {
+    expect(hasPermission('manager', 'rev_pricing', 'write')).toBe(true);
+  });
+});
+
 describe('permissionsService — ACCESS_LEVEL_ORDER', () => {
   it('définit un ordre strict croissant', () => {
     expect(ACCESS_LEVEL_ORDER.none).toBeLessThan(ACCESS_LEVEL_ORDER.read);
