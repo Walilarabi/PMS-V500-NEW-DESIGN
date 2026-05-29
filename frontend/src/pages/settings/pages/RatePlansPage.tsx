@@ -213,11 +213,14 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
     );
   }
 
-  if (storeLoading) {
+  // Spinner plein écran UNIQUEMENT au tout premier chargement (liste vide).
+  // Les rechargements en arrière-plan (après une sauvegarde) ne doivent pas
+  // masquer la page — sinon l'utilisateur perçoit un "moulinage" à chaque édition.
+  if (storeLoading && roomTypes.length === 0) {
     return <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Chargement des plans tarifaires…</div>;
   }
 
-  if (loadError) {
+  if (loadError && roomTypes.length === 0) {
     return <div className="flex-1 flex items-center justify-center text-rose-500 text-sm">{loadError}</div>;
   }
 

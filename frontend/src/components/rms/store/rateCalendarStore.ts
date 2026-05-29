@@ -196,6 +196,49 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
   // Remplace `set` par `safeSet` dans le scope du store
   set = safeSet as typeof set;
 
+  // ── Persistance calendrier (UPSERT — insert-or-update) ───────────────────
+  // Toutes les éditions du calendrier (prix, restrictions, ouverture/fermeture)
+  // doivent survivre au reload. On UPSERT dans rate_prices / rate_restrictions
+  // (clés uniques en base) plutôt qu'un simple UPDATE conditionnel — sinon une
+  // cellule sans ligne préexistante (ex : plan importé) n'était jamais persistée.
+
+  /** Upsert le prix + plan_closed d'une cellule (room_type, plan, date). */
+  const persistPrice = (roomTypeId: string, planId: string, date: string) => {
+    const room = get().roomTypes.find((r) => r.roomTypeId === roomTypeId);
+    const plan = room?.ratePlans.find((p) => p.planId === planId);
+    const cell = plan?.prices.find((c) => c.date === date);
+    if (!cell) return;
+    // plan_id doit être un UUID Supabase (pas un id local "plan_xxx")
+    if (!/^[0-9a-f-]{36}$/i.test(planId)) return;
+    void getCurrentHotelIdSafe().then((hotelId) => {
+      if (!hotelId) return;
+      void (supabase as any)
+        .from('rate_prices')
+        .upsert({
+          hotel_id: hotelId, room_type_code: roomTypeId, plan_id: planId, stay_date: date,
+          price: cell.price ?? 0, plan_closed: !!cell.planClosed, source: 'manual',
+        }, { onConflict: 'hotel_id,room_type_code,plan_id,stay_date' });
+    });
+  };
+
+  /** Upsert les restrictions (minStay/maxStay/cta/ctd/inventaire) d'une date. */
+  const persistRestriction = (roomTypeId: string, date: string) => {
+    const room = get().roomTypes.find((r) => r.roomTypeId === roomTypeId);
+    const st = room?.statuses.find((s) => s.date === date);
+    if (!st) return;
+    void getCurrentHotelIdSafe().then((hotelId) => {
+      if (!hotelId) return;
+      void (supabase as any)
+        .from('rate_restrictions')
+        .upsert({
+          hotel_id: hotelId, room_type_code: roomTypeId, stay_date: date,
+          min_stay: st.minStay ?? null, max_stay: st.maxStay ?? null,
+          cta: !!st.cta, ctd: !!st.ctd,
+          inventory: st.inventory ?? st.capacity ?? 0, capacity: st.capacity ?? 0,
+        }, { onConflict: 'hotel_id,room_type_code,stay_date' });
+    });
+  };
+
   return {
     viewMode: "1month",
     startDate: initialStartDate,
@@ -376,30 +419,8 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       
       get().addAuditLog({ action: "price_updated", target: key, detail: `Prix ${newPrice} EUR`, result: "accepted" });
 
-      // ─── Persist to Supabase ────────────────────────
-      if (cell?.priceId && typeof cell.priceVersion === 'number') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any)
-          .from('rate_prices')
-          .update({
-            price: newPrice,
-            source: 'manual',
-            version: cell.priceVersion + 1,
-          })
-          .eq('id', cell.priceId)
-          .eq('version', cell.priceVersion)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .then(({ error }: any) => {
-            if (error) {
-              get().addAuditLog({
-                action: 'price_persist_failed',
-                target: key,
-                detail: error.message || 'Update failed',
-                result: 'failed',
-              });
-            }
-          });
-      }
+      // ─── Persist to Supabase (UPSERT — fonctionne même sans ligne préexistante) ──
+      persistPrice(roomTypeId, planId, date);
     },
 
     updateInventory: (roomTypeId, date, newInventory) => {
@@ -464,21 +485,26 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
     updateStayRestriction: (roomTypeId, date, field, value) => {
       const { roomTypes, cascadeEngine } = get();
       set({ roomTypes: cascadeEngine.updateStayRestriction(roomTypes, roomTypeId, date, field, value) });
+      persistRestriction(roomTypeId, date);
     },
 
     updateArrivalDepartureRestriction: (roomTypeId, date, field, value) => {
       const { roomTypes, cascadeEngine } = get();
       set({ roomTypes: cascadeEngine.updateArrivalDepartureRestriction(roomTypes, roomTypeId, date, field, value) });
+      persistRestriction(roomTypeId, date);
     },
 
     updatePlanRestriction: (roomTypeId, planId, date, closed) => {
       const { roomTypes, cascadeEngine } = get();
       set({ roomTypes: cascadeEngine.updatePlanRestriction(roomTypes, roomTypeId, planId, date, closed) });
+      // L'ouverture/fermeture par plan est stockée dans rate_prices.plan_closed
+      persistPrice(roomTypeId, planId, date);
     },
 
     updateStatus: (roomTypeId, date, newStatus, newLabel) => {
       const { roomTypes, cascadeEngine } = get();
       set({ roomTypes: cascadeEngine.updateStatus(roomTypes, roomTypeId, date, newStatus, newLabel) });
+      persistRestriction(roomTypeId, date);
     },
 
     markCellEdited: (key) => set((s) => ({ editedCells: new Set([...s.editedCells, key]) })),

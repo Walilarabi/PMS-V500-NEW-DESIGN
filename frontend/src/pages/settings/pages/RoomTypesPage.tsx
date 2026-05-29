@@ -94,8 +94,9 @@ export const RoomTypesPage: React.FC<RoomTypesPageProps> = ({ onNavigate }) => {
   const totalCapacity = roomTypes.reduce((s, rt) => s + (rt.capacity ?? 0), 0);
 
   if (!canRead) return <DeniedBanner />;
-  if (storeLoading) return <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Chargement des types de chambre…</div>;
-  if (loadError) return <div className="flex-1 flex items-center justify-center text-rose-500 text-sm">{loadError}</div>;
+  // Spinner plein écran seulement au 1er chargement (évite le "moulinage" sur reload de fond)
+  if (storeLoading && roomTypes.length === 0) return <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Chargement des types de chambre…</div>;
+  if (loadError && roomTypes.length === 0) return <div className="flex-1 flex items-center justify-center text-rose-500 text-sm">{loadError}</div>;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">

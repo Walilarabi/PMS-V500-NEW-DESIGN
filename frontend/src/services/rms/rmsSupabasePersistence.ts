@@ -131,7 +131,9 @@ export async function upsertRatePlanToSupabase(plan: RatePlanData): Promise<Pers
       channel_type:          plan.channelType,
       calc_mode:             plan.calcMode,
       calc_value:            plan.calcValue ?? 0,
-      reference_plan_id:     plan.referencePlanId ?? null,
+      // UUID column : une chaîne vide ("") provoque "invalid input syntax for
+      // type uuid" → on coerce vers null (cas des plans importés sans référent).
+      reference_plan_id:     plan.referencePlanId ? plan.referencePlanId : null,
       connectivity_type:     plan.connectivityType,
       is_reference:          plan.isReference,
       is_active:             plan.isActive,
