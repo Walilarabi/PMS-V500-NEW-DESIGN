@@ -37,8 +37,10 @@ export const EventSearchPanel: React.FC<EventSearchPanelProps> = ({ open, onTogg
 
   // Ville par défaut = ville de l'hôtel configuré (logique métier RMS)
   const [city, setCity] = useState<string>(hotelCity || 'Paris');
-  const [from, setFrom] = useState('2026-06-01');
-  const [to, setTo] = useState('2026-12-31');
+  const [from, setFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  const [to, setTo] = useState(() => {
+    const d = new Date(); d.setMonth(d.getMonth() + 6); return d.toISOString().slice(0, 10);
+  });
   const [radius, setRadius] = useState(50);
   const [minImpact, setMinImpact] = useState<EventImpactLevel | ''>('');
   const [loading, setLoading] = useState(false);

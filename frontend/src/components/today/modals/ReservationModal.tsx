@@ -214,7 +214,7 @@ export const ReservationModal = ({ state, onClose, onValidate }: { state: Reserv
             </div>
           )}
 
-          {activeTab === ‘reviews’ && (
+          {activeTab === 'reviews' && (
             <div className="space-y-6">
               <div className="flex items-center gap-4">
                 <div className="rounded-2xl bg-amber-50 p-4 text-amber-600"><Sparkles /></div>

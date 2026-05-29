@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Reservation, useReservations, CardexDocument } from '../../contexts/ReservationContext';
+import { useConfigStore } from '../../store/configStore';
 import { FileText, CreditCard, Users, AlertCircle, Search, Star, Award, X, Edit, Plus, Check, Printer, Mail, Save, ChevronDown, Bed, Wine, Package, PlusCircle, Trash2, UploadCloud, Link as LinkIcon, History, TrendingUp, MapPin, Phone, Globe, Briefcase, Hash, Calendar, Shirt, Smartphone, File, Gem, MessageSquare, Reply, Share2, Tag, Box, Zap, Gift, Info, LogOut } from 'lucide-react';
 import { COUNTRIES, NatSelector, GUAR_ICONS, RATE_PLANS, GUAR_CFG, SEGMENTS } from './reservationConstants';
 import { CHANNELS } from '../../constants/channels';
@@ -183,12 +184,10 @@ const buildMockEliteStay = (reservations: any[], clientId?: string): EliteStayAc
 
   return {
     memberId, tier, totalPoints: earnedPts, availablePoints: Math.floor(earnedPts * 0.8),
-    lifetimeSpend: totalSpend, memberSince: '2024-01-15',
+    lifetimeSpend: totalSpend,
+    memberSince: clientResas.length > 0 ? clientResas[clientResas.length - 1].checkIn : '',
     staysCount: clientResas.length, nightsCount: totalNights, transactions,
-    redemptions: [{
-      id: uid(), date: '2025-12-10', pointsUsed: 5000, amountDiscount: 50,
-      reservationId: clientResas[0]?.id || 'RES-001', status: 'used',
-    }],
+    redemptions: [],
   };
 };
 
@@ -226,22 +225,13 @@ const Ico = {
 };
 
 // ─── ONGLET 1 : RÉSERVATION (MODE AVANCÉ) ──────────────────────────────────
-const ROOMS_DEFAULT = [
-  { number: '101', type: 'Double Classique', price: 99 },
-  { number: '102', type: 'Double Classique', price: 99 },
-  { number: '103', type: 'Suite Deluxe', price: 189 },
-  { number: '104', type: 'Simple', price: 69 },
-  { number: '201', type: 'Double Supérieure', price: 129 },
-  { number: '202', type: 'Twin', price: 115 },
-  { number: '203', type: 'Suite Panoramique', price: 249 },
-  { number: '301', type: 'Familiale', price: 185 },
-  { number: '302', type: 'Junior Suite', price: 165 },
-];
 
 const todayISO = () => new Date().toISOString().split('T')[0];
 
 const TabReservation: React.FC<{ res: Reservation; onUpdate?: (updated: Reservation) => void }> = ({ res, onUpdate }) => {
   const { reservations } = useReservations();
+  const configRooms = useConfigStore((s) => s.rooms);
+  const roomList = configRooms.map(r => ({ number: r.number, type: [r.type, r.category].filter(Boolean).join(' '), price: r.price ?? 0 }));
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -300,9 +290,9 @@ const TabReservation: React.FC<{ res: Reservation; onUpdate?: (updated: Reservat
   const availableRooms = useMemo(() => {
     const cin = new Date(editedRes.arrival || editedRes.checkIn).getTime();
     const cout = new Date(editedRes.departure || editedRes.checkOut).getTime();
-    if (isNaN(cin) || isNaN(cout) || cin >= cout) return ROOMS_DEFAULT;
+    if (isNaN(cin) || isNaN(cout) || cin >= cout) return roomList;
 
-    return ROOMS_DEFAULT.filter(room => {
+    return roomList.filter(room => {
       // SI C'EST LA CHAMBRE DÉJÀ ATTRIBUÉE, ON LA GARDE TOUJOURS (même si le type a changé)
       if (String(room.number) === String(res.room)) return true;
 
@@ -2231,11 +2221,7 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
     const roomNum = String(r.room || r.roomNumber || '');
     
     // Inférence du type de chambre si manquant
-    let rType = r.roomType || r.category || r.typeChambre;
-    if (!rType && roomNum) {
-      const found = ROOMS_DEFAULT.find(rm => rm.number === roomNum);
-      if (found) rType = found.type;
-    }
+    const rType = r.roomType || r.category || r.typeChambre || '';
     
     return { 
       ...r, 

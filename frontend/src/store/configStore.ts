@@ -204,14 +204,14 @@ export const useConfigStore = create<ConfigState>()(
   persist(
     (set) => ({
       hotel: {
-        name: 'Flowtym Premium Resort',
+        name: '',
         stars: 4,
-        address: '123 Avenue des Champs-Élysées',
-        city: 'Paris',
-        zip: '75008',
+        address: '',
+        city: '',
+        zip: '',
         country: 'France',
-        phone: '+33 1 23 45 67 89',
-        email: 'contact@flowtym.com',
+        phone: '',
+        email: '',
         logo: '',
       },
       taxes: {
@@ -219,10 +219,7 @@ export const useConfigStore = create<ConfigState>()(
         fb: 10,
         sejour: 1.50,
       },
-      users: [
-        { id: '1', name: 'Wali LARABI', email: 'walilarabi@gmail.com', role: 'admin', active: true },
-        { id: '2', name: 'Sarah Bernard', email: 's.bernard@hotel.com', role: 'receptionist', active: true },
-      ],
+      users: [],
       rooms: [
         { id: '1', number: '101', type: 'DBL', category: 'CL', floor: '1', status: 'clean', price: 85 },
         { id: '2', number: '102', type: 'DBL', category: 'CL', floor: '1', status: 'clean', price: 85 },
@@ -233,10 +230,7 @@ export const useConfigStore = create<ConfigState>()(
         { id: '7', number: '203', type: 'SGL', category: 'STD', floor: '2', status: 'dirty', price: 100 },
         { id: '8', number: '301', type: 'TPL', category: 'JS', floor: '3', status: 'clean', price: 100 },
       ],
-      events: [
-        { id: 'e1', name: 'Salon International du Tourisme', startDate: '2026-05-15', endDate: '2026-05-18', impact: 'critical', description: 'Grand pic d\'activité', source: 'Externe' },
-        { id: 'e2', name: 'Concert Stade de France', startDate: '2026-05-20', endDate: '2026-05-20', impact: 'high', description: 'Affluence élevée', source: 'OTA' },
-      ],
+      events: [],
       channels: [
         { id: '1', name: 'DIRECT', color: '#A5B4FC' },
         { id: '2', name: 'BOOKING.COM', color: '#003580' },
