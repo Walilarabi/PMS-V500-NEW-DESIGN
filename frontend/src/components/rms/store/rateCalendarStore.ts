@@ -169,10 +169,18 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
   // et applique dedupRoomTypes avant de stocker. Garantit qu'aucun chemin
   // d'écriture (mutation locale, import, RMS push, cascade, supabase load)
   // ne peut produire de doublons dans le store.
+  //
+  // IMPORTANT : on capture le `set` ORIGINAL de Zustand (`rawSet`) avant de
+  // réassigner `set = safeSet`. Sans ça, les appels internes `set(...)` de
+  // safeSet se résoudraient vers safeSet lui-même (le binding `set` est
+  // réassigné en aval) → récursion infinie → "Maximum call stack size
+  // exceeded" à la première écriture, ce qui gèle TOUT le store
+  // (loadData, openRoomPanel, openRatePanel, updatePrice…).
   type SetterArg = Parameters<typeof set>[0];
+  const rawSet = set;
   const safeSet = (partial: SetterArg) => {
     if (typeof partial === 'function') {
-      set((state) => {
+      rawSet((state) => {
         const next = (partial as (s: RateCalendarStore) => Partial<RateCalendarStore>)(state);
         if (next && 'roomTypes' in next && Array.isArray((next as { roomTypes?: unknown }).roomTypes)) {
           return { ...next, roomTypes: dedupRoomTypes((next as { roomTypes: RoomTypeData[] }).roomTypes) };
@@ -180,9 +188,9 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         return next;
       });
     } else if (partial && typeof partial === 'object' && 'roomTypes' in partial && Array.isArray((partial as { roomTypes?: unknown }).roomTypes)) {
-      set({ ...partial, roomTypes: dedupRoomTypes((partial as { roomTypes: RoomTypeData[] }).roomTypes) } as SetterArg);
+      rawSet({ ...partial, roomTypes: dedupRoomTypes((partial as { roomTypes: RoomTypeData[] }).roomTypes) } as SetterArg);
     } else {
-      set(partial);
+      rawSet(partial);
     }
   };
   // Remplace `set` par `safeSet` dans le scope du store
