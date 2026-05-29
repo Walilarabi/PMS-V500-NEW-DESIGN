@@ -22,6 +22,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { RateManagerPanel } from '@/src/components/rms/calendar/RateManagerPanel';
+import { RatePlanImportModal } from './RatePlanImportModal';
 import { usePermission, PermissionDeniedBanner } from '@/src/services/settings/permissionsService';
 import { PARTNERS, PARTNERS_BY_ID } from '@/src/constants/partners';
 import type { RatePlanData, PensionType } from '@/src/components/rms/types';
@@ -48,6 +49,7 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
     isLoading: storeLoading, loadError,
   } = useRateCalendarStore();
   const [search, setSearch] = useState('');
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [filterRoom, setFilterRoom] = useState<string>('all');
   const [filterPartner, setFilterPartner] = useState<string>('all');
   const [toast, setToast] = useState<string | null>(null);
@@ -252,15 +254,20 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
               <Plus className="w-3.5 h-3.5" /> Créer un tarif
             </button>
             <button
-              onClick={() => canWrite && fileRef.current?.click()}
-              disabled={importing || !canWrite}
-              title={!canWrite ? 'Permission requise : rev_pricing (write)' : undefined}
+              onClick={() => canWrite && setImportModalOpen(true)}
+              disabled={!canWrite}
+              title={!canWrite ? 'Permission requise : rev_pricing (write)' : 'Importer des plans tarifaires depuis Excel'}
               className="px-3 py-2 rounded-lg ring-1 ring-violet-200 bg-white text-[13px] font-medium text-violet-700 hover:bg-violet-50 inline-flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Upload className="w-3.5 h-3.5" />
-              {importing ? 'Import en cours…' : 'Importer Excel'}
+              Importer Excel
             </button>
             <RateManagerPanel />
+            <RatePlanImportModal
+              open={importModalOpen}
+              onClose={() => setImportModalOpen(false)}
+              onImported={() => loadData()}
+            />
             <button
               onClick={() => onNavigate('rev_calendar' as PageId)}
               className="px-3 py-2 rounded-lg bg-white ring-1 ring-slate-200 text-slate-700 text-[13px] font-medium hover:bg-slate-50 inline-flex items-center gap-1.5"
