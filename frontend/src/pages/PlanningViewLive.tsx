@@ -1931,29 +1931,59 @@ export const PlanningView = () => {
            )}
         </div>
 
-        {/* Volet latéral droit — Intelligence RMS + opérationnel */}
+        {/* Volet latéral droit — Intelligence RMS + opérationnel, collé au bord droit */}
         {displayMode === 'Gantt' && (
           <aside
             className={cn(
-              'shrink-0 bg-white border-l border-gray-100 z-30 transition-[width] duration-200 ease-out overflow-hidden',
-              showRightSidebar ? 'w-[280px]' : 'w-0',
+              'shrink-0 bg-white border-l border-gray-100 z-30 transition-[width] duration-200 ease-out overflow-hidden flex flex-col',
+              showRightSidebar ? 'w-[300px]' : 'w-9',
             )}
             aria-label="Volet intelligence RMS"
           >
-            {showRightSidebar && (
-              <PlanningRightPanel
-                startDate={currentDate}
-                rangeDays={viewLength}
-                today={todayKpi}
-                hkCleanRatio={hkCleanRatio}
-                onlineCheckins={onlineCheckinsToday}
-                intel={rightPanelIntel}
-              />
+            {showRightSidebar ? (
+              <>
+                {/* En-tête du volet — bouton de repli (collapse) */}
+                <div className="h-9 shrink-0 flex items-center justify-between pl-3 pr-2 border-b border-gray-100">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Intelligence</span>
+                  <button
+                    onClick={toggleRightSidebar}
+                    title="Réduire le volet"
+                    aria-label="Réduire le volet intelligence"
+                    aria-pressed={!showRightSidebar}
+                    className="p-1 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <PlanningRightPanel
+                    startDate={currentDate}
+                    rangeDays={viewLength}
+                    today={todayKpi}
+                    hkCleanRatio={hkCleanRatio}
+                    onlineCheckins={onlineCheckinsToday}
+                    intel={rightPanelIntel}
+                  />
+                </div>
+              </>
+            ) : (
+              /* Replié — fine bande cliquable pour rouvrir le volet */
+              <button
+                onClick={toggleRightSidebar}
+                title="Afficher le volet intelligence"
+                aria-label="Afficher le volet intelligence"
+                aria-pressed={!showRightSidebar}
+                className="w-full h-full flex items-start justify-center pt-3 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+              >
+                <ChevronLeft size={16} />
+              </button>
             )}
           </aside>
         )}
+      </div>
+      {/* ↑ Fin de la ligne principale (sidebar gauche · grille pleine largeur · volet droit collé à droite) */}
 
-      {/* Volet inférieur — légende + actions rapides (maquette) */}
+      {/* Volet inférieur — légende + actions rapides (maquette), pleine largeur en bas */}
       {displayMode === 'Gantt' && (
         <div className="shrink-0 border-t border-gray-100 bg-white px-6 py-2.5 flex items-center gap-6 z-40">
           {/* Légende des badges réservation */}
@@ -2559,6 +2589,5 @@ export const PlanningView = () => {
         </div>
       )}
     </div>
-  </div>
 );
 };
