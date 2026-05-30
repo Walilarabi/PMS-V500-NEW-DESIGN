@@ -53,12 +53,12 @@
 ## Phase 5 — Sidebars collapsibles
 - [x] 5.1 planningUiStore.ts (Zustand + persist localStorage : leftSidebarCollapsed, rightSidebarCollapsed, activeMode) ✅
 - [x] 5.2 Colonne gauche collapsible (170px↔68px, transition 200ms, mode icônes via RoomRowLabel compact) + toggle persistant ✅
-- [x] 5.3 Toggle sidebar droite persistant (store) ✅ — le panneau droit (contenu RMS + libres) est construit en Phase 6 pour éviter un volet vide.
+- [x] 5.3 Sidebar droite collapsible — panneau RMS docké (300px, transition margin) branché sur rightSidebarCollapsed ✅ (livré avec Phase 6)
 
 ## Phase 6 — RMS + Chambres libres (maquette #8, #17)
-- [ ] 6.1 RmsRecommendationPanel.tsx (rms_pricing_recommendations, Appliquer/Rejeter)
-- [ ] 6.2 FreeRoomsModal.tsx (liste + créer resa/bloquer/maintenance/statut)
-- [ ] 6.3 useRmsRecommendations.ts
+- [x] 6.1 RmsRecommendationPanel.tsx (pending groupées par confiance, loading/error/empty) — Appliquer ÉCRIT rate_prices (chaîne room_type_id→code→ligne→updatePrice verrou optimiste) + marque applied ; Rejeter marque rejected. ✅
+- [x] 6.2 FreeRoomsModal.tsx (liste chambres libres du jour + Créer résa préremplie / Bloquer / Maintenance via useUpdateRoom) ✅
+- [x] 6.3 useRmsRecommendations.ts (fetch pending range + apply chain + reject, invalidations) + planning-rms.service.ts ✅
 
 ## Phase 7 — 5 modes (maquette #9)
 - [ ] 7.1 PlanningModeBar.tsx (Occupation/Revenue/Housekeeping/Groupe/Maintenance)

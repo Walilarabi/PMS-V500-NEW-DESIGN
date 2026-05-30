@@ -68,6 +68,8 @@ import { ReservationBadges } from '@/src/pages/planning/ReservationBadges';
 import { deriveBadges } from '@/src/services/planning/planning-reservation-badges.service';
 import { RoomRowLabel } from '@/src/pages/planning/RoomRowLabel';
 import { usePlanningUiStore } from '@/src/store/planningUiStore';
+import { RmsRecommendationPanel } from '@/src/pages/planning/RmsRecommendationPanel';
+import { FreeRoomsModal } from '@/src/pages/planning/FreeRoomsModal';
 import {
   computeDayKpi,
   computeRangeKpis,
@@ -188,6 +190,7 @@ export const PlanningView = () => {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedDetailsRes, setSelectedDetailsRes] = useState<Reservation | null>(null);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
+  const [isFreeRoomsOpen, setIsFreeRoomsOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
   const [selectedEventDate, setSelectedEventDate] = useState<string | null>(null);
@@ -472,6 +475,19 @@ export const PlanningView = () => {
     () => computeDayKpi(new Date(), kpiReservations, kpiRooms),
     [kpiReservations, kpiRooms],
   );
+
+  // Numéros de chambre occupés aujourd'hui (pour la modale chambres libres).
+  const todayOccupiedNumbers = React.useMemo(() => {
+    const todayStr = toLocalISODate(new Date());
+    const set = new Set<string>();
+    contextReservations.forEach((res) => {
+      if (res.effectiveStatus === 'cancelled' || res.effectiveStatus === 'noshow' || !res.room) return;
+      const ci = (res.checkIn || res.arrival).split(' ')[0].split('T')[0];
+      const co = (res.checkOut || res.departure).split(' ')[0].split('T')[0];
+      if (ci <= todayStr && todayStr < co) set.add(res.room);
+    });
+    return set;
+  }, [contextReservations]);
 
   // Snapshot horizon fixe J+0..J+30 (indépendant de la plage affichée) pour un
   // pickup couvrant tout l'horizon de réservation.
@@ -1014,7 +1030,7 @@ export const PlanningView = () => {
           }
           eventsCount={rangeEventsCount}
           heatmap={visibleDayKpis.map((d) => ({ date: d.date, toRate: d.toRate }))}
-          onFreeRoomsClick={() => setIsAvailabilityModalOpen(true)}
+          onFreeRoomsClick={() => setIsFreeRoomsOpen(true)}
           onEventsClick={() => setIsEventModalOpen(true)}
           pickupLoading={pickup.isLoading}
           compressionLoading={compression.isLoading}
@@ -1133,6 +1149,12 @@ export const PlanningView = () => {
       )}
 
       <div className="flex-1 flex overflow-hidden relative">
+        {/* Sidebar droite — Intelligence RMS (maquette #17) */}
+        {displayMode === 'Gantt' && showRightSidebar && (
+          <aside className="absolute right-0 top-0 bottom-0 w-[300px] bg-white border-l border-gray-100 z-40 shadow-xl shadow-gray-200/40 transition-transform duration-200" aria-label="Volet intelligence RMS">
+            <RmsRecommendationPanel startDate={currentDate} rangeDays={viewLength} />
+          </aside>
+        )}
         {/* Left Unit Sidebar */}
         {displayMode === 'Gantt' && (
           <div className={cn("flex flex-col bg-white border-r border-gray-100 shrink-0 z-40 transition-[width] duration-200 ease-out", leftSidebarCollapsed ? "w-[68px]" : "w-[170px]")}>
@@ -1212,7 +1234,7 @@ export const PlanningView = () => {
       )}
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0" ref={gridRef}>
+        <div className={cn("flex-1 flex flex-col min-w-0 transition-[margin] duration-200", displayMode === 'Gantt' && showRightSidebar && "mr-[300px]")} ref={gridRef}>
            {displayMode === 'Gantt' ? (
              <div className="flex-1 overflow-auto custom-scrollbar flex flex-col" onScroll={handleScroll}>
                 {/* Header Stats & Dates (Sticky) */}
@@ -2259,6 +2281,26 @@ export const PlanningView = () => {
         onClose={() => setIsAvailabilityModalOpen(false)}
         dateRange={days.map(d => new Date(d.id))}
         roomsByCategory={availabilityData}
+      />
+
+      <FreeRoomsModal
+        isOpen={isFreeRoomsOpen}
+        onClose={() => setIsFreeRoomsOpen(false)}
+        rooms={storeRooms}
+        occupiedNumbers={todayOccupiedNumbers}
+        dateIso={toLocalISODate(new Date())}
+        onCreateReservation={(room) => {
+          const checkIn = toLocalISODate(new Date());
+          setDragFormData({
+            roomNumber: room.number,
+            category: room.category ?? '',
+            roomType: `${room.category ?? ''}/${room.type ?? ''}`,
+            checkIn,
+            checkOut: addOneNight(checkIn),
+          });
+          setIsFreeRoomsOpen(false);
+          setIsModalOpen(true);
+        }}
       />
 
       {/* ── Paramètres du planning ────────────────────────────────── */}
