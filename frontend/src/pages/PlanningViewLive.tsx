@@ -78,7 +78,7 @@ import { deriveBadges } from '@/src/services/planning/planning-reservation-badge
 import { RoomRowLabel } from '@/src/pages/planning/RoomRowLabel';
 import { usePlanningUiStore } from '@/src/store/planningUiStore';
 import { FreeRoomsModal } from '@/src/pages/planning/FreeRoomsModal';
-import { PlanningPilotagePanel } from '@/src/pages/planning/PlanningPilotagePanel';
+import { PlanningModeBar } from '@/src/pages/planning/PlanningModeBar';
 import { PlanningRightPanel, type RightPanelIntel } from '@/src/pages/planning/PlanningRightPanel';
 import { getOccThreshold } from '@/src/pages/planning/revenueThresholds';
 import { persistReservationMove } from '@/src/domains/reservations/repository';
@@ -201,8 +201,6 @@ export const PlanningView = () => {
   const showRightSidebar = !rightSidebarCollapsed;
   const activeMode = usePlanningUiStore((s) => s.activeMode);
   const setActiveMode = usePlanningUiStore((s) => s.setActiveMode);
-  const pilotageCollapsed = usePlanningUiStore((s) => s.pilotageCollapsed);
-  const togglePilotage = usePlanningUiStore((s) => s.togglePilotage);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedDetailsRes, setSelectedDetailsRes] = useState<Reservation | null>(null);
@@ -921,6 +919,11 @@ export const PlanningView = () => {
             </button>
           </div>
 
+          {/* Mode d'affichage Gantt (Occupation / Revenue / Ménage / Groupe / Maintenance) */}
+          {displayMode === 'Gantt' && (
+            <PlanningModeBar activeMode={activeMode} onChange={setActiveMode} orientation="horizontal" />
+          )}
+
           <div className="flex items-center gap-3 px-4 py-1.5 bg-white rounded-xl border border-gray-100 ml-4">
             <button onClick={handlePrev} className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"><ChevronLeft size={16} /></button>
             <button 
@@ -1000,7 +1003,16 @@ export const PlanningView = () => {
           </div>
 
           <div className="flex items-center gap-2 px-2 bg-gray-50 border border-gray-100 rounded-2xl">
-             <select 
+             <select
+               value={floorFilter}
+               onChange={(e) => setFloorFilter(e.target.value)}
+               className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-3 focus:ring-0 cursor-pointer"
+             >
+                <option value="Tous">Tous étages</option>
+                {floors.map(f => <option key={f} value={String(f)}>Étage {f}</option>)}
+             </select>
+             <div className="w-px h-6 bg-gray-200" />
+             <select
                value={typeFilter}
                onChange={(e) => setTypeFilter(e.target.value)}
                className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-3 focus:ring-0 cursor-pointer"
@@ -1014,7 +1026,7 @@ export const PlanningView = () => {
                 </optgroup>
              </select>
              <div className="w-px h-6 bg-gray-200" />
-             <select 
+             <select
                value={statusFilter}
                onChange={(e) => setStatusFilter(e.target.value)}
                className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-1 focus:ring-0 cursor-pointer"
@@ -1218,24 +1230,6 @@ export const PlanningView = () => {
       )}
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Volet latéral gauche — pilotage (modes + filtres) */}
-        {displayMode === 'Gantt' && (
-          <PlanningPilotagePanel
-            collapsed={pilotageCollapsed}
-            onToggle={togglePilotage}
-            activeMode={activeMode}
-            onModeChange={setActiveMode}
-            floors={floors}
-            floorFilter={floorFilter}
-            onFloorChange={setFloorFilter}
-            roomTypes={roomTypes}
-            typeFilter={typeFilter}
-            onTypeChange={setTypeFilter}
-            statuses={statuses}
-            statusFilter={statusFilter}
-            onStatusChange={setStatusFilter}
-          />
-        )}
         {/* Left Unit Sidebar */}
         {displayMode === 'Gantt' && (
           <div className={cn("flex flex-col bg-white border-r border-gray-100 shrink-0 z-40 transition-[width] duration-200 ease-out", leftSidebarCollapsed ? "w-[68px]" : "w-[170px]")}>
