@@ -213,6 +213,7 @@ export const PlanningView = () => {
   const [activeView, setActiveView] = useState<'7J' | '15J' | 'Mois'>('15J');
   const [displayMode, setDisplayMode] = useState<'Gantt' | 'Revenue'>('Gantt');
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [activeRevCalFilter, setActiveRevCalFilter] = useState<string | null>(null);
   const [revenueSubView, setRevenueSubView] = useState<'KPI' | 'Graphiques'>('KPI');
   const [isRevenueDetailsOpen, setIsRevenueDetailsOpen] = useState(false);
   const [revenueDetailsTab, setRevenueDetailsTab] = useState<'day' | 'events' | 'channels' | 'forecast' | 'alerts' | 'score'>('day');
@@ -736,6 +737,17 @@ export const PlanningView = () => {
     return byDate;
   }, [calendarDays, revenueBaselines.avgAdr, revenueBaselines.avgRevpar]);
 
+  const monthlyScore = React.useMemo(() => {
+    const values = Object.values(revenueInsightsByDate) as Array<{ score: number }>;
+    if (values.length === 0) return 0;
+    return Math.round(values.reduce((s, d) => s + d.score, 0) / values.length);
+  }, [revenueInsightsByDate]);
+
+  const monthlyScoreLabel = monthlyScore >= 85 ? 'Excellent mois'
+    : monthlyScore >= 75 ? 'Bon mois'
+    : monthlyScore >= 65 ? 'Mois moyen'
+    : 'Mois difficile';
+
   const handleMouseMove = (e: React.MouseEvent) => {
     if (hoveredRes) {
       setTooltipPos({ x: e.clientX + 15, y: e.clientY + 15 });
@@ -1143,18 +1155,18 @@ export const PlanningView = () => {
                  <div className="relative w-16 h-16 shrink-0">
                     <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                        <circle cx="18" cy="18" r="16" fill="none" className="stroke-white" strokeWidth="4" />
-                       <circle cx="18" cy="18" r="16" fill="none" className="stroke-indigo-500" strokeWidth="4" strokeDasharray="78 100" />
+                       <circle cx="18" cy="18" r="16" fill="none" className="stroke-indigo-500" strokeWidth="4" strokeDasharray={`${monthlyScore} 100`} />
                     </svg>
-                    <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-indigo-600">78</div>
+                    <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-indigo-600">{monthlyScore}</div>
                  </div>
                  <div>
                     <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1">Score mensuel</div>
                     <div className="flex items-baseline gap-1">
-                       <span className="text-lg font-black text-indigo-600">78</span>
+                       <span className="text-lg font-black text-indigo-600">{monthlyScore}</span>
                        <span className="text-[10px] font-black text-gray-400">/100</span>
                     </div>
                     <div className="flex items-center gap-2">
-                       <span className="text-[10px] font-black text-indigo-400 uppercase">Bon mois</span>
+                       <span className="text-[10px] font-black text-indigo-400 uppercase">{monthlyScoreLabel}</span>
                        <ChevronRight size={10} className="text-indigo-300 group-hover:translate-x-1 transition-transform" />
                     </div>
                  </div>
@@ -1756,19 +1768,22 @@ export const PlanningView = () => {
                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Filtres rapides :</span>
                          <div className="flex items-center gap-6">
                              {[
-                               { label: 'Jours critiques', color: 'bg-rose-500', active: true },
-                               { label: 'Événements', color: 'bg-indigo-500', active: false },
-                               { label: 'Sous-performance', color: 'bg-orange-400', active: false }
-                             ].map((f, i) => (
-                               <button 
-                                 key={i} 
-                                 onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Filtre actif : ${f.label}` } }))}
-                                 className='flex items-center gap-2 cursor-pointer group outline-none'
-                               >
-                                  <div className={cn('w-2 h-2 rounded-full transition-all', f.color, f.active ? 'scale-125 ring-2 ring-offset-2 ring-gray-100' : 'opacity-40')} />
-                                  <span className={cn('text-[10px] font-black uppercase tracking-widest transition-colors', f.active ? 'text-gray-900' : 'text-gray-400 group-hover:text-indigo-600')}>{f.label}</span>
-                               </button>
-                             ))}
+                               { label: 'Jours critiques', color: 'bg-rose-500' },
+                               { label: 'Événements', color: 'bg-indigo-500' },
+                               { label: 'Sous-performance', color: 'bg-orange-400' }
+                             ].map((f, i) => {
+                               const isActive = activeRevCalFilter === f.label;
+                               return (
+                                 <button
+                                   key={i}
+                                   onClick={() => setActiveRevCalFilter(isActive ? null : f.label)}
+                                   className='flex items-center gap-2 cursor-pointer group outline-none'
+                                 >
+                                   <div className={cn('w-2 h-2 rounded-full transition-all', f.color, isActive ? 'scale-125 ring-2 ring-offset-2 ring-gray-100' : 'opacity-40')} />
+                                   <span className={cn('text-[10px] font-black uppercase tracking-widest transition-colors', isActive ? 'text-gray-900' : 'text-gray-400 group-hover:text-indigo-600')}>{f.label}</span>
+                                 </button>
+                               );
+                             })}
                           </div>
                       </div>
                    </div>
@@ -1815,17 +1830,21 @@ export const PlanningView = () => {
                             {calendarDays.map((d, dayIdx) => {
                               const insight = revenueInsightsByDate[d.dateStr];
                               const score = insight?.score ?? 65;
-                              const scoreColor = score >= 85 ? 'text-emerald-500 border-emerald-100 bg-emerald-50' : 
-                                               score >= 75 ? 'text-indigo-500 border-indigo-100 bg-indigo-50' : 
+                              const scoreColor = score >= 85 ? 'text-emerald-500 border-emerald-100 bg-emerald-50' :
+                                               score >= 75 ? 'text-indigo-500 border-indigo-100 bg-indigo-50' :
                                                score >= 65 ? 'text-orange-500 border-orange-100 bg-orange-50' : 'text-rose-500 border-rose-100 bg-rose-50';
                               const demandBadge = insight?.demandLevel === 'strong'
                                 ? { label: 'Demande forte', cls: 'text-emerald-600 bg-emerald-50' }
                                 : insight?.demandLevel === 'normal'
                                   ? { label: 'Demande stable', cls: 'text-indigo-600 bg-indigo-50' }
                                   : { label: 'Demande faible', cls: 'text-rose-600 bg-rose-50' };
+                              const matchesFilter = !activeRevCalFilter
+                                || (activeRevCalFilter === 'Jours critiques' && insight?.riskLevel === 'high')
+                                || (activeRevCalFilter === 'Événements' && d.events.length > 0)
+                                || (activeRevCalFilter === 'Sous-performance' && insight?.demandLevel === 'weak');
 
                               return (
-                                <div 
+                                <div
                                   key={`rev-day-${d.dateStr}`}
                                   onClick={() => {
                                     setSelectedCalendarDate(d.dateStr);
@@ -1835,7 +1854,8 @@ export const PlanningView = () => {
                                   className={cn(
                                     "bg-white rounded-[32px] border border-gray-100 p-6 transition-all cursor-pointer hover:shadow-2xl hover:shadow-gray-200/50 hover:scale-[1.02] relative group",
                                     selectedCalendarDate === d.dateStr && "ring-2 ring-indigo-500 shadow-2xl shadow-indigo-100",
-                                    d.isToday && "ring-2 ring-violet-500 bg-violet-50/40"
+                                    d.isToday && "ring-2 ring-violet-500 bg-violet-50/40",
+                                    !matchesFilter && "opacity-25 pointer-events-none"
                                   )}
                                 >
                                    <div className="flex items-center justify-between mb-6">
@@ -2080,7 +2100,14 @@ export const PlanningView = () => {
             const n = Math.ceil((e.getTime() - s.getTime()) / 86400000);
             return isNaN(n) || n < 1 ? 1 : n;
           })();
-          const balance = hoveredRes.totalAmount - (hoveredRes.payment === 'Payé' ? hoveredRes.totalAmount : hoveredRes.payment === 'Partiel' ? hoveredRes.totalAmount * 0.5 : 0);
+          // Use real solde from Supabase if available; otherwise derive from payment status
+          const balance = hoveredRes.solde != null
+            ? hoveredRes.solde
+            : hoveredRes.paymentStatus === 'paid'
+              ? 0
+              : hoveredRes.paymentStatus === 'partial'
+                ? hoveredRes.totalAmount * 0.5
+                : hoveredRes.totalAmount;
           const statusMeta: Record<string, { label: string; bg: string; text: string; dot: string }> = {
             confirmed:  { label: 'Confirmée',   bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
             pending:    { label: 'En attente',  bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-500' },
