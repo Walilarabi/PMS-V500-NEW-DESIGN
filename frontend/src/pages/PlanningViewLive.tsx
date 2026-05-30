@@ -57,6 +57,16 @@ import { useRooms } from '@/src/domains/hotel/hooks';
 import { useEvents, useChannels } from '@/src/domains/planning/hooks';
 import { usePlanningRealtime } from '@/src/hooks/planning/usePlanningRealtime';
 import type { RoomRow } from '@/src/lib/supabase.types';
+import { PlanningKpiBar } from '@/src/pages/planning/PlanningKpiBar';
+import { usePickup } from '@/src/hooks/planning/usePickup';
+import { useMarketCompression } from '@/src/hooks/planning/useMarketCompression';
+import {
+  computeDayKpi,
+  computeRangeKpis,
+  aggregateKpis,
+  type KpiReservation,
+  type KpiRoom,
+} from '@/src/services/planning/planning-kpi.service';
 
 const getContrastColor = (hexcolor: string) => {
   if (!hexcolor) return '#1e293b';
@@ -412,7 +422,62 @@ export const PlanningView = () => {
 
   const viewLength = activeView === '7J' ? 7 : activeView === '15J' ? 15 : 31;
   const colWidth = 100 / viewLength; // percentage
-  
+
+  // ── KPIs planning (source unique : planning-kpi.service) ─────────────────
+  // Les réservations du contexte sont synchronisées depuis Supabase ; on les
+  // mappe vers le sous-ensemble pur consommé par le moteur KPI centralisé.
+  const kpiReservations = React.useMemo<KpiReservation[]>(() => {
+    const looseToIso = (s?: string): string => {
+      if (!s) return '';
+      const head = s.split(' ')[0].split('T')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head;
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? '' : toLocalISODate(d);
+    };
+    return contextReservations.map((r) => {
+      const status = r.effectiveStatus === 'noshow' ? 'no_show' : (r.effectiveStatus ?? 'confirmed');
+      return {
+        check_in: r.checkIn || looseToIso(r.arrival),
+        check_out: r.checkOut || looseToIso(r.departure),
+        nights: r.nights ?? null,
+        status,
+        total_amount: r.totalAmount ?? null,
+      };
+    }).filter((r) => r.check_in && r.check_out);
+  }, [contextReservations]);
+
+  const kpiRooms = React.useMemo<KpiRoom[]>(
+    () => storeRooms.map((r) => ({ id: r.id, active: r.active ?? true, status: r.status ?? null })),
+    [storeRooms],
+  );
+
+  const visibleDayKpis = React.useMemo(
+    () => computeRangeKpis(currentDate, viewLength, kpiReservations, kpiRooms),
+    [currentDate, viewLength, kpiReservations, kpiRooms],
+  );
+  const visibleSummary = React.useMemo(() => aggregateKpis(visibleDayKpis), [visibleDayKpis]);
+  const todayKpi = React.useMemo(
+    () => computeDayKpi(new Date(), kpiReservations, kpiRooms),
+    [kpiReservations, kpiRooms],
+  );
+
+  // Snapshot horizon fixe J+0..J+30 (indépendant de la plage affichée) pour un
+  // pickup couvrant tout l'horizon de réservation.
+  const snapshotKpis = React.useMemo(
+    () => computeRangeKpis(new Date(), 31, kpiReservations, kpiRooms),
+    [kpiReservations, kpiRooms],
+  );
+  const pickup = usePickup(new Date(), 31, snapshotKpis);
+  const compression = useMarketCompression(currentDate, viewLength);
+
+  // Événements actifs intersectant la plage affichée.
+  const rangeEventsCount = React.useMemo(() => {
+    if (visibleDayKpis.length === 0) return 0;
+    const start = visibleDayKpis[0].date;
+    const end = visibleDayKpis[visibleDayKpis.length - 1].date;
+    return storeEvents.filter((e) => e.startDate <= end && e.endDate >= start).length;
+  }, [storeEvents, visibleDayKpis]);
+
   const days = React.useMemo(() => {
     return Array.from({ length: viewLength }, (_, i) => {
       const date = new Date(currentDate);
@@ -905,6 +970,38 @@ export const PlanningView = () => {
         </div>
       </div>
 
+      {/* Barre KPI compacte (Gantt) — données réelles, source unique */}
+      {displayMode === 'Gantt' && (
+        <PlanningKpiBar
+          toRate={visibleSummary.avgToRate}
+          adr={visibleSummary.avgAdr}
+          revpar={visibleSummary.avgRevpar}
+          occupied={todayKpi.occupied}
+          totalRooms={todayKpi.totalRooms}
+          free={todayKpi.free}
+          pickupRooms={pickup.noBaseline ? null : pickup.totalRooms}
+          pickupRevenue={pickup.noBaseline ? null : pickup.totalRevenue}
+          compressionPercent={compression.avgPercent}
+          compressionLevel={
+            compression.avgPercent == null
+              ? null
+              : compression.avgPercent <= 40
+                ? 'low'
+                : compression.avgPercent <= 60
+                  ? 'medium'
+                  : compression.avgPercent <= 80
+                    ? 'high'
+                    : 'critical'
+          }
+          eventsCount={rangeEventsCount}
+          heatmap={visibleDayKpis.map((d) => ({ date: d.date, toRate: d.toRate }))}
+          onFreeRoomsClick={() => setIsAvailabilityModalOpen(true)}
+          onEventsClick={() => setIsEventModalOpen(true)}
+          pickupLoading={pickup.isLoading}
+          compressionLoading={compression.isLoading}
+        />
+      )}
+
       {/* Revenue Top Dashboard */}
       {displayMode === 'Revenue' && (
         <div className="bg-white border-b border-gray-100 px-8 py-6 flex items-center justify-between gap-6 shrink-0">
@@ -915,9 +1012,12 @@ export const PlanningView = () => {
                   { label: 'RevPAR', val: `${kpiData.revpar.toFixed(1)} €`, trend: `Chambres vendues: ${kpiData.roomsSold}`, icon: Activity, color: 'text-violet-600', bg: 'bg-violet-50/40', border: 'border-violet-100/50' },
                   { label: 'ADR', val: `${kpiData.adr.toFixed(1)} €`, trend: `Dispo restante: ${kpiData.availableRooms}`, icon: CreditCard, color: 'text-amber-600', bg: 'bg-amber-50/40', border: 'border-amber-100/50' },
                ].map((kpi, i) => (
-                  <div 
-                    key={i} 
-                    onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Détails pour ${kpi.label}` } }))}
+                  <div
+                    key={i}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); } }}
                     className={cn('p-5 rounded-3xl border transition-all cursor-pointer group hover:shadow-xl hover:shadow-gray-200/50', kpi.bg, kpi.border)}
                   >
                     <div className="flex items-center justify-between mb-3">
@@ -1018,7 +1118,7 @@ export const PlanningView = () => {
         {displayMode === 'Gantt' && (
           <div className="w-[170px] flex flex-col bg-white border-r border-gray-100 shrink-0 z-40">
            <div className="flex flex-col border-b border-gray-100">
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Détails TO %' } }))} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+               <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
                   <TrendingUp size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>TO %</span>
                </button>
@@ -1026,11 +1126,11 @@ export const PlanningView = () => {
                   <Lock size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Ch. libres</span>
                </button>
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Détails ADR' } }))} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+               <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
                   <Euro size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>ADR</span>
                </button>
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Liste des Événements' } }))} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+               <button onClick={() => setIsEventModalOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
                   <Zap size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Événements</span>
                </button>
