@@ -16,7 +16,7 @@ import {
   type KpiRoom,
 } from '@/src/services/planning/planning-kpi.service';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
-import type { RoomRow } from '@/src/domains/hotel/schemas';
+import type { RoomRow } from '@/src/lib/supabase.types';
 
 export interface PlanningKpis {
   /** KPI jour par jour sur la plage demandée. */
