@@ -40,6 +40,7 @@ export function RoomRowLabel({
   housekeepingStatus,
   roomStatus,
   fullLabel,
+  compact = false,
 }: {
   number: string;
   code: string;
@@ -47,22 +48,31 @@ export function RoomRowLabel({
   roomStatus?: string | null;
   /** Libellé complet pour le tooltip (ex: "201 - Double Deluxe"). */
   fullLabel?: string;
+  /** Mode replié : numéro + pastille seulement (sidebar collapsée). */
+  compact?: boolean;
 }) {
   const tone = hkTone(housekeepingStatus);
   const maintenance = isUnderMaintenance(roomStatus);
 
   return (
-    <div className="flex items-center gap-2 flex-1 min-w-0">
+    <div className={cn('flex items-center gap-2 flex-1 min-w-0', compact && 'justify-center gap-1')}>
       <span
         className={cn('w-2 h-2 rounded-full shrink-0', tone.dot)}
         title={`Ménage : ${tone.label}`}
         aria-label={`Ménage : ${tone.label}`}
       />
-      <span className="text-[14px] font-semibold text-gray-900 cursor-help" title={fullLabel}>
+      <span
+        className={cn('font-semibold text-gray-900 cursor-help', compact ? 'text-[12px]' : 'text-[14px]')}
+        title={fullLabel}
+      >
         {number}
       </span>
-      <span className="text-gray-400">·</span>
-      <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{code}</span>
+      {!compact && (
+        <>
+          <span className="text-gray-400">·</span>
+          <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{code}</span>
+        </>
+      )}
       {maintenance && (
         <span
           className="ml-1 inline-flex items-center justify-center text-rose-500 shrink-0"

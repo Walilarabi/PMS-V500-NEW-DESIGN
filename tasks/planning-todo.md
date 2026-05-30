@@ -51,9 +51,9 @@
 - [x] 4.3 Intégration PlanningGrid + extension useSupabaseSync (payment_status, solde, group_id, checkin_status, special_requests, meal_plan, guests.vip/loyalty) + RoomRow type (housekeeping_status, assigned_to) ✅
 
 ## Phase 5 — Sidebars collapsibles
-- [ ] 5.1 planningUiStore.ts (Zustand + localStorage)
-- [ ] 5.2 Sidebar gauche collapsible (icônes/étendu, ≤200ms)
-- [ ] 5.3 Sidebar droite collapsible
+- [x] 5.1 planningUiStore.ts (Zustand + persist localStorage : leftSidebarCollapsed, rightSidebarCollapsed, activeMode) ✅
+- [x] 5.2 Colonne gauche collapsible (170px↔68px, transition 200ms, mode icônes via RoomRowLabel compact) + toggle persistant ✅
+- [x] 5.3 Toggle sidebar droite persistant (store) ✅ — le panneau droit (contenu RMS + libres) est construit en Phase 6 pour éviter un volet vide.
 
 ## Phase 6 — RMS + Chambres libres (maquette #8, #17)
 - [ ] 6.1 RmsRecommendationPanel.tsx (rms_pricing_recommendations, Appliquer/Rejeter)

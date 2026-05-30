@@ -67,6 +67,7 @@ import { useForecast } from '@/src/hooks/planning/useForecast';
 import { ReservationBadges } from '@/src/pages/planning/ReservationBadges';
 import { deriveBadges } from '@/src/services/planning/planning-reservation-badges.service';
 import { RoomRowLabel } from '@/src/pages/planning/RoomRowLabel';
+import { usePlanningUiStore } from '@/src/store/planningUiStore';
 import {
   computeDayKpi,
   computeRangeKpis,
@@ -177,7 +178,12 @@ export const PlanningView = () => {
   });
   
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // Préférences UI persistées (collapse sidebars, mode actif).
+  const leftSidebarCollapsed = usePlanningUiStore((s) => s.leftSidebarCollapsed);
+  const toggleLeftSidebar = usePlanningUiStore((s) => s.toggleLeftSidebar);
+  const rightSidebarCollapsed = usePlanningUiStore((s) => s.rightSidebarCollapsed);
+  const toggleRightSidebar = usePlanningUiStore((s) => s.toggleRightSidebar);
+  const showRightSidebar = !rightSidebarCollapsed;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedDetailsRes, setSelectedDetailsRes] = useState<Reservation | null>(null);
@@ -189,7 +195,6 @@ export const PlanningView = () => {
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState<'7J' | '15J' | 'Mois'>('15J');
   const [displayMode, setDisplayMode] = useState<'Gantt' | 'Revenue'>('Gantt');
-  const [showRightSidebar, setShowRightSidebar] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
   const [revenueSubView, setRevenueSubView] = useState<'KPI' | 'Graphiques'>('KPI');
   const [isRevenueDetailsOpen, setIsRevenueDetailsOpen] = useState(false);
@@ -946,7 +951,21 @@ export const PlanningView = () => {
           <div className="flex items-center gap-1">
              {displayMode === 'Gantt' && (
                <button
-                 onClick={() => setShowRightSidebar(!showRightSidebar)}
+                 onClick={toggleLeftSidebar}
+                 title={leftSidebarCollapsed ? "Déployer la colonne chambres" : "Réduire la colonne chambres"}
+                 aria-label={leftSidebarCollapsed ? "Déployer la colonne chambres" : "Réduire la colonne chambres"}
+                 aria-pressed={leftSidebarCollapsed}
+                 className={cn("p-2.5 rounded-xl transition-all", leftSidebarCollapsed ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
+               >
+                 {leftSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+               </button>
+             )}
+             {displayMode === 'Gantt' && (
+               <button
+                 onClick={toggleRightSidebar}
+                 title="Volet intelligence (droite)"
+                 aria-label="Afficher/masquer le volet intelligence"
+                 aria-pressed={showRightSidebar}
                  className={cn("p-2.5 rounded-xl transition-all", showRightSidebar ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
                >
                  <Eye size={18} />
@@ -1116,8 +1135,8 @@ export const PlanningView = () => {
       <div className="flex-1 flex overflow-hidden relative">
         {/* Left Unit Sidebar */}
         {displayMode === 'Gantt' && (
-          <div className="w-[170px] flex flex-col bg-white border-r border-gray-100 shrink-0 z-40">
-           <div className="flex flex-col border-b border-gray-100">
+          <div className={cn("flex flex-col bg-white border-r border-gray-100 shrink-0 z-40 transition-[width] duration-200 ease-out", leftSidebarCollapsed ? "w-[68px]" : "w-[170px]")}>
+           <div className={cn("flex flex-col border-b border-gray-100", leftSidebarCollapsed && "[&_button]:justify-center [&_button]:px-0 [&_span:last-child]:hidden")}>
                <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
                   <TrendingUp size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>TO %</span>
@@ -1176,6 +1195,7 @@ export const PlanningView = () => {
                       housekeepingStatus={room.housekeeping_status}
                       roomStatus={room.status}
                       fullLabel={`${room.number} - ${room.type ?? ''} ${room.category ?? ''}`.trim()}
+                      compact={leftSidebarCollapsed}
                     />
                     <div
                       className={cn(
@@ -2292,7 +2312,7 @@ export const PlanningView = () => {
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-semibold text-gray-700">Volet latéral</span>
                 <button
-                  onClick={() => setShowRightSidebar(v => !v)}
+                  onClick={toggleRightSidebar}
                   className={cn(
                     'w-10 h-6 rounded-full transition-colors relative',
                     showRightSidebar ? 'bg-indigo-600' : 'bg-gray-200',
@@ -2304,13 +2324,13 @@ export const PlanningView = () => {
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-semibold text-gray-700">Colonne chambre réduite</span>
                 <button
-                  onClick={() => setIsSidebarCollapsed(v => !v)}
+                  onClick={toggleLeftSidebar}
                   className={cn(
                     'w-10 h-6 rounded-full transition-colors relative',
-                    isSidebarCollapsed ? 'bg-indigo-600' : 'bg-gray-200',
+                    leftSidebarCollapsed ? 'bg-indigo-600' : 'bg-gray-200',
                   )}
                 >
-                  <span className={cn('absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform', isSidebarCollapsed ? 'translate-x-4' : 'translate-x-0.5')} />
+                  <span className={cn('absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform', leftSidebarCollapsed ? 'translate-x-4' : 'translate-x-0.5')} />
                 </button>
               </div>
             </div>
