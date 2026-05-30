@@ -23,7 +23,7 @@
 ## Phase 1 — Foundation
 - [x] 1.1 Migration planning_daily_snapshots (RLS hotel_id) — vérifié en DB ✅
 - [x] 1.2 Supprimer PlanningView.tsx (doublon mort, non importé) ✅
-- [ ] 1.3 Rewire PlanningViewLive → données réelles (configRooms/generateOccupancyData mock → useRooms/useReservations + usePlanningKpis) ⏳ PROCHAINE ÉTAPE
+- [x] 1.3 Rewire PlanningViewLive → données réelles (useConfigStore mock → useRooms/useEvents/useChannels + usePlanningRealtime) ✅
 - [x] 1.4 planning-kpi.service.ts (source unique) + usePlanningKpis + 20 tests ✅
 - [x] 1.5 usePlanningRealtime + publication supabase_realtime (4/4 tables) ✅
 
