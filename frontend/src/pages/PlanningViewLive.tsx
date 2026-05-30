@@ -766,14 +766,27 @@ export const PlanningView = () => {
     return toLocalISODate(next);
   }, []);
 
-  const isCellReserved = React.useCallback((roomNumber: string, dateStr: string) => {
-    return contextReservations.some((res) => {
-      if (res.room !== roomNumber) return false;
+  // Pre-compute reserved cells as a Set for O(1) lookup instead of O(N) per cell.
+  // Key format: "roomNumber:YYYY-MM-DD"
+  const reservedCellsSet = React.useMemo(() => {
+    const set = new Set<string>();
+    contextReservations.forEach((res) => {
+      if (!res.room) return;
+      if (res.effectiveStatus === 'cancelled' || res.effectiveStatus === 'noshow') return;
       const start = res.arrival.split(' ')[0];
       const end = res.departure.split(' ')[0];
-      return dateStr >= start && dateStr < end;
+      days.forEach((day) => {
+        if (day.dateStr >= start && day.dateStr < end) {
+          set.add(`${res.room}:${day.dateStr}`);
+        }
+      });
     });
-  }, [contextReservations]);
+    return set;
+  }, [contextReservations, days]);
+
+  const isCellReserved = React.useCallback((roomNumber: string, dateStr: string) => {
+    return reservedCellsSet.has(`${roomNumber}:${dateStr}`);
+  }, [reservedCellsSet]);
 
   const hasReservedNightsInRange = React.useCallback((roomNumber: string, startIdx: number, departureIdx: number) => {
     for (let i = startIdx; i < departureIdx; i += 1) {
