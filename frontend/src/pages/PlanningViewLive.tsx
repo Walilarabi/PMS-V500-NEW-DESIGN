@@ -34,6 +34,9 @@ import {
   Target,
   ZapOff,
   X,
+  LineChart,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
@@ -60,6 +63,7 @@ import type { RoomRow } from '@/src/lib/supabase.types';
 import { PlanningKpiBar } from '@/src/pages/planning/PlanningKpiBar';
 import { usePickup } from '@/src/hooks/planning/usePickup';
 import { useMarketCompression } from '@/src/hooks/planning/useMarketCompression';
+import { useForecast } from '@/src/hooks/planning/useForecast';
 import {
   computeDayKpi,
   computeRangeKpis,
@@ -478,40 +482,29 @@ export const PlanningView = () => {
     return storeEvents.filter((e) => e.startDate <= end && e.endDate >= start).length;
   }, [storeEvents, visibleDayKpis]);
 
+  // Forecast d'occupation auto (calculé, jamais saisi) par jour visible.
+  const forecast = useForecast(visibleDayKpis, pickup.byDate, compression.byDate, kpiReservations);
+  // Forecast moyen de la plage (pour la barre KPI).
+  const avgForecast = React.useMemo(() => {
+    const vals = visibleDayKpis.map((d) => forecast.byDate[d.date]).filter((v) => v != null) as number[];
+    return vals.length > 0 ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10 : null;
+  }, [visibleDayKpis, forecast.byDate]);
+
   const days = React.useMemo(() => {
     return Array.from({ length: viewLength }, (_, i) => {
       const date = new Date(currentDate);
       date.setDate(currentDate.getDate() + i);
       const dateStr = toLocalISODate(date);
-      
-      const occupiedCount = contextReservations.filter(res => {
-        try {
-          const start = new Date(res.arrival).getTime();
-          const end = new Date(res.departure).getTime();
-          const current = date.getTime();
-          return !isNaN(start) && current >= start && current < end;
-        } catch { return false; }
-      }).length;
 
-      const blockedCount = rooms.filter(r => r.status === 'out_of_order' || r.status === 'maintenance').length;
-      const availableTotal = rooms.length - occupiedCount - blockedCount;
-
-      // Calculate real ADR from actual reservations for this date
-      const dayReservations = contextReservations.filter(res => {
-        try {
-          const start = new Date(res.arrival).getTime();
-          const end = new Date(res.departure).getTime();
-          const current = date.getTime();
-          return !isNaN(start) && !isNaN(end) && current >= start && current < end;
-        } catch { return false; }
-      });
-      
-      const totalRevenue = dayReservations.reduce((sum, res) => sum + (res.totalAmount || 0), 0);
-      const realADR = occupiedCount > 0 ? Math.round(totalRevenue / occupiedCount) : 0;
+      // Source unique : moteur KPI centralisé (cohérent avec la barre KPI).
+      const kpi = visibleDayKpis[i];
 
       const dayEvents = storeEvents.filter(e => {
           return dateStr >= e.startDate && dateStr <= e.endDate;
       });
+
+      const pk = pickup.byDate[dateStr];
+      const comp = compression.byDate[dateStr];
 
       return {
         id: `day-${date.getTime()}`,
@@ -520,13 +513,16 @@ export const PlanningView = () => {
         dayName: ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][date.getDay()],
         monthName: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'][date.getMonth()],
         isWeekend: date.getDay() === 0 || date.getDay() === 6,
-        occ: rooms.length > 0 ? Math.round((occupiedCount / rooms.length) * 100) : 0,
-        available: Math.max(0, availableTotal),
+        occ: kpi ? Math.round(kpi.toRate) : 0,
+        available: kpi ? kpi.free : 0,
+        adr: kpi ? Math.round(kpi.adr) : 0,
         events: dayEvents,
-        adr: realADR || 120 // Fallback to default if no data
+        forecast: forecast.byDate[dateStr] ?? null,
+        pickupRooms: pk && !pk.noBaseline ? pk.rooms : null,
+        compressionPercent: comp?.percent ?? null,
       };
     });
-  }, [contextReservations, storeEvents, rooms, currentDate, viewLength]);
+  }, [storeEvents, currentDate, viewLength, visibleDayKpis, forecast.byDate, pickup.byDate, compression.byDate]);
 
   const calendarDays = React.useMemo(() => {
     const today = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1); // start of current month
@@ -976,6 +972,7 @@ export const PlanningView = () => {
           toRate={visibleSummary.avgToRate}
           adr={visibleSummary.avgAdr}
           revpar={visibleSummary.avgRevpar}
+          forecast={avgForecast}
           occupied={todayKpi.occupied}
           totalRooms={todayKpi.totalRooms}
           free={todayKpi.free}
@@ -1122,9 +1119,17 @@ export const PlanningView = () => {
                   <TrendingUp size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>TO %</span>
                </button>
+               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+                  <LineChart size={13} className='group-hover:text-sky-400 transition-colors' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Forecast</span>
+               </button>
                <button onClick={() => setIsAvailabilityModalOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
                   <Lock size={13} className='group-hover:text-indigo-400 transition-colors' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Ch. libres</span>
+               </button>
+               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
+                  <ArrowUpRight size={13} className='group-hover:text-emerald-400 transition-colors' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Pickup</span>
                </button>
                <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
                   <Euro size={13} className='group-hover:text-indigo-400 transition-colors' />
@@ -1201,12 +1206,35 @@ export const PlanningView = () => {
                        </div>
                      ))}
                   </div>
+                  {/* Forecast d'occupation (calculé) */}
+                  <div className="flex text-center bg-sky-50/20 w-full flex-nowrap">
+                     {days.map(d => (
+                       <div key={`fc-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={d.forecast != null ? `Forecast occ. ${d.forecast.toFixed(1)}%` : 'Forecast indisponible'}>
+                          <span className={cn("text-[11px] font-black", d.forecast == null ? "text-gray-300" : d.forecast > 80 ? "text-sky-600" : d.forecast > 50 ? "text-sky-400" : "text-sky-300")}>
+                            {d.forecast == null ? '—' : `${Math.round(d.forecast)}%`}
+                          </span>
+                       </div>
+                     ))}
+                  </div>
                   <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
                      {days.map(d => (
                        <div key={`avail-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors font-sans shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
                           <span className="text-[13px] font-black text-indigo-400">{d.available}</span>
                        </div>
                      ))}
+                  </div>
+                  {/* Pickup chambres (J vs J-1) */}
+                  <div className="flex text-center w-full flex-nowrap">
+                     {days.map(d => {
+                       const pk = d.pickupRooms;
+                       const tone = pk == null ? 'text-gray-300' : pk > 0 ? 'text-emerald-500' : pk < 0 ? 'text-rose-500' : 'text-gray-400';
+                       return (
+                         <div key={`pk-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center gap-0.5 transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={pk == null ? 'Pickup indisponible (pas d\'historique)' : `Pickup ${pk > 0 ? '+' : ''}${pk} ch. vs hier`}>
+                           {pk != null && pk !== 0 && (pk > 0 ? <ArrowUpRight size={11} className={tone} /> : <ArrowDownRight size={11} className={tone} />)}
+                           <span className={cn("text-[11px] font-black", tone)}>{pk == null ? '—' : `${pk > 0 ? '+' : ''}${pk}`}</span>
+                         </div>
+                       );
+                     })}
                   </div>
                   <div className="flex text-center w-full flex-nowrap">
                      {days.map(d => (

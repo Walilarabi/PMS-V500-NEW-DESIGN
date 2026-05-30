@@ -35,15 +35,15 @@
 - Brancher usePlanningRealtime() au montage (reservations déjà couvert globalement par App.tsx)
 
 ## Phase 2 — Barre KPI compacte (maquette #1, #14)
-- [ ] 2.1 PlanningKpiBar.tsx (TO, ADR, RevPAR, Forecast, Pickup Ch, Pickup Rev, Compression, Libres, Events, mini-heatmap)
-- [ ] 2.2 usePickup.ts (planning_daily_snapshots J vs J-1)
-- [ ] 2.3 useMarketCompression.ts (lighthouse_days.market_demand_percent)
-- [ ] 2.4 Service snapshot (écriture auto au chargement si absent < 12h)
-- [ ] 2.5 Intégration barre + recherche header + ajout FINANCE au menu
+- [x] 2.1 PlanningKpiBar.tsx (TO, ADR, RevPAR, Pickup Ch, Pickup Rev, Compression, Libres, Events, mini-heatmap) ✅ — Forecast déplacé en Phase 3 (useForecast)
+- [x] 2.2 usePickup.ts (planning_daily_snapshots J vs J-1) ✅ + 8 tests
+- [x] 2.3 useMarketCompression.ts (lighthouse_days.market_demand_percent) ✅
+- [x] 2.4 Service snapshot (écriture auto 1×/jour, horizon J+30) ✅ planning-snapshot.service.ts
+- [x] 2.5 Intégration barre (mode Gantt) + correction 4 boutons morts ✅ — FINANCE déjà présent au menu (Topbar entre Revenue et Analyse)
 
 ## Phase 3 — Colonnes journalières (maquette #7, #13)
-- [ ] 3.1 PlanningDayColumn.tsx (TO%, Forecast, Pickup, Libres, Events + heatmap)
-- [ ] 3.2 useForecast.ts (calcul auto)
+- [x] 3.1 Lignes journalières enrichies (TO%, Forecast, Libres, Pickup, ADR, Events) ✅ — intégrées au header sticky (layout row-par-métrique aligné sidebar). Forecast/Pickup chip ajoutés à la barre KPI.
+- [x] 3.2 useForecast.ts (calcul auto) ✅ + planning-forecast.service.ts (12 tests). Source unique : days[] dérive désormais de visibleDayKpis (fin de la triple divergence P4).
 
 ## Phase 4 — Badges (maquette #3, #4, #5)
 - [ ] 4.1 ReservationBar.tsx (badges VIP/payée/PdJ/arrivée/départ/groupe/online/notes)

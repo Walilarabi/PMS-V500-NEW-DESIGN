@@ -20,6 +20,7 @@ import {
   Gauge,
   DoorOpen,
   Zap,
+  LineChart,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { getOccThreshold } from './revenueThresholds';
@@ -32,6 +33,8 @@ export interface PlanningKpiBarProps {
   adr: number;
   /** RevPAR moyen (€). */
   revpar: number;
+  /** Forecast d'occupation moyen calculé (0-100). null = indéterminé. */
+  forecast: number | null;
   /** Chambres occupées aujourd'hui / total exploitable (sous-titre TO). */
   occupied: number;
   totalRooms: number;
@@ -141,6 +144,7 @@ export function PlanningKpiBar({
   toRate,
   adr,
   revpar,
+  forecast,
   occupied,
   totalRooms,
   free,
@@ -168,6 +172,13 @@ export function PlanningKpiBar({
       />
       <Chip label="ADR" value={fmtEuro(adr)} icon={CreditCard} valueClass="text-amber-600" />
       <Chip label="RevPAR" value={fmtEuro(revpar)} icon={Activity} valueClass="text-violet-600" />
+      <Chip
+        label="Forecast"
+        value={forecast == null ? <span className="text-gray-300">—</span> : `${forecast.toFixed(1)} %`}
+        sub="prévision occ."
+        icon={LineChart}
+        valueClass="text-sky-600"
+      />
 
       <Chip
         label="Pickup ch."
