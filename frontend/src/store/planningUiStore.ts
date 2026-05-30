@@ -15,12 +15,15 @@ export type PlanningMode = 'occupation' | 'revenue' | 'housekeeping' | 'groupe' 
 interface PlanningUiStore {
   /** Colonne gauche (labels chambres) repliée en mode icônes. */
   leftSidebarCollapsed: boolean;
-  /** Sidebar droite (intelligence RMS) repliée. */
+  /** Volet de pilotage gauche (modes + filtres) replié. */
+  pilotageCollapsed: boolean;
+  /** Sidebar droite (intelligence RMS + opérationnel) repliée. */
   rightSidebarCollapsed: boolean;
   /** Mode d'affichage actif. */
   activeMode: PlanningMode;
 
   toggleLeftSidebar: () => void;
+  togglePilotage: () => void;
   toggleRightSidebar: () => void;
   setLeftSidebarCollapsed: (v: boolean) => void;
   setRightSidebarCollapsed: (v: boolean) => void;
@@ -31,10 +34,12 @@ export const usePlanningUiStore = create<PlanningUiStore>()(
   persist(
     (set) => ({
       leftSidebarCollapsed: false,
-      rightSidebarCollapsed: true,
+      pilotageCollapsed: false,
+      rightSidebarCollapsed: false,
       activeMode: 'occupation',
 
       toggleLeftSidebar: () => set((s) => ({ leftSidebarCollapsed: !s.leftSidebarCollapsed })),
+      togglePilotage: () => set((s) => ({ pilotageCollapsed: !s.pilotageCollapsed })),
       toggleRightSidebar: () => set((s) => ({ rightSidebarCollapsed: !s.rightSidebarCollapsed })),
       setLeftSidebarCollapsed: (v) => set({ leftSidebarCollapsed: v }),
       setRightSidebarCollapsed: (v) => set({ rightSidebarCollapsed: v }),
@@ -44,6 +49,7 @@ export const usePlanningUiStore = create<PlanningUiStore>()(
       name: 'flowtym_planning_ui',
       partialize: (state) => ({
         leftSidebarCollapsed: state.leftSidebarCollapsed,
+        pilotageCollapsed: state.pilotageCollapsed,
         rightSidebarCollapsed: state.rightSidebarCollapsed,
         activeMode: state.activeMode,
       }),

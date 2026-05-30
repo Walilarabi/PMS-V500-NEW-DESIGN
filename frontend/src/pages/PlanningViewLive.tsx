@@ -37,6 +37,12 @@ import {
   LineChart,
   ArrowUpRight,
   ArrowDownRight,
+  Gauge,
+  Star,
+  Coffee,
+  Smartphone,
+  StickyNote,
+  DoorOpen,
 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
@@ -71,9 +77,9 @@ import { ReservationBadges } from '@/src/pages/planning/ReservationBadges';
 import { deriveBadges } from '@/src/services/planning/planning-reservation-badges.service';
 import { RoomRowLabel } from '@/src/pages/planning/RoomRowLabel';
 import { usePlanningUiStore } from '@/src/store/planningUiStore';
-import { RmsRecommendationPanel } from '@/src/pages/planning/RmsRecommendationPanel';
 import { FreeRoomsModal } from '@/src/pages/planning/FreeRoomsModal';
-import { PlanningModeBar } from '@/src/pages/planning/PlanningModeBar';
+import { PlanningPilotagePanel } from '@/src/pages/planning/PlanningPilotagePanel';
+import { PlanningRightPanel, type RightPanelIntel } from '@/src/pages/planning/PlanningRightPanel';
 import { getOccThreshold } from '@/src/pages/planning/revenueThresholds';
 import { persistReservationMove } from '@/src/domains/reservations/repository';
 import {
@@ -195,11 +201,14 @@ export const PlanningView = () => {
   const showRightSidebar = !rightSidebarCollapsed;
   const activeMode = usePlanningUiStore((s) => s.activeMode);
   const setActiveMode = usePlanningUiStore((s) => s.setActiveMode);
+  const pilotageCollapsed = usePlanningUiStore((s) => s.pilotageCollapsed);
+  const togglePilotage = usePlanningUiStore((s) => s.togglePilotage);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedDetailsRes, setSelectedDetailsRes] = useState<Reservation | null>(null);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [isFreeRoomsOpen, setIsFreeRoomsOpen] = useState(false);
+  const [smartMoveEnabled, setSmartMoveEnabled] = useState(true);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
   const [selectedEventDate, setSelectedEventDate] = useState<string | null>(null);
@@ -336,6 +345,7 @@ export const PlanningView = () => {
 
   const handleDrop = (e: React.DragEvent, targetRoom: RoomRow) => {
     e.preventDefault();
+    if (!smartMoveEnabled) return;
     const resId = e.dataTransfer.getData('text/plain');
     if (!resId) return;
 
@@ -511,6 +521,23 @@ export const PlanningView = () => {
     return set;
   }, [contextReservations]);
 
+  // Ratio chambres propres (housekeeping) — pour la vue rapide opérationnelle.
+  const hkCleanRatio = React.useMemo(() => {
+    if (storeRooms.length === 0) return 0;
+    const clean = storeRooms.filter((r) => r.housekeeping_status === 'clean' || r.housekeeping_status === 'inspected').length;
+    return (clean / storeRooms.length) * 100;
+  }, [storeRooms]);
+
+  // Check-in en ligne effectués aujourd'hui.
+  const onlineCheckinsToday = React.useMemo(() => {
+    const todayStr = toLocalISODate(new Date());
+    return contextReservations.filter((res) => {
+      if (res.checkinStatus !== 'online') return false;
+      const ci = (res.checkIn || res.arrival).split(' ')[0].split('T')[0];
+      return ci === todayStr;
+    }).length;
+  }, [contextReservations]);
+
   // Snapshot horizon fixe J+0..J+30 (indépendant de la plage affichée) pour un
   // pickup couvrant tout l'horizon de réservation.
   const snapshotKpis = React.useMemo(
@@ -565,10 +592,30 @@ export const PlanningView = () => {
         events: dayEvents,
         forecast: forecast.byDate[dateStr] ?? null,
         pickupRooms: pk && !pk.noBaseline ? pk.rooms : null,
+        pickupRevenue: pk && !pk.noBaseline ? pk.revenue : null,
         compressionPercent: comp?.percent ?? null,
       };
     });
   }, [storeEvents, currentDate, viewLength, visibleDayKpis, forecast.byDate, pickup.byDate, compression.byDate]);
+
+  // Intelligence du jour de référence (premier jour visible) pour le volet droit.
+  const rightPanelIntel = React.useMemo<RightPanelIntel>(() => {
+    const d = days[0];
+    const ev = d?.events[0] ?? null;
+    const impactFr: Record<string, string> = { low: 'Faible', medium: 'Moyen', high: 'Fort', critical: 'Très fort' };
+    return {
+      dateLabel: d ? `${d.dateNum} ${d.monthName}` : '',
+      toRate: d?.occ ?? 0,
+      forecast: d?.forecast ?? null,
+      adr: d?.adr ?? 0,
+      revpar: visibleDayKpis[0]?.revpar ?? 0,
+      pickupRooms: d?.pickupRooms ?? null,
+      pickupRevenue: d?.pickupRevenue ?? null,
+      compressionPercent: d?.compressionPercent ?? null,
+      eventName: ev?.name ?? null,
+      eventImpact: ev ? (impactFr[ev.impact] ?? ev.impact) : null,
+    };
+  }, [days, visibleDayKpis]);
 
   const calendarDays = React.useMemo(() => {
     const today = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1); // start of current month
@@ -1026,14 +1073,6 @@ export const PlanningView = () => {
         </div>
       </div>
 
-      {/* Sélecteur de mode (Gantt) */}
-      {displayMode === 'Gantt' && (
-        <div className="shrink-0 border-b border-gray-100 bg-white px-6 py-2 flex items-center gap-3">
-          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest hidden lg:block">Mode</span>
-          <PlanningModeBar activeMode={activeMode} onChange={setActiveMode} />
-        </div>
-      )}
-
       {/* Barre KPI compacte (Gantt) — données réelles, source unique */}
       {displayMode === 'Gantt' && (
         <PlanningKpiBar
@@ -1179,57 +1218,71 @@ export const PlanningView = () => {
       )}
 
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Sidebar droite — Intelligence RMS (maquette #17) */}
+        {/* Volet latéral gauche — pilotage (modes + filtres) */}
+        {displayMode === 'Gantt' && (
+          <PlanningPilotagePanel
+            collapsed={pilotageCollapsed}
+            onToggle={togglePilotage}
+            activeMode={activeMode}
+            onModeChange={setActiveMode}
+            floors={floors}
+            floorFilter={floorFilter}
+            onFloorChange={setFloorFilter}
+            roomTypes={roomTypes}
+            typeFilter={typeFilter}
+            onTypeChange={setTypeFilter}
+            statuses={statuses}
+            statusFilter={statusFilter}
+            onStatusChange={setStatusFilter}
+          />
+        )}
+        {/* Sidebar droite — Intelligence RMS + opérationnel (maquette #17) */}
         {displayMode === 'Gantt' && showRightSidebar && (
           <aside className="absolute right-0 top-0 bottom-0 w-[300px] bg-white border-l border-gray-100 z-40 shadow-xl shadow-gray-200/40 transition-transform duration-200" aria-label="Volet intelligence RMS">
-            <RmsRecommendationPanel startDate={currentDate} rangeDays={viewLength} />
+            <PlanningRightPanel
+              startDate={currentDate}
+              rangeDays={viewLength}
+              today={todayKpi}
+              hkCleanRatio={hkCleanRatio}
+              onlineCheckins={onlineCheckinsToday}
+              intel={rightPanelIntel}
+            />
           </aside>
         )}
         {/* Left Unit Sidebar */}
         {displayMode === 'Gantt' && (
           <div className={cn("flex flex-col bg-white border-r border-gray-100 shrink-0 z-40 transition-[width] duration-200 ease-out", leftSidebarCollapsed ? "w-[68px]" : "w-[170px]")}>
-           <div className={cn("flex flex-col border-b border-gray-100", leftSidebarCollapsed && "[&_button]:justify-center [&_button]:px-0 [&_span:last-child]:hidden")}>
-               <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <TrendingUp size={13} className='group-hover:text-indigo-400 transition-colors' />
-                  <span className='text-[9px] font-black uppercase tracking-widest'>TO %</span>
+           {/* En-tête colonne — aligné avec la ligne DATES (56px) */}
+           <div className="h-[56px] flex items-center px-4 border-r border-b border-gray-100 bg-white">
+              <span className={cn("text-[10px] font-black text-gray-400 uppercase tracking-widest", leftSidebarCollapsed && "hidden")}>Chambres</span>
+              <span className={cn("text-[10px] font-black text-gray-300 uppercase tracking-widest ml-auto", leftSidebarCollapsed && "hidden")}>État</span>
+           </div>
+           {/* Libellés indicateurs — alignés aux lignes du header (6 × 34px) */}
+           <div className={cn("flex flex-col border-b border-gray-100", leftSidebarCollapsed && "[&_button]:justify-center [&_button]:px-0 [&_span]:hidden")}>
+               <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-transparent w-full text-left'>
+                  <TrendingUp size={12} className='group-hover:text-indigo-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>TO (réel)</span>
                </button>
-               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <LineChart size={13} className='group-hover:text-sky-400 transition-colors' />
+               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-sky-50/20 w-full text-left'>
+                  <LineChart size={12} className='group-hover:text-sky-400 transition-colors shrink-0' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Forecast</span>
                </button>
-               <button onClick={() => setIsAvailabilityModalOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <Lock size={13} className='group-hover:text-indigo-400 transition-colors' />
-                  <span className='text-[9px] font-black uppercase tracking-widest'>Ch. libres</span>
+               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-transparent w-full text-left'>
+                  <ArrowUpRight size={12} className='group-hover:text-emerald-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Pickup (ch.)</span>
                </button>
-               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <ArrowUpRight size={13} className='group-hover:text-emerald-400 transition-colors' />
-                  <span className='text-[9px] font-black uppercase tracking-widest'>Pickup</span>
+               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-gray-50/30 w-full text-left'>
+                  <Euro size={12} className='group-hover:text-emerald-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Pickup (rev.)</span>
                </button>
-               <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <Euro size={13} className='group-hover:text-indigo-400 transition-colors' />
-                  <span className='text-[9px] font-black uppercase tracking-widest'>ADR</span>
+               <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-transparent w-full text-left'>
+                  <Gauge size={12} className='group-hover:text-indigo-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Comp. marché</span>
                </button>
-               <button onClick={() => setIsEventModalOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <Zap size={13} className='group-hover:text-indigo-400 transition-colors' />
+               <button onClick={() => setIsEventModalOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-gray-50/30 w-full text-left'>
+                  <Zap size={12} className='group-hover:text-indigo-400 transition-colors shrink-0' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Événements</span>
                </button>
-           </div>
-
-           <div className="h-[56px] flex items-center px-4 bg-gray-50/30">
-              <div className="relative w-full">
-                 <select 
-                   value={floorFilter}
-                   onChange={(e) => setFloorFilter(e.target.value)}
-                   className="w-full bg-white border border-gray-100 rounded-xl shadow-sm pl-9 pr-4 py-2 text-[10px] font-black text-gray-600 uppercase tracking-widest appearance-none focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
-                 >
-                    <option value="Tous">Tous Étages</option>
-                    {floors.map(f => (
-                      <option key={f} value={f}>Étage {f}</option>
-                    ))}
-                 </select>
-                 <LayoutGrid size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none" />
-                 <ChevronRight size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none rotate-90" />
-              </div>
            </div>
 
            <div ref={sidebarRef} className="flex-1 overflow-hidden scrollbar-hide pointer-events-none">
@@ -1281,6 +1334,19 @@ export const PlanningView = () => {
              <div className="flex-1 overflow-auto custom-scrollbar flex flex-col" onScroll={handleScroll}>
                 {/* Header Stats & Dates (Sticky) */}
                <div className="sticky top-0 z-30 bg-white border-b border-gray-100 w-full overflow-hidden">
+                  {/* 1. Ligne DATES — première ligne du planning (maquette) */}
+                  <div className="flex bg-white w-full flex-nowrap">
+                     {days.map((d, i) => (
+                       <div key={`date-${d.id}`} className={cn("shrink-0 h-[56px] flex flex-col items-center justify-center border-r border-b border-gray-100 transition-all", d.isWeekend ? "bg-[#FFF9F5]/50" : "bg-white", i === 0 && "bg-indigo-50/30 ring-2 ring-inset ring-indigo-100/50")} style={{ width: `${colWidth}%` }}>
+                         <span className={cn("text-[10px] font-black uppercase tracking-widest mb-1", d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.dayName}</span>
+                         <div className="flex items-baseline gap-1.5 leading-none">
+                            <span className={cn("text-[17px] font-black", i === 0 ? "text-indigo-400" : d.isWeekend ? "text-orange-400" : "text-gray-900")}>{d.dateNum}</span>
+                            <span className={cn("text-[11px] font-black uppercase tracking-tighter opacity-70", i === 0 ? "text-indigo-300" : d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.monthName}</span>
+                         </div>
+                       </div>
+                     ))}
+                  </div>
+                  {/* 2. TO (réel) */}
                   <div className="flex text-center flex-nowrap w-full">
                      {days.map(d => (
                        <div key={`occ-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
@@ -1288,7 +1354,7 @@ export const PlanningView = () => {
                        </div>
                      ))}
                   </div>
-                  {/* Forecast d'occupation (calculé) */}
+                  {/* 3. Forecast d'occupation (calculé) */}
                   <div className="flex text-center bg-sky-50/20 w-full flex-nowrap">
                      {days.map(d => (
                        <div key={`fc-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={d.forecast != null ? `Forecast occ. ${d.forecast.toFixed(1)}%` : 'Forecast indisponible'}>
@@ -1298,14 +1364,7 @@ export const PlanningView = () => {
                        </div>
                      ))}
                   </div>
-                  <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
-                     {days.map(d => (
-                       <div key={`avail-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors font-sans shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
-                          <span className="text-[13px] font-black text-indigo-400">{d.available}</span>
-                       </div>
-                     ))}
-                  </div>
-                  {/* Pickup chambres (J vs J-1) */}
+                  {/* 4. Pickup (chambres) J vs J-1 */}
                   <div className="flex text-center w-full flex-nowrap">
                      {days.map(d => {
                        const pk = d.pickupRooms;
@@ -1318,14 +1377,31 @@ export const PlanningView = () => {
                        );
                      })}
                   </div>
-                  <div className="flex text-center w-full flex-nowrap">
-                     {days.map(d => (
-                       <div key={`adr-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
-                          <span className="text-[11px] font-black text-violet-300">{d.adr}€</span>
-                       </div>
-                     ))}
+                  {/* 5. Pickup (revenu) J vs J-1 */}
+                  <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
+                     {days.map(d => {
+                       const rev = d.pickupRevenue;
+                       const tone = rev == null ? 'text-gray-300' : rev > 0 ? 'text-emerald-500' : rev < 0 ? 'text-rose-500' : 'text-gray-400';
+                       return (
+                         <div key={`pkrev-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={rev == null ? 'Pickup revenu indisponible' : `Pickup ${rev > 0 ? '+' : ''}${Math.round(rev)}€ vs hier`}>
+                           <span className={cn("text-[10px] font-black", tone)}>{rev == null ? '—' : `${rev > 0 ? '+' : ''}${Math.round(rev)}€`}</span>
+                         </div>
+                       );
+                     })}
                   </div>
-                  {/* Ligne Événements — agrège configStore.events + useEventsStore */}
+                  {/* 6. Compression marché (Lighthouse) */}
+                  <div className="flex text-center w-full flex-nowrap">
+                     {days.map(d => {
+                       const c = d.compressionPercent;
+                       const tone = c == null ? 'text-gray-300' : c <= 40 ? 'text-emerald-500' : c <= 60 ? 'text-amber-500' : c <= 80 ? 'text-orange-500' : 'text-rose-500';
+                       return (
+                         <div key={`comp-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={c == null ? 'Compression marché indisponible (Lighthouse)' : `Compression marché ${c}%`}>
+                           <span className={cn("text-[11px] font-black", tone)}>{c == null ? '—' : `${c}%`}</span>
+                         </div>
+                       );
+                     })}
+                  </div>
+                  {/* 7. Ligne Événements — agrège configStore.events + useEventsStore */}
                   <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
                      {days.map(d => {
                        const agg = aggregateEventsForDate(rmsEvents, d.dateStr);
@@ -1378,17 +1454,6 @@ export const PlanningView = () => {
                          </div>
                        );
                      })}
-                  </div>
-                  <div className="flex bg-white w-full flex-nowrap">
-                     {days.map((d, i) => (
-                       <div key={`date-${d.id}`} className={cn("shrink-0 h-[56px] flex flex-col items-center justify-center border-r border-gray-100 transition-all", d.isWeekend ? "bg-[#FFF9F5]/50" : "bg-white", i === 0 && "bg-indigo-50/30 ring-2 ring-inset ring-indigo-100/50")} style={{ width: `${colWidth}%` }}>
-                         <span className={cn("text-[10px] font-black uppercase tracking-widest mb-1", d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.dayName}</span>
-                         <div className="flex items-baseline gap-1.5 leading-none">
-                            <span className={cn("text-[17px] font-black", i === 0 ? "text-indigo-400" : d.isWeekend ? "text-orange-400" : "text-gray-900")}>{d.dateNum}</span>
-                            <span className={cn("text-[11px] font-black uppercase tracking-tighter opacity-70", i === 0 ? "text-indigo-300" : d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.monthName}</span>
-                         </div>
-                       </div>
-                     ))}
                   </div>
                </div>
 
@@ -1604,8 +1669,8 @@ export const PlanningView = () => {
                            return (
                              <div
                                key={`planning-res-${res.id}-${idx}`}
-                               draggable={true}
-                               onDragStart={(e) => e.dataTransfer.setData('text/plain', res.id)}
+                               draggable={smartMoveEnabled}
+                               onDragStart={(e) => { if (smartMoveEnabled) e.dataTransfer.setData('text/plain', res.id); }}
                                onMouseEnter={(e) => { setHoveredRes(res); setTooltipPos({ x: e.clientX + 15, y: e.clientY + 15 }); }}
                                onMouseLeave={() => setHoveredRes(null)}
                                onClick={() => {
@@ -1908,6 +1973,64 @@ export const PlanningView = () => {
              </div>
            )}
         </div>
+
+      {/* Volet inférieur — légende + actions rapides (maquette) */}
+      {displayMode === 'Gantt' && (
+        <div className="shrink-0 border-t border-gray-100 bg-white px-6 py-2.5 flex items-center gap-6 z-40">
+          {/* Légende des badges réservation */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Légende</span>
+            {[
+              { icon: <span className="w-3 h-3 rounded-[3px] border-2 border-emerald-500" />, label: 'Arrivée' },
+              { icon: <span className="w-3 h-3 rounded-[3px] border-2 border-orange-400" />, label: 'Départ' },
+              { icon: <Star size={12} className="text-amber-500" />, label: 'VIP' },
+              { icon: <Users size={12} className="text-indigo-600" />, label: 'Groupe' },
+              { icon: <CheckCircle2 size={12} className="text-emerald-600" />, label: 'Payée' },
+              { icon: <Euro size={12} className="text-rose-600" />, label: 'Solde dû' },
+              { icon: <Coffee size={12} className="text-orange-500" />, label: 'PdJ' },
+              { icon: <Smartphone size={12} className="text-sky-600" />, label: 'Online' },
+              { icon: <StickyNote size={12} className="text-violet-600" />, label: 'Notes' },
+            ].map((l) => (
+              <div key={l.label} className="flex items-center gap-1.5">
+                {l.icon}
+                <span className="text-[10px] font-bold text-gray-500">{l.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Actions rapides */}
+          <div className="flex items-center gap-3 ml-auto">
+            <button
+              onClick={() => setIsFreeRoomsOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-wide hover:bg-indigo-100 transition-all"
+            >
+              <DoorOpen size={13} /> {todayKpi.free} chambres libres
+            </button>
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Recherche…"
+                aria-label="Rechercher une chambre ou un client"
+                className="h-8 w-40 pl-8 pr-3 rounded-xl border border-gray-200 text-[11px] font-semibold text-gray-700 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+              />
+            </div>
+            <button
+              onClick={() => setSmartMoveEnabled((v) => !v)}
+              title="Activer/désactiver le déplacement intelligent (drag & drop)"
+              aria-label="Déplacement intelligent"
+              aria-pressed={smartMoveEnabled}
+              className="inline-flex items-center gap-2 h-8 px-3 rounded-xl border border-gray-200 text-[10px] font-black uppercase tracking-wide text-gray-500 hover:bg-gray-50 transition-all"
+            >
+              <span>Déplacement intelligent</span>
+              <span className={cn('w-8 h-4 rounded-full relative transition-colors', smartMoveEnabled ? 'bg-indigo-600' : 'bg-gray-200')}>
+                <span className={cn('absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform', smartMoveEnabled ? 'translate-x-4' : 'translate-x-0.5')} />
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
 
     {/* Tooltip Overlay */}
       <AnimatePresence>

@@ -20,7 +20,6 @@ import {
   Gauge,
   DoorOpen,
   Zap,
-  LineChart,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { getOccThreshold } from './revenueThresholds';
@@ -162,87 +161,81 @@ export function PlanningKpiBar({
   const comp = compressionLevel ? COMPRESSION_TONE[compressionLevel] : null;
 
   return (
-    <div className="shrink-0 border-b border-gray-100 bg-white/90 backdrop-blur-md px-6 py-3 flex items-center gap-2.5 overflow-x-auto scrollbar-hide">
-      <Chip
-        label="Taux occ."
-        value={`${toRate.toFixed(1)} %`}
-        sub={`${occupied}/${totalRooms} ch.`}
-        icon={TrendingUp}
-        valueClass="text-emerald-600"
-      />
-      <Chip label="ADR" value={fmtEuro(adr)} icon={CreditCard} valueClass="text-amber-600" />
-      <Chip label="RevPAR" value={fmtEuro(revpar)} icon={Activity} valueClass="text-violet-600" />
-      <Chip
-        label="Forecast"
-        value={forecast == null ? <span className="text-gray-300">—</span> : `${forecast.toFixed(1)} %`}
-        sub="prévision occ."
-        icon={LineChart}
-        valueClass="text-sky-600"
-      />
+    <div className="shrink-0 border-b border-gray-100 bg-white/90 backdrop-blur-md px-6 py-3 flex items-center gap-4 w-full">
+      {/* Chips distribués sur toute la largeur */}
+      <div className="flex-1 flex items-center justify-between gap-2 min-w-0">
+        <Chip
+          label="Taux occ."
+          value={`${toRate.toFixed(1)} %`}
+          sub={forecast == null ? `${occupied}/${totalRooms} ch.` : `Forecast ${forecast.toFixed(0)}%`}
+          icon={TrendingUp}
+          valueClass="text-emerald-600"
+        />
+        <Chip label="ADR" value={fmtEuro(adr)} sub={`${occupied}/${totalRooms} ch.`} icon={CreditCard} valueClass="text-amber-600" />
+        <Chip label="RevPAR" value={fmtEuro(revpar)} sub="par chambre" icon={Activity} valueClass="text-violet-600" />
+        <Chip
+          label="Libres"
+          value={free}
+          sub="aujourd'hui"
+          icon={DoorOpen}
+          valueClass="text-indigo-600"
+          onClick={onFreeRoomsClick}
+        />
+        <Chip
+          label="Pickup"
+          value={<PickupValue value={pickupRooms} />}
+          sub={pickupRevenue == null ? 'vs hier' : `${pickupRevenue > 0 ? '+' : ''}${Math.round(pickupRevenue).toLocaleString('fr-FR')} €`}
+          icon={ArrowUpRight}
+          loading={pickupLoading}
+        />
+        <Chip
+          label="Événements"
+          value={eventsCount}
+          sub="sur la plage"
+          icon={Zap}
+          valueClass={eventsCount > 0 ? 'text-orange-600' : 'text-gray-400'}
+          onClick={onEventsClick}
+        />
+        <Chip
+          label="Comp. marché"
+          value={
+            compressionPercent == null ? (
+              <span className="text-gray-300">—</span>
+            ) : (
+              <span className={cn('inline-flex items-center gap-1.5', comp?.text)}>
+                {comp && <span className={cn('w-1.5 h-1.5 rounded-full', comp.dot)} />}
+                {compressionPercent} %
+              </span>
+            )
+          }
+          sub={comp?.label ?? 'Lighthouse'}
+          icon={Gauge}
+          loading={compressionLoading}
+        />
+      </div>
 
-      <Chip
-        label="Pickup ch."
-        value={<PickupValue value={pickupRooms} />}
-        sub="vs hier"
-        icon={ArrowUpRight}
-        loading={pickupLoading}
-      />
-      <Chip
-        label="Pickup rev."
-        value={<PickupValue value={pickupRevenue} euro />}
-        sub="vs hier"
-        icon={ArrowUpRight}
-        loading={pickupLoading}
-      />
-
-      <Chip
-        label="Compression"
-        value={
-          compressionPercent == null ? (
-            <span className="text-gray-300">—</span>
-          ) : (
-            <span className={cn('inline-flex items-center gap-1.5', comp?.text)}>
-              {comp && <span className={cn('w-1.5 h-1.5 rounded-full', comp.dot)} />}
-              {compressionPercent} %
-            </span>
-          )
-        }
-        sub={comp?.label ?? 'Lighthouse'}
-        icon={Gauge}
-        loading={compressionLoading}
-      />
-
-      <Chip
-        label="Libres"
-        value={free}
-        sub="aujourd'hui"
-        icon={DoorOpen}
-        valueClass="text-indigo-600"
-        onClick={onFreeRoomsClick}
-      />
-      <Chip
-        label="Événements"
-        value={eventsCount}
-        sub="sur la plage"
-        icon={Zap}
-        valueClass={eventsCount > 0 ? 'text-orange-600' : 'text-gray-400'}
-        onClick={onEventsClick}
-      />
-
-      {/* Mini-heatmap d'occupation */}
+      {/* Heatmap d'occupation (maquette #13) — barres + légende dégradé */}
       {heatmap.length > 0 && (
-        <div className="flex items-end gap-0.5 px-3 py-2 rounded-2xl border border-gray-100 bg-white shrink-0" aria-hidden="true">
-          {heatmap.map((d) => {
-            const th = getOccThreshold(d.toRate);
-            return (
-              <div
-                key={d.date}
-                className={cn('w-1.5 rounded-sm', th.bg)}
-                style={{ height: `${Math.max(4, (d.toRate / 100) * 28)}px` }}
-                title={`${d.date} — ${d.toRate.toFixed(0)}%`}
-              />
-            );
-          })}
+        <div className="shrink-0 flex flex-col gap-1 pl-4 border-l border-gray-100">
+          <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Heatmap occupation</span>
+          <div className="flex items-end gap-0.5 h-7" aria-hidden="true">
+            {heatmap.map((d) => {
+              const th = getOccThreshold(d.toRate);
+              return (
+                <div
+                  key={d.date}
+                  className={cn('w-1.5 rounded-sm', th.bg)}
+                  style={{ height: `${Math.max(4, (d.toRate / 100) * 28)}px` }}
+                  title={`${d.date} — ${d.toRate.toFixed(0)}%`}
+                />
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-[8px] font-bold text-gray-300">0%</span>
+            <div className="h-1.5 w-24 rounded-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500" />
+            <span className="text-[8px] font-bold text-gray-300">100%</span>
+          </div>
         </div>
       )}
     </div>
