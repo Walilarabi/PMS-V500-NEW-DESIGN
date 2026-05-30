@@ -64,6 +64,8 @@ export interface RoomRow {
   max_occupancy: number | null;
   base_price: number | null;
   status: string | null;
+  housekeeping_status: string | null;
+  assigned_to: string | null;
   amenities: Json | null;
   notes: string | null;
   active: boolean | null;

@@ -46,9 +46,9 @@
 - [x] 3.2 useForecast.ts (calcul auto) ✅ + planning-forecast.service.ts (12 tests). Source unique : days[] dérive désormais de visibleDayKpis (fin de la triple divergence P4).
 
 ## Phase 4 — Badges (maquette #3, #4, #5)
-- [ ] 4.1 ReservationBar.tsx (badges VIP/payée/PdJ/arrivée/départ/groupe/online/notes)
-- [ ] 4.2 RoomRowLabel.tsx (pastille HK + icône maintenance)
-- [ ] 4.3 Intégration PlanningGrid
+- [x] 4.1 ReservationBadges.tsx (VIP/payée/solde dû/PdJ/groupe/online/notes) + service pur deriveBadges (11 tests). Arrivée/départ déjà gérés par chevrons. ✅
+- [x] 4.2 RoomRowLabel.tsx (pastille HK clean/dirty/inspected/oos + icône maintenance) ✅
+- [x] 4.3 Intégration PlanningGrid + extension useSupabaseSync (payment_status, solde, group_id, checkin_status, special_requests, meal_plan, guests.vip/loyalty) + RoomRow type (housekeeping_status, assigned_to) ✅
 
 ## Phase 5 — Sidebars collapsibles
 - [ ] 5.1 planningUiStore.ts (Zustand + localStorage)

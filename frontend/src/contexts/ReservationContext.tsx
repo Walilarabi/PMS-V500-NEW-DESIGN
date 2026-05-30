@@ -72,6 +72,14 @@ export interface Reservation {
   dynamicBasePrice?: number;
   logs?: ReservationLog[];
   cardexDocuments?: CardexDocument[];
+
+  // ── Champs source pour les badges planning (Supabase, optionnels) ──
+  paymentStatus?: string;          // payment_status DB (ex: 'paid', 'partial', 'pending')
+  solde?: number;                  // solde restant dû
+  groupId?: string;                // group_id (réservation de groupe)
+  checkinStatus?: string;          // checkin_status (ex: 'online')
+  specialRequests?: string;        // demandes spéciales
+  loyaltyLevel?: string;           // niveau de fidélité du client (VIP)
 }
 
 interface EnrichedReservation extends Reservation {

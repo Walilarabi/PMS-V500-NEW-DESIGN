@@ -64,6 +64,9 @@ import { PlanningKpiBar } from '@/src/pages/planning/PlanningKpiBar';
 import { usePickup } from '@/src/hooks/planning/usePickup';
 import { useMarketCompression } from '@/src/hooks/planning/useMarketCompression';
 import { useForecast } from '@/src/hooks/planning/useForecast';
+import { ReservationBadges } from '@/src/pages/planning/ReservationBadges';
+import { deriveBadges } from '@/src/services/planning/planning-reservation-badges.service';
+import { RoomRowLabel } from '@/src/pages/planning/RoomRowLabel';
 import {
   computeDayKpi,
   computeRangeKpis,
@@ -1167,25 +1170,20 @@ export const PlanningView = () => {
 
                 return (
                   <div key={room.id} className="h-[32px] flex items-center px-4 border-b border-gray-100 group">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                       <span 
-                         className="text-[14px] font-semibold text-gray-900 cursor-help" 
-                         title={`${room.number} - ${room.type ?? ''} ${room.category ?? ''}`}
-                       >
-                         {room.number}
-                       </span>
-                       <span className="text-gray-400">·</span>
-                       <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-                         {getRoomCode(room.type ?? '', room.category ?? '')}
-                       </span>
-                       <div className={cn(
-                         "w-4 h-4 rounded-full ml-auto shrink-0 border border-white", 
-                         todayRes ? "bg-blue-500" :
-                         room.status === 'clean' ? "bg-emerald-400" : 
-                         room.status === 'dirty' ? "bg-rose-400" : 
-                         "bg-orange-400"
-                       )} />
-                    </div>
+                    <RoomRowLabel
+                      number={room.number}
+                      code={getRoomCode(room.type ?? '', room.category ?? '')}
+                      housekeepingStatus={room.housekeeping_status}
+                      roomStatus={room.status}
+                      fullLabel={`${room.number} - ${room.type ?? ''} ${room.category ?? ''}`.trim()}
+                    />
+                    <div
+                      className={cn(
+                        'w-3.5 h-3.5 rounded-full ml-auto shrink-0 border border-white',
+                        todayRes ? 'bg-blue-500' : 'bg-gray-200',
+                      )}
+                      title={todayRes ? 'Occupée aujourd\'hui' : 'Libre aujourd\'hui'}
+                    />
                   </div>
                 );
               })}
@@ -1540,6 +1538,21 @@ export const PlanningView = () => {
                                         </div>
                                       )}
                                       <span className={cn("text-[11px] font-semibold truncate min-w-0 flex-1", viewLength > 15 ? "hidden lg:block" : "")}>{res.client}</span>
+                                      {(() => {
+                                        const badges = deriveBadges({
+                                          checkInIso: res.checkIn || checkInDate,
+                                          checkOutIso: res.checkOut || checkOutDate,
+                                          vip: res.vip,
+                                          loyaltyLevel: res.loyaltyLevel,
+                                          paymentStatus: res.paymentStatus,
+                                          solde: res.solde,
+                                          groupId: res.groupId,
+                                          checkinStatus: res.checkinStatus,
+                                          specialRequests: res.specialRequests,
+                                          mealPlan: res.mealPlan,
+                                        }, today);
+                                        return <ReservationBadges badges={badges} max={viewLength > 15 ? 3 : 5} />;
+                                      })()}
                                       {isOB && (
                                         <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 900, background: '#DC2626', color: '#fff', padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>OB</span>
                                       )}

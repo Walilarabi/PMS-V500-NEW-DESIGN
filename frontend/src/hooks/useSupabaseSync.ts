@@ -54,6 +54,16 @@ interface SupabaseReservation {
   notes: string | null;
   room_type: string | null;
   room_category: string | null;
+  payment_status: string | null;
+  paid_amount: number | null;
+  solde: number | null;
+  group_id: string | null;
+  checkin_status: string | null;
+  special_requests: string | null;
+  rate_plan_id: string | null;
+  guest_id: string | null;
+  guests: { vip: boolean | null; loyalty_level: string | null } | null;
+  rate_plans: { meal_plan: string | null } | null;
 }
 
 /**
@@ -123,6 +133,15 @@ function formatDateShort(isoDate: string): string {
 function mapSupabaseReservationToContext(r: SupabaseReservation): Reservation {
   const statusInfo = mapStatus(r.status);
   const source = r.source ?? 'Direct';
+  // payment_status réel → libellé opérationnel FR (jamais inventé).
+  const paymentLabel = r.payment_status === 'paid'
+    ? 'Payée'
+    : r.payment_status === 'partial'
+      ? 'Acompte'
+      : (r.solde ?? 0) > 0
+        ? 'Solde dû'
+        : 'En attente';
+  const isVip = !!(r.guests?.vip || (r.guests?.loyalty_level && r.guests.loyalty_level.trim() !== ''));
   return {
     id: r.id,
     priority: 'normal',
@@ -137,7 +156,7 @@ function mapSupabaseReservationToContext(r: SupabaseReservation): Reservation {
     source,
     sourceColor: 'bg-violet-100 text-violet-700',
     partnerRef: r.reference ?? undefined,
-    payment: 'En attente',
+    payment: paymentLabel,
     totalAmount: r.total_amount ?? 0,
     totalTTC: r.total_amount ?? 0,
     ownerFeeRate: 0.20,
@@ -148,6 +167,15 @@ function mapSupabaseReservationToContext(r: SupabaseReservation): Reservation {
     checkIn: r.check_in,
     checkOut: r.check_out,
     guests: { adults: r.adults ?? 2, children: r.children ?? 0 },
+    notes: r.notes ?? undefined,
+    mealPlan: r.rate_plans?.meal_plan ?? undefined,
+    vip: isVip,
+    paymentStatus: r.payment_status ?? undefined,
+    solde: r.solde ?? undefined,
+    groupId: r.group_id ?? undefined,
+    checkinStatus: r.checkin_status ?? undefined,
+    specialRequests: r.special_requests ?? undefined,
+    loyaltyLevel: r.guests?.loyalty_level ?? undefined,
     logs: [],
   } as Reservation;
 }
@@ -225,7 +253,9 @@ export function useSupabaseSync() {
           .select(
             'id,reference,room_id,room_number,guest_name,guest_email,guest_phone,' +
               'check_in,check_out,nights,status,adults,children,pax,total_amount,source,' +
-              'notes,room_type,room_category'
+              'notes,room_type,room_category,payment_status,paid_amount,solde,group_id,' +
+              'checkin_status,special_requests,rate_plan_id,guest_id,' +
+              'guests(vip,loyalty_level),rate_plans(meal_plan)'
           )
           .eq('hotel_id', tenantId)
           .order('check_in', { ascending: true })
