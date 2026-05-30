@@ -257,14 +257,35 @@ export const PlanningView = () => {
       (r.type ?? '').toLowerCase().includes(searchQuery.toLowerCase());
 
     // Status filter for rooms
+    const todayFilterStr = toLocalISODate(new Date());
     let passStatus = true;
-    if (statusFilter === 'Libres') passStatus = r.status === 'clean';
-    if (statusFilter === 'Ménage') passStatus = r.status === 'dirty';
-    if (statusFilter === 'Occupées') {
-      const todayStr = toLocalISODate(new Date());
-       passStatus = contextReservations.some(res =>
-         res.room === r.number && todayStr >= res.arrival.split(' ')[0] && todayStr < res.departure.split(' ')[0]
-       );
+    if (statusFilter === 'Libres') {
+      // Free = no active reservation today (reservation-based, not room.status field)
+      passStatus = !contextReservations.some(res =>
+        res.room === r.number &&
+        todayFilterStr >= res.arrival.split(' ')[0] &&
+        todayFilterStr < res.departure.split(' ')[0] &&
+        res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow'
+      );
+    } else if (statusFilter === 'Ménage') {
+      passStatus = r.housekeeping_status === 'dirty';
+    } else if (statusFilter === 'Occupées') {
+      passStatus = contextReservations.some(res =>
+        res.room === r.number &&
+        todayFilterStr >= res.arrival.split(' ')[0] &&
+        todayFilterStr < res.departure.split(' ')[0] &&
+        res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow'
+      );
+    } else if (statusFilter === 'Arrivées') {
+      passStatus = contextReservations.some(res =>
+        res.room === r.number && res.arrival.startsWith(todayFilterStr)
+        && res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow'
+      );
+    } else if (statusFilter === 'Départs') {
+      passStatus = contextReservations.some(res =>
+        res.room === r.number && res.departure.startsWith(todayFilterStr)
+        && res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow'
+      );
     }
 
     return passFloor && passType && passSearch && passStatus;
@@ -616,6 +637,8 @@ export const PlanningView = () => {
     const year = today.getFullYear();
     const month = today.getMonth();
     const lastDay = new Date(year, month + 1, 0).getDate();
+    // Use total sellable rooms (not filtered) as the denominator for TO and RevPAR
+    const totalRooms = storeRooms.filter(r => r.active !== false && r.status !== 'out_of_order' && r.status !== 'maintenance').length || storeRooms.length;
     const result = [];
     for (let i = 1; i <= lastDay; i++) {
       const date = new Date(year, month, i);
@@ -625,18 +648,18 @@ export const PlanningView = () => {
           const start = new Date(res.arrival).getTime();
           const end = new Date(res.departure).getTime();
           const current = date.getTime();
-          return !isNaN(start) && !isNaN(end) && current >= start && current < end;
+          return !isNaN(start) && !isNaN(end) && current >= start && current < end
+            && res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow';
         } catch { return false; }
       });
       const occupiedCount = occupiedRes.length;
       const dayEvents = storeEvents.filter(e => dateStr >= e.startDate && dateStr <= e.endDate);
-      const occ = rooms.length > 0 ? Math.round((occupiedCount / rooms.length) * 100) : 0;
-      
-      // Calculate real revenue from actual reservations
-      const totalRevenue = occupiedRes.reduce((sum, res) => sum + (res.totalAmount || 0), 0);
-      const ca = totalRevenue;
+      const occ = totalRooms > 0 ? Math.round((occupiedCount / totalRooms) * 100) : 0;
+
+      // Per-night revenue: each reservation contributes its prorated daily amount
+      const ca = occupiedRes.reduce((sum, res) => sum + res.revenuePerNight, 0);
       const adr = occupiedCount > 0 ? Math.round(ca / occupiedCount) : 0;
-      
+
       result.push({
         date,
         dateStr,
@@ -646,12 +669,12 @@ export const PlanningView = () => {
         occ,
         ca,
         adr,
-        revpar: rooms.length > 0 ? ca / rooms.length : 0,
+        revpar: totalRooms > 0 ? ca / totalRooms : 0,
         events: dayEvents,
       });
     }
     return result;
-  }, [contextReservations, storeEvents, rooms, monthDate]);
+  }, [contextReservations, storeEvents, storeRooms, monthDate]);
 
   const revenueBaselines = React.useMemo(() => {
     const avgAdr = calendarDays.length ? calendarDays.reduce((sum, d) => sum + d.adr, 0) / calendarDays.length : 0;
@@ -1789,7 +1812,7 @@ export const PlanningView = () => {
                               <div key={`empty-rev-${i}`} />
                             ))}
 
-                            {calendarDays.map((d) => {
+                            {calendarDays.map((d, dayIdx) => {
                               const insight = revenueInsightsByDate[d.dateStr];
                               const score = insight?.score ?? 65;
                               const scoreColor = score >= 85 ? 'text-emerald-500 border-emerald-100 bg-emerald-50' : 
@@ -1852,15 +1875,21 @@ export const PlanningView = () => {
                                       </div>
 
                                       <div className="h-10 flex items-end gap-1 px-1">
-                                         {[35, 48, 56, 64, 72, 80, 88, Math.max(45, score)].map((h, idx) => (
-                                           <div 
-                                             key={idx} 
+                                         {[
+                                           ...Array.from({ length: 7 }, (_, i) => {
+                                             const prev = calendarDays[dayIdx - 7 + i];
+                                             return prev ? Math.max(5, prev.occ) : 5;
+                                           }),
+                                           Math.max(5, d.occ),
+                                         ].map((h, idx) => (
+                                           <div
+                                             key={idx}
                                              className={cn(
                                                "flex-1 rounded-full transition-all group-hover:opacity-100",
                                                idx === 7 ? "bg-indigo-500" : "bg-gray-100",
                                                idx > 4 && idx < 7 && "bg-indigo-200"
-                                             )} 
-                                             style={{ height: `${h}%` }} 
+                                             )}
+                                             style={{ height: `${h}%` }}
                                            />
                                          ))}
                                       </div>
