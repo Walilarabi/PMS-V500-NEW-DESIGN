@@ -42,7 +42,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
 import { RevenueKPIChart } from '@/src/components/configuration/RevenueKPIChart';
 import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
-import { useConfigStore, HotelEvent } from '@/src/store/configStore';
+import type { HotelEvent, ChannelConfig } from '@/src/store/configStore';
 import { useEventsStore } from '@/src/store/eventsStore';
 import { aggregateEventsForDate, eventCellTone, impactLevelLabel } from '@/src/services/events-bridge.service';
 import { useRealtimeKPI } from '@/src/hooks/useRealtimeKPI';
@@ -52,8 +52,11 @@ import { RevenueDetailsModal } from '@/src/components/modals/RevenueDetailsModal
 import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 import { AvailabilityModal } from '@/src/components/modals/AvailabilityModal';
 import { Palette } from 'lucide-react';
-import { usePlanningMetrics } from '@/src/hooks/usePlanningMetrics';
 import { buildReservation } from '@/src/lib/reservationFactory';
+import { useRooms } from '@/src/domains/hotel/hooks';
+import { useEvents, useChannels } from '@/src/domains/planning/hooks';
+import { usePlanningRealtime } from '@/src/hooks/planning/usePlanningRealtime';
+import type { RoomRow } from '@/src/lib/supabase.types';
 
 const getContrastColor = (hexcolor: string) => {
   if (!hexcolor) return '#1e293b';
@@ -109,9 +112,47 @@ const getRoomCode = (type: string, category: string): string => {
 
 export const PlanningView = () => {
   const { addReservation, updateReservation, reservations: contextReservations } = useReservations();
-  const { rooms: storeRooms, events: storeEvents, channels: storeChannels, syncStatus } = useConfigStore();
   const rmsEvents = useEventsStore((s) => s.events);
-  
+
+  // ── Données réelles Supabase ────────────────────────────────────────────
+  const roomsQuery = useRooms();
+  const eventsQuery = useEvents();
+  const channelsQuery = useChannels();
+  usePlanningRealtime();
+
+  const storeRooms: RoomRow[] = roomsQuery.data ?? [];
+
+  const storeEvents: HotelEvent[] = React.useMemo(
+    () =>
+      (eventsQuery.data ?? []).map((e) => ({
+        id: e.id,
+        name: e.name,
+        startDate: e.start_date,
+        endDate: e.end_date,
+        impact: e.impact,
+        description: e.description ?? undefined,
+        source: e.source ?? undefined,
+        location: e.location ?? undefined,
+      })),
+    [eventsQuery.data],
+  );
+
+  const storeChannels: ChannelConfig[] = React.useMemo(
+    () =>
+      (channelsQuery.data ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        color: c.color,
+      })),
+    [channelsQuery.data],
+  );
+
+  const syncStatus = roomsQuery.isLoading || eventsQuery.isLoading
+    ? 'loading'
+    : roomsQuery.isError
+      ? 'error'
+      : 'synced';
+
   // Calcul KPI temps réel automatique
   const kpiData = useRealtimeKPI(contextReservations, storeRooms.length, {
     start: new Date(),
@@ -137,7 +178,7 @@ export const PlanningView = () => {
   const [isRevenueDetailsOpen, setIsRevenueDetailsOpen] = useState(false);
   const [revenueDetailsTab, setRevenueDetailsTab] = useState<'day' | 'events' | 'channels' | 'forecast' | 'alerts' | 'score'>('day');
   const [editReservation, setEditReservation] = useState<Reservation | null>(null);
-  const [confirmMove, setConfirmMove] = useState<{resId: string, newRoom: typeof storeRooms[0], oldPrice: number, newPrice: number} | null>(null);
+  const [confirmMove, setConfirmMove] = useState<{resId: string, newRoom: RoomRow, oldPrice: number, newPrice: number} | null>(null);
   const [isCustomizingMove, setIsCustomizingMove] = useState(false);
   const [moveCustomMode, setMoveCustomMode] = useState<'night' | 'total' | 'free'>('night');
   const [customSupplement, setCustomSupplement] = useState<number>(0);
@@ -164,19 +205,19 @@ export const PlanningView = () => {
   const [hoveredEvents, setHoveredEvents] = useState<HotelEvent[] | null>(null);
 
   // Constants for filters
-  const roomTypes  = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.type))).sort(),   [storeRooms]);
-  const roomScales = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.category))).sort(),[storeRooms]);
-  const channels   = React.useMemo(() => storeChannels.map(c => c.name),                             [storeChannels]);
-  const floors     = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.floor))).sort(),   [storeRooms]);
+  const roomTypes  = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.type).filter(Boolean))).sort() as string[],   [storeRooms]);
+  const roomScales = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.category).filter(Boolean))).sort() as string[], [storeRooms]);
+  const channels   = React.useMemo(() => storeChannels.map(c => c.name),                                                          [storeChannels]);
+  const floors     = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.floor).filter(f => f != null))).sort((a, b) => (a as number) - (b as number)) as number[], [storeRooms]);
   const statuses = ['Arrivées', 'Départs', 'Occupées', 'Libres', 'Ménage'];
 
   // Filter Rooms
   const rooms = React.useMemo(() => storeRooms.filter(r => {
-    const passFloor = floorFilter === 'Tous' || r.floor.toString() === floorFilter;
+    const passFloor = floorFilter === 'Tous' || String(r.floor ?? '') === floorFilter;
     const passType = typeFilter === 'Tous Types' || r.type === typeFilter || r.category === typeFilter;
     const passSearch = searchQuery === '' ||
       r.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.type.toLowerCase().includes(searchQuery.toLowerCase());
+      (r.type ?? '').toLowerCase().includes(searchQuery.toLowerCase());
 
     // Status filter for rooms
     let passStatus = true;
@@ -259,7 +300,7 @@ export const PlanningView = () => {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent, targetRoom: typeof storeRooms[0]) => {
+  const handleDrop = (e: React.DragEvent, targetRoom: RoomRow) => {
     e.preventDefault();
     const resId = e.dataTransfer.getData('text/plain');
     if (!resId) return;
@@ -299,13 +340,13 @@ export const PlanningView = () => {
     };
 
     const oldRoom = storeRooms.find(r => r.number === res.room);
-    const oldPrice = (oldRoom as any)?.price || getPriceByCategory(oldRoom?.category);
-    const newPrice = (targetRoom as any)?.price || getPriceByCategory(targetRoom.category);
+    const oldPrice = oldRoom?.base_price ?? getPriceByCategory(oldRoom?.category ?? undefined);
+    const newPrice = targetRoom.base_price ?? getPriceByCategory(targetRoom.category ?? undefined);
 
     if (oldRoom?.category !== targetRoom.category) {
       setConfirmMove({ resId, newRoom: targetRoom, oldPrice, newPrice });
     } else {
-      updateReservation(resId, { room: targetRoom.number, roomType: targetRoom.type });
+      updateReservation(resId, { room: targetRoom.number, roomType: targetRoom.type ?? undefined });
       window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Réservation ${resId} déplacée en chambre ${targetRoom.number}` } }));
     }
   };
@@ -335,14 +376,14 @@ export const PlanningView = () => {
 
       const newTotal = (res.totalAmount || 0) + (diff * days);
       
-      updateReservation(resId, { 
-        room: newRoom.number, 
-        roomType: newRoom.type,
+      updateReservation(resId, {
+        room: newRoom.number,
+        roomType: newRoom.type ?? undefined,
         totalAmount: newTotal,
         logs: [{ timestamp: new Date().toISOString(), action: note, userId: 'user' }]
       });
-      window.dispatchEvent(new CustomEvent('app-toast', { 
-        detail: { message: `Délogement confirmé. Nouveau total: ${newTotal.toFixed(2)}€` } 
+      window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: `Délogement confirmé. Nouveau total: ${newTotal.toFixed(2)}€` }
       }));
     }
     setConfirmMove(null);
@@ -352,9 +393,9 @@ export const PlanningView = () => {
   const handleIgnoreMove = () => {
     if (!confirmMove) return;
     const { resId, newRoom } = confirmMove;
-    updateReservation(resId, { 
-      room: newRoom.number, 
-      roomType: newRoom.type,
+    updateReservation(resId, {
+      room: newRoom.number,
+      roomType: newRoom.type ?? undefined,
       logs: [{ timestamp: new Date().toISOString(), action: `Délogement sans changement de prix: ${newRoom.number}`, userId: 'user' }]
     });
     window.dispatchEvent(new CustomEvent('app-toast', { 
@@ -588,7 +629,7 @@ export const PlanningView = () => {
     setIsModalOpen(true);
   }, [addOneNight, days, hasReservedNightsInRange]);
 
-  const handleGridCellMouseDown = React.useCallback((e: React.MouseEvent<HTMLDivElement>, room: typeof storeRooms[number], dateIdx: number) => {
+  const handleGridCellMouseDown = React.useCallback((e: React.MouseEvent<HTMLDivElement>, room: RoomRow, dateIdx: number) => {
     if (e.button !== 0) return;
     if (!days[dateIdx]) return;
     if (isCellReserved(room.number, days[dateIdx].dateStr)) return;
@@ -597,15 +638,15 @@ export const PlanningView = () => {
     setIsMouseSelecting(true);
     setDragSel({
       roomNumber: room.number,
-      roomType: room.type,
-      roomCategory: room.category,
+      roomType: room.type ?? '',
+      roomCategory: room.category ?? '',
       startDateIdx: dateIdx,
       endDateIdx: dateIdx,
       active: true,
     });
   }, [days, isCellReserved]);
 
-  const handleGridCellMouseEnter = React.useCallback((room: typeof storeRooms[number], dateIdx: number) => {
+  const handleGridCellMouseEnter = React.useCallback((room: RoomRow, dateIdx: number) => {
     setDragSel((prev) => {
       if (!prev?.active) return prev;
       if (prev.roomNumber !== room.number) return prev;
@@ -639,21 +680,21 @@ export const PlanningView = () => {
     const categoriesMap = new Map<string, { category: string; totalRooms: number; occupiedByDate: Record<string, Set<string>> }>();
     
     storeRooms.forEach(room => {
-      const category = `${room.type} ${room.category}`.trim();
+      const category = `${room.type ?? ''} ${room.category ?? ''}`.trim();
       if (!categoriesMap.has(category)) {
         categoriesMap.set(category, { category, totalRooms: 0, occupiedByDate: {} });
       }
       categoriesMap.get(category)!.totalRooms++;
     });
-    
+
     // Calculer occupation par date pour chaque catégorie
     contextReservations.forEach(res => {
       if (res.reservationStatus === 'cancelled' || !res.room) return;
-      
+
       const room = storeRooms.find(r => r.number === res.room);
       if (!room) return;
-      
-      const category = `${room.type} ${room.category}`.trim();
+
+      const category = `${room.type ?? ''} ${room.category ?? ''}`.trim();
       const catData = categoriesMap.get(category);
       if (!catData) return;
       
@@ -1024,13 +1065,13 @@ export const PlanningView = () => {
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                        <span 
                          className="text-[14px] font-semibold text-gray-900 cursor-help" 
-                         title={`${room.number} - ${room.type} ${room.category}`}
+                         title={`${room.number} - ${room.type ?? ''} ${room.category ?? ''}`}
                        >
                          {room.number}
                        </span>
                        <span className="text-gray-400">·</span>
                        <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-                         {getRoomCode(room.type, room.category)}
+                         {getRoomCode(room.type ?? '', room.category ?? '')}
                        </span>
                        <div className={cn(
                          "w-4 h-4 rounded-full ml-auto shrink-0 border border-white", 
@@ -1170,7 +1211,7 @@ export const PlanningView = () => {
                               <div
                                 key={`cell-${room.id}-${day.id}`}
                                 data-chambre={room.number}
-                                data-categorie={`${room.category}/${room.type}`}
+                                data-categorie={`${room.category ?? ''}/${room.type ?? ''}`}
                                 data-date={day.dateStr}
                                 className={cn(
                                   'h-full border-r border-transparent transition-colors relative overflow-hidden',
@@ -1851,7 +1892,7 @@ export const PlanningView = () => {
           roomNumber: dragFormData.roomNumber,
           category: dragFormData.category,
         } : undefined}
-        availableRooms={storeRooms.map(r => ({ number: r.number, type: r.type, price: (r as any).price }))}
+        availableRooms={storeRooms.map(r => ({ number: r.number, type: r.type ?? '', price: r.base_price ?? undefined }))}
         allReservations={contextReservations.map(r => ({ id: r.id, room: r.room, arrival: r.arrival, departure: r.departure }))}
         source="planning"
         onSave={(data: ReservationFormData) => {
@@ -1864,7 +1905,7 @@ export const PlanningView = () => {
           };
           const newRes: Reservation = buildReservation({
             ...typedData,
-            roomType: room ? `${room.category}/${room.type}` : 'STD/DLX',
+            roomType: room ? `${room.category ?? 'STD'}/${room.type ?? 'DLX'}` : 'STD/DLX',
           });
           addReservation(newRes);
           setIsModalOpen(false);
@@ -1894,7 +1935,8 @@ export const PlanningView = () => {
         initialTab={revenueDetailsTab}
         selectedDate={selectedCalendarDate || undefined}
         reservations={contextReservations}
-        rooms={rooms}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        rooms={rooms as any}
         events={storeEvents}
         rmsEvents={rmsEvents}
         channels={storeChannels}
