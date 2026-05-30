@@ -223,6 +223,41 @@ export async function updateReservationStatus(
 }
 
 /**
+ * persistReservationMove — Persiste un déplacement de réservation (délogement)
+ * dans Supabase : nouvelle chambre + total éventuellement réajusté.
+ *
+ * Corrige P6 (drag-move non persisté → perte au rechargement). RLS scope par
+ * hôtel. Audit trail via writeAuditLog.
+ */
+export async function persistReservationMove(input: {
+  id: string;
+  roomId: string;
+  roomNumber: string;
+  totalAmount?: number;
+}): Promise<void> {
+  const patch: Record<string, unknown> = {
+    room_id: input.roomId,
+    room_number: input.roomNumber,
+  };
+  if (input.totalAmount !== undefined) patch.total_amount = input.totalAmount;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.from('reservations') as any).update(patch).eq('id', input.id);
+  if (error) throw mapSupabaseError(error);
+
+  void writeAuditLog({
+    entity: 'reservation',
+    entity_id: input.id,
+    action: 'MOVE',
+    payload: {
+      room_id: input.roomId,
+      room_number: input.roomNumber,
+      total_amount: input.totalAmount ?? null,
+    },
+  });
+}
+
+/**
  * checkIn — Statut confirmed → checked_in
  * Exige expectedVersion pour éviter double check-in concurrent.
  */

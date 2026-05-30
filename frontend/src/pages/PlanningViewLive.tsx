@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, lazy, Suspense } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -51,7 +51,10 @@ import { aggregateEventsForDate, eventCellTone, impactLevelLabel } from '@/src/s
 import { useRealtimeKPI } from '@/src/hooks/useRealtimeKPI';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 import { ChannelColorModal } from '@/src/components/modals/ChannelColorModal';
-import { RevenueDetailsModal } from '@/src/components/modals/RevenueDetailsModal';
+// Modale lourde (graphiques) — chargée à la demande pour alléger le bundle initial.
+const RevenueDetailsModal = lazy(() =>
+  import('@/src/components/modals/RevenueDetailsModal').then((m) => ({ default: m.RevenueDetailsModal })),
+);
 import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 import { AvailabilityModal } from '@/src/components/modals/AvailabilityModal';
 import { Palette } from 'lucide-react';
@@ -72,6 +75,7 @@ import { RmsRecommendationPanel } from '@/src/pages/planning/RmsRecommendationPa
 import { FreeRoomsModal } from '@/src/pages/planning/FreeRoomsModal';
 import { PlanningModeBar } from '@/src/pages/planning/PlanningModeBar';
 import { getOccThreshold } from '@/src/pages/planning/revenueThresholds';
+import { persistReservationMove } from '@/src/domains/reservations/repository';
 import {
   computeDayKpi,
   computeRangeKpis,
@@ -377,7 +381,10 @@ export const PlanningView = () => {
       setConfirmMove({ resId, newRoom: targetRoom, oldPrice, newPrice });
     } else {
       updateReservation(resId, { room: targetRoom.number, roomType: targetRoom.type ?? undefined });
-      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Réservation ${resId} déplacée en chambre ${targetRoom.number}` } }));
+      // Persistance DB (corrige P6 : le déplacement survit au rechargement).
+      persistReservationMove({ id: resId, roomId: targetRoom.id, roomNumber: targetRoom.number })
+        .then(() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Réservation déplacée en chambre ${targetRoom.number}` } })))
+        .catch((e) => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Échec de l'enregistrement du déplacement : ${e instanceof Error ? e.message : 'erreur'}` } })));
     }
   };
 
@@ -412,9 +419,14 @@ export const PlanningView = () => {
         totalAmount: newTotal,
         logs: [{ timestamp: new Date().toISOString(), action: note, userId: 'user' }]
       });
-      window.dispatchEvent(new CustomEvent('app-toast', {
-        detail: { message: `Délogement confirmé. Nouveau total: ${newTotal.toFixed(2)}€` }
-      }));
+      // Persistance DB : chambre + nouveau total (cohérence prix/DB).
+      persistReservationMove({ id: resId, roomId: newRoom.id, roomNumber: newRoom.number, totalAmount: newTotal })
+        .then(() => window.dispatchEvent(new CustomEvent('app-toast', {
+          detail: { message: `Délogement confirmé. Nouveau total: ${newTotal.toFixed(2)}€` }
+        })))
+        .catch((e) => window.dispatchEvent(new CustomEvent('app-toast', {
+          detail: { message: `Échec de l'enregistrement : ${e instanceof Error ? e.message : 'erreur'}` }
+        })));
     }
     setConfirmMove(null);
     setIsCustomizingMove(false);
@@ -428,8 +440,13 @@ export const PlanningView = () => {
       roomType: newRoom.type ?? undefined,
       logs: [{ timestamp: new Date().toISOString(), action: `Délogement sans changement de prix: ${newRoom.number}`, userId: 'user' }]
     });
-    window.dispatchEvent(new CustomEvent('app-toast', { 
-      detail: { message: `Délogement effectué. Prix maintenu.` } 
+    // Persistance DB (chambre uniquement, prix maintenu).
+    persistReservationMove({ id: resId, roomId: newRoom.id, roomNumber: newRoom.number })
+      .catch((e) => window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: `Échec de l'enregistrement : ${e instanceof Error ? e.message : 'erreur'}` }
+      })));
+    window.dispatchEvent(new CustomEvent('app-toast', {
+      detail: { message: `Délogement effectué. Prix maintenu.` }
     }));
     setConfirmMove(null);
     setIsCustomizingMove(false);
@@ -2160,26 +2177,30 @@ export const PlanningView = () => {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #EEF2F7; border-radius: 10px; border: 2px solid white; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #E2E8F0; }
       `}} />
-      <RevenueDetailsModal
-        isOpen={isRevenueDetailsOpen}
-        onClose={() => setIsRevenueDetailsOpen(false)}
-        initialTab={revenueDetailsTab}
-        selectedDate={selectedCalendarDate || undefined}
-        reservations={contextReservations}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        rooms={rooms as any}
-        events={storeEvents}
-        rmsEvents={rmsEvents}
-        channels={storeChannels}
-        calendarDays={calendarDays}
-        insightsByDate={revenueInsightsByDate}
-        onRefresh={async () => {
-          // Force re-evaluation of derived data; React Query invalidations are
-          // already handled inside the modal. We just need to bump local state
-          // so memos re-compute against the freshest store snapshots.
-          setMonthDate((d) => new Date(d.getFullYear(), d.getMonth(), 1));
-        }}
-      />
+      {isRevenueDetailsOpen && (
+        <Suspense fallback={null}>
+          <RevenueDetailsModal
+            isOpen={isRevenueDetailsOpen}
+            onClose={() => setIsRevenueDetailsOpen(false)}
+            initialTab={revenueDetailsTab}
+            selectedDate={selectedCalendarDate || undefined}
+            reservations={contextReservations}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            rooms={rooms as any}
+            events={storeEvents}
+            rmsEvents={rmsEvents}
+            channels={storeChannels}
+            calendarDays={calendarDays}
+            insightsByDate={revenueInsightsByDate}
+            onRefresh={async () => {
+              // Force re-evaluation of derived data; React Query invalidations are
+              // already handled inside the modal. We just need to bump local state
+              // so memos re-compute against the freshest store snapshots.
+              setMonthDate((d) => new Date(d.getFullYear(), d.getMonth(), 1));
+            }}
+          />
+        </Suspense>
+      )}
       <ChannelColorModal 
         isOpen={isChannelModalOpen} 
         onClose={() => setIsChannelModalOpen(false)} 

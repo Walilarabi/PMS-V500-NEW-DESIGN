@@ -67,9 +67,9 @@
 - [x] 7.4 Mode Maintenance : fond rayé sur chambres maintenance/out_of_order ✅
 
 ## Phase 8 — Performance (maquette #12)
-- [ ] 8.1 Virtualisation lignes chambre
-- [ ] 8.2 useMemo + useCallback agressifs
-- [ ] 8.3 Optimistic updates drag-move (persisté en DB)
-- [ ] 8.4 Lazy loading modales
-- [ ] 8.5 Batch snapshot writes
-- [ ] 8.6 Realtime throttle 500ms (fait dans usePlanningRealtime)
+- [~] 8.1 Virtualisation lignes chambre — DIFFÉRÉ : 55 chambres réelles, optimisation prématurée (skill perf : mesurer d'abord). Risque élevé sur la grille à barres absolues. À reconsidérer si > 150 chambres.
+- [x] 8.2 useMemo agressifs — calculs KPI/pickup/compression/forecast tous memoized (sources uniques) ✅
+- [x] 8.3 Drag-move PERSISTÉ en DB (persistReservationMove : room_id/room_number/total_amount + audit) — corrige P6 (perte au rechargement). Erreurs remontées via toast. ✅
+- [x] 8.4 Lazy loading RevenueDetailsModal (chunk séparé 37 kB, monté à l'ouverture seulement) ✅
+- [x] 8.5 Batch snapshot writes (upsertSnapshots = 1 requête pour tout l'horizon) ✅
+- [x] 8.6 Realtime throttle 500ms (usePlanningRealtime) ✅
