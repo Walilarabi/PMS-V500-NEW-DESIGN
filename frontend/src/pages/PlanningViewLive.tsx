@@ -78,7 +78,6 @@ import { deriveBadges } from '@/src/services/planning/planning-reservation-badge
 import { RoomRowLabel } from '@/src/pages/planning/RoomRowLabel';
 import { usePlanningUiStore } from '@/src/store/planningUiStore';
 import { FreeRoomsModal } from '@/src/pages/planning/FreeRoomsModal';
-import { PlanningModeBar } from '@/src/pages/planning/PlanningModeBar';
 import { PlanningRightPanel, type RightPanelIntel } from '@/src/pages/planning/PlanningRightPanel';
 import { getOccThreshold } from '@/src/pages/planning/revenueThresholds';
 import { persistReservationMove } from '@/src/domains/reservations/repository';
@@ -200,7 +199,6 @@ export const PlanningView = () => {
   const toggleRightSidebar = usePlanningUiStore((s) => s.toggleRightSidebar);
   const showRightSidebar = !rightSidebarCollapsed;
   const activeMode = usePlanningUiStore((s) => s.activeMode);
-  const setActiveMode = usePlanningUiStore((s) => s.setActiveMode);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedDetailsRes, setSelectedDetailsRes] = useState<Reservation | null>(null);
@@ -238,19 +236,17 @@ export const PlanningView = () => {
   const [dragFormData, setDragFormData] = useState<Record<string, string> | null>(null);
   const [isMouseSelecting, setIsMouseSelecting] = useState(false);
 
-  const [floorFilter, setFloorFilter] = useState<string>('Tous');
-  const [typeFilter, setTypeFilter] = useState<string>('Tous Types');
-  const [statusFilter, setStatusFilter] = useState<string>('Tous Statuts');
+  // Filtres planning — partagés avec la sidebar principale via planningUiStore.
+  const floorFilter = usePlanningUiStore((s) => s.floorFilter);
+  const typeFilter = usePlanningUiStore((s) => s.typeFilter);
+  const statusFilter = usePlanningUiStore((s) => s.statusFilter);
   const [channelFilter, setChannelFilter] = useState<string>('Tous Canaux');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [hoveredEvents, setHoveredEvents] = useState<HotelEvent[] | null>(null);
 
-  // Constants for filters
-  const roomTypes  = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.type).filter(Boolean))).sort() as string[],   [storeRooms]);
-  const roomScales = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.category).filter(Boolean))).sort() as string[], [storeRooms]);
+  // Constants for filters — options (étage/type/statut) are presented by the
+  // sidebar (PlanningSidebarSection) ; only the channel list is used here.
   const channels   = React.useMemo(() => storeChannels.map(c => c.name),                                                          [storeChannels]);
-  const floors     = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.floor).filter(f => f != null))).sort((a, b) => (a as number) - (b as number)) as number[], [storeRooms]);
-  const statuses = ['Arrivées', 'Départs', 'Occupées', 'Libres', 'Ménage'];
 
   // Filter Rooms
   const rooms = React.useMemo(() => storeRooms.filter(r => {
@@ -919,11 +915,6 @@ export const PlanningView = () => {
             </button>
           </div>
 
-          {/* Mode d'affichage Gantt (Occupation / Revenue / Ménage / Groupe / Maintenance) */}
-          {displayMode === 'Gantt' && (
-            <PlanningModeBar activeMode={activeMode} onChange={setActiveMode} orientation="horizontal" />
-          )}
-
           <div className="flex items-center gap-3 px-4 py-1.5 bg-white rounded-xl border border-gray-100 ml-4">
             <button onClick={handlePrev} className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"><ChevronLeft size={16} /></button>
             <button 
@@ -1002,40 +993,9 @@ export const PlanningView = () => {
             />
           </div>
 
+          {/* Filtre canal — Étage/Type/Statut vivent dans la sidebar (maquette) */}
           <div className="flex items-center gap-2 px-2 bg-gray-50 border border-gray-100 rounded-2xl">
              <select
-               value={floorFilter}
-               onChange={(e) => setFloorFilter(e.target.value)}
-               className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-3 focus:ring-0 cursor-pointer"
-             >
-                <option value="Tous">Tous étages</option>
-                {floors.map(f => <option key={f} value={String(f)}>Étage {f}</option>)}
-             </select>
-             <div className="w-px h-6 bg-gray-200" />
-             <select
-               value={typeFilter}
-               onChange={(e) => setTypeFilter(e.target.value)}
-               className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-3 focus:ring-0 cursor-pointer"
-             >
-                <option>Tous Types</option>
-                <optgroup label="Catégories">
-                  {roomScales.map(s => <option key={s} value={s}>{s}</option>)}
-                </optgroup>
-                <optgroup label="Modèles">
-                  {roomTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                </optgroup>
-             </select>
-             <div className="w-px h-6 bg-gray-200" />
-             <select
-               value={statusFilter}
-               onChange={(e) => setStatusFilter(e.target.value)}
-               className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-1 focus:ring-0 cursor-pointer"
-             >
-                <option>Tous Statuts</option>
-                {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-             </select>
-             <div className="w-px h-6 bg-gray-200" />
-             <select 
                value={channelFilter}
                onChange={(e) => setChannelFilter(e.target.value)}
                className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-3 focus:ring-0 cursor-pointer"

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
+import { PlanningSidebarSection } from './PlanningSidebarSection';
 
 interface SidebarProps {
   activePage: PageId;
@@ -376,6 +377,9 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
             </div>
           </div>
         ))}
+
+        {/* Section contextuelle Planning — modes d'affichage + filtres (maquette) */}
+        {activePage === 'planning' && <PlanningSidebarSection isCollapsed={isCollapsed} />}
       </div>
     </aside>
   );

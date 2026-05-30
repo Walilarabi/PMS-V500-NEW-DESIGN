@@ -165,7 +165,7 @@ export function PlanningKpiBar({
       {/* Chips distribués sur toute la largeur */}
       <div className="flex-1 flex items-center justify-between gap-2 min-w-0">
         <Chip
-          label="Taux occ."
+          label="TO (réel)"
           value={`${toRate.toFixed(1)} %`}
           sub={forecast == null ? `${occupied}/${totalRooms} ch.` : `Forecast ${forecast.toFixed(0)}%`}
           icon={TrendingUp}
@@ -182,19 +182,18 @@ export function PlanningKpiBar({
           onClick={onFreeRoomsClick}
         />
         <Chip
-          label="Pickup"
+          label="Pickup (ch.)"
           value={<PickupValue value={pickupRooms} />}
-          sub={pickupRevenue == null ? 'vs hier' : `${pickupRevenue > 0 ? '+' : ''}${Math.round(pickupRevenue).toLocaleString('fr-FR')} €`}
+          sub="vs hier"
           icon={ArrowUpRight}
           loading={pickupLoading}
         />
         <Chip
-          label="Événements"
-          value={eventsCount}
-          sub="sur la plage"
-          icon={Zap}
-          valueClass={eventsCount > 0 ? 'text-orange-600' : 'text-gray-400'}
-          onClick={onEventsClick}
+          label="Pickup (rev.)"
+          value={<PickupValue value={pickupRevenue} euro />}
+          sub="vs hier"
+          icon={CreditCard}
+          loading={pickupLoading}
         />
         <Chip
           label="Comp. marché"
@@ -211,6 +210,14 @@ export function PlanningKpiBar({
           sub={comp?.label ?? 'Lighthouse'}
           icon={Gauge}
           loading={compressionLoading}
+        />
+        <Chip
+          label="Événements"
+          value={eventsCount}
+          sub="sur la plage"
+          icon={Zap}
+          valueClass={eventsCount > 0 ? 'text-orange-600' : 'text-gray-400'}
+          onClick={onEventsClick}
         />
       </div>
 
