@@ -1217,7 +1217,7 @@ export const PlanningView = () => {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden">
         {/* Volet latéral gauche — pilotage (modes + filtres) */}
         {displayMode === 'Gantt' && (
           <PlanningPilotagePanel
@@ -1235,19 +1235,6 @@ export const PlanningView = () => {
             statusFilter={statusFilter}
             onStatusChange={setStatusFilter}
           />
-        )}
-        {/* Sidebar droite — Intelligence RMS + opérationnel (maquette #17) */}
-        {displayMode === 'Gantt' && showRightSidebar && (
-          <aside className="absolute right-0 top-0 bottom-0 w-[300px] bg-white border-l border-gray-100 z-40 shadow-xl shadow-gray-200/40 transition-transform duration-200" aria-label="Volet intelligence RMS">
-            <PlanningRightPanel
-              startDate={currentDate}
-              rangeDays={viewLength}
-              today={todayKpi}
-              hkCleanRatio={hkCleanRatio}
-              onlineCheckins={onlineCheckinsToday}
-              intel={rightPanelIntel}
-            />
-          </aside>
         )}
         {/* Left Unit Sidebar */}
         {displayMode === 'Gantt' && (
@@ -1278,6 +1265,10 @@ export const PlanningView = () => {
                <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-transparent w-full text-left'>
                   <Gauge size={12} className='group-hover:text-indigo-400 transition-colors shrink-0' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Comp. marché</span>
+               </button>
+               <button onClick={() => setIsFreeRoomsOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-sky-50/10 w-full text-left'>
+                  <DoorOpen size={12} className='group-hover:text-sky-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Ch. libres</span>
                </button>
                <button onClick={() => setIsEventModalOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-gray-50/30 w-full text-left'>
                   <Zap size={12} className='group-hover:text-indigo-400 transition-colors shrink-0' />
@@ -1329,7 +1320,7 @@ export const PlanningView = () => {
       )}
 
         {/* Main Content Area */}
-        <div className={cn("flex-1 flex flex-col min-w-0 transition-[margin] duration-200", displayMode === 'Gantt' && showRightSidebar && "mr-[300px]")} ref={gridRef}>
+        <div className="flex-1 flex flex-col min-w-0" ref={gridRef}>
            {displayMode === 'Gantt' ? (
              <div className="flex-1 overflow-auto custom-scrollbar flex flex-col" onScroll={handleScroll}>
                 {/* Header Stats & Dates (Sticky) */}
@@ -1401,7 +1392,19 @@ export const PlanningView = () => {
                        );
                      })}
                   </div>
-                  {/* 7. Ligne Événements — agrège configStore.events + useEventsStore */}
+                  {/* 7. Chambres libres */}
+                  <div className="flex text-center bg-sky-50/10 w-full flex-nowrap">
+                     {days.map(d => {
+                       const free = d.available;
+                       const tone = free == null ? 'text-gray-300' : free === 0 ? 'text-rose-500' : free <= 5 ? 'text-orange-500' : free <= 15 ? 'text-amber-500' : 'text-sky-500';
+                       return (
+                         <div key={`free-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={`${free ?? '—'} chambre(s) libre(s)`}>
+                           <span className={cn("text-[11px] font-black tabular-nums", tone)}>{free ?? '—'}</span>
+                         </div>
+                       );
+                     })}
+                  </div>
+                  {/* 8. Ligne Événements — agrège configStore.events + useEventsStore */}
                   <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
                      {days.map(d => {
                        const agg = aggregateEventsForDate(rmsEvents, d.dateStr);
@@ -1973,6 +1976,28 @@ export const PlanningView = () => {
              </div>
            )}
         </div>
+
+        {/* Volet latéral droit — Intelligence RMS + opérationnel */}
+        {displayMode === 'Gantt' && (
+          <aside
+            className={cn(
+              'shrink-0 bg-white border-l border-gray-100 z-30 transition-[width] duration-200 ease-out overflow-hidden',
+              showRightSidebar ? 'w-[280px]' : 'w-0',
+            )}
+            aria-label="Volet intelligence RMS"
+          >
+            {showRightSidebar && (
+              <PlanningRightPanel
+                startDate={currentDate}
+                rangeDays={viewLength}
+                today={todayKpi}
+                hkCleanRatio={hkCleanRatio}
+                onlineCheckins={onlineCheckinsToday}
+                intel={rightPanelIntel}
+              />
+            )}
+          </aside>
+        )}
 
       {/* Volet inférieur — légende + actions rapides (maquette) */}
       {displayMode === 'Gantt' && (
