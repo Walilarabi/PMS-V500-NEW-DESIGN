@@ -872,7 +872,7 @@ export const PlanningView = () => {
 
     // Calculer occupation par date pour chaque catégorie
     contextReservations.forEach(res => {
-      if (res.reservationStatus === 'cancelled' || !res.room) return;
+      if (res.effectiveStatus === 'cancelled' || res.effectiveStatus === 'noshow' || !res.room) return;
 
       const room = storeRooms.find(r => r.number === res.room);
       if (!room) return;
@@ -2228,7 +2228,7 @@ export const PlanningView = () => {
                   <div className="flex items-center justify-between px-0.5">
                     <span className="text-[10px] text-gray-400">Occupants</span>
                     <span className="text-[10px] font-semibold text-gray-700">
-                      {hoveredRes.guests?.adults ?? 2} adultes{(hoveredRes.guests?.children ?? 0) > 0 ? `, ${hoveredRes.guests!.children} enfant${hoveredRes.guests!.children! > 1 ? 's' : ''}` : ''}
+                      {hoveredRes.guests?.adults ?? 2} adultes{(hoveredRes.guests?.children ?? 0) > 0 ? `, ${hoveredRes.guests?.children ?? 0} enfant${(hoveredRes.guests?.children ?? 0) > 1 ? 's' : ''}` : ''}
                     </span>
                   </div>
                 </div>
