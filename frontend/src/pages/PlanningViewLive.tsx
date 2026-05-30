@@ -56,7 +56,7 @@ import { ReservationDetailsModal } from '@/src/components/modals/ReservationDeta
 import { AvailabilityModal } from '@/src/components/modals/AvailabilityModal';
 import { Palette } from 'lucide-react';
 import { buildReservation } from '@/src/lib/reservationFactory';
-import { useRooms } from '@/src/domains/hotel/hooks';
+import { useRooms, useUpdateRoom } from '@/src/domains/hotel/hooks';
 import { useEvents, useChannels } from '@/src/domains/planning/hooks';
 import { usePlanningRealtime } from '@/src/hooks/planning/usePlanningRealtime';
 import type { RoomRow } from '@/src/lib/supabase.types';
@@ -70,6 +70,8 @@ import { RoomRowLabel } from '@/src/pages/planning/RoomRowLabel';
 import { usePlanningUiStore } from '@/src/store/planningUiStore';
 import { RmsRecommendationPanel } from '@/src/pages/planning/RmsRecommendationPanel';
 import { FreeRoomsModal } from '@/src/pages/planning/FreeRoomsModal';
+import { PlanningModeBar } from '@/src/pages/planning/PlanningModeBar';
+import { getOccThreshold } from '@/src/pages/planning/revenueThresholds';
 import {
   computeDayKpi,
   computeRangeKpis,
@@ -138,6 +140,7 @@ export const PlanningView = () => {
   const roomsQuery = useRooms();
   const eventsQuery = useEvents();
   const channelsQuery = useChannels();
+  const updateRoomMut = useUpdateRoom();
   usePlanningRealtime();
 
   const storeRooms: RoomRow[] = roomsQuery.data ?? [];
@@ -186,6 +189,8 @@ export const PlanningView = () => {
   const rightSidebarCollapsed = usePlanningUiStore((s) => s.rightSidebarCollapsed);
   const toggleRightSidebar = usePlanningUiStore((s) => s.toggleRightSidebar);
   const showRightSidebar = !rightSidebarCollapsed;
+  const activeMode = usePlanningUiStore((s) => s.activeMode);
+  const setActiveMode = usePlanningUiStore((s) => s.setActiveMode);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedDetailsRes, setSelectedDetailsRes] = useState<Reservation | null>(null);
@@ -1004,6 +1009,14 @@ export const PlanningView = () => {
         </div>
       </div>
 
+      {/* Sélecteur de mode (Gantt) */}
+      {displayMode === 'Gantt' && (
+        <div className="shrink-0 border-b border-gray-100 bg-white px-6 py-2 flex items-center gap-3">
+          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest hidden lg:block">Mode</span>
+          <PlanningModeBar activeMode={activeMode} onChange={setActiveMode} />
+        </div>
+      )}
+
       {/* Barre KPI compacte (Gantt) — données réelles, source unique */}
       {displayMode === 'Gantt' && (
         <PlanningKpiBar
@@ -1219,13 +1232,25 @@ export const PlanningView = () => {
                       fullLabel={`${room.number} - ${room.type ?? ''} ${room.category ?? ''}`.trim()}
                       compact={leftSidebarCollapsed}
                     />
-                    <div
-                      className={cn(
-                        'w-3.5 h-3.5 rounded-full ml-auto shrink-0 border border-white',
-                        todayRes ? 'bg-blue-500' : 'bg-gray-200',
-                      )}
-                      title={todayRes ? 'Occupée aujourd\'hui' : 'Libre aujourd\'hui'}
-                    />
+                    {activeMode === 'housekeeping' && (room.housekeeping_status === 'dirty' || room.housekeeping_status === 'to_clean') ? (
+                      <button
+                        onClick={() => updateRoomMut.mutate({ id: room.id, patch: { housekeeping_status: 'clean' } })}
+                        disabled={updateRoomMut.isPending}
+                        title={`Marquer la chambre ${room.number} propre`}
+                        aria-label={`Marquer la chambre ${room.number} propre`}
+                        className="ml-auto shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-lg bg-emerald-600 text-white text-[9px] font-black uppercase hover:bg-emerald-700 disabled:opacity-50 transition-all pointer-events-auto"
+                      >
+                        <CheckCircle2 size={11} /> Propre
+                      </button>
+                    ) : (
+                      <div
+                        className={cn(
+                          'w-3.5 h-3.5 rounded-full ml-auto shrink-0 border border-white',
+                          todayRes ? 'bg-blue-500' : 'bg-gray-200',
+                        )}
+                        title={todayRes ? 'Occupée aujourd\'hui' : 'Libre aujourd\'hui'}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -1353,15 +1378,34 @@ export const PlanningView = () => {
                {/* Main Grid Body */}
                <div className="relative w-full bg-white flex-1 min-h-[500px]">
                   <div className="absolute inset-0 flex pointer-events-none z-0">
-                     {days.map((d) => (
-                        <div key={`col-${d.id}`} className={cn("shrink-0 border-r", d.isWeekend ? "bg-gray-50/30 border-gray-200/60" : "border-gray-100")} style={{ width: `${colWidth}%` }} />
-                     ))}
+                     {days.map((d) => {
+                        // Mode Revenue : fond teinté par occupation (heatmap).
+                        const revenueTint = activeMode === 'revenue' ? getOccThreshold(d.occ).bg : '';
+                        return (
+                        <div
+                          key={`col-${d.id}`}
+                          className={cn("shrink-0 border-r", revenueTint || (d.isWeekend ? "bg-gray-50/30 border-gray-200/60" : "border-gray-100"))}
+                          style={{ width: `${colWidth}%`, opacity: activeMode === 'revenue' ? 0.5 : 1 }}
+                        />
+                        );
+                     })}
                   </div>
                   <div className="relative z-10 pb-20 w-full">
-                     {rooms.map((room) => (
-                      <div 
-                         key={`row-${room.id}`} 
-                         className="h-[32px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
+                     {rooms.map((room) => {
+                      const roomUnderMaintenance = room.status === 'maintenance' || room.status === 'out_of_order';
+                      const maintenanceStriped = activeMode === 'maintenance' && roomUnderMaintenance;
+                      const hkRowTint = activeMode === 'housekeeping'
+                        ? (room.housekeeping_status === 'dirty' || room.housekeeping_status === 'to_clean'
+                            ? 'bg-amber-50/40'
+                            : room.housekeeping_status === 'clean'
+                              ? 'bg-emerald-50/20'
+                              : '')
+                        : '';
+                      return (
+                      <div
+                         key={`row-${room.id}`}
+                         className={cn("h-[32px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full", hkRowTint)}
+                         style={maintenanceStriped ? { backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(244,63,94,0.08) 6px, rgba(244,63,94,0.08) 12px)' } : undefined}
                          onDragOver={handleDragOver}
                          onDrop={(e) => handleDrop(e, room)}
                        >
@@ -1553,7 +1597,11 @@ export const PlanningView = () => {
                                }}
                                className={cn(
                                  'absolute h-[26px] top-[3px] rounded-lg border flex items-center px-2 gap-1.5 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden text-xs',
-                                 opacityClass
+                                 opacityClass,
+                                 // Mode Groupe : met en avant les résas de groupe, atténue les autres.
+                                 activeMode === 'groupe' && (res.groupId ? 'ring-2 ring-indigo-500 ring-offset-1' : 'opacity-40'),
+                                 // Mode Ménage : atténue les barres pour laisser lire les pastilles HK.
+                                 activeMode === 'housekeeping' && 'opacity-60',
                                )}
                                style={{ 
                                  left: `calc(${startIndex * colWidth}% + 4px)`, 
@@ -1614,7 +1662,7 @@ export const PlanningView = () => {
                          })
                        })()}
                        </div>
-                     ))}
+                     );})}
                   </div>
                </div>
              </div>

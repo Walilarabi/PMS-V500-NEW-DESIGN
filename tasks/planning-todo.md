@@ -61,10 +61,10 @@
 - [x] 6.3 useRmsRecommendations.ts (fetch pending range + apply chain + reject, invalidations) + planning-rms.service.ts ✅
 
 ## Phase 7 — 5 modes (maquette #9)
-- [ ] 7.1 PlanningModeBar.tsx (Occupation/Revenue/Housekeeping/Groupe/Maintenance)
-- [ ] 7.2 Styles par mode
-- [ ] 7.3 Mode Housekeeping (actions rapides)
-- [ ] 7.4 Mode Maintenance (fond rayé)
+- [x] 7.1 PlanningModeBar.tsx (Occupation/Revenue/Housekeeping/Groupe/Maintenance) branché sur planningUiStore (persisté), role=tablist ✅
+- [x] 7.2 Styles par mode (sans rechargement) : Revenue=heatmap fond colonnes, Groupe=ring résas groupe + atténue autres ✅
+- [x] 7.3 Mode Housekeeping : lignes teintées par statut HK + bouton rapide « Propre » (housekeeping_status→clean, useUpdateRoom) ✅
+- [x] 7.4 Mode Maintenance : fond rayé sur chambres maintenance/out_of_order ✅
 
 ## Phase 8 — Performance (maquette #12)
 - [ ] 8.1 Virtualisation lignes chambre
