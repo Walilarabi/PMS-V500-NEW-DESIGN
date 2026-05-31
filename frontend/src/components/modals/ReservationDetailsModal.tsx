@@ -3,9 +3,10 @@ import ReactDOM from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Reservation, useReservations, CardexDocument } from '../../contexts/ReservationContext';
 import { useConfigStore } from '../../store/configStore';
-import { FileText, CreditCard, Users, AlertCircle, Search, Star, Award, X, Edit, Plus, Check, Printer, Mail, Save, ChevronDown, Bed, Wine, Package, PlusCircle, Trash2, UploadCloud, Link as LinkIcon, History, TrendingUp, MapPin, Phone, Globe, Briefcase, Hash, Calendar, Shirt, Smartphone, File, Gem, MessageSquare, Reply, Share2, Tag, Box, Zap, Gift, Info, LogOut } from 'lucide-react';
+import { FileText, CreditCard, Users, AlertCircle, Search, Star, Award, X, Edit, Plus, Check, Printer, Mail, Save, ChevronDown, ChevronLeft, ChevronRight, Bed, Wine, Package, PlusCircle, Trash2, UploadCloud, Link as LinkIcon, History, TrendingUp, MapPin, Phone, Globe, Briefcase, Hash, Calendar, Shirt, Smartphone, File, Gem, MessageSquare, Reply, Share2, Tag, Box, Zap, Gift, Info, LogOut, MoreHorizontal, ArrowRight, RotateCcw, Clock, Scissors, Building2, BedDouble, Landmark } from 'lucide-react';
 import { COUNTRIES, NatSelector, GUAR_ICONS, RATE_PLANS, GUAR_CFG, SEGMENTS } from './reservationConstants';
 import { CHANNELS } from '../../constants/channels';
+import { RefundModal } from '../billing/RefundModal';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FLOWTYM — FICHE RÉSERVATION COMPLÈTE
@@ -669,6 +670,18 @@ const TabReservation: React.FC<{ res: Reservation; onUpdate?: (updated: Reservat
 // ─── FIN ONGLET 1 ─────────────────────────────────────────────────────────────
 
 // ─── ONGLET 2 : FACTURATION (MULTI-FOLIO) ──────────────────────────────────
+// ─── Audit Trail Types ───────────────────────────────────────────────────────
+type AuditEntryType = 'LINE_ADD' | 'PAYMENT' | 'TRANSFER' | 'REFUND' | 'CREDIT_NOTE' | 'SPLIT' | 'DISCOUNT' | 'FOLIO_CREATE';
+interface AuditEntry {
+  id: string;
+  type: AuditEntryType;
+  ts: string;
+  user: string;
+  action: string;
+  amount?: number;
+  folioId?: string;
+}
+
 export interface InvoiceLine {
   id: string;
   date: string;
@@ -694,6 +707,384 @@ interface FolioPaymentRecord {
   date: string;
   amount: number;
   method: string;
+}
+
+// ─── AUDIT COLOR MAP ─────────────────────────────────────────────────────────
+const AUDIT_COLORS: Record<string, string> = {
+  LINE_ADD: '#8B5CF6', PAYMENT: '#10B981', TRANSFER: '#3B82F6',
+  REFUND: '#EF4444', CREDIT_NOTE: '#F97316', SPLIT: '#6366F1',
+  DISCOUNT: '#F59E0B', FOLIO_CREATE: '#94A3B8',
+};
+
+// ─── BillingRightPanel ────────────────────────────────────────────────────────
+function BillingRightPanel({ folios, res, auditLog, collapsed, onToggle }: {
+  folios: Folio[]; res: Reservation; auditLog: AuditEntry[]; collapsed: boolean; onToggle: () => void;
+}) {
+  const fmtE = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v);
+  const calcTTC = (lines: InvoiceLine[]) => lines.reduce((s, l) => s + l.unitPriceHT * l.qty * (1 + l.vatRate), 0);
+  const globalTTC = folios.reduce((s, f) => s + calcTTC(f.lines), 0);
+  const globalPaid = folios.reduce((s, f) => s + f.payments, 0);
+  const globalSolde = globalTTC - globalPaid;
+  const allLines = folios.flatMap(f => f.lines);
+  const hasVAT = allLines.some(l => l.vatRate > 0);
+  const hasTaxSejour = allLines.some(l => l.desc.toLowerCase().includes('taxe'));
+  const hasPaid = globalPaid > 0 || globalTTC === 0;
+  const isCoherent = globalTTC > 0;
+  const alertCount = auditLog.filter(e => e.type === 'REFUND' || e.type === 'CREDIT_NOTE').length;
+  const riskRatio = globalTTC > 0 ? (globalSolde / globalTTC) * 100 : 0;
+  const risk = riskRatio < 20 ? { label: 'Faible', color: '#10B981', bg: '#ECFDF5' }
+    : riskRatio < 60 ? { label: 'Modéré', color: '#F59E0B', bg: '#FFFBEB' }
+    : { label: 'Élevé', color: '#EF4444', bg: '#FEF2F2' };
+  const nights = (res as any).nights || 1;
+  const panierMoyen = nights > 0 ? globalTTC / nights : 0;
+  const staysCount = (res as any).staysCount || 1;
+  const [section, setSection] = React.useState<'summary' | 'intelligence' | 'control'>('summary');
+
+  if (collapsed) return (
+    <div style={{ width: 28, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 8, borderLeft: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+      <button onClick={onToggle} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8B5CF6', padding: 4 }} title="Ouvrir l'analyse financière"><ChevronLeft size={16} /></button>
+      <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: 9, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 1, marginTop: 8 }}>Analyse</div>
+    </div>
+  );
+
+  return (
+    <div style={{ width: 256, flexShrink: 0, borderLeft: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff' }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: 1 }}>Analyse financière</span>
+        <button onClick={onToggle} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}><ChevronRight size={13} /></button>
+      </div>
+      <div style={{ display: 'flex', borderBottom: '1px solid #E2E8F0', background: '#fff' }}>
+        {([['summary', 'Résumé'], ['intelligence', 'Intel.'], ['control', 'Contrôle']] as const).map(([id, lbl]) => (
+          <button key={id} onClick={() => setSection(id)} style={{ flex: 1, padding: '7px 2px', fontSize: 9, fontWeight: 700, border: 'none', borderBottom: section === id ? '2px solid #8B5CF6' : '2px solid transparent', background: 'none', cursor: 'pointer', color: section === id ? '#8B5CF6' : '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5 }}>{lbl}</button>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+        {section === 'summary' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[
+              { label: 'Total facturé', value: fmtE(globalTTC), color: '#1E293B' },
+              { label: 'Total encaissé', value: fmtE(globalPaid), color: '#059669' },
+              { label: 'Solde restant', value: fmtE(globalSolde), color: globalSolde > 0.01 ? '#DC2626' : '#059669' },
+              { label: 'Acomptes', value: fmtE(globalPaid > 0 && globalSolde > 0.01 ? globalPaid : 0), color: '#6D28D9' },
+              { label: 'Arrhes', value: fmtE((res as any).arrha || 0), color: '#475569' },
+              { label: 'Préautorisations', value: 'N/A', color: '#94A3B8' },
+            ].map(({ label, value, color }) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 8px', background: '#fff', borderRadius: 7, border: '1px solid #F1F5F9' }}>
+                <span style={{ fontSize: 10, color: '#64748B' }}>{label}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: 'monospace' }}>{value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {section === 'intelligence' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ padding: '8px 10px', background: risk.bg, borderRadius: 7, border: `1px solid ${risk.color}40` }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 3 }}>Risque d'impayé</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: risk.color }}>{risk.label}</div>
+              <div style={{ fontSize: 10, color: risk.color, marginTop: 1 }}>{riskRatio.toFixed(0)}% reste dû</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: '#fff', borderRadius: 7, border: '1px solid #F1F5F9' }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 3 }}>Historique client</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#334155' }}>{staysCount === 1 ? '1er séjour' : `${staysCount} séjours`}</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: '#fff', borderRadius: 7, border: '1px solid #F1F5F9' }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 3 }}>Panier moy. / nuit</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#8B5CF6', fontFamily: 'monospace' }}>{fmtE(panierMoyen)}</div>
+            </div>
+            <div style={{ padding: '8px 10px', background: '#EFF6FF', borderRadius: 7, border: '1px solid #BFDBFE' }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#64748B', textTransform: 'uppercase', marginBottom: 5 }}>Recommandations</div>
+              {globalSolde > 0.01 && <div style={{ fontSize: 10, color: '#1E40AF', marginBottom: 3 }}>• Encaisser le solde de {fmtE(globalSolde)}</div>}
+              {!hasTaxSejour && <div style={{ fontSize: 10, color: '#92400E', marginBottom: 3 }}>• Ajouter la taxe de séjour</div>}
+              {staysCount > 1 && <div style={{ fontSize: 10, color: '#065F46', marginBottom: 3 }}>• Client fidèle — envisager remise</div>}
+              {globalSolde <= 0.01 && hasTaxSejour && <div style={{ fontSize: 10, color: '#059669' }}>• Facture complète et soldée ✓</div>}
+            </div>
+          </div>
+        )}
+        {section === 'control' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[
+              { label: 'TVA vérifiée', ok: hasVAT },
+              { label: 'Taxe de séjour', ok: hasTaxSejour },
+              { label: 'Paiements vérifiés', ok: hasPaid },
+              { label: 'Facture cohérente', ok: isCoherent },
+            ].map(({ label, ok }) => (
+              <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 8px', background: ok ? '#F0FDF4' : '#FFF1F2', borderRadius: 7, border: `1px solid ${ok ? '#BBF7D0' : '#FECDD3'}` }}>
+                <span style={{ fontSize: 10, color: '#475569' }}>{label}</span>
+                <span style={{ fontSize: 13 }}>{ok ? '✅' : '❌'}</span>
+              </div>
+            ))}
+            {alertCount > 0 && (
+              <div style={{ padding: '7px 8px', background: '#FFFBEB', borderRadius: 7, border: '1px solid #FDE68A', fontSize: 10, color: '#92400E' }}>
+                ⚠️ {alertCount} alerte(s) (avoirs/remboursements)
+              </div>
+            )}
+            {alertCount === 0 && allLines.length > 0 && <div style={{ padding: '7px 8px', background: '#F0FDF4', borderRadius: 7, border: '1px solid #BBF7D0', fontSize: 10, color: '#059669' }}>✅ Aucune alerte détectée</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── FolioTimeline ────────────────────────────────────────────────────────────
+function FolioTimeline({ entries }: { entries: AuditEntry[] }) {
+  const [filter, setFilter] = React.useState<AuditEntryType | null>(null);
+  const fmtE = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v);
+  const displayed = filter ? entries.filter(e => e.type === filter) : entries;
+  if (entries.length === 0) return null;
+  return (
+    <div style={{ marginTop: 4, padding: '14px 18px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <Clock size={14} color="#8B5CF6" />
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>Timeline Financière</span>
+          <span style={{ fontSize: 10, color: '#94A3B8', background: '#F1F5F9', padding: '1px 5px', borderRadius: 8 }}>{entries.length}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button onClick={() => setFilter(null)} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 6, border: '1px solid #E2E8F0', background: !filter ? '#8B5CF6' : '#fff', color: !filter ? '#fff' : '#64748B', cursor: 'pointer', fontWeight: 700 }}>Tout</button>
+          {(['PAYMENT', 'TRANSFER', 'REFUND', 'LINE_ADD'] as AuditEntryType[]).map(t => (
+            <button key={t} onClick={() => setFilter(f => f === t ? null : t)} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 6, border: `1px solid ${AUDIT_COLORS[t]}50`, background: filter === t ? AUDIT_COLORS[t] : '#fff', color: filter === t ? '#fff' : AUDIT_COLORS[t], cursor: 'pointer', fontWeight: 700 }}>
+              {t === 'PAYMENT' ? 'Paiement' : t === 'TRANSFER' ? 'Transfert' : t === 'REFUND' ? 'Remb.' : 'Ligne'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 260, overflowY: 'auto' }}>
+        {[...displayed].reverse().map((e, i, arr) => (
+          <div key={e.id} style={{ display: 'flex', gap: 10, paddingBottom: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ width: 9, height: 9, borderRadius: '50%', background: AUDIT_COLORS[e.type] || '#94A3B8', flexShrink: 0, marginTop: 3 }} />
+              {i < arr.length - 1 && <div style={{ width: 1, flex: 1, background: '#F1F5F9', marginTop: 3, minHeight: 14 }} />}
+            </div>
+            <div style={{ flex: 1, paddingBottom: i < arr.length - 1 ? 2 : 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#334155' }}>{e.action}</span>
+                {e.amount !== undefined && <span style={{ fontSize: 10, fontFamily: 'monospace', color: AUDIT_COLORS[e.type], fontWeight: 700, flexShrink: 0, marginLeft: 6 }}>{e.amount >= 0 ? '+' : ''}{fmtE(e.amount)}</span>}
+              </div>
+              <div style={{ fontSize: 9, color: '#94A3B8', marginTop: 1 }}>{e.ts.replace('T', ' ').substring(0, 16)} · {e.user}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── FolioTransferDialog ──────────────────────────────────────────────────────
+type TransferDest = 'room' | 'reservation' | 'company' | 'group' | 'house_account';
+function FolioTransferDialog({ isOpen, selectedLines, onClose, onConfirm }: {
+  isOpen: boolean;
+  selectedLines: number;
+  onClose: () => void;
+  onConfirm: (dest: TransferDest, target: string, reason: string) => void;
+}) {
+  const [dest, setDest] = React.useState<TransferDest>('room');
+  const [target, setTarget] = React.useState('');
+  const [reason, setReason] = React.useState('');
+  React.useEffect(() => { if (isOpen) { setDest('room'); setTarget(''); setReason(''); } }, [isOpen]);
+  if (!isOpen) return null;
+  const DESTS: { id: TransferDest; label: string; icon: React.ReactNode; placeholder: string }[] = [
+    { id: 'room', label: 'Autre chambre', icon: <BedDouble size={13} />, placeholder: 'Ex: 302' },
+    { id: 'reservation', label: 'Autre réservation', icon: <FileText size={13} />, placeholder: 'Ex: RES-ABCD' },
+    { id: 'company', label: 'Société', icon: <Building2 size={13} />, placeholder: 'Ex: Société SA' },
+    { id: 'group', label: 'Groupe', icon: <Users size={13} />, placeholder: 'Ex: Groupe Conférence' },
+    { id: 'house_account', label: 'Compte interne', icon: <Landmark size={13} />, placeholder: 'Direction / Commercial...' },
+  ];
+  const canConfirm = target.trim().length > 0 && reason.trim().length > 0;
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F5F3FF' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <ArrowRight size={16} color="#8B5CF6" />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#4C1D95' }}>Transférer {selectedLines} ligne(s)</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={15} color="#94A3B8" /></button>
+        </div>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Destination</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {DESTS.map(d => (
+                <button key={d.id} onClick={() => { setDest(d.id); setTarget(''); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === d.id ? '#8B5CF6' : '#E2E8F0'}`, background: dest === d.id ? '#F5F3FF' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ color: dest === d.id ? '#8B5CF6' : '#94A3B8' }}>{d.icon}</span>
+                  <span style={{ fontSize: 12, fontWeight: dest === d.id ? 700 : 500, color: dest === d.id ? '#6D28D9' : '#475569' }}>{d.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              {DESTS.find(d => d.id === dest)?.label}
+            </div>
+            <input value={target} onChange={e => setTarget(e.target.value)} placeholder={DESTS.find(d => d.id === dest)?.placeholder} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Motif (obligatoire)</div>
+            <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Ex: Frais à imputer sur la société cliente" rows={2} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
+            <button onClick={() => { if (canConfirm) { onConfirm(dest, target.trim(), reason.trim()); onClose(); } }} disabled={!canConfirm} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: canConfirm ? '#8B5CF6' : '#E2E8F0', color: canConfirm ? '#fff' : '#94A3B8', fontWeight: 700, fontSize: 13, cursor: canConfirm ? 'pointer' : 'default' }}>
+              <ArrowRight size={13} style={{ marginRight: 6, display: 'inline' }} />Transférer
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FolioSplitDialog ─────────────────────────────────────────────────────────
+function FolioSplitDialog({ isOpen, folioName, totalTTC, lineCount, onClose, onConfirm }: {
+  isOpen: boolean; folioName: string; totalTTC: number; lineCount: number;
+  onClose: () => void; onConfirm: (mode: 'auto' | 'percent' | 'fixed', value: number) => void;
+}) {
+  const [mode, setMode] = React.useState<'auto' | 'percent' | 'fixed'>('auto');
+  const [value, setValue] = React.useState(50);
+  const fmtE = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v);
+  React.useEffect(() => { if (isOpen) { setMode('auto'); setValue(50); } }, [isOpen]);
+  if (!isOpen) return null;
+  const partA = mode === 'auto' ? totalTTC / 2 : mode === 'percent' ? totalTTC * value / 100 : Math.min(value, totalTTC);
+  const partB = totalTTC - partA;
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F5F3FF' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Scissors size={16} color="#8B5CF6" />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#4C1D95' }}>Répartir {folioName}</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={15} color="#94A3B8" /></button>
+        </div>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([['auto', '50/50 Auto'], ['percent', '% personnalisé'], ['fixed', 'Montant fixe']] as const).map(([m, lbl]) => (
+              <button key={m} onClick={() => setMode(m)} style={{ flex: 1, padding: '8px 6px', borderRadius: 8, border: `1.5px solid ${mode === m ? '#8B5CF6' : '#E2E8F0'}`, background: mode === m ? '#F5F3FF' : '#fff', color: mode === m ? '#6D28D9' : '#64748B', fontWeight: mode === m ? 700 : 500, fontSize: 11, cursor: 'pointer' }}>{lbl}</button>
+            ))}
+          </div>
+          {mode !== 'auto' && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 6 }}>{mode === 'percent' ? 'Partie A (%)' : 'Partie A (€)'}</div>
+              <input type="number" value={value} onChange={e => setValue(Number(e.target.value))} min={0} max={mode === 'percent' ? 100 : totalTTC} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {[['Partie A', partA], ['Partie B', partB]].map(([lbl, amt]) => (
+              <div key={String(lbl)} style={{ padding: '12px 14px', background: '#F8FAFC', borderRadius: 8, border: '1px solid #E2E8F0' }}>
+                <div style={{ fontSize: 10, color: '#64748B', marginBottom: 4 }}>{lbl}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#8B5CF6', fontFamily: 'monospace' }}>{fmtE(Number(amt))}</div>
+                <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>~{Math.round(Number(amt) / totalTTC * lineCount)} ligne(s)</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
+            <button onClick={() => { onConfirm(mode, value); onClose(); }} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: '#8B5CF6', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              <Scissors size={13} style={{ marginRight: 6, display: 'inline' }} />Répartir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FolioAvoirDialog ─────────────────────────────────────────────────────────
+function FolioAvoirDialog({ isOpen, maxAmount, onClose, onConfirm }: {
+  isOpen: boolean; maxAmount: number; onClose: () => void; onConfirm: (amount: number, motif: string) => void;
+}) {
+  const [amount, setAmount] = React.useState(0);
+  const [motif, setMotif] = React.useState('');
+  const fmtE = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v);
+  React.useEffect(() => { if (isOpen) { setAmount(0); setMotif(''); } }, [isOpen]);
+  if (!isOpen) return null;
+  const canConfirm = amount > 0 && amount <= maxAmount + 0.01 && motif.trim().length > 0;
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFF7ED' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <RotateCcw size={16} color="#F97316" />
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#9A3412' }}>Créer un avoir</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={15} color="#94A3B8" /></button>
+        </div>
+        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ padding: '8px 12px', background: '#FFF7ED', borderRadius: 8, fontSize: 11, color: '#92400E' }}>
+            Maximum : {fmtE(maxAmount)} (total TTC du folio)
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Montant de l'avoir (€)</div>
+            <input type="number" value={amount || ''} onChange={e => setAmount(Number(e.target.value))} min={0.01} max={maxAmount} step={0.01} placeholder="0.00" style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: `1px solid ${amount > maxAmount ? '#EF4444' : '#E2E8F0'}`, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontWeight: 700 }} />
+            {amount > maxAmount + 0.01 && <div style={{ fontSize: 10, color: '#EF4444', marginTop: 4 }}>Montant supérieur au total du folio</div>}
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Motif (obligatoire)</div>
+            <textarea value={motif} onChange={e => setMotif(e.target.value)} placeholder="Ex: Incident technique, remboursement partiel..." rows={3} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #E2E8F0', background: '#fff', color: '#64748B', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>Annuler</button>
+            <button onClick={() => { if (canConfirm) { onConfirm(amount, motif.trim()); onClose(); } }} disabled={!canConfirm} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: canConfirm ? '#F97316' : '#E2E8F0', color: canConfirm ? '#fff' : '#94A3B8', fontWeight: 700, fontSize: 13, cursor: canConfirm ? 'pointer' : 'default' }}>
+              <RotateCcw size={13} style={{ marginRight: 6, display: 'inline' }} />Créer l'avoir
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── BillingActionsToolbar ────────────────────────────────────────────────────
+function BillingActionsToolbar({ onTransfer, onSplit, onAvoir, onRefund, onHistory, selectedCount }: {
+  onTransfer: () => void; onSplit: () => void; onAvoir: () => void; onRefund: () => void; onHistory: () => void; selectedCount: number;
+}) {
+  const [showTransferMenu, setShowTransferMenu] = React.useState(false);
+  const btnBase: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 7, border: '1px solid #E2E8F0', background: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', color: '#475569', whiteSpace: 'nowrap' };
+  return (
+    <div style={{ padding: '10px 18px', background: '#FAFBFF', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 10, fontWeight: 800, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 4 }}>Actions :</span>
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => setShowTransferMenu(v => !v)} style={{ ...btnBase, color: '#6D28D9', borderColor: '#C4B5FD', background: '#F5F3FF' }}>
+          <ArrowRight size={12} /> Transférer <ChevronDown size={11} />
+        </button>
+        {showTransferMenu && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.1)', minWidth: 180, marginTop: 4 }}>
+            {[
+              { label: 'Autre chambre', icon: <BedDouble size={12} /> },
+              { label: 'Autre réservation', icon: <FileText size={12} /> },
+              { label: 'Société', icon: <Building2 size={12} /> },
+              { label: 'Groupe', icon: <Users size={12} /> },
+              { label: 'Compte interne', icon: <Landmark size={12} /> },
+            ].map(({ label, icon }) => (
+              <button key={label} onClick={() => { setShowTransferMenu(false); onTransfer(); }} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 12px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: '#334155', textAlign: 'left' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#F8FAFC')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                <span style={{ color: '#94A3B8' }}>{icon}</span>{label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <button onClick={onSplit} style={{ ...btnBase, color: '#4F46E5', borderColor: '#C7D2FE' }}>
+        <Scissors size={12} /> Répartir
+      </button>
+      <button onClick={onAvoir} style={{ ...btnBase, color: '#EA580C', borderColor: '#FED7AA' }}>
+        <RotateCcw size={12} /> Créer un avoir
+      </button>
+      <button onClick={onRefund} style={{ ...btnBase, color: '#DC2626', borderColor: '#FECACA' }}>
+        <RotateCcw size={12} style={{ transform: 'scaleX(-1)' }} /> Rembourser
+      </button>
+      <button onClick={onHistory} style={{ ...btnBase, marginLeft: 'auto', color: '#64748B' }}>
+        <Clock size={12} /> Historique
+      </button>
+      {selectedCount > 0 && (
+        <span style={{ fontSize: 10, color: '#8B5CF6', fontWeight: 700, background: '#F5F3FF', padding: '3px 8px', borderRadius: 8, border: '1px solid #DDD6FE' }}>
+          {selectedCount} ligne(s) sélectionnée(s)
+        </span>
+      )}
+    </div>
+  );
 }
 
 const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
@@ -805,6 +1196,28 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
   const [selectedLines, setSelectedLines] = useState<string[]>([]);
   const [targetTransferFolio, setTargetTransferFolio] = useState('');
 
+  // Right panel + action modals
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  const [showTransferDialog, setShowTransferDialog] = useState(false);
+  const [showSplitDialog, setShowSplitDialog] = useState(false);
+  const [showAvoirDialog, setShowAvoirDialog] = useState(false);
+  const [showRefundDialog, setShowRefundDialog] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+
+  // Audit trail
+  const guestName = res.client || res.guestName || 'Réception';
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>(() => {
+    const now = new Date().toISOString();
+    return [
+      { id: uid(), type: 'FOLIO_CREATE', ts: now, user: guestName, action: 'Folio 1 : Hébergement créé', folioId: 'f1' },
+      { id: uid(), type: 'FOLIO_CREATE', ts: now, user: guestName, action: 'Folio 2 : Taxes créé', folioId: 'f2' },
+      { id: uid(), type: 'FOLIO_CREATE', ts: now, user: guestName, action: 'Folio 3 : Extras créé', folioId: 'f3' },
+    ];
+  });
+  const appendAudit = (type: AuditEntryType, action: string, amount?: number, folioId?: string) => {
+    setAuditLog(prev => [...prev, { id: uid(), type, ts: new Date().toISOString(), user: guestName, action, amount, folioId }]);
+  };
+
   // Computed Totals
   const calculateTotals = (lines: InvoiceLine[]) => {
     let ht = 0;
@@ -852,6 +1265,7 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
     } : f));
     setSelectedProductCode('');
     setServiceCodeInput('');
+    appendAudit('LINE_ADD', `Prestation ajoutée : ${selectedProduct.code} · ${selectedProduct.desc}`, selectedProduct.ht * (1 + selectedProduct.tvaRate), activeFolioId);
     window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Prestation ${selectedProduct.code} ajoutée.` } }));
   };
 
@@ -877,6 +1291,7 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
         vatRate: 0
       }]
     } : f));
+    appendAudit('DISCOUNT', `Remise commerciale appliquée (${discountMode === 'percent' ? sanitized.toFixed(0)+'%' : 'montant'})`, -boundedAmount, activeFolioId);
     window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Remise appliquée : ${fmtEuro(boundedAmount)}` } }));
     setDiscountValue(0);
   };
@@ -894,6 +1309,8 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
       });
       return newFs.map(f => f.id === targetTransferFolio ? { ...f, lines: [...f.lines, ...linesToMove] } : f);
     });
+    const targetName = folios.find(f => f.id === targetTransferFolio)?.name || targetTransferFolio;
+    appendAudit('TRANSFER', `${selectedLines.length} ligne(s) transférée(s) → ${targetName}`, undefined, activeFolioId);
     setSelectedLines([]);
     setTargetTransferFolio('');
     window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `${selectedLines.length} ligne(s) transférée(s).` } }));
@@ -913,8 +1330,74 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
 
   const S_LABEL = { fontSize: 11, fontWeight: 700, color: '#64748B', textTransform: 'uppercase' as const, letterSpacing: '.5px' };
 
+  // ── Handlers for action modals ──────────────────────────────────────────────
+  const handleTransferConfirm = (dest: TransferDest, target: string, reason: string) => {
+    const destLabels: Record<TransferDest, string> = { room: `Ch. ${target}`, reservation: target, company: `Société ${target}`, group: `Groupe ${target}`, house_account: target };
+    if (dest === 'company' || dest === 'group') {
+      const newId = `f${Date.now()}`;
+      const newName = dest === 'company' ? `Folio Société : ${target}` : `Folio Groupe : ${target}`;
+      let linesToMove: InvoiceLine[] = [];
+      setFolios(fs => {
+        const updated = fs.map(f => {
+          if (f.id === activeFolioId) {
+            linesToMove = selectedLines.length > 0 ? f.lines.filter(l => selectedLines.includes(l.id)) : f.lines;
+            return { ...f, lines: f.lines.filter(l => !linesToMove.map(x => x.id).includes(l.id)) };
+          }
+          return f;
+        });
+        return [...updated, { id: newId, name: newName, payerType: 'company' as const, payerName: target, billingAddress: '', lines: linesToMove, payments: 0, paymentRecords: [] }];
+      });
+    }
+    const count = selectedLines.length || activeFolio.lines.length;
+    appendAudit('TRANSFER', `Transfert → ${destLabels[dest]} (${count} ligne(s)) — ${reason}`, undefined, activeFolioId);
+    setSelectedLines([]);
+    window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Transfert effectué vers ${destLabels[dest]}` } }));
+  };
+
+  const handleSplitConfirm = (mode: 'auto' | 'percent' | 'fixed', value: number) => {
+    const lines = [...activeFolio.lines];
+    const totalTTC = activeFolioTotals.ttc;
+    const targetA = mode === 'auto' ? totalTTC / 2 : mode === 'percent' ? totalTTC * value / 100 : Math.min(value, totalTTC);
+    let runA = 0;
+    const linesA: InvoiceLine[] = [];
+    const linesB: InvoiceLine[] = [];
+    for (const l of lines) {
+      const ttc = l.unitPriceHT * l.qty * (1 + l.vatRate);
+      if (runA + ttc <= targetA + 0.01) { linesA.push(l); runA += ttc; } else linesB.push(l);
+    }
+    const newId = `f${Date.now()}`;
+    setFolios(fs => [
+      ...fs.map(f => f.id === activeFolioId ? { ...f, lines: linesA } : f),
+      { id: newId, name: `${activeFolio.name} (Partie B)`, payerType: activeFolio.payerType, payerName: activeFolio.payerName, billingAddress: activeFolio.billingAddress, lines: linesB, payments: 0, paymentRecords: [] }
+    ]);
+    appendAudit('SPLIT', `Répartition : ${activeFolio.name} → 2 parties`, totalTTC, activeFolioId);
+    window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Folio réparti en 2 parties.' } }));
+  };
+
+  const handleAvoirConfirm = (amount: number, motif: string) => {
+    setFolios(fs => fs.map(f => f.id === activeFolioId ? {
+      ...f, lines: [...f.lines, { id: uid(), date: fmtDate(TODAY), desc: `[AVOIR] ${motif}`, qty: 1, unitPriceHT: -amount, vatRate: 0 }]
+    } : f));
+    appendAudit('CREDIT_NOTE', `Avoir créé : ${motif}`, -amount, activeFolioId);
+    window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Avoir de ${fmtEuro(amount)} créé.` } }));
+  };
+
+  const handleRefundConfirm = (reason: string) => {
+    const refundAmt = activeFolio.payments;
+    setFolios(fs => fs.map(f => f.id === activeFolioId ? {
+      ...f,
+      payments: 0,
+      paymentRecords: [],
+      lines: [...f.lines, { id: uid(), date: fmtDate(TODAY), desc: `[REMBOURSEMENT] ${reason}`, qty: 1, unitPriceHT: -refundAmt, vatRate: 0 }]
+    } : f));
+    appendAudit('REFUND', `Remboursement : ${reason}`, -refundAmt, activeFolioId);
+    window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Remboursement de ${fmtEuro(refundAmt)} effectué.` } }));
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start' }}>
+      {/* ── MAIN CONTENT COLUMN ── */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* RÉSUMÉ DU SÉJOUR */}
       <div className="print-hide" style={{ ...CARD, padding: '16px 20px', background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 32 }}>
@@ -1048,6 +1531,16 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
             </button>
           </div>
         </div>
+
+        {/* ── Zone Actions Financières ── */}
+        <BillingActionsToolbar
+          onTransfer={() => setShowTransferDialog(true)}
+          onSplit={() => setShowSplitDialog(true)}
+          onAvoir={() => setShowAvoirDialog(true)}
+          onRefund={() => setShowRefundDialog(true)}
+          onHistory={() => setShowTimeline(v => !v)}
+          selectedCount={selectedLines.length}
+        />
 
         {/* Folio Payer & Address */}
         <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24, borderBottom: '1px solid #F1F5F9', background: '#F8FAFC' }}>
@@ -1194,6 +1687,7 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
                       { id: uid(), date: fmtDate(TODAY), amount: sanitizedAmount, method: payMethod }
                     ]
                   } : f));
+                  appendAudit('PAYMENT', `Paiement ${payMethod} enregistré sur ${activeFolio.name}`, sanitizedAmount, activeFolio.id);
                   setShowPayForm(null);
                   window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Paiement ${payMethod} enregistré sur ${activeFolio.name}` } }));
                 }} style={{ ...BTN('primary'), background: '#10B981', border: 'none' }}>Valider</button>
@@ -1385,6 +1879,47 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
         })}
       </div>, document.body)}
 
+      {/* ── Timeline Financière (toggled) ── */}
+      {showTimeline && <FolioTimeline entries={auditLog} />}
+
+      </div>{/* end main content column */}
+
+      {/* ── Right Panel ── */}
+      <BillingRightPanel
+        folios={folios}
+        res={res}
+        auditLog={auditLog}
+        collapsed={rightPanelCollapsed}
+        onToggle={() => setRightPanelCollapsed(v => !v)}
+      />
+
+      {/* ── Action Modals ── */}
+      <FolioTransferDialog
+        isOpen={showTransferDialog}
+        selectedLines={selectedLines.length || activeFolio.lines.length}
+        onClose={() => setShowTransferDialog(false)}
+        onConfirm={handleTransferConfirm}
+      />
+      <FolioSplitDialog
+        isOpen={showSplitDialog}
+        folioName={activeFolio.name}
+        totalTTC={activeFolioTotals.ttc}
+        lineCount={activeFolio.lines.length}
+        onClose={() => setShowSplitDialog(false)}
+        onConfirm={handleSplitConfirm}
+      />
+      <FolioAvoirDialog
+        isOpen={showAvoirDialog}
+        maxAmount={activeFolioTotals.ttc}
+        onClose={() => setShowAvoirDialog(false)}
+        onConfirm={handleAvoirConfirm}
+      />
+      <RefundModal
+        isOpen={showRefundDialog}
+        paymentAmount={activeFolio.payments}
+        onConfirm={handleRefundConfirm}
+        onCancel={() => setShowRefundDialog(false)}
+      />
     </div>
   );
 };
