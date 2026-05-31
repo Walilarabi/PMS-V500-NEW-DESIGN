@@ -6,6 +6,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Topbar } from '@/src/components/layout/Topbar';
 import { Sidebar } from '@/src/components/layout/Sidebar';
+import { useAppShellStore } from '@/src/store/appShellStore';
 import { PageId } from '@/src/types';
 import type { ClientsPage } from '@/src/pages/clients/ClientsLayout';
 
@@ -290,7 +291,10 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
 
 export default function App() {
   const [activePage, setActivePage] = useState<PageId>('flowboard');
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // Sidebar de navigation principale — état partagé (persisté) pour que le
+  // bouton Collapse du Planning puisse la piloter sans casser la colonne Chambre.
+  const sidebarCollapsed = useAppShellStore((s) => s.navCollapsed);
+  const setSidebarCollapsed = useAppShellStore((s) => s.setNavCollapsed);
 
   useReservationsRealtime();
   useReconciliationRealtime();

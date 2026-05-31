@@ -77,6 +77,7 @@ import { ReservationBadges } from '@/src/pages/planning/ReservationBadges';
 import { deriveBadges } from '@/src/services/planning/planning-reservation-badges.service';
 import { RoomRowLabel } from '@/src/pages/planning/RoomRowLabel';
 import { usePlanningUiStore } from '@/src/store/planningUiStore';
+import { useAppShellStore } from '@/src/store/appShellStore';
 import { FreeRoomsModal } from '@/src/pages/planning/FreeRoomsModal';
 import { PlanningRightPanel, type RightPanelIntel } from '@/src/pages/planning/PlanningRightPanel';
 import { getOccThreshold } from '@/src/pages/planning/revenueThresholds';
@@ -195,6 +196,9 @@ export const PlanningView = () => {
   // Préférences UI persistées (collapse sidebars, mode actif).
   const leftSidebarCollapsed = usePlanningUiStore((s) => s.leftSidebarCollapsed);
   const toggleLeftSidebar = usePlanningUiStore((s) => s.toggleLeftSidebar);
+  // Navigation principale (app shell) — pilotée par le bouton Collapse en haut à droite.
+  const navCollapsed = useAppShellStore((s) => s.navCollapsed);
+  const toggleNav = useAppShellStore((s) => s.toggleNav);
   const rightSidebarCollapsed = usePlanningUiStore((s) => s.rightSidebarCollapsed);
   const toggleRightSidebar = usePlanningUiStore((s) => s.toggleRightSidebar);
   const showRightSidebar = !rightSidebarCollapsed;
@@ -1054,17 +1058,15 @@ export const PlanningView = () => {
           </div>
 
           <div className="flex items-center gap-1">
-             {displayMode === 'Gantt' && (
-               <button
-                 onClick={toggleLeftSidebar}
-                 title={leftSidebarCollapsed ? "Déployer la colonne chambres" : "Réduire la colonne chambres"}
-                 aria-label={leftSidebarCollapsed ? "Déployer la colonne chambres" : "Réduire la colonne chambres"}
-                 aria-pressed={leftSidebarCollapsed}
-                 className={cn("p-2.5 rounded-xl transition-all", leftSidebarCollapsed ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
-               >
-                 {leftSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-               </button>
-             )}
+             <button
+               onClick={toggleNav}
+               title={navCollapsed ? "Déployer la navigation" : "Réduire la navigation"}
+               aria-label={navCollapsed ? "Déployer la navigation" : "Réduire la navigation"}
+               aria-pressed={navCollapsed}
+               className={cn("p-2.5 rounded-xl transition-all", navCollapsed ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
+             >
+               {navCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+             </button>
              {displayMode === 'Gantt' && (
                <button
                  onClick={toggleRightSidebar}
