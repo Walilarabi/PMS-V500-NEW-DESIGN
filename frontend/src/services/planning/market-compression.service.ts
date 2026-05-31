@@ -9,8 +9,10 @@
  * Si aucune ligne Lighthouse n'existe pour une date, `percent` vaut `null`
  * (l'UI affiche « — », jamais 0 %).
  *
- * Couleurs : cohérentes avec la charte « demande marché » de la veille
- * concurrentielle — bleu (faible) → orange (moyen) → rouge (fort). Aucun vert.
+ * Couleurs : identiques à la colonne « Pression » du tableau RMS Revenue Management
+ * (RMSTableauPro.tsx) — vert (≤40%) → jaune (>40-70%) → rouge (>70%).
+ * Les seuils et couleurs sont synchronisés avec la source unique Revenue pour
+ * garantir une cohérence visuelle parfaite entre les deux modules.
  */
 import { supabase } from '@/src/lib/supabase';
 import { mapSupabaseError } from '@/src/domains/_shared/errors';
@@ -27,12 +29,15 @@ export interface MarketCompressionPoint {
   ourPrice: number | null;
 }
 
-/** Mappe un pourcentage de demande/compression marché vers un palier coloré. */
+/**
+ * Mappe un pourcentage de demande/compression marché vers un palier coloré.
+ * Seuils identiques à la colonne Pression de RMSTableauPro : ≤40 vert, ≤70 jaune, >70 rouge.
+ */
 export function compressionLevel(percent: number): CompressionLevel {
   if (percent <= 40) return 'low';
-  if (percent <= 60) return 'medium';
-  if (percent <= 80) return 'high';
-  return 'critical';
+  if (percent <= 70) return 'medium';
+  return 'high';
+  // 'critical' kept in type for backward compat but never returned — maps to same red as 'high'
 }
 
 interface LighthouseDayLite {
@@ -121,8 +126,10 @@ export async function getMarketCompressionRange(
 }
 
 // ── Charte couleur compression marché ───────────────────────────────────────
-// Bleu = faible, Orange = moyen, Rouge = fort. Jamais de vert (≠ veille 6-paliers).
-// Hex repris de la palette demande marché (DEMAND_COLORS) pour cohérence visuelle.
+// Identique à la colonne "Pression" de RMSTableauPro (Revenue Management) :
+//   Vert  (≤40%)  bg-green-100 / text-green-700
+//   Jaune (>40%)  bg-yellow-100 / text-yellow-700
+//   Rouge (>70%)  bg-red-100 / text-red-700
 export interface CompressionTone {
   /** Couleur hex (graphiques, points). */
   hex: string;
@@ -137,10 +144,10 @@ export interface CompressionTone {
 }
 
 const COMPRESSION_TONES: Record<CompressionLevel, CompressionTone> = {
-  low:      { hex: '#3B82F6', text: 'text-blue-600',   bg: 'bg-blue-50',   dot: 'bg-blue-500',   label: 'Faible' },
-  medium:   { hex: '#F59E0B', text: 'text-amber-600',  bg: 'bg-amber-50',  dot: 'bg-amber-500',  label: 'Modérée' },
-  high:     { hex: '#EF4444', text: 'text-red-600',    bg: 'bg-red-50',    dot: 'bg-red-500',    label: 'Forte' },
-  critical: { hex: '#991B1B', text: 'text-red-800',    bg: 'bg-red-100',   dot: 'bg-red-800',    label: 'Critique' },
+  low:      { hex: '#16A34A', text: 'text-green-700',  bg: 'bg-green-100',  dot: 'bg-green-500',  label: 'Faible' },
+  medium:   { hex: '#CA8A04', text: 'text-yellow-700', bg: 'bg-yellow-100', dot: 'bg-yellow-500', label: 'Modérée' },
+  high:     { hex: '#B91C1C', text: 'text-red-700',    bg: 'bg-red-100',    dot: 'bg-red-500',    label: 'Forte' },
+  critical: { hex: '#B91C1C', text: 'text-red-700',    bg: 'bg-red-100',    dot: 'bg-red-500',    label: 'Critique' },
 };
 
 const NEUTRAL_TONE: CompressionTone = {

@@ -1458,14 +1458,17 @@ export const PlanningView = () => {
                        );
                      })}
                   </div>
-                  {/* 6. Compression marché (Lighthouse) */}
+                  {/* 6. Compression marché (Lighthouse) — badge identique à colonne Pression de RMSTableauPro */}
                   <div className="flex text-center w-full flex-nowrap">
                      {days.map(d => {
                        const c = d.compressionPercent;
-                       const tone = getCompressionTone(c == null ? null : compressionLevel(c)).text;
+                       const ctone = getCompressionTone(c == null ? null : compressionLevel(c));
                        return (
                          <div key={`comp-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={c == null ? 'Compression marché indisponible (Lighthouse)' : `Compression marché ${c}%`}>
-                           <span className={cn("text-[11px] font-black", tone)}>{c == null ? '—' : `${c}%`}</span>
+                           {c == null
+                             ? <span className="text-[11px] font-black text-gray-300">—</span>
+                             : <span className={cn("px-1.5 py-0.5 text-[10px] font-bold rounded", ctone.bg, ctone.text)}>{c}%</span>
+                           }
                          </div>
                        );
                      })}
