@@ -12,8 +12,23 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Grid, Search, Settings as SettingsIcon, ExternalLink, Star, Power, CheckCircle2,
   AlertCircle, Plug, Tag, Upload, FileSpreadsheet, Trash2, X, Zap, ArrowRight, Wand2,
-  RefreshCw, Plus, Pencil,
+  RefreshCw, Plus, Pencil, GripVertical,
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/src/lib/utils';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { RateManagerPanel } from '@/src/components/rms/calendar/RateManagerPanel';
@@ -40,6 +55,95 @@ import {
 import { logImportedRatePlanReport } from '@/src/services/settings/settingsPersistence';
 import { useAuditLogger } from '@/src/hooks/settings/useAuditLogger';
 
+const PLAN_ORDER_KEY = 'flowtym_rateplans_order';
+
+interface SortablePlanRowProps {
+  key?: React.Key;
+  plan: RatePlanWithRoom;
+  canWrite: boolean;
+  isDragEnabled: boolean;
+  onOpen: () => void;
+  onDelete: () => void;
+}
+
+function SortablePlanRow({ plan, canWrite, isDragEnabled, onOpen, onDelete }: SortablePlanRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: plan.id,
+    disabled: !isDragEnabled,
+  });
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        ...(isDragging ? { background: 'rgb(245, 243, 255)', boxShadow: '0 4px 20px rgba(109,40,217,0.10)' } : {}),
+      }}
+      className="border-t border-slate-100 hover:bg-slate-50/60 group cursor-pointer"
+      onClick={onOpen}
+    >
+      <td className="pl-2.5 pr-0 py-2.5 w-8">
+        {isDragEnabled ? (
+          <button
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()}
+            className="p-0.5 rounded text-slate-300 hover:text-slate-500 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity touch-none"
+            aria-label="Réordonner"
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </button>
+        ) : <span className="inline-block w-3.5" />}
+      </td>
+      <td className="px-4 py-2.5">
+        <div className="flex items-center gap-2 min-w-0">
+          {plan.is_reference && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" aria-label="Plan de référence" />}
+          <span className="text-[12.5px] font-semibold text-slate-900 truncate">{plan.plan_name}</span>
+        </div>
+      </td>
+      <td className="px-3 py-2.5 text-[12px] font-mono text-slate-600">{plan.plan_code}</td>
+      <td className="px-3 py-2.5 text-slate-700 text-[12px]">{plan.room?.room_type_name ?? <span className="text-slate-400">—</span>}</td>
+      <td className="px-3 py-2.5">
+        {plan.pension_type ? (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded-md ring-1 ring-slate-200 bg-slate-50 text-[10.5px] font-semibold text-slate-600">
+            {plan.pension_type}
+          </span>
+        ) : <span className="text-slate-400 text-[12px]">—</span>}
+      </td>
+      <td className="px-3 py-2.5 text-[11.5px]">
+        {plan.connectivity_type && plan.connectivity_type !== 'Aucun' ? (
+          <span className="inline-flex items-center gap-1 text-violet-700">
+            <Plug className="w-3 h-3" /> {plan.connectivity_type}
+          </span>
+        ) : <span className="text-slate-400">—</span>}
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 ring-inset text-[10.5px] font-semibold',
+          plan.is_active ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200')}>
+          <Power className="w-2.5 h-2.5" />
+          {plan.is_active ? 'Actif' : 'Désactivé'}
+        </span>
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={(e) => { e.stopPropagation(); onOpen(); }}
+            className="p-1 rounded hover:bg-violet-50 text-violet-500" title="Modifier ce plan">
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+          {canWrite && (
+            <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="p-1 rounded hover:bg-rose-50 text-rose-500" title="Supprimer ce plan">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 interface RatePlansPageProps {
   onNavigate: (page: PageId) => void;
 }
@@ -58,6 +162,47 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [sheetPlanId, setSheetPlanId] = useState<string | 'new' | null>(null);
   const audit = useAuditLogger();
+
+  // ─── Drag-and-drop order ──────────────────────────────────────────────
+  const [planOrder, setPlanOrder] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(PLAN_ORDER_KEY) ?? '[]'); }
+    catch { return []; }
+  });
+
+  useEffect(() => {
+    if (plans.length === 0) return;
+    setPlanOrder((prev) => {
+      const existing = new Set(plans.map((p) => p.id));
+      const kept = prev.filter((id) => existing.has(id));
+      const newIds = plans.map((p) => p.id).filter((id) => !new Set(kept).has(id));
+      return [...kept, ...newIds];
+    });
+  }, [plans]);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setPlanOrder((prev) => {
+      const oldIndex = prev.indexOf(active.id as string);
+      const newIndex = prev.indexOf(over.id as string);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const next = arrayMove(prev, oldIndex, newIndex);
+      localStorage.setItem(PLAN_ORDER_KEY, JSON.stringify(next));
+      return next;
+    });
+  }
+
+  const orderedPlans = useMemo(() => {
+    if (planOrder.length === 0) return plans;
+    const idx = new Map<string, number>(planOrder.map((id, i) => [id, i]));
+    return [...plans].sort((a, b) => {
+      const ia = idx.get(a.id);
+      const ib = idx.get(b.id);
+      return (ia !== undefined ? ia : 9999) - (ib !== undefined ? ib : 9999);
+    });
+  }, [plans, planOrder]);
 
   const canRead = usePermission('rev_pricing', 'read');
   const canWrite = usePermission('rev_pricing', 'write');
@@ -179,14 +324,16 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
   }
 
   // ─── Données dérivées ─────────────────────────────────────────────────
+  const isDragEnabled = search.trim() === '' && filterRoom === 'all';
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return plans.filter((p) => {
+    return orderedPlans.filter((p) => {
       if (filterRoom !== 'all' && p.room_type_id !== filterRoom) return false;
       if (q && !`${p.plan_name} ${p.plan_code} ${p.room?.room_type_name ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [plans, search, filterRoom]);
+  }, [orderedPlans, search, filterRoom]);
 
   const totalPlans = plans.length;
   const activePlans = plans.filter((p) => p.is_active).length;
@@ -422,7 +569,8 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
                 <table className="w-full text-[13px]">
                   <thead className="bg-slate-50/60 text-left text-[10.5px] uppercase tracking-wide text-slate-400">
                     <tr>
-                      <th className="px-5 py-2.5 font-medium">Plan tarifaire</th>
+                      <th className="pl-2.5 pr-0 py-2.5 w-8" />
+                      <th className="px-4 py-2.5 font-medium">Plan tarifaire</th>
                       <th className="px-3 py-2.5 font-medium">Code</th>
                       <th className="px-3 py-2.5 font-medium">Chambre</th>
                       <th className="px-3 py-2.5 font-medium">Pension</th>
@@ -431,55 +579,31 @@ export const RatePlansPage: React.FC<RatePlansPageProps> = ({ onNavigate }) => {
                       <th className="px-3 py-2.5 w-10" />
                     </tr>
                   </thead>
-                  <tbody>
-                    {filtered.map((plan) => (
-                      <tr key={plan.id} className="border-t border-slate-100 hover:bg-slate-50/60 group cursor-pointer" onClick={() => setSheetPlanId(plan.id)}>
-                        <td className="px-5 py-2.5">
-                          <div className="flex items-center gap-2 min-w-0">
-                            {plan.is_reference && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" aria-label="Plan de référence" />}
-                            <span className="text-[12.5px] font-semibold text-slate-900 truncate">{plan.plan_name}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5 text-[12px] font-mono text-slate-600">{plan.plan_code}</td>
-                        <td className="px-3 py-2.5 text-slate-700 text-[12px]">{plan.room?.room_type_name ?? <span className="text-slate-400">—</span>}</td>
-                        <td className="px-3 py-2.5">
-                          {plan.pension_type ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md ring-1 ring-slate-200 bg-slate-50 text-[10.5px] font-semibold text-slate-600">
-                              {plan.pension_type}
-                            </span>
-                          ) : <span className="text-slate-400 text-[12px]">—</span>}
-                        </td>
-                        <td className="px-3 py-2.5 text-[11.5px]">
-                          {plan.connectivity_type && plan.connectivity_type !== 'Aucun' ? (
-                            <span className="inline-flex items-center gap-1 text-violet-700">
-                              <Plug className="w-3 h-3" /> {plan.connectivity_type}
-                            </span>
-                          ) : <span className="text-slate-400">—</span>}
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full ring-1 ring-inset text-[10.5px] font-semibold',
-                            plan.is_active ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-slate-100 text-slate-500 ring-slate-200')}>
-                            <Power className="w-2.5 h-2.5" />
-                            {plan.is_active ? 'Actif' : 'Désactivé'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={(e) => { e.stopPropagation(); setSheetPlanId(plan.id); }}
-                              className="p-1 rounded hover:bg-violet-50 text-violet-500" title="Modifier ce plan">
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            {canWrite && (
-                              <button onClick={(e) => { e.stopPropagation(); void handleDeletePlan(plan); }}
-                                className="p-1 rounded hover:bg-rose-50 text-rose-500" title="Supprimer ce plan">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                    <SortableContext items={filtered.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+                      <tbody>
+                        {!isDragEnabled && (
+                          <tr>
+                            <td colSpan={8} className="px-5 py-1.5 bg-slate-50/80 border-t border-slate-100">
+                              <span className="text-[11px] text-slate-400 italic">
+                                Désactivez les filtres pour réordonner les plans par glisser-déposer.
+                              </span>
+                            </td>
+                          </tr>
+                        )}
+                        {filtered.map((plan) => (
+                          <SortablePlanRow
+                            key={plan.id}
+                            plan={plan}
+                            canWrite={canWrite}
+                            isDragEnabled={isDragEnabled}
+                            onOpen={() => setSheetPlanId(plan.id)}
+                            onDelete={() => void handleDeletePlan(plan)}
+                          />
+                        ))}
+                      </tbody>
+                    </SortableContext>
+                  </DndContext>
                 </table>
               )}
             </section>
