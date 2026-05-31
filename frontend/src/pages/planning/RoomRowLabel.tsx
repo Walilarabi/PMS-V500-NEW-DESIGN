@@ -41,6 +41,8 @@ export function RoomRowLabel({
   roomStatus,
   fullLabel,
   compact = false,
+  blocked = false,
+  blockedTitle,
 }: {
   number: string;
   code: string;
@@ -50,9 +52,13 @@ export function RoomRowLabel({
   fullLabel?: string;
   /** Mode replié : numéro + pastille seulement (sidebar collapsée). */
   compact?: boolean;
+  /** Chambre bloquée via room_blocks (motif daté) — affiche l'icône outil. */
+  blocked?: boolean;
+  /** Tooltip de l'icône outil (motif + période du blocage). */
+  blockedTitle?: string;
 }) {
   const tone = hkTone(housekeepingStatus);
-  const maintenance = isUnderMaintenance(roomStatus);
+  const maintenance = isUnderMaintenance(roomStatus) || blocked;
 
   return (
     <div className={cn('flex items-center gap-2 flex-1 min-w-0', compact && 'justify-center gap-1')}>
@@ -76,8 +82,8 @@ export function RoomRowLabel({
       {maintenance && (
         <span
           className="ml-1 inline-flex items-center justify-center text-rose-500 shrink-0"
-          title="Chambre en maintenance"
-          aria-label="Chambre en maintenance"
+          title={blockedTitle ?? 'Chambre en maintenance'}
+          aria-label={blockedTitle ?? 'Chambre en maintenance'}
         >
           <Wrench size={12} />
         </span>

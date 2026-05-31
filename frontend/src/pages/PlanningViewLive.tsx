@@ -19,6 +19,8 @@ import {
   Euro,
   MoreVertical,
   Lock,
+  Wrench,
+  CalendarPlus,
   LayoutGrid,
   CalendarDays,
   Zap,
@@ -57,6 +59,7 @@ import { aggregateEventsForDate, eventCellTone, impactLevelLabel } from '@/src/s
 import { useRealtimeKPI } from '@/src/hooks/useRealtimeKPI';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 import { ChannelColorModal } from '@/src/components/modals/ChannelColorModal';
+import { BlockRoomsModal } from '@/src/components/modals/BlockRoomsModal';
 // Modale lourde (graphiques) — chargée à la demande pour alléger le bundle initial.
 const RevenueDetailsModal = lazy(() =>
   import('@/src/components/modals/RevenueDetailsModal').then((m) => ({ default: m.RevenueDetailsModal })),
@@ -73,6 +76,7 @@ import { PlanningKpiBar } from '@/src/pages/planning/PlanningKpiBar';
 import { usePickup } from '@/src/hooks/planning/usePickup';
 import { useMarketCompression } from '@/src/hooks/planning/useMarketCompression';
 import { compressionLevel, getCompressionTone } from '@/src/services/planning/market-compression.service';
+import { useRoomBlocks, blockReasonLabel, type RoomBlock } from '@/src/hooks/planning/useRoomBlocks';
 import { useForecast } from '@/src/hooks/planning/useForecast';
 import { ReservationBadges } from '@/src/pages/planning/ReservationBadges';
 import { deriveBadges } from '@/src/services/planning/planning-reservation-badges.service';
@@ -212,6 +216,9 @@ export const PlanningView = () => {
   const [smartMoveEnabled, setSmartMoveEnabled] = useState(true);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
+  const [isBlockRoomsOpen, setIsBlockRoomsOpen] = useState(false);
+  // Cible d'inspection/déblocage maintenance (room + blocage room_blocks éventuel).
+  const [unblockTarget, setUnblockTarget] = useState<{ room: RoomRow; block: RoomBlock | null } | null>(null);
   const [selectedEventDate, setSelectedEventDate] = useState<string | null>(null);
   const [hoveredRes, setHoveredRes] = useState<Reservation | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
@@ -567,6 +574,70 @@ export const PlanningView = () => {
   );
   const pickup = usePickup(new Date(), 31, snapshotKpis);
   const compression = useMarketCompression(currentDate, viewLength);
+  // Blocages de chambres (room_blocks) sur la plage — source des actions maintenance.
+  const roomBlocks = useRoomBlocks(currentDate, viewLength);
+  const todayIso = React.useMemo(() => toLocalISODate(new Date()), []);
+
+  /**
+   * État de blocage d'une chambre, fusionnant les deux mécanismes réels :
+   *   - statut chambre (rooms.status ∈ {maintenance, out_of_order}) ;
+   *   - blocage daté (room_blocks) actif aujourd'hui.
+   * Retourne null si la chambre est vendable.
+   */
+  const getRoomBlockState = React.useCallback((room: RoomRow): {
+    source: 'status' | 'block';
+    reason: string;
+    startDate: string | null;
+    endDate: string | null;
+    block: RoomBlock | null;
+  } | null => {
+    const activeBlock = roomBlocks.getActiveBlock(room.id, todayIso);
+    if (activeBlock) {
+      return {
+        source: 'block',
+        reason: activeBlock.reason,
+        startDate: activeBlock.start_date,
+        endDate: activeBlock.end_date,
+        block: activeBlock,
+      };
+    }
+    if (room.status === 'maintenance' || room.status === 'out_of_order') {
+      return {
+        source: 'status',
+        reason: room.status === 'out_of_order' ? 'out_of_order' : 'maintenance',
+        startDate: null,
+        endDate: null,
+        block: null,
+      };
+    }
+    return null;
+  }, [roomBlocks, todayIso]);
+
+  /**
+   * Déblocage RÉEL d'une chambre. Selon la source :
+   *   - block  : supprime la ligne room_blocks ;
+   *   - status : remet rooms.status à 'available'.
+   * Invalide rooms + room-blocks → recalcul chambres libres / TO / dispo / planning.
+   */
+  const handleUnblockRoom = React.useCallback((room: RoomRow, block: RoomBlock | null) => {
+    if (block) {
+      roomBlocks.unblock.mutate(block.id, {
+        onSuccess: () => {
+          setUnblockTarget(null);
+          window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Chambre ${room.number} débloquée — à nouveau vendable.` } }));
+        },
+        onError: (e) => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Échec du déblocage : ${e instanceof Error ? e.message : 'erreur'}` } })),
+      });
+    } else {
+      updateRoomMut.mutate({ id: room.id, patch: { status: 'available' } }, {
+        onSuccess: () => {
+          setUnblockTarget(null);
+          window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Chambre ${room.number} remise en service.` } }));
+        },
+        onError: (e) => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Échec de la remise en service : ${e instanceof Error ? e.message : 'erreur'}` } })),
+      });
+    }
+  }, [roomBlocks.unblock, updateRoomMut]);
 
   // Événements actifs intersectant la plage affichée.
   const rangeEventsCount = React.useMemo(() => {
@@ -1277,6 +1348,7 @@ export const PlanningView = () => {
                   const now = new Date().getTime();
                   return res.room === room.number && now >= new Date(res.arrival).getTime() && now <= new Date(res.departure).getTime();
                 });
+                const blockState = getRoomBlockState(room);
 
                 return (
                   <div key={room.id} className="h-[32px] flex items-center px-4 border-b border-gray-100 group">
@@ -1287,8 +1359,19 @@ export const PlanningView = () => {
                       roomStatus={room.status}
                       fullLabel={`${room.number} - ${room.type ?? ''} ${room.category ?? ''}`.trim()}
                       compact={leftSidebarCollapsed}
+                      blocked={blockState != null}
+                      blockedTitle={blockState ? `${blockReasonLabel(blockState.reason)}${blockState.startDate ? ` · ${blockState.startDate} → ${blockState.endDate}` : ''}` : undefined}
                     />
-                    {activeMode === 'housekeeping' && (room.housekeeping_status === 'dirty' || room.housekeeping_status === 'to_clean') ? (
+                    {activeMode === 'maintenance' && blockState ? (
+                      <button
+                        onClick={() => setUnblockTarget({ room, block: blockState.block })}
+                        title={`${blockReasonLabel(blockState.reason)}${blockState.startDate ? ` · ${blockState.startDate} → ${blockState.endDate}` : ''} — cliquer pour débloquer`}
+                        aria-label={`Débloquer la chambre ${room.number}`}
+                        className="ml-auto shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-lg bg-rose-600 text-white text-[9px] font-black uppercase hover:bg-rose-700 transition-all pointer-events-auto"
+                      >
+                        <Wrench size={11} /> Débloquer
+                      </button>
+                    ) : activeMode === 'housekeeping' && (room.housekeeping_status === 'dirty' || room.housekeeping_status === 'to_clean') ? (
                       <button
                         onClick={() => updateRoomMut.mutate({ id: room.id, patch: { housekeeping_status: 'clean' } })}
                         disabled={updateRoomMut.isPending}
@@ -1302,9 +1385,9 @@ export const PlanningView = () => {
                       <div
                         className={cn(
                           'w-3.5 h-3.5 rounded-full ml-auto shrink-0 border border-white',
-                          todayRes ? 'bg-blue-500' : 'bg-gray-200',
+                          blockState ? 'bg-rose-500' : todayRes ? 'bg-blue-500' : 'bg-gray-200',
                         )}
-                        title={todayRes ? 'Occupée aujourd\'hui' : 'Libre aujourd\'hui'}
+                        title={blockState ? blockReasonLabel(blockState.reason) : todayRes ? 'Occupée aujourd\'hui' : 'Libre aujourd\'hui'}
                       />
                     )}
                   </div>
@@ -1472,7 +1555,8 @@ export const PlanningView = () => {
                   </div>
                   <div className="relative z-10 pb-20 w-full">
                      {rooms.map((room) => {
-                      const roomUnderMaintenance = room.status === 'maintenance' || room.status === 'out_of_order';
+                      const roomBlockState = getRoomBlockState(room);
+                      const roomUnderMaintenance = roomBlockState != null;
                       const maintenanceStriped = activeMode === 'maintenance' && roomUnderMaintenance;
                       const hkRowTint = activeMode === 'housekeeping'
                         ? (room.housekeeping_status === 'dirty' || room.housekeeping_status === 'to_clean'
@@ -2064,6 +2148,14 @@ export const PlanningView = () => {
 
           {/* Actions rapides */}
           <div className="flex items-center gap-3 ml-auto">
+            {activeMode === 'maintenance' && (
+              <button
+                onClick={() => setIsBlockRoomsOpen(true)}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-rose-50 text-rose-600 text-[10px] font-black uppercase tracking-wide hover:bg-rose-100 transition-all"
+              >
+                <Lock size={13} /> Bloquer une chambre
+              </button>
+            )}
             <button
               onClick={() => setIsFreeRoomsOpen(true)}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-wide hover:bg-indigo-100 transition-all"
@@ -2395,10 +2487,112 @@ export const PlanningView = () => {
           />
         </Suspense>
       )}
-      <ChannelColorModal 
-        isOpen={isChannelModalOpen} 
-        onClose={() => setIsChannelModalOpen(false)} 
+      <ChannelColorModal
+        isOpen={isChannelModalOpen}
+        onClose={() => setIsChannelModalOpen(false)}
       />
+
+      {/* Modal Blocage chambres (room_blocks) */}
+      <BlockRoomsModal
+        isOpen={isBlockRoomsOpen}
+        dateStr={todayIso}
+        rooms={storeRooms.map((r) => ({ id: r.id, number: r.number, type: r.type ?? '' }))}
+        onClose={() => setIsBlockRoomsOpen(false)}
+      />
+
+      {/* Modal Confirmation Déblocage chambre */}
+      <AnimatePresence>
+        {unblockTarget && (() => {
+          const { room, block } = unblockTarget;
+          const blockState = getRoomBlockState(room);
+          const reason = block ? block.reason : blockState?.reason ?? 'maintenance';
+          const period = block ? `${block.start_date} → ${block.end_date}` : null;
+          const busy = roomBlocks.unblock.isPending || updateRoomMut.isPending;
+          return (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => !busy && setUnblockTarget(null)}>
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl"
+              >
+                <div className="flex items-center gap-2.5 px-5 py-4 border-b border-gray-100">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+                    <Wrench size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">Débloquer la chambre {room.number}</h3>
+                    <p className="text-[11px] text-gray-500">La chambre redeviendra vendable.</p>
+                  </div>
+                </div>
+                <div className="px-5 py-4 space-y-2">
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Statut</span>
+                    <span className="font-bold text-rose-600">{blockReasonLabel(reason)}</span>
+                  </div>
+                  {period && (
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className="font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Période</span>
+                      <span className="font-bold text-gray-700">{period}</span>
+                    </div>
+                  )}
+                  {block?.notes && (
+                    <div className="text-[11px] text-gray-500 bg-gray-50 rounded-xl px-3 py-2">{block.notes}</div>
+                  )}
+                  <p className="text-[11px] text-gray-500 pt-1">
+                    Après déblocage, la chambre est recalculée dans les chambres libres, le TO,
+                    la disponibilité et le planning.
+                  </p>
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-5 py-3">
+                  {/* Prolonger : uniquement pour les blocages datés (room_blocks) */}
+                  {block ? (
+                    <button
+                      onClick={() => {
+                        const newEnd = new Date(`${block.end_date}T00:00:00`);
+                        newEnd.setDate(newEnd.getDate() + 7);
+                        roomBlocks.extend.mutate(
+                          { id: block.id, newEndDate: toLocalISODate(newEnd) },
+                          {
+                            onSuccess: () => {
+                              setUnblockTarget(null);
+                              window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Blocage chambre ${room.number} prolongé de 7 jours.` } }));
+                            },
+                            onError: (e) => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Échec de la prolongation : ${e instanceof Error ? e.message : 'erreur'}` } })),
+                          },
+                        );
+                      }}
+                      disabled={busy}
+                      title="Prolonger le blocage de 7 jours"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition"
+                    >
+                      <CalendarPlus size={14} /> Prolonger +7j
+                    </button>
+                  ) : <span />}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setUnblockTarget(null)}
+                      disabled={busy}
+                      className="h-9 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={() => handleUnblockRoom(room, block)}
+                      disabled={busy}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50 transition"
+                    >
+                      <Wrench size={14} />
+                      {busy ? 'Déblocage…' : 'Confirmer le déblocage'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
 
       {/* Modal Confirmation Délogement */}
       <AnimatePresence>
