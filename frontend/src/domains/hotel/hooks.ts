@@ -49,6 +49,7 @@ export function useRooms() {
     queryKey: ['rooms'],
     enabled: status === 'authenticated',
     staleTime: 30_000,
+    retry: 1,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rooms')

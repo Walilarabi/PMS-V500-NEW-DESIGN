@@ -70,6 +70,7 @@ export function useMarketCompression(
     queryKey: ['planning', 'market-compression', start, rangeDays],
     enabled: status === 'authenticated' && !lhByDate,
     staleTime: 5 * 60_000,
+    retry: 1,
     queryFn: () => getMarketCompressionRange(hotelId, startDate, rangeDays),
   });
 

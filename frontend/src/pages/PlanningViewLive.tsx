@@ -56,7 +56,6 @@ import { useReservations, Reservation } from '@/src/contexts/ReservationContext'
 import type { HotelEvent, ChannelConfig } from '@/src/store/configStore';
 import { useEventsStore } from '@/src/store/eventsStore';
 import { aggregateEventsForDate, eventCellTone, impactLevelLabel } from '@/src/services/events-bridge.service';
-import { useRealtimeKPI } from '@/src/hooks/useRealtimeKPI';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 import { ChannelColorModal } from '@/src/components/modals/ChannelColorModal';
 import { BlockRoomsModal } from '@/src/components/modals/BlockRoomsModal';
@@ -191,12 +190,6 @@ export const PlanningView = () => {
       ? 'error'
       : 'synced';
 
-  // Calcul KPI temps réel automatique
-  const kpiData = useRealtimeKPI(contextReservations, storeRooms.length, {
-    start: new Date(),
-    end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 jours
-  });
-  
   const [currentDate, setCurrentDate] = useState(new Date());
   // Préférences UI persistées (collapse sidebars, mode actif).
   const leftSidebarCollapsed = usePlanningUiStore((s) => s.leftSidebarCollapsed);
@@ -343,7 +336,7 @@ export const PlanningView = () => {
     };
     window.addEventListener('flowtym:planning-nav', handler);
     return () => window.removeEventListener('flowtym:planning-nav', handler);
-  });
+  }, [activeView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Navigation handlers
 
@@ -993,15 +986,6 @@ export const PlanningView = () => {
     }));
   }, [storeRooms, contextReservations]);
 
-  if (syncStatus === 'loading') {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#F8FAFC] gap-3">
-        <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
-        <p className="text-sm text-slate-500">Chargement du planning…</p>
-      </div>
-    );
-  }
-
   if (syncStatus === 'error') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full bg-[#F8FAFC] gap-3">
@@ -1014,6 +998,9 @@ export const PlanningView = () => {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#F8FAFC] overflow-hidden font-sans select-none" onMouseMove={handleMouseMove}>
+      {syncStatus === 'loading' && (
+        <div className="h-0.5 w-full bg-indigo-500 animate-pulse shrink-0" />
+      )}
       {/* Top Header Bar */}
       <div className="h-[72px] shrink-0 border-b border-gray-100 flex items-center justify-between px-6 bg-white z-[60]">
         <div className="flex items-center gap-6">

@@ -57,6 +57,7 @@ export function useRoomBlocks(startDate: Date | string, rangeDays: number) {
     queryKey: [...BLOCKS_KEY, start, end],
     enabled: status === 'authenticated',
     staleTime: 30_000,
+    retry: 1,
     queryFn: async () => {
       // Blocages qui chevauchent la plage : start <= rangeEnd ET end >= rangeStart.
       const { data, error } = await supabase

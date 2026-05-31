@@ -85,6 +85,7 @@ export function usePickup(
     queryKey: ['planning', 'pickup', today, start, end],
     enabled: status === 'authenticated',
     staleTime: 60_000,
+    retry: 1,
     queryFn: async () => {
       const [cur, prior] = await Promise.all([
         fetchSnapshots(today, start, end),

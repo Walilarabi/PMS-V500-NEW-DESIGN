@@ -24,6 +24,7 @@ export function useChannels() {
     queryFn: listChannels,
     enabled: status === 'authenticated',
     staleTime: 60_000,
+    retry: 1,
   });
 }
 
@@ -70,6 +71,7 @@ export function useEvents() {
     queryFn: listEvents,
     enabled: status === 'authenticated',
     staleTime: 60_000,
+    retry: 1,
   });
 }
 

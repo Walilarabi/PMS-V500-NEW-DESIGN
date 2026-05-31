@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 import { computeReservationPriority } from '../store/revenueEngine';
 import { useConfigStore } from '../store/configStore';
 
@@ -204,7 +204,7 @@ export const ReservationProvider: React.FC<{ children: ReactNode }> = ({ childre
     };
   };
 
-  const reservations = baseReservations.map(enrichReservation);
+  const reservations = useMemo(() => baseReservations.map(enrichReservation), [baseReservations]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Expiration automatique des options (toutes les 60 secondes) ──
   useEffect(() => {

@@ -49,6 +49,7 @@ export function useRmsRecommendations(startDate: Date | string, rangeDays: numbe
     queryKey: [...RECO_KEY, start, end],
     enabled: status === 'authenticated',
     staleTime: 30_000,
+    retry: 1,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('rms_pricing_recommendations')
