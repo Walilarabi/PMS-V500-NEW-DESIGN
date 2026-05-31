@@ -172,7 +172,7 @@ export interface AuditLogEntry {
   action: string;
   target: string;
   detail: string;
-  result: "accepted" | "ignored";
+  result: "accepted" | "ignored" | "failed";
 }
 
 // ─── Navigation ───

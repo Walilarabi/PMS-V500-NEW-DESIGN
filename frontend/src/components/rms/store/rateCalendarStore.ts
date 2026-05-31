@@ -6,6 +6,9 @@ import {
 } from "../types";
 import {
   fetchCalendarDataFromSupabase as fetchCalendarData,
+  fetchCalendarRangeOnly,
+  invalidateStaticCache,
+  prefetchRange,
   persistAddRatePlan,
   persistUpdateRatePlan,
   persistDeleteRatePlan,
@@ -94,7 +97,7 @@ interface RateCalendarStore {
   // Calendar Actions
   setViewMode: (mode: ViewMode) => void;
   setStartDate: (date: Date) => void;
-  loadData: () => Promise<void>;
+  loadData: (rangeOnlyIfPossible?: boolean) => Promise<void>;
   toggleRoom: (roomTypeId: string) => void;
   expandAllRooms: () => void;
   collapseAllRooms: () => void;
@@ -266,15 +269,21 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
     setSelectedRoomTypeIds: (ids) => set({ selectedRoomTypeIds: ids }),
     setSelectedPlanNames: (names) => set({ selectedPlanNames: names }),
 
-    setViewMode: (mode) => { set({ viewMode: mode }); get().loadData(); },
-    setStartDate: (date) => { set({ startDate: date }); get().loadData(); },
+    setViewMode: (mode) => { set({ viewMode: mode }); get().loadData(true); },
+    setStartDate: (date) => { set({ startDate: date }); get().loadData(true); },
 
-    loadData: async () => {
+    loadData: async (rangeOnlyIfPossible = false) => {
       const { startDate, viewMode } = get();
       set({ isLoading: true, loadError: null });
 
       try {
-        let { roomTypes, dateColumns } = await fetchCalendarData(startDate, viewMode);
+        // Optimisation : si on a déjà le cache statique (room_types, plans…),
+        // on ne re-fetche que les prix + restrictions pour la nouvelle période.
+        const rangeResult = rangeOnlyIfPossible
+          ? await fetchCalendarRangeOnly(startDate, viewMode)
+          : null;
+
+        let { roomTypes, dateColumns } = rangeResult ?? await fetchCalendarData(startDate, viewMode);
 
         // ✅ Appliquer ordre sauvegardé utilisateur (rooms)
         const savedOrder = localStorage.getItem('flowtym_room_order');
@@ -345,6 +354,9 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         // composantes physiques (cohérence après chargement).
         const roomTypesWithVirtual = rebuildAllVirtualInventories(roomTypes);
         set({ roomTypes: roomTypesWithVirtual, dateColumns, expandedRooms, isLoading: false, loadError: null, selectedRoomTypeIds: roomIds, selectedPlanNames: planNames });
+
+        // Pré-charge la période suivante en arrière-plan (navigation instantanée)
+        prefetchRange(startDate, viewMode);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Erreur inconnue lors du chargement';
         console.error('[rateCalendarStore] loadData failed:', message);
@@ -520,7 +532,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
 
     resetRoomTypesOrder: () => {
       localStorage.removeItem('flowtym_room_order');
-      // Recharger pour ordre par défaut
+      invalidateStaticCache();
       get().loadData();
     },
 
@@ -558,6 +570,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
       } catch {
         localStorage.removeItem('flowtym_plan_order');
       }
+      invalidateStaticCache();
       get().loadData();
     },
 
@@ -592,6 +605,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         return { error };
       }
       // Recharge depuis la DB → la liste reflète exactement ce qui est persisté
+      invalidateStaticCache();
       await get().loadData();
       return { error: null };
     },
@@ -615,7 +629,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         set({ roomTypes: prev });   // rollback
         return { error };
       }
-      // Pas de loadData() : l'état optimiste est déjà exact (évite un refetch complet).
+      invalidateStaticCache();
       return { error: null };
     },
 
@@ -629,6 +643,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         set({ roomTypes: prev });   // rollback
         return { error };
       }
+      invalidateStaticCache();
       return { error: null };
     },
     toggleRoomActive: (roomTypeId) => set((s) => ({ roomTypes: s.roomTypes.map(r => r.roomTypeId === roomTypeId ? { ...r, isActive: !r.isActive } : r) })),
@@ -667,6 +682,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         set({ roomTypes: prev });   // rollback optimiste
         return { error };
       }
+      invalidateStaticCache();
       await get().loadData();       // recharge depuis la DB (visible calendrier + résa)
       return { error: null };
     },
@@ -698,7 +714,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         set({ roomTypes: prev });   // rollback
         return { error };
       }
-      // Pas de loadData() : l'état optimiste reflète déjà la modification.
+      invalidateStaticCache();
       return { error: null };
     },
 
@@ -716,6 +732,7 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
         set({ roomTypes: prev });   // rollback
         return { error };
       }
+      invalidateStaticCache();
       return { error: null };
     },
 
