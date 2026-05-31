@@ -8,6 +8,7 @@ import {
   Download, Loader2, RefreshCcw, AlertCircle, RotateCcw,
   ChevronDown, ChevronRight, Banknote, Receipt,
 } from 'lucide-react';
+import { AnomalyDetectionBar } from '@/src/components/billing/AnomalyDetectionBar';
 import { motion, AnimatePresence } from 'motion/react';
 import { Badge } from '@/src/components/ui/Badge';
 import { Button } from '@/src/components/ui/Button';
@@ -22,6 +23,7 @@ import {
   useBillingStats,
 } from '@/src/domains/billing/hooks';
 import type { InvoiceRow, PaymentMethod } from '@/src/domains/billing/schemas';
+import { RefundModal } from '@/src/components/billing/RefundModal';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,6 +64,7 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
   const [voidReason, setVoidReason] = useState('');
   const [showVoid, setShowVoid] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [refundTarget, setRefundTarget] = useState<{ paymentId: string; amount: number } | null>(null);
 
   if (isLoading || !invoice) {
     return (
@@ -237,7 +240,11 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
                       {pay.status === 'reversed' ? 'Annulé' : 'OK'}
                     </Badge>
                     {pay.status === 'completed' && (
-                      <button onClick={() => { const r = prompt('Motif du remboursement ?'); if (r) reversePayment.mutate({ paymentId: pay.id, invoiceId, reason: r }, { onError: (err) => setActionError(`Remboursement échoué — ${err.message}`) }); }} className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors" title="Rembourser">
+                      <button
+                        onClick={() => setRefundTarget({ paymentId: pay.id, amount: pay.amount })}
+                        className="p-1 hover:bg-red-50 rounded-lg text-gray-300 hover:text-red-400 transition-colors"
+                        title="Rembourser"
+                      >
                         <RotateCcw size={12} />
                       </button>
                     )}
@@ -272,6 +279,26 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
           </Button>
         </div>
       )}
+
+      <RefundModal
+        isOpen={!!refundTarget}
+        paymentAmount={refundTarget?.amount ?? 0}
+        isPending={reversePayment.isPending}
+        onCancel={() => setRefundTarget(null)}
+        onConfirm={(reason) => {
+          if (!refundTarget) return;
+          reversePayment.mutate(
+            { paymentId: refundTarget.paymentId, invoiceId, reason },
+            {
+              onSuccess: () => setRefundTarget(null),
+              onError: (err) => {
+                setActionError(`Remboursement échoué — ${err.message}`);
+                setRefundTarget(null);
+              },
+            },
+          );
+        }}
+      />
     </div>
   );
 }
@@ -350,6 +377,9 @@ export const FacturationView = () => {
             </Card>
           ))}
         </div>
+
+        {/* Anomaly bar */}
+        <AnomalyDetectionBar />
 
         {/* Filters */}
         <div className="px-6 mb-4 flex gap-1 shrink-0">

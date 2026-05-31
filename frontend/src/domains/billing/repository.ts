@@ -73,7 +73,8 @@ export async function createInvoice(
   input: CreateInvoiceInput,
 ): Promise<{ invoice: InvoiceRow; folio: FolioRow }> {
   // Générer le numéro de facture via la fonction PG
-  const { data: numData, error: numError } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: numData, error: numError } = await (supabase as any)
     .rpc('next_invoice_number', { p_hotel_id: hotelId });
   if (numError) throw mapSupabaseError(numError);
   const invoiceNumber = numData as string;

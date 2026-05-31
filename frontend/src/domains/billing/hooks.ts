@@ -5,6 +5,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 import * as repo from './repository';
 import type { CreateInvoiceInput, AddInvoiceLineInput, AddPaymentInput } from './schemas';
+import * as haRepo from './houseAccounts.repository';
+import type { CreateHouseAccountInput, AddHouseAccountLineInput } from './houseAccounts.repository';
+import * as depRepo from './deposits.repository';
+import type { CreateDepositInput } from './deposits.repository';
+import * as cnRepo from './creditNotes.repository';
+import type { CreateCreditNoteInput } from './creditNotes.repository';
 
 const INVOICE_KEY  = ['invoices'] as const;
 const PAYMENT_KEY  = ['payments'] as const;
@@ -172,5 +178,149 @@ export function useBillingStats() {
     enabled: status === 'authenticated',
     staleTime: 30_000,
     refetchInterval: 60_000,
+  });
+}
+
+// ─── House Accounts ───────────────────────────────────────────────────────────
+
+const HA_KEY = ['house_accounts'] as const;
+
+export function useHouseAccounts(activeOnly = true) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: [...HA_KEY, 'list', activeOnly],
+    queryFn: () => haRepo.listHouseAccounts(activeOnly),
+    enabled: status === 'authenticated',
+    staleTime: 30_000,
+  });
+}
+
+export function useHouseAccountLines(houseAccountId: string | null) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: [...HA_KEY, 'lines', houseAccountId],
+    queryFn: () => haRepo.listHouseAccountLines(houseAccountId!),
+    enabled: status === 'authenticated' && !!houseAccountId,
+    staleTime: 15_000,
+  });
+}
+
+export function useCreateHouseAccount() {
+  const qc = useQueryClient();
+  const { session } = useAuth();
+  return useMutation({
+    mutationFn: (input: CreateHouseAccountInput) =>
+      haRepo.createHouseAccount(session?.tenantId ?? '', input),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: HA_KEY }),
+  });
+}
+
+export function useAddHouseAccountLine() {
+  const qc = useQueryClient();
+  const { session } = useAuth();
+  return useMutation({
+    mutationFn: (input: AddHouseAccountLineInput) =>
+      haRepo.addHouseAccountLine(session?.tenantId ?? '', input),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: [...HA_KEY, 'lines', vars.houseAccountId] });
+      void qc.invalidateQueries({ queryKey: [...HA_KEY, 'list'] });
+    },
+  });
+}
+
+// ─── Deposits ─────────────────────────────────────────────────────────────────
+
+const DEP_KEY = ['deposits'] as const;
+
+export function useDeposits(params: {
+  reservationId?: string;
+  invoiceId?: string;
+  status?: string;
+} = {}) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: [...DEP_KEY, 'list', params],
+    queryFn: () => depRepo.listDeposits(params),
+    enabled: status === 'authenticated',
+    staleTime: 20_000,
+  });
+}
+
+export function useCreateDeposit() {
+  const qc = useQueryClient();
+  const { session } = useAuth();
+  return useMutation({
+    mutationFn: (input: CreateDepositInput) =>
+      depRepo.createDeposit(session?.tenantId ?? '', input),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: DEP_KEY }),
+  });
+}
+
+export function useCaptureDeposit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => depRepo.captureDeposit(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: DEP_KEY }),
+  });
+}
+
+export function useReleaseDeposit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, notes }: { id: string; notes?: string }) =>
+      depRepo.releaseDeposit(id, notes),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: DEP_KEY }),
+  });
+}
+
+export function useApplyDepositToInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, invoiceId, appliedAmount }: {
+      id: string; invoiceId: string; appliedAmount?: number;
+    }) => depRepo.applyDepositToInvoice(id, invoiceId, appliedAmount),
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: DEP_KEY });
+      void qc.invalidateQueries({ queryKey: [...INVOICE_KEY, 'one', vars.invoiceId] });
+    },
+  });
+}
+
+// ─── Credit Notes ─────────────────────────────────────────────────────────────
+
+const CN_KEY = ['credit_notes'] as const;
+
+export function useCreditNotes(params: {
+  originalInvoiceId?: string;
+  reservationId?: string;
+  status?: string;
+} = {}) {
+  const { status } = useAuth();
+  return useQuery({
+    queryKey: [...CN_KEY, 'list', params],
+    queryFn: () => cnRepo.listCreditNotes(params),
+    enabled: status === 'authenticated',
+    staleTime: 20_000,
+  });
+}
+
+export function useCreateCreditNote() {
+  const qc = useQueryClient();
+  const { session } = useAuth();
+  return useMutation({
+    mutationFn: (input: CreateCreditNoteInput) =>
+      cnRepo.createCreditNote(session?.tenantId ?? '', input),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: CN_KEY }),
+  });
+}
+
+export function useIssueCreditNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => cnRepo.issueCreditNote(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: CN_KEY });
+      void qc.invalidateQueries({ queryKey: BILLING_KEY });
+    },
   });
 }
