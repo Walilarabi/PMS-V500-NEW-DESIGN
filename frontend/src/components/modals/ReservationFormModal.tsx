@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { X, AlertTriangle, TrendingUp, Clock, CheckCircle2, XCircle, Loader2, Search, Moon, Banknote } from 'lucide-react';
-import { PARTNER_CATEGORIES, PARTNER_CATEGORY_ORDER } from '@/src/constants/partners';
 import { useRateCalendarStore } from '@/src/components/rms/store/rateCalendarStore';
 import { useRevenueEngine } from '@/src/hooks/useRevenueEngine';
 import type { ReservationStatus } from '@/src/contexts/ReservationContext';
-import { getStayBreakdown } from '@/src/services/calendar-pricing.service';
+import { useDistributionPartners } from '@/src/hooks/reservations/useDistributionPartners';
+import { useRatePlansForPartner } from '@/src/hooks/reservations/useRatePlansForPartner';
+import type { RatePlanOption } from '@/src/hooks/reservations/useRatePlansForPartner';
+import { useRatePricesForPlan, calcStayTotalFromPrices } from '@/src/hooks/reservations/useRatePricesForPlan';
+import { RatePlanInfoPopover } from '@/src/components/modals/RatePlanInfoPopover';
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 
@@ -66,17 +69,18 @@ interface Props {
 
 // ─── CONSTANTES ──────────────────────────────────────────────────────────────
 
-const ROOMS_DEFAULT: AvailableRoom[] = [
-  { number: '101', type: 'Double Classique', price: 99 },
-  { number: '102', type: 'Double Classique', price: 99 },
-  { number: '103', type: 'Suite Deluxe', price: 189 },
-  { number: '104', type: 'Simple', price: 69 },
-  { number: '201', type: 'Double Supérieure', price: 129 },
-  { number: '202', type: 'Twin', price: 115 },
-  { number: '203', type: 'Suite Panoramique', price: 249 },
-  { number: '301', type: 'Familiale', price: 185 },
-  { number: '302', type: 'Junior Suite', price: 165 },
-];
+// Maps room type names (from rooms.type) to rate_prices.room_type_code
+const ROOM_TYPE_CODE: Record<string, string> = {
+  'Simple':                     'SGL-CLASSIC',
+  'Double Classique':            'DBL-CLASSIC',
+  'Double Classique Terrasse':   'DBL-CLASSIC-TER',
+  'Double Deluxe':               'DBL-DELUXE',
+  'Double Deluxe Terrasse':      'DBL-DELUXE-TER',
+  'Twin Classique':              'TWIN-CLASSIC',
+  'Twin Deluxe':                 'TWIN-DELUXE',
+  'Appartement 4 personnes':     'ADJ-4P',
+  'Familiale':                   'ADJ-4P',
+};
 
 // Indicatifs téléphoniques par pays (ISO 2 lettres)
 const COUNTRY_DIAL: Record<string, string> = {
@@ -99,34 +103,8 @@ export const SEGMENTS = [
   { value: 'VIP',      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>, label: 'VIP' },
 ];
 
-export const RATE_PLANS = [
-  { id: 'RACK-RO',  label: 'Rack — Room Only',            mult: 1.00 },
-  { id: 'RACK-BB',  label: 'Rack — Petit-déjeuner',        mult: 1.15 },
-  { id: 'FLEX',     label: 'Flexible — Room Only',          mult: 1.00 },
-  { id: 'NANR',     label: 'Non-remboursable (−10%)',       mult: 0.90 },
-  { id: 'EARLY',    label: 'Early Bird (−15%)',              mult: 0.85 },
-  { id: 'LAST',     label: 'Last Minute (−20%)',             mult: 0.80 },
-  { id: 'CORP',     label: 'Corporatif',                     mult: 1.10 },
-];
-
-// Plans tarifaires enrichis avec filtrage dynamique (canal, pension, politique)
-export const ENHANCED_RATE_PLANS: { id: string; label: string; mult: number; boards: string[]; policies: string[]; channels: string[] }[] = [
-  { id: 'RACK-RO',  label: 'Rack — Room Only',            mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible','modere','stricte','non_remboursable'], channels: ['DIRECT','WALK_IN'] },
-  { id: 'RACK-BB',  label: 'Rack — Petit-déjeuner',        mult: 1.15, boards: ['Petit-déjeuner'],                           policies: ['flexible','modere','stricte'],                     channels: ['DIRECT','WALK_IN'] },
-  { id: 'FLEX',     label: 'Flexible — Room Only',          mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible'],                                       channels: ['DIRECT','BOOKING','EXPEDIA','AIRBNB','WALK_IN'] },
-  { id: 'NANR',     label: 'Non-remboursable (−10%)',       mult: 0.90, boards: ['Room Only','Petit-déjeuner'],               policies: ['non_remboursable'],                               channels: ['DIRECT','BOOKING','EXPEDIA','AIRBNB'] },
-  { id: 'EARLY',    label: 'Early Bird (−15%)',              mult: 0.85, boards: ['Room Only'],                                 policies: ['non_remboursable','stricte'],                     channels: ['DIRECT','BOOKING','EXPEDIA'] },
-  { id: 'LAST',     label: 'Last Minute (−20%)',             mult: 0.80, boards: ['Room Only'],                                 policies: ['non_remboursable'],                               channels: ['DIRECT','WALK_IN'] },
-  { id: 'CORP',     label: 'Corporatif',                     mult: 1.10, boards: ['Room Only','Petit-déjeuner','Demi-pension'], policies: ['flexible','modere'],                              channels: ['DIRECT'] },
-  { id: 'BKG-FLEX', label: 'Booking — Flexible',             mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible'],                                       channels: ['BOOKING'] },
-  { id: 'BKG-NANR', label: 'Booking — Non remboursable',     mult: 0.90, boards: ['Room Only','Petit-déjeuner'],               policies: ['non_remboursable'],                               channels: ['BOOKING'] },
-  { id: 'BKG-BB',   label: 'Booking — Petit-déjeuner',       mult: 1.15, boards: ['Petit-déjeuner'],                           policies: ['flexible','modere'],                              channels: ['BOOKING'] },
-  { id: 'EXP-FLEX', label: 'Expedia — Flexible',              mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible'],                                       channels: ['EXPEDIA'] },
-  { id: 'EXP-NANR', label: 'Expedia — Non remboursable',      mult: 0.88, boards: ['Room Only'],                                 policies: ['non_remboursable'],                               channels: ['EXPEDIA'] },
-  { id: 'AIR-FLEX', label: 'Airbnb — Flexible',               mult: 1.00, boards: ['Room Only'],                                 policies: ['flexible','modere','stricte'],                    channels: ['AIRBNB'] },
-  { id: 'DP-FLEX',  label: 'Demi-pension — Flexible',          mult: 1.30, boards: ['Demi-pension'],                             policies: ['flexible','modere'],                              channels: ['DIRECT','WALK_IN'] },
-  { id: 'PC-FLEX',  label: 'Pension complète',                  mult: 1.60, boards: ['Pension complète'],                         policies: ['flexible','modere'],                              channels: ['DIRECT','WALK_IN'] },
-];
+// Kept only for legacy display labels in proforma / email (no pricing logic)
+export const RATE_PLANS: { id: string; label: string }[] = [];
 
 // Génère une référence PMS unique au format FLW-YYYY-NNNNNN
 const generatePMSRef = (): string => {
@@ -335,8 +313,11 @@ const ReservationFormModal: React.FC<Props> = ({
   isOpen, onClose, onSave,
   initialData, availableRooms, editId, allReservations
 }) => {
-  const baseRooms = (availableRooms && availableRooms.length > 0) ? availableRooms : ROOMS_DEFAULT;
+  const baseRooms = availableRooms ?? [];
   const { roomTypes: storeRoomTypes } = useRateCalendarStore();
+
+  // ── Partenaires réels (distribution_partners) ────────────────────────────
+  const { data: partners = [] } = useDistributionPartners();
 
   const defaultForm: ReservationFormData = {
     guestName: '', email: '', phone: '',
@@ -367,6 +348,30 @@ const ReservationFormModal: React.FC<Props> = ({
   const [showDynPricing, setShowDynPricing] = useState(false);
   const [discountMode, setDiscountMode] = useState<'percent' | 'amount'>('percent');
   const [discountValue, setDiscountValue] = useState<number>(0);
+
+  // ── Plans tarifaires filtrés par partenaire (Supabase) ───────────────────
+  const ratePlanPartnerId = !form.channel || form.channel === 'direct' ? null : form.channel;
+  const { data: supabasePlans = [], isLoading: plansLoading } = useRatePlansForPartner(ratePlanPartnerId);
+
+  // ── Tarifs nuit par nuit depuis rate_prices (Supabase) ───────────────────
+  const selectedRoomType = useMemo(() => {
+    const room = baseRooms.find(r => r.number === form.roomNumber);
+    const typeName = room?.type || form.category;
+    return typeName ? (ROOM_TYPE_CODE[typeName] ?? null) : null;
+  }, [form.roomNumber, form.category, baseRooms]);
+
+  const { data: ratePrices = [], isLoading: pricesLoading } = useRatePricesForPlan(
+    form.ratePlanId || null,
+    form.checkIn || null,
+    form.checkOut || null,
+    selectedRoomType,
+  );
+
+  // Plan sélectionné (pour le popover)
+  const selectedPlan: RatePlanOption | null = useMemo(
+    () => supabasePlans.find(p => p.id === form.ratePlanId) ?? null,
+    [supabasePlans, form.ratePlanId],
+  );
 
   // Hook Revenue Engine
   const { getPriceForStay, canOverbook } = useRevenueEngine();
@@ -471,95 +476,37 @@ const ReservationFormModal: React.FC<Props> = ({
   const set = <K extends keyof ReservationFormData>(k: K, v: ReservationFormData[K]) =>
     setForm(f => ({ ...f, [k]: v }));
 
-  // ── Plans depuis le store (dédupliqués) ──────────────────────────────────────
-  const storePlans = useMemo(
-    () =>
-      Array.from(
-        new Map(
-          storeRoomTypes.flatMap((rt) =>
-            rt.ratePlans.map((rp) => [rp.planId, rp])
-          )
-        ).values()
-      ),
-    [storeRoomTypes]
-  );
-
-  // ── Plans tarifaires filtrés dynamiquement selon partenaire (channel) ─────────
-  // Priorité : plans du store filtrés par partenaire (partnerIds)
-  // Fallback : ENHANCED_RATE_PLANS filtrés par canal/pension/politique (mock data)
-  const filteredRatePlans = useMemo(() => {
-    const partnerId = form.channel; // now a stable slug like "booking-com"
-
-    if (storePlans.length > 0) {
-      const byPartner = partnerId && partnerId !== 'direct'
-        ? storePlans.filter((p) => {
-            const ids = p.partnerIds ?? p.distributionChannels ?? [];
-            return ids.length === 0 || ids.includes(partnerId);
-          })
-        : storePlans;
-      const result = byPartner.length > 0 ? byPartner : storePlans;
-      return result.map((p) => ({
-        id:    p.planId,
-        label: p.planName,
-        mult:  1.0,
-        // carry through extra fields needed for calc below
-        boards: [], policies: [], channels: [],
-      }));
-    }
-
-    // ─ Fallback : plans statiques (ENHANCED_RATE_PLANS) ─
-    const ch = (partnerId || 'DIRECT').toUpperCase().replace(/-/g, '_').replace('BOOKING_COM', 'BOOKING').replace('TRIP_COM', 'TRIP');
-    const bd = form.board || 'Room Only';
-    const cp = form.cancelPolicy || 'flexible';
-    const fromEnhanced = ENHANCED_RATE_PLANS.filter(p => {
-      const channelOk = p.channels.some(c => c === ch) || p.channels.includes('DIRECT');
-      const boardOk   = p.boards.includes(bd);
-      const policyOk  = p.policies.includes(cp);
-      return channelOk && boardOk && policyOk;
-    });
-    return fromEnhanced.length > 0 ? fromEnhanced : ENHANCED_RATE_PLANS;
-  }, [storePlans, form.channel, form.board, form.cancelPolicy]);
-
-  // Reset ratePlanId if no longer available after filter change
+  // ── Reset ratePlanId si non disponible après changement de partenaire ──────
   useEffect(() => {
-    if (form.ratePlanId && !filteredRatePlans.find(p => p.id === form.ratePlanId)) {
-      set('ratePlanId', filteredRatePlans[0]?.id ?? '');
+    if (!plansLoading && form.ratePlanId && !supabasePlans.find(p => p.id === form.ratePlanId)) {
+      set('ratePlanId', supabasePlans[0]?.id ?? '');
     }
-  }, [filteredRatePlans]);
+  }, [supabasePlans, plansLoading]);
 
-  // ── Calculs ──
-  // On essaie d'abord de récupérer les tarifs exacts depuis le Calendrier
-  // Tarifaire (nuit par nuit). Sinon fallback sur prix de base × multiplicateur.
+  // ── Calculs depuis rate_prices (Calendrier Tarifaire — données réelles) ───
   const calc = useMemo(() => {
     const cin = new Date(form.checkIn), cout = new Date(form.checkOut);
     const nights = Math.max(0, Math.round((cout.getTime() - cin.getTime()) / 86400000));
-    const room = baseRooms.find(r => r.number === form.roomNumber);
-    const plan = RATE_PLANS.find(p => p.id === form.ratePlanId);
-    const fallbackPerNight = (room?.price ?? 0) * (plan?.mult ?? 1);
 
-    let calendarBreakdown: ReturnType<typeof getStayBreakdown> | null = null;
-    if (form.checkIn && form.checkOut && room && nights > 0) {
-      calendarBreakdown = getStayBreakdown({
-        checkIn: form.checkIn,
-        checkOut: form.checkOut,
-        roomQuery: room.type,
-        planQuery: plan?.label || form.ratePlanId,
-        fallbackPrice: fallbackPerNight,
-      });
-    }
+    const stayCalc = form.checkIn && form.checkOut && nights > 0 && ratePrices.length > 0
+      ? calcStayTotalFromPrices(ratePrices, form.checkIn, form.checkOut, selectedRoomType)
+      : null;
+    const ht = stayCalc?.total ?? 0;
+    const hasMissingDates = stayCalc?.hasMissingDates ?? false;
 
-    const pn = fallbackPerNight; // prix de référence "1ère nuit" pour préauto
-    const ht = calendarBreakdown && calendarBreakdown.nights.length > 0
-      ? calendarBreakdown.total
-      : pn * nights;
+    // Prix de la première nuit pour la préautorisation
+    const pn = ratePrices.find(p => p.stay_date === form.checkIn)
+      ? Number(ratePrices.find(p => p.stay_date === form.checkIn)!.price)
+      : (ht > 0 && nights > 0 ? ht / nights : 0);
+
     const tva = ht * (form.vatRate / 100);
     const tax = 2.5 * (form.adults + form.children) * nights;
     const baseTtc = ht + tva + tax;
-    // Remise
     const discountAmt = discountMode === 'percent'
       ? Math.min(baseTtc, (baseTtc * discountValue) / 100)
       : Math.min(baseTtc, discountValue);
     const ttc = Math.max(0, baseTtc - discountAmt);
+
     return {
       nights,
       pn,
@@ -569,11 +516,11 @@ const ReservationFormModal: React.FC<Props> = ({
       ttc,
       baseTtc,
       discountAmt,
-      breakdown: calendarBreakdown,
-      fromCalendar: !!calendarBreakdown && calendarBreakdown.allFromCalendar,
-      anyClosed: !!calendarBreakdown && calendarBreakdown.anyClosed,
+      hasMissingDates,
+      fromCalendar: ratePrices.length > 0 && !hasMissingDates,
+      pricesLoading,
     };
-  }, [form.checkIn, form.checkOut, form.roomNumber, form.adults, form.children, form.vatRate, form.ratePlanId, baseRooms, discountMode, discountValue]);
+  }, [form.checkIn, form.checkOut, form.roomNumber, form.adults, form.children, form.vatRate, ratePrices, selectedRoomType, discountMode, discountValue, pricesLoading]);
 
   // ── Préautorisation ──
   const isNanr = form.cancelPolicy === 'non_remboursable';
@@ -745,7 +692,7 @@ const ReservationFormModal: React.FC<Props> = ({
               style={{ position: 'relative', width: '100%', maxWidth: 1060, maxHeight: 'calc(100vh - 32px)', background: '#fff', borderRadius: 22, boxShadow: '0 28px 80px rgba(139,92,246,.18)', overflow: 'hidden', zIndex: 1, display: 'flex', flexDirection: 'column' }}
             >
               {/* HEADER */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 28px', background: 'linear-gradient(130deg,#8B5CF6,#6D28D9)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', background: 'linear-gradient(130deg,#8B5CF6,#6D28D9)' }}>
                 <span style={{ fontSize: 20, fontWeight: 700, color: '#fff', letterSpacing: '-.4px' }}>
                   {editId ? `Modifier · ${editId}` : 'Nouvelle réservation'}
                 </span>
@@ -936,18 +883,17 @@ const ReservationFormModal: React.FC<Props> = ({
                     </div>
                   </div>
                   <Sel icon={<Ico d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />}
-                    value={form.channel} onChange={v => set('channel', v)} placeholder="Partenaire / Source">
-                    {PARTNER_CATEGORY_ORDER.map((catKey) => {
-                      const cat = PARTNER_CATEGORIES[catKey];
-                      if (!cat) return null;
-                      return (
-                        <optgroup key={catKey} label={cat.label}>
-                          {cat.partners.map((p) => (
-                            <option key={p.id} value={p.id}>{p.label}</option>
-                          ))}
-                        </optgroup>
-                      );
-                    })}
+                    value={form.channel}
+                    onChange={v => {
+                      set('channel', v);
+                      const partner = partners.find(p => p.id === v);
+                      set('partnerName', partner?.name ?? (v === 'direct' ? 'Direct' : ''));
+                    }}
+                    placeholder="Partenaire / Source">
+                    <option value="direct">Réservation directe</option>
+                    {partners.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
                   </Sel>
                 </div>
 
@@ -1020,7 +966,7 @@ const ReservationFormModal: React.FC<Props> = ({
                 </div>
 
                 {/* Pension + Annulation + Plan tarifaire */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, alignItems: 'center' }}>
                   <Sel icon={<Ico d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3" />}
                     value={form.board} onChange={v => set('board', v)}>
                     {['Room Only','Petit-déjeuner','Demi-pension','Pension complète'].map(b => <option key={b}>{b}</option>)}
@@ -1032,13 +978,20 @@ const ReservationFormModal: React.FC<Props> = ({
                     <option value="stricte">Stricte (7j)</option>
                     <option value="non_remboursable">Non remboursable</option>
                   </Sel>
-                  <Sel icon={<Ico d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01" />}
-                    value={form.ratePlanId} onChange={v => set('ratePlanId', v)} placeholder="Plan tarifaire">
-                    {filteredRatePlans.length > 0
-                      ? filteredRatePlans.map(p => <option key={p.id} value={p.id}>{p.label}</option>)
-                      : RATE_PLANS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)
-                    }
-                  </Sel>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Sel icon={<Ico d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82zM7 7h.01" />}
+                        value={form.ratePlanId} onChange={v => set('ratePlanId', v)} placeholder={plansLoading ? 'Chargement…' : 'Plan tarifaire'}>
+                        {supabasePlans.map(p => <option key={p.id} value={p.id}>{p.plan_name}</option>)}
+                      </Sel>
+                    </div>
+                    <RatePlanInfoPopover
+                      plan={selectedPlan}
+                      checkIn={form.checkIn || null}
+                      checkOut={form.checkOut || null}
+                      roomTypeCode={selectedRoomType}
+                    />
+                  </div>
                 </div>
 
                 {SEP}
@@ -1058,45 +1011,62 @@ const ReservationFormModal: React.FC<Props> = ({
                         : <><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>Sélectionnez chambre & dates</>}
                     </div>
                   </div>
-                  {calc.nights > 0 && calc.pn > 0 && (
+                  {calc.nights > 0 && (
                     <>
-                      {(calc.fromCalendar || calc.anyClosed) && (
-                        <div style={{ padding: '6px 16px', display: 'flex', gap: 8, alignItems: 'center', background: calc.anyClosed ? '#FEF2F2' : '#ECFDF5', borderBottom: '1px solid #F3F4F6' }}>
-                          {calc.anyClosed ? (
+                      {/* Source des tarifs */}
+                      {form.ratePlanId && !calc.pricesLoading && (
+                        <div style={{ padding: '6px 16px', display: 'flex', gap: 8, alignItems: 'center', background: calc.hasMissingDates ? '#FEF2F2' : (ratePrices.length > 0 ? '#ECFDF5' : '#FEF9C3'), borderBottom: '1px solid #F3F4F6' }}>
+                          {calc.hasMissingDates ? (
                             <span style={{ fontSize: 11, fontWeight: 700, color: '#B91C1C' }}>
-                              ⚠ Au moins une nuit est fermée sur ce plan tarifaire
+                              ⚠ Certaines nuits manquent dans le Calendrier Tarifaire
                             </span>
-                          ) : (
+                          ) : ratePrices.length > 0 ? (
                             <span style={{ fontSize: 11, fontWeight: 700, color: '#047857' }}>
                               ✓ Tarifs récupérés depuis le Calendrier Tarifaire
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#92400E' }}>
+                              ⚠ Aucun tarif configuré pour ces dates / ce plan
                             </span>
                           )}
                         </div>
                       )}
-                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead><tr style={{ borderBottom: '1px solid #F3F4F6' }}>
-                          {['Date','Libellé','Montant'].map((h, i) => <th key={h} style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.5px', padding: '10px 16px 7px', textAlign: i === 2 ? 'right' : 'left' }}>{h}</th>)}
-                        </tr></thead>
-                        <tbody>
-                          {Array.from({ length: calc.nights }).map((_, i) => {
-                            const d = new Date(form.checkIn); d.setDate(d.getDate() + i);
-                            const room = baseRooms.find(r => r.number === form.roomNumber);
-                            const breakdownNight = calc.breakdown?.nights[i];
-                            const nightPrice = breakdownNight?.price ?? calc.pn;
-                            const fromCalendar = breakdownNight?.source === 'calendar';
-                            const isClosed = breakdownNight?.source === 'closed';
-                            return <tr key={i} style={{ borderBottom: '1px solid #F9FAFB' }}>
-                              <td style={{ fontSize: 12, color: '#6B7280', padding: '8px 16px' }}>{d.toLocaleDateString('fr-FR')}</td>
-                              <td style={{ fontSize: 12, fontStyle: 'italic', color: isClosed ? '#B91C1C' : '#9CA3AF', padding: '8px 16px' }}>
-                                Nuitée — {room?.type ?? 'Chambre'}
-                                {fromCalendar && <span style={{ marginLeft: 6, fontStyle: 'normal', fontSize: 9, fontWeight: 700, color: '#047857', background: '#D1FAE5', padding: '1px 5px', borderRadius: 3 }}>CAL</span>}
-                                {isClosed && <span style={{ marginLeft: 6, fontStyle: 'normal', fontSize: 9, fontWeight: 700, color: '#B91C1C', background: '#FEE2E2', padding: '1px 5px', borderRadius: 3 }}>FERMÉ</span>}
-                              </td>
-                              <td style={{ fontSize: 12, fontWeight: 600, textAlign: 'right', padding: '8px 16px', color: isClosed ? '#B91C1C' : undefined }}>{fmtEur(nightPrice)}</td>
-                            </tr>;
-                          })}
-                        </tbody>
-                      </table>
+                      {calc.pricesLoading && (
+                        <div style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', borderBottom: '1px solid #F3F4F6' }}>
+                          <Loader2 size={12} className="animate-spin text-violet-500" style={{ animation: 'spin 1s linear infinite' }} />
+                          <span style={{ fontSize: 11, color: '#9CA3AF' }}>Chargement des tarifs…</span>
+                        </div>
+                      )}
+                      {/* Tableau nuitée par nuitée — affiché seulement si type chambre résolu */}
+                      {ratePrices.length > 0 && selectedRoomType && (
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead><tr style={{ borderBottom: '1px solid #F3F4F6' }}>
+                            {['Date','Type','Montant'].map((h, i) => <th key={h} style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '.5px', padding: '10px 16px 7px', textAlign: i === 2 ? 'right' : 'left' }}>{h}</th>)}
+                          </tr></thead>
+                          <tbody>
+                            {ratePrices.map((p) => (
+                              <tr key={p.stay_date} style={{ borderBottom: '1px solid #F9FAFB' }}>
+                                <td style={{ fontSize: 12, color: '#6B7280', padding: '8px 16px' }}>
+                                  {new Date(p.stay_date).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                                </td>
+                                <td style={{ fontSize: 11, color: '#9CA3AF', padding: '8px 16px' }}>
+                                  <span style={{ fontStyle: 'normal', fontSize: 9, fontWeight: 700, color: '#047857', background: '#D1FAE5', padding: '1px 5px', borderRadius: 3, marginRight: 5 }}>CAL</span>
+                                  {p.room_type_code}
+                                </td>
+                                <td style={{ fontSize: 12, fontWeight: 600, textAlign: 'right', padding: '8px 16px' }}>
+                                  {Number(p.price).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                      {/* Tarif disponible mais type chambre non résolu — renvoyer vers le popover */}
+                      {ratePrices.length > 0 && !selectedRoomType && (
+                        <div style={{ padding: '8px 16px', fontSize: 11, color: '#6B7280', fontStyle: 'italic' }}>
+                          Sélectionnez un type de chambre pour voir le détail nuitée. Consultez le ⓘ pour les tarifs par type.
+                        </div>
+                      )}
                     </>
                   )}
                   <div style={{ padding: '10px 16px 0' }}>
