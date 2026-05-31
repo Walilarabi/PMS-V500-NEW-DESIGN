@@ -1087,6 +1087,194 @@ function BillingActionsToolbar({ onTransfer, onSplit, onAvoir, onRefund, onHisto
   );
 }
 
+// ─── Invoice HTML Generator (opens in new tab for Aperçu / Impression) ───────
+function buildInvoiceHTML(folio: Folio, res: Reservation, invoiceNumber: string): string {
+  const fmtE = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(v);
+  const calcTTC = (lines: InvoiceLine[]) => lines.reduce((s, l) => s + l.unitPriceHT * l.qty * (1 + l.vatRate), 0);
+  const calcHT = (lines: InvoiceLine[]) => lines.reduce((s, l) => s + l.unitPriceHT * l.qty, 0);
+  const ttc = calcTTC(folio.lines);
+  const ht = calcHT(folio.lines);
+  const vatBreakdown: Record<string, { ht: number; vat: number }> = {};
+  folio.lines.forEach(l => {
+    const key = (l.vatRate * 100).toFixed(0) + '%';
+    if (!vatBreakdown[key]) vatBreakdown[key] = { ht: 0, vat: 0 };
+    vatBreakdown[key].ht += l.unitPriceHT * l.qty;
+    vatBreakdown[key].vat += l.unitPriceHT * l.qty * l.vatRate;
+  });
+  const solde = Math.max(0, ttc - folio.payments);
+  const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const linesHTML = folio.lines.length > 0 ? folio.lines.map(l => `
+    <tr>
+      <td class="desc">${l.desc}</td>
+      <td class="center">${l.date}</td>
+      <td class="right">${l.qty}</td>
+      <td class="right">${fmtE(l.unitPriceHT)}</td>
+      <td class="right tva">${(l.vatRate * 100).toFixed(0)}%</td>
+      <td class="right bold">${fmtE(l.unitPriceHT * l.qty * (1 + l.vatRate))}</td>
+    </tr>`).join('') : '<tr><td colspan="6" class="empty">Aucune prestation</td></tr>';
+
+  const vatRows = Object.entries(vatBreakdown).sort((a, b) => parseFloat(b[0]) - parseFloat(a[0])).map(([rate, d]) => `
+    <tr><td>${rate}</td><td class="right">${fmtE(d.ht)}</td><td class="right">${fmtE(d.vat)}</td></tr>`).join('');
+
+  const paymentsHTML = folio.paymentRecords.length > 0
+    ? folio.paymentRecords.map(p => `<tr class="paid"><td>Paiement reçu — ${p.method}</td><td class="right">${p.date}</td><td class="right">${fmtE(p.amount)}</td></tr>`).join('')
+    : folio.payments > 0 ? `<tr class="paid"><td colspan="2">Paiement reçu</td><td class="right">${fmtE(folio.payments)}</td></tr>` : '';
+
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/><title>Facture ${invoiceNumber}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 11pt; color: #1a1a2e; background: white; }
+  @page { size: A4 portrait; margin: 18mm 15mm 20mm 15mm; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } }
+
+  /* Print button */
+  .no-print { display: flex; justify-content: center; gap: 12px; padding: 16px; background: #f8f9fa; border-bottom: 1px solid #dee2e6; }
+  .no-print button { padding: 8px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .btn-print { background: #8B5CF6; color: white; }
+  .btn-close { background: #e9ecef; color: #495057; }
+
+  /* Page */
+  .page { max-width: 210mm; margin: 0 auto; padding: 0 2mm; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; padding-bottom: 20px; border-bottom: 3px solid #8B5CF6; }
+  .hotel-name { font-size: 20pt; font-weight: 900; color: #4C1D95; margin-bottom: 4px; letter-spacing: -0.5px; }
+  .hotel-sub { font-size: 9pt; color: #555; line-height: 1.6; }
+  .invoice-title { font-size: 26pt; font-weight: 900; color: #8B5CF6; margin-bottom: 6px; }
+  .invoice-meta { font-size: 10pt; color: #333; line-height: 1.8; text-align: right; }
+  .invoice-meta strong { color: #111; }
+
+  /* Addresses */
+  .addresses { display: flex; justify-content: space-between; margin-bottom: 24px; gap: 24px; }
+  .address-box { background: #f8f7ff; border: 1px solid #e0d9f7; border-radius: 8px; padding: 14px 16px; flex: 1; }
+  .address-label { font-size: 8pt; font-weight: 700; color: #8B5CF6; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .address-name { font-size: 11pt; font-weight: 700; color: #111; margin-bottom: 4px; }
+  .address-text { font-size: 9.5pt; color: #444; line-height: 1.5; white-space: pre-wrap; }
+  .reservation-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 16px; }
+  .res-label { font-size: 8pt; font-weight: 700; color: #059669; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .res-row { font-size: 9.5pt; color: #333; margin-bottom: 3px; }
+  .res-row strong { color: #111; }
+
+  /* Lines table */
+  .table-title { font-size: 10pt; font-weight: 700; color: #4C1D95; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid #8B5CF6; }
+  table.lines { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt; }
+  table.lines thead tr { background: #4C1D95; color: white; }
+  table.lines thead th { padding: 9px 8px; font-weight: 700; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.3px; }
+  table.lines tbody tr { border-bottom: 1px solid #f0f0f0; }
+  table.lines tbody tr:nth-child(even) { background: #fafafa; }
+  table.lines tbody td { padding: 8px; }
+  table.lines .desc { font-weight: 600; }
+  table.lines .center { text-align: center; color: #555; }
+  table.lines .right { text-align: right; font-family: monospace; }
+  table.lines .tva { color: #666; }
+  table.lines .bold { font-weight: 700; color: #111; }
+  table.lines .empty { text-align: center; font-style: italic; color: #888; padding: 20px; }
+
+  /* Totals */
+  .totals-section { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+  .totals-box { width: 320px; }
+  .totals-box table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  .totals-box td { padding: 6px 8px; }
+  .totals-box .sub { color: #555; }
+  .totals-box .vat-table { font-size: 9pt; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden; width: 100%; border-collapse: collapse; }
+  .totals-box .vat-table th { padding: 4px 6px; text-align: left; background: #f8f8f8; font-size: 8.5pt; color: #666; }
+  .totals-box .vat-table td { padding: 4px 6px; border-top: 1px solid #f0f0f0; font-size: 8.5pt; }
+  .totals-box .right { text-align: right; font-family: monospace; }
+  .totals-sep { height: 2px; background: #111; margin: 6px 0; }
+  .totals-ttc td { font-size: 14pt; font-weight: 900; color: #111; padding: 8px; }
+  .paid { color: #059669; }
+  .solde-due td { font-size: 12pt; font-weight: 800; color: #DC2626; }
+  .solde-ok td { font-size: 12pt; font-weight: 800; color: #059669; }
+  .paid-section { margin-bottom: 16px; }
+  .paid-section table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  .paid-section .paid { color: #059669; }
+  .paid-section td { padding: 5px 8px; border-bottom: 1px solid #f0f0f0; }
+
+  /* Footer */
+  .footer { margin-top: 32px; padding-top: 14px; border-top: 1px solid #e0e0e0; font-size: 8.5pt; color: #888; text-align: center; line-height: 1.6; }
+  .status-badge { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 10pt; font-weight: 700; margin-bottom: 16px; }
+  .status-paid { background: #d1fae5; color: #065f46; }
+  .status-due { background: #fee2e2; color: #991b1b; }
+</style>
+</head><body>
+<div class="no-print">
+  <button class="btn-print" onclick="window.print()">🖨️ Imprimer / Enregistrer PDF</button>
+  <button class="btn-close" onclick="window.close()">✕ Fermer</button>
+</div>
+<div class="page">
+  <div class="header">
+    <div>
+      <div class="hotel-name">FLOWTYM HÔTEL</div>
+      <div class="hotel-sub">123 Avenue des Champs-Élysées<br/>75008 Paris, France<br/>TVA Intracommunautaire : FR 12 345 678 901<br/>Tél : +33 1 23 45 67 89 · contact@flowtym.com</div>
+    </div>
+    <div style="text-align:right">
+      <div class="invoice-title">FACTURE</div>
+      <div class="invoice-meta"><strong>N° :</strong> ${invoiceNumber}<br/><strong>Date :</strong> ${today}<br/><strong>Réservation :</strong> ${(res as any).reference || res.id}</div>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin-bottom:16px">
+    <span class="status-badge ${solde <= 0.01 ? 'status-paid' : 'status-due'}">${solde <= 0.01 ? '✓ SOLDÉE' : `SOLDE : ${fmtE(solde)}`}</span>
+  </div>
+
+  <div class="addresses">
+    <div class="address-box">
+      <div class="address-label">Facturé à</div>
+      <div class="address-name">${folio.payerName || (res as any).guestName || (res as any).client || 'Client'}</div>
+      <div class="address-text">${folio.billingAddress || ''}</div>
+    </div>
+    <div class="reservation-box">
+      <div class="res-label">Détails du séjour</div>
+      <div class="res-row"><strong>Chambre :</strong> Ch. ${(res as any).room || '—'} (${(res as any).roomType || 'Standard'})</div>
+      <div class="res-row"><strong>Arrivée :</strong> ${(res as any).checkin || ''}</div>
+      <div class="res-row"><strong>Départ :</strong> ${(res as any).checkout || ''}</div>
+      <div class="res-row"><strong>Durée :</strong> ${(res as any).nights || 1} nuit(s) · ${(res as any).guests?.adults || 2} adulte(s)</div>
+    </div>
+  </div>
+
+  <div class="table-title">${folio.name}</div>
+  <table class="lines">
+    <thead><tr>
+      <th style="text-align:left;width:35%">Description</th>
+      <th style="text-align:center;width:12%">Date</th>
+      <th style="text-align:right;width:7%">Qté</th>
+      <th style="text-align:right;width:14%">PU HT</th>
+      <th style="text-align:right;width:8%">TVA</th>
+      <th style="text-align:right;width:14%">Total TTC</th>
+    </tr></thead>
+    <tbody>${linesHTML}</tbody>
+  </table>
+
+  <div class="totals-section">
+    <div class="totals-box">
+      <table>
+        <tr class="sub"><td>Total HT</td><td class="right">${fmtE(ht)}</td></tr>
+        <tr><td colspan="2"><table class="vat-table">
+          <thead><tr><th>Taux</th><th class="right">Base HT</th><th class="right">Montant TVA</th></tr></thead>
+          <tbody>${vatRows || '<tr><td colspan="3" style="text-align:center;color:#aaa">—</td></tr>'}</tbody>
+        </table></td></tr>
+        <tr class="totals-ttc"><td><strong>TOTAL TTC</strong></td><td class="right"><strong>${fmtE(ttc)}</strong></td></tr>
+      </table>
+      <div class="totals-sep"></div>
+      ${paymentsHTML ? `<div class="paid-section"><table>${paymentsHTML}</table></div>` : ''}
+      <table>
+        <tr class="${solde <= 0.01 ? 'solde-ok' : 'solde-due'}">
+          <td>${solde <= 0.01 ? '✓ Facture soldée' : 'NET À PAYER'}</td>
+          <td class="right">${fmtE(solde)}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    Flowtym Hôtel SAS · RCS Paris 123 456 789 · TVA FR 12 345 678 901<br/>
+    Conformément aux articles L441-3 et L441-6 du Code de Commerce — Escompte en cas de paiement anticipé : néant<br/>
+    Pénalités de retard : 3 fois le taux d'intérêt légal en vigueur · Indemnité forfaitaire pour frais de recouvrement : 40 €<br/>
+    Page 1/1
+  </div>
+</div>
+</body></html>`;
+}
+
 const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
   // Constants & Initial Data
   const defaultAddress = `${res.client || res.guestName || 'Client'}\n${res.email || ''}\n${res.phone || ''}`;
@@ -1501,21 +1689,32 @@ const TabFacturation: React.FC<{ res: Reservation }> = ({ res }) => {
             <div style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', marginRight: 12, borderRight: '1px solid #E2E8F0', paddingRight: 12, display: 'flex', alignItems: 'center' }}>
               Action sur {selectedFolioIds.length} sélection(s)
             </div>
-            <button 
-              onClick={() => { 
-                if (selectedFolioIds.length === 0) { window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Veuillez sélectionner au moins un folio' } })); return; }
-                window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Génération PDF pour ${selectedFolioIds.length} folio(s)` } })); 
-                setTimeout(() => window.print(), 500); 
-              }} 
-              style={{ ...BTN('ghost'), color: '#475569' }}
+            <button
+              onClick={() => {
+                const targets = folios.filter(f => selectedFolioIds.includes(f.id) && (f.lines.length > 0 || f.payments > 0));
+                if (targets.length === 0) { window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Sélectionnez au moins un folio avec des données.' } })); return; }
+                targets.forEach((folio, idx) => {
+                  const inv = `FAC-${TODAY.replace(/-/g,'')}-${folio.id.toUpperCase()}`;
+                  const html = buildInvoiceHTML(folio, res, inv);
+                  const w = window.open('', `_invoice_${idx}`, 'width=900,height=1100,menubar=no,toolbar=no,location=no');
+                  if (w) { w.document.write(html); w.document.close(); }
+                });
+              }}
+              style={{ ...BTN('ghost'), color: '#6D28D9', background: '#F5F3FF', borderColor: '#C4B5FD' }}
             >
               <Search size={14} /> Aperçu PDF
             </button>
-            <button 
-              onClick={() => { 
-                if (selectedFolioIds.length === 0) { window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Veuillez sélectionner au moins un folio' } })); return; }
-                window.print(); 
-              }} 
+            <button
+              onClick={() => {
+                const targets = folios.filter(f => selectedFolioIds.includes(f.id) && (f.lines.length > 0 || f.payments > 0));
+                if (targets.length === 0) { window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Sélectionnez au moins un folio avec des données.' } })); return; }
+                targets.forEach((folio, idx) => {
+                  const inv = `FAC-${TODAY.replace(/-/g,'')}-${folio.id.toUpperCase()}`;
+                  const html = buildInvoiceHTML(folio, res, inv);
+                  const w = window.open('', `_print_${idx}`, 'width=900,height=1100,menubar=no,toolbar=no,location=no');
+                  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400); }
+                });
+              }}
               style={{ ...BTN('ghost'), color: '#475569' }}
             >
               <Printer size={14} /> Imprimer
@@ -2867,43 +3066,43 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
           style={{ width: '100%', maxWidth: 1280, height: '92vh', background: '#F8FAFC', borderRadius: 20, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,.22), 0 0 0 1px rgba(255,255,255,.08)' }}
         >
           {/* ── HEADER ── */}
-          <div className="print-hide" style={{ background: '#8B5CF6', padding: '18px 28px', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+          <div className="print-hide" style={{ background: '#8B5CF6', padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           {/* Avatar initiales */}
-          <div style={{ width: 48, height: 48, borderRadius: 16, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: 'white', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: 'white', flexShrink: 0 }}>
             {(reservation.guestName || 'G').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
           </div>
           {/* Infos */}
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: 'white', marginBottom: 4 }}>{reservation.guestName || 'Client'}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'rgba(255,255,255,.6)' }}>{(reservation as any).reference || reservation.id}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 10px', borderRadius: 100, background: st.bg, color: st.color }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'white', marginBottom: 2 }}>{reservation.guestName || 'Client'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,.6)' }}>{(reservation as any).reference || reservation.id}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 100, background: st.bg, color: st.color }}>
                 {reservation.status.replace('_', ' ')}
               </span>
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,.5)' }}>
+              <span style={{ fontSize: 10, color: 'rgba(255,255,255,.5)' }}>
                 Ch. {reservation.room} · {fmtDate(reservation.checkin)} → {fmtDate(reservation.checkout)} · {reservation.nights} nuit(s)
               </span>
             </div>
           </div>
           {/* Montant */}
-          <div style={{ textAlign: 'right', flexShrink: 0, marginRight: 8 }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: 'white', fontFamily: 'monospace' }}>{fmtEuro(reservation.montant)}</div>
-            <div style={{ fontSize: 10, color: (reservation.solde ?? 0) > 0 ? '#FCA5A5' : '#86EFAC', fontWeight: 600 }}>
+          <div style={{ textAlign: 'right', flexShrink: 0, marginRight: 6 }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'white', fontFamily: 'monospace' }}>{fmtEuro(reservation.montant)}</div>
+            <div style={{ fontSize: 9, color: (reservation.solde ?? 0) > 0 ? '#FCA5A5' : '#86EFAC', fontWeight: 600 }}>
               {(reservation.solde ?? 0) > 0 ? `Solde : ${fmtEuro(reservation.solde)}` : '✓ Soldée'}
             </div>
           </div>
 
           {/* Fermer */}
-          <button onClick={onClose} style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(255,255,255,.12)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(255,255,255,.12)', border: 'none', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {Ico.close}
           </button>
         </div>
 
         {/* ── ONGLETS ── */}
-        <div style={{ display: 'flex', gap: 0, background: 'white', borderBottom: '1px solid #F1F5F9', padding: '0 28px', flexShrink: 0, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: 0, background: 'white', borderBottom: '1px solid #F1F5F9', padding: '0 20px', flexShrink: 0, overflowX: 'auto' }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '13px 16px', border: 'none', background: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif',
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 12px', border: 'none', background: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Inter, sans-serif',
                 borderBottom: activeTab === t.id ? '2.5px solid #8B5CF6' : '2.5px solid transparent',
                 color: activeTab === t.id ? '#7C3AED' : '#94A3B8',
                 transition: 'all .15s',
@@ -2915,7 +3114,7 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
         </div>
 
         {/* ── CONTENU ── */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
           <AnimatePresence mode="wait">
             <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: .15 }}>
               {activeTab === 'reservation' && <TabReservation res={reservation} onUpdate={onUpdate} />}
@@ -2931,7 +3130,7 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
 
         {/* ── BARRE D'ACTIONS OPÉRATIONNELLES (bas de fiche) ── */}
         {(reservation.status === 'confirmed' || reservation.status === 'checked_in') && (
-          <div className="print-hide" style={{ borderTop: '1px solid #F1F5F9', background: 'white', padding: '12px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div className="print-hide" style={{ borderTop: '1px solid #F1F5F9', background: 'white', padding: '8px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8' }}>
               Actions opérationnelles
             </div>
