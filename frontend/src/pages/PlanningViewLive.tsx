@@ -72,6 +72,7 @@ import type { RoomRow } from '@/src/lib/supabase.types';
 import { PlanningKpiBar } from '@/src/pages/planning/PlanningKpiBar';
 import { usePickup } from '@/src/hooks/planning/usePickup';
 import { useMarketCompression } from '@/src/hooks/planning/useMarketCompression';
+import { compressionLevel, getCompressionTone } from '@/src/services/planning/market-compression.service';
 import { useForecast } from '@/src/hooks/planning/useForecast';
 import { ReservationBadges } from '@/src/pages/planning/ReservationBadges';
 import { deriveBadges } from '@/src/services/planning/planning-reservation-badges.service';
@@ -1108,17 +1109,7 @@ export const PlanningView = () => {
           pickupRooms={pickup.noBaseline ? null : pickup.totalRooms}
           pickupRevenue={pickup.noBaseline ? null : pickup.totalRevenue}
           compressionPercent={compression.avgPercent}
-          compressionLevel={
-            compression.avgPercent == null
-              ? null
-              : compression.avgPercent <= 40
-                ? 'low'
-                : compression.avgPercent <= 60
-                  ? 'medium'
-                  : compression.avgPercent <= 80
-                    ? 'high'
-                    : 'critical'
-          }
+          compressionLevel={compression.avgPercent == null ? null : compressionLevel(compression.avgPercent)}
           eventsCount={rangeEventsCount}
           heatmap={visibleDayKpis.map((d) => ({ date: d.date, toRate: d.toRate }))}
           onFreeRoomsClick={() => setIsFreeRoomsOpen(true)}
@@ -1388,7 +1379,7 @@ export const PlanningView = () => {
                   <div className="flex text-center w-full flex-nowrap">
                      {days.map(d => {
                        const c = d.compressionPercent;
-                       const tone = c == null ? 'text-gray-300' : c <= 40 ? 'text-emerald-500' : c <= 60 ? 'text-amber-500' : c <= 80 ? 'text-orange-500' : 'text-rose-500';
+                       const tone = getCompressionTone(c == null ? null : compressionLevel(c)).text;
                        return (
                          <div key={`comp-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={c == null ? 'Compression marché indisponible (Lighthouse)' : `Compression marché ${c}%`}>
                            <span className={cn("text-[11px] font-black", tone)}>{c == null ? '—' : `${c}%`}</span>

@@ -1,46 +1,30 @@
 /**
- * FLOWTYM — Compression marché (depuis lighthouse_days).
+ * FLOWTYM — Compression marché (hook de consommation).
  *
- * `market_demand_percent` (0-100) est fourni directement par Lighthouse pour
- * chaque date de séjour. On l'expose par date sur la plage du planning, plus
- * une moyenne de plage, pour colorer la barre KPI et les colonnes jour.
+ * Récupère la compression marché via le service centralisé
+ * `getMarketCompressionRange` (source unique : lighthouse_days). Le Planning ne
+ * recalcule jamais la compression : il consomme cette donnée.
  *
- * Aucune donnée fictive : si aucune ligne Lighthouse n'existe pour une date,
- * la compression est `null` (et l'UI affiche « — » plutôt qu'un chiffre inventé).
+ * Aucune donnée fictive : si aucune ligne Lighthouse n'existe pour une date, la
+ * compression est `null` (l'UI affiche « — » plutôt qu'un 0 % inventé).
  */
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { supabase } from '@/src/lib/supabase';
-import { mapSupabaseError } from '@/src/domains/_shared/errors';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 import { toIsoDate } from '@/src/services/planning/planning-kpi.service';
+import {
+  getMarketCompressionRange,
+  compressionLevel,
+  type CompressionLevel,
+  type MarketCompressionPoint,
+} from '@/src/services/planning/market-compression.service';
 
-export type CompressionLevel = 'low' | 'medium' | 'high' | 'critical';
+export type { CompressionLevel };
+export { compressionLevel };
 
-export interface CompressionDay {
-  date: string;
-  /** 0-100, ou null si Lighthouse n'a pas de donnée pour cette date. */
-  percent: number | null;
-  level: CompressionLevel | null;
-  compsetMedian: number | null;
-  ourPrice: number | null;
-}
-
-/** Mappe un pourcentage de demande vers un niveau coloré. */
-export function compressionLevel(percent: number): CompressionLevel {
-  if (percent <= 40) return 'low';
-  if (percent <= 60) return 'medium';
-  if (percent <= 80) return 'high';
-  return 'critical';
-}
-
-interface LighthouseDayLite {
-  stay_date: string;
-  market_demand_percent: number | null;
-  compset_median: number | null;
-  our_price: number | null;
-}
+/** Alias rétro-compatible — un point de compression par date. */
+export type CompressionDay = MarketCompressionPoint;
 
 export interface MarketCompression {
   days: CompressionDay[];
@@ -55,48 +39,20 @@ export function useMarketCompression(
   startDate: Date | string,
   rangeDays: number,
 ): MarketCompression {
-  const { status } = useAuth();
+  const { status, session } = useAuth();
+  const hotelId = session?.tenantId ?? null;
   const start = toIsoDate(startDate);
-  const endDt = new Date(typeof startDate === 'string' ? `${start}T00:00:00` : startDate);
-  endDt.setDate(endDt.getDate() + Math.max(1, rangeDays) - 1);
-  const end = toIsoDate(endDt);
 
-  const query = useQuery<LighthouseDayLite[]>({
-    queryKey: ['planning', 'market-compression', start, end],
+  const query = useQuery({
+    queryKey: ['planning', 'market-compression', start, rangeDays],
     enabled: status === 'authenticated',
     staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('lighthouse_days')
-        .select('stay_date, market_demand_percent, compset_median, our_price')
-        .gte('stay_date', start)
-        .lte('stay_date', end)
-        .order('stay_date', { ascending: true });
-      if (error) throw mapSupabaseError(error);
-      return (data ?? []) as LighthouseDayLite[];
-    },
+    queryFn: () => getMarketCompressionRange(hotelId, startDate, rangeDays),
   });
 
   return useMemo(() => {
-    const byDate: Record<string, CompressionDay> = {};
-    for (const row of query.data ?? []) {
-      const percent = row.market_demand_percent;
-      byDate[row.stay_date] = {
-        date: row.stay_date,
-        percent: percent ?? null,
-        level: percent != null ? compressionLevel(percent) : null,
-        compsetMedian: row.compset_median ?? null,
-        ourPrice: row.our_price ?? null,
-      };
-    }
-
-    const days: CompressionDay[] = [];
-    for (let i = 0; i < Math.max(1, rangeDays); i += 1) {
-      const dt = new Date(`${start}T00:00:00`);
-      dt.setDate(dt.getDate() + i);
-      const iso = toIsoDate(dt);
-      days.push(byDate[iso] ?? { date: iso, percent: null, level: null, compsetMedian: null, ourPrice: null });
-    }
+    const days = query.data?.days ?? [];
+    const byDate = query.data?.byDate ?? {};
 
     const withData = days.filter((d) => d.percent != null);
     const avgPercent = withData.length > 0
@@ -110,5 +66,5 @@ export function useMarketCompression(
       isLoading: query.isLoading,
       isError: query.isError,
     };
-  }, [query.data, query.isLoading, query.isError, start, rangeDays]);
+  }, [query.data, query.isLoading, query.isError]);
 }

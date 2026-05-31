@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import type { DayKpi } from '@/src/services/planning/planning-kpi.service';
+import { compressionLevel, getCompressionTone } from '@/src/services/planning/market-compression.service';
 import { RmsRecommendationPanel } from './RmsRecommendationPanel';
 
 export interface RightPanelIntel {
@@ -109,7 +110,15 @@ export function PlanningRightPanel({
         />
         <IntelRow
           label="Compression marché"
-          value={intel.compressionPercent == null ? '—' : `${intel.compressionPercent} %`}
+          value={
+            intel.compressionPercent == null
+              ? '—'
+              : (
+                <span className={getCompressionTone(compressionLevel(intel.compressionPercent)).text}>
+                  {intel.compressionPercent} %
+                </span>
+              )
+          }
         />
         {intel.eventName && (
           <div className="flex items-center gap-1.5 mt-2 px-2 py-1.5 rounded-lg bg-orange-50">

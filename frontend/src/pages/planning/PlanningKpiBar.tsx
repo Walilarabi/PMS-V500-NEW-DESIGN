@@ -24,6 +24,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { getOccThreshold } from './revenueThresholds';
 import type { CompressionLevel } from '@/src/hooks/planning/useMarketCompression';
+import { getCompressionTone } from '@/src/services/planning/market-compression.service';
 
 export interface PlanningKpiBarProps {
   /** Taux d'occupation moyen de la plage (0-100). */
@@ -59,12 +60,8 @@ export interface PlanningKpiBarProps {
   compressionLoading?: boolean;
 }
 
-const COMPRESSION_TONE: Record<CompressionLevel, { text: string; dot: string; label: string }> = {
-  low: { text: 'text-emerald-600', dot: 'bg-emerald-500', label: 'Faible' },
-  medium: { text: 'text-amber-600', dot: 'bg-amber-500', label: 'Modérée' },
-  high: { text: 'text-orange-600', dot: 'bg-orange-500', label: 'Forte' },
-  critical: { text: 'text-rose-600', dot: 'bg-rose-500', label: 'Critique' },
-};
+// Charte compression marché — bleu (faible) → orange (moyen) → rouge (fort).
+// Source unique : getCompressionTone (market-compression.service). Aucun vert.
 
 /** Formate un nombre en euros compact (1 250 €). */
 function fmtEuro(n: number): string {
@@ -158,7 +155,7 @@ export function PlanningKpiBar({
   pickupLoading,
   compressionLoading,
 }: PlanningKpiBarProps) {
-  const comp = compressionLevel ? COMPRESSION_TONE[compressionLevel] : null;
+  const comp = compressionLevel ? getCompressionTone(compressionLevel) : null;
 
   return (
     <div className="shrink-0 border-b border-gray-100 bg-white/90 backdrop-blur-md px-6 py-3 flex items-center gap-4 w-full">
