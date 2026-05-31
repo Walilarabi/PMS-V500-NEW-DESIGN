@@ -81,6 +81,10 @@ export type PageId =
   | 'comptabilite'
   | 'fin_audit_chain'
   | 'cash_management'
+  | 'fin_house_accounts'
+  | 'fin_deposits'
+  | 'fin_timeline'
+  | 'fin_group_billing'
   // ── 7. ANALYSE ─────────────────────────────────────────────────────────────
   | 'analysis'
   | 'analysis_library'

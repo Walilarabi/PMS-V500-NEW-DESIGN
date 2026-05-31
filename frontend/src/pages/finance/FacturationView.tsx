@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import {
   FileText, Plus, Eye, CheckCircle, XCircle, CreditCard,
   Download, Loader2, RefreshCcw, AlertCircle, RotateCcw,
-  ChevronDown, ChevronRight, Banknote, Receipt,
+  ChevronDown, ChevronRight, Banknote, Receipt, Brain, Scissors, PenLine,
 } from 'lucide-react';
 import { AnomalyDetectionBar } from '@/src/components/billing/AnomalyDetectionBar';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,6 +24,11 @@ import {
 } from '@/src/domains/billing/hooks';
 import type { InvoiceRow, PaymentMethod } from '@/src/domains/billing/schemas';
 import { RefundModal } from '@/src/components/billing/RefundModal';
+import { FinancialIntelligencePanel } from '@/src/components/billing/FinancialIntelligencePanel';
+import { SplitBillingWizard } from '@/src/components/billing/SplitBillingWizard';
+import { ElectronicSignatureModal } from '@/src/components/billing/ElectronicSignatureModal';
+import { PreBillingControlPanel } from '@/src/components/billing/PreBillingControlPanel';
+import { CreditNotesPanel } from '@/src/components/billing/CreditNotesPanel';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -65,6 +70,9 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
   const [showVoid, setShowVoid] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [refundTarget, setRefundTarget] = useState<{ paymentId: string; amount: number } | null>(null);
+  const [showPreBilling, setShowPreBilling] = useState(false);
+  const [showSplit, setShowSplit] = useState(false);
+  const [showSignature, setShowSignature] = useState(false);
 
   if (isLoading || !invoice) {
     return (
@@ -254,14 +262,47 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
             </div>
           )}
         </div>
+        {/* Avoirs */}
+        <div>
+          <CreditNotesPanel invoice={invoice} />
+        </div>
       </div>
 
+      {/* Pre-billing control panel */}
+      {showPreBilling && canIssue && (
+        <PreBillingControlPanel
+          invoice={invoice}
+          folios={folios}
+          lines={lines}
+          payments={payments}
+          reservation={null}
+          onIssue={() => {
+            issueInvoice.mutate(invoiceId, {
+              onSuccess: () => setShowPreBilling(false),
+              onError: (err) => { setActionError(`Émission échouée — ${err.message}`); setShowPreBilling(false); },
+            });
+          }}
+          isIssuing={issueInvoice.isPending}
+          onCancel={() => setShowPreBilling(false)}
+        />
+      )}
+
       {/* Actions */}
-      <div className="p-4 border-t border-gray-100 flex gap-2 shrink-0">
-        {canIssue && (
-          <Button onClick={() => issueInvoice.mutate(invoiceId, { onError: (err) => setActionError(`Émission échouée — ${err.message}`) })} disabled={issueInvoice.isPending} className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20">
-            {issueInvoice.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+      <div className="p-4 border-t border-gray-100 flex gap-2 shrink-0 flex-wrap">
+        {canIssue && !showPreBilling && (
+          <Button onClick={() => setShowPreBilling(true)} className="flex-1 bg-[#8B5CF6] text-white font-bold gap-2 shadow-lg shadow-[#8B5CF6]/20">
+            <CheckCircle size={14} />
             Émettre la facture
+          </Button>
+        )}
+        {invoice.status === 'draft' && lines.length > 0 && (
+          <Button variant="outline" onClick={() => setShowSplit(true)} className="gap-2 font-bold text-gray-600">
+            <Scissors size={13} /> Fractionner
+          </Button>
+        )}
+        {invoice.status === 'issued' && (
+          <Button variant="outline" onClick={() => setShowSignature(true)} className="gap-2 font-bold text-blue-600 border-blue-100 hover:bg-blue-50">
+            <PenLine size={13} /> Signature
           </Button>
         )}
         {(invoice.status === 'draft' || invoice.status === 'issued') && (
@@ -299,6 +340,22 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
           );
         }}
       />
+
+      <SplitBillingWizard
+        isOpen={showSplit}
+        sourceInvoice={invoice}
+        lines={lines}
+        onClose={() => setShowSplit(false)}
+        onSuccess={() => { setShowSplit(false); onClose(); }}
+      />
+
+      <ElectronicSignatureModal
+        isOpen={showSignature}
+        invoiceId={invoiceId}
+        invoiceNumber={invoice.invoice_number}
+        onClose={() => setShowSignature(false)}
+        onSigned={() => setShowSignature(false)}
+      />
     </div>
   );
 }
@@ -309,6 +366,7 @@ export const FacturationView = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [intelligenceOpen, setIntelligenceOpen] = useState(false);
   const [page, setPage] = useState(1);
   const PER_PAGE = 50;
 
@@ -344,6 +402,15 @@ export const FacturationView = () => {
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2 font-bold">
               <RefreshCcw size={13} className={cn(isFetching && 'animate-spin')} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIntelligenceOpen(v => !v)}
+              className={cn('gap-2 font-bold', intelligenceOpen && 'bg-purple-50 border-purple-300 text-purple-700')}
+              title="Intelligence financière"
+            >
+              <Brain size={15} />
             </Button>
             <Button onClick={() => setShowCreate(true)} className="bg-[#8B5CF6] text-white gap-2 font-bold shadow-lg shadow-[#8B5CF6]/20">
               <Plus size={16} /> Nouvelle facture
@@ -502,6 +569,11 @@ export const FacturationView = () => {
           />
         )}
       </AnimatePresence>
+
+      <FinancialIntelligencePanel
+        isOpen={intelligenceOpen}
+        onClose={() => setIntelligenceOpen(false)}
+      />
     </div>
   );
 };

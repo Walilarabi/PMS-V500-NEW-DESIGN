@@ -10,7 +10,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Wallet, TrendingUp, CreditCard, AlertTriangle, FileText, Percent,
-  Loader2, Lock, DollarSign, Receipt, Clock,
+  Loader2, Lock, DollarSign, Receipt, Clock, Users, Shield, BarChart3,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { RevenueHeader } from '../../components/revenue/RevenueHeader';
@@ -29,6 +29,10 @@ import { BankReconciliationView } from './BankReconciliationView';
 import { AuditChainView } from './AuditChainView';
 import { CashManagementView } from './CashManagementView';
 import { PaiementsSecurisesView } from './PaiementsSecurisesView';
+import { HouseAccountsPanel } from '../../components/billing/HouseAccountsPanel';
+import { DepositsPanel } from '../../components/billing/DepositsPanel';
+import { FinancialTimelinePanel } from '../../components/billing/FinancialTimelinePanel';
+import { GroupBillingPanel } from '../../components/billing/GroupBillingPanel';
 import { fetchFinanceKpis, type FinanceDashboardKpis } from '../../services/finance/finance.service';
 
 const cn = (...c: (string | boolean | undefined)[]) => c.filter(Boolean).join(' ');
@@ -49,7 +53,11 @@ export type FinancePage =
   | 'paiements_securises'
   | 'comptabilite'
   | 'fin_audit_chain'
-  | 'cash_management';
+  | 'cash_management'
+  | 'fin_house_accounts'
+  | 'fin_deposits'
+  | 'fin_timeline'
+  | 'fin_group_billing';
 
 const PAGE_TITLES: Record<FinancePage, { title: string; subtitle: string }> = {
   finance:             { title: 'Finance — Vue d\'ensemble',  subtitle: 'Dashboard financier et KPIs clés' },
@@ -67,7 +75,11 @@ const PAGE_TITLES: Record<FinancePage, { title: string; subtitle: string }> = {
   paiements_securises: { title: 'Paiements sécurisés',        subtitle: 'Pré-autorisations & 3DS' },
   comptabilite:        { title: 'Comptabilité',               subtitle: 'Journal des écritures et export FEC' },
   fin_audit_chain:     { title: 'Journal d\'audit chaîné',     subtitle: 'Traçabilité infalsifiable scellée SHA-256' },
-  cash_management:     { title: 'Cash Management',            subtitle: 'Trésorerie prévisionnelle, multi-devises et exports comptables' },
+  cash_management:       { title: 'Cash Management',            subtitle: 'Trésorerie prévisionnelle, multi-devises et exports comptables' },
+  fin_house_accounts:    { title: 'Comptes internes',           subtitle: 'Comptes de direction, commercial, maintenance et compensation' },
+  fin_deposits:          { title: 'Garanties & Acomptes',       subtitle: 'Pré-autorisations, dépôts de garantie et suivi des statuts' },
+  fin_timeline:          { title: 'Timeline financière',        subtitle: 'Vue unifiée factures, paiements, avoirs et dépôts' },
+  fin_group_billing:     { title: 'Facturation groupe',         subtitle: 'Facturation globale, individuelle ou mixte pour les groupes' },
 };
 
 export interface FinanceLayoutProps {
@@ -120,6 +132,10 @@ export const FinanceLayout: React.FC<FinanceLayoutProps> = ({ activePage }) => {
         {activePage === 'comptabilite' && <AuditLogView />}
         {activePage === 'fin_audit_chain' && <AuditChainView />}
         {activePage === 'cash_management' && <CashManagementView />}
+        {activePage === 'fin_house_accounts' && <HouseAccountsPanel />}
+        {activePage === 'fin_deposits' && <DepositsPanel />}
+        {activePage === 'fin_timeline' && <FinancialTimelinePanel />}
+        {activePage === 'fin_group_billing' && <GroupBillingPanel />}
       </div>
     </div>
   );

@@ -219,6 +219,10 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
     case 'comptabilite':
     case 'fin_audit_chain':
     case 'cash_management':
+    case 'fin_house_accounts':
+    case 'fin_deposits':
+    case 'fin_timeline':
+    case 'fin_group_billing':
       return <FinanceLayout activePage={page as any} />;
 
     // ── ANALYSE ───────────────────────────────────────────────────────────────

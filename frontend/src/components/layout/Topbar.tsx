@@ -45,6 +45,10 @@ const PAGE_TO_NAV: Record<string, string> = {
   caisse: 'finance', impayes: 'finance', cloture: 'finance',
   fin_reconciliation: 'finance', tva2026: 'finance',
   paiements_securises: 'finance', comptabilite: 'finance', cash_management: 'finance',
+  fin_folios: 'finance', fin_dunning: 'finance', fin_bank_reco: 'finance',
+  fin_einvoice: 'finance', fin_audit_chain: 'finance',
+  fin_house_accounts: 'finance', fin_deposits: 'finance',
+  fin_timeline: 'finance', fin_group_billing: 'finance',
   // Analyse
   analysis: 'analysis', kpi: 'analysis', performance: 'analysis',
   forecast: 'analysis', rapports: 'analysis',
