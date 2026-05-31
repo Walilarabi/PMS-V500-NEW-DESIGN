@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
+import { PlanningSidebarSection } from './PlanningSidebarSection';
 
 interface SidebarProps {
   activePage: PageId;
@@ -33,11 +34,15 @@ const SIDEBAR_CONFIG: Record<string, NavGroup[]> = {
     {
       label: 'Pilotage opérationnel',
       items: [
-        { id: 'flowboard',   label: 'Flowboard',    icon: LayoutDashboard },
-        { id: 'planning',    label: 'Planning',     icon: CalendarDays },
-        { id: 'today',       label: 'Flowday',      icon: Bed },
-        { id: 'housekeeping',label: 'Housekeeping', icon: Sparkles },
-        { id: 'maintenance', label: 'Maintenance',  icon: Wrench },
+        { id: 'flowboard',        label: 'Tableau de bord',       icon: LayoutDashboard },
+        { id: 'planning',         label: 'Planning',               icon: CalendarDays },
+        { id: 'today',            label: 'Flowday',                icon: Bed },
+        { id: 'housekeeping',     label: 'Housekeeping',           icon: Sparkles },
+        { id: 'maintenance',      label: 'Maintenance',            icon: Wrench },
+        { id: 'reservations',     label: 'Réservations',           icon: Calendar },
+        { id: 'groupes',          label: 'Groupes',                icon: Users },
+        { id: 'rev_calendar',     label: 'Tarifs & Disponibilités',icon: Grid },
+        { id: 'rev_distribution', label: 'Channel Manager',        icon: Share2 },
       ],
     },
   ],
@@ -376,6 +381,9 @@ export const Sidebar = ({ activePage, setActivePage, isCollapsed, setIsCollapsed
             </div>
           </div>
         ))}
+
+        {/* Section contextuelle Planning — modes d'affichage + filtres (maquette) */}
+        {activePage === 'planning' && <PlanningSidebarSection isCollapsed={isCollapsed} />}
       </div>
     </aside>
   );

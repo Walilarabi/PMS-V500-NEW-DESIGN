@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, lazy, Suspense } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -19,6 +19,8 @@ import {
   Euro,
   MoreVertical,
   Lock,
+  Wrench,
+  CalendarPlus,
   LayoutGrid,
   CalendarDays,
   Zap,
@@ -34,6 +36,15 @@ import {
   Target,
   ZapOff,
   X,
+  LineChart,
+  ArrowUpRight,
+  ArrowDownRight,
+  Gauge,
+  Star,
+  Coffee,
+  Smartphone,
+  StickyNote,
+  DoorOpen,
 } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Badge } from '@/src/components/ui/Badge';
@@ -42,18 +53,47 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReservationFormModal, { ReservationFormData } from '@/src/components/modals/ReservationFormModal';
 import { RevenueKPIChart } from '@/src/components/configuration/RevenueKPIChart';
 import { useReservations, Reservation } from '@/src/contexts/ReservationContext';
-import { useConfigStore, HotelEvent } from '@/src/store/configStore';
+import type { HotelEvent, ChannelConfig } from '@/src/store/configStore';
 import { useEventsStore } from '@/src/store/eventsStore';
 import { aggregateEventsForDate, eventCellTone, impactLevelLabel } from '@/src/services/events-bridge.service';
 import { useRealtimeKPI } from '@/src/hooks/useRealtimeKPI';
 import { EventManagerModal } from '@/src/components/modals/EventManagerModal';
 import { ChannelColorModal } from '@/src/components/modals/ChannelColorModal';
-import { RevenueDetailsModal } from '@/src/components/modals/RevenueDetailsModal';
+import { BlockRoomsModal } from '@/src/components/modals/BlockRoomsModal';
+// Modale lourde (graphiques) — chargée à la demande pour alléger le bundle initial.
+const RevenueDetailsModal = lazy(() =>
+  import('@/src/components/modals/RevenueDetailsModal').then((m) => ({ default: m.RevenueDetailsModal })),
+);
 import { ReservationDetailsModal } from '@/src/components/modals/ReservationDetailsModal';
 import { AvailabilityModal } from '@/src/components/modals/AvailabilityModal';
 import { Palette } from 'lucide-react';
-import { usePlanningMetrics } from '@/src/hooks/usePlanningMetrics';
 import { buildReservation } from '@/src/lib/reservationFactory';
+import { useRooms, useUpdateRoom } from '@/src/domains/hotel/hooks';
+import { useEvents, useChannels } from '@/src/domains/planning/hooks';
+import { usePlanningRealtime } from '@/src/hooks/planning/usePlanningRealtime';
+import type { RoomRow } from '@/src/lib/supabase.types';
+import { PlanningKpiBar } from '@/src/pages/planning/PlanningKpiBar';
+import { usePickup } from '@/src/hooks/planning/usePickup';
+import { useMarketCompression } from '@/src/hooks/planning/useMarketCompression';
+import { compressionLevel, getCompressionTone } from '@/src/services/planning/market-compression.service';
+import { useRoomBlocks, blockReasonLabel, type RoomBlock } from '@/src/hooks/planning/useRoomBlocks';
+import { useForecast } from '@/src/hooks/planning/useForecast';
+import { ReservationBadges } from '@/src/pages/planning/ReservationBadges';
+import { deriveBadges } from '@/src/services/planning/planning-reservation-badges.service';
+import { RoomRowLabel } from '@/src/pages/planning/RoomRowLabel';
+import { usePlanningUiStore } from '@/src/store/planningUiStore';
+import { useAppShellStore } from '@/src/store/appShellStore';
+import { FreeRoomsModal } from '@/src/pages/planning/FreeRoomsModal';
+import { PlanningRightPanel, type RightPanelIntel } from '@/src/pages/planning/PlanningRightPanel';
+import { getOccThreshold } from '@/src/pages/planning/revenueThresholds';
+import { persistReservationMove } from '@/src/domains/reservations/repository';
+import {
+  computeDayKpi,
+  computeRangeKpis,
+  aggregateKpis,
+  type KpiReservation,
+  type KpiRoom,
+} from '@/src/services/planning/planning-kpi.service';
 
 const getContrastColor = (hexcolor: string) => {
   if (!hexcolor) return '#1e293b';
@@ -109,9 +149,48 @@ const getRoomCode = (type: string, category: string): string => {
 
 export const PlanningView = () => {
   const { addReservation, updateReservation, reservations: contextReservations } = useReservations();
-  const { rooms: storeRooms, events: storeEvents, channels: storeChannels, syncStatus } = useConfigStore();
   const rmsEvents = useEventsStore((s) => s.events);
-  
+
+  // ── Données réelles Supabase ────────────────────────────────────────────
+  const roomsQuery = useRooms();
+  const eventsQuery = useEvents();
+  const channelsQuery = useChannels();
+  const updateRoomMut = useUpdateRoom();
+  usePlanningRealtime();
+
+  const storeRooms: RoomRow[] = roomsQuery.data ?? [];
+
+  const storeEvents: HotelEvent[] = React.useMemo(
+    () =>
+      (eventsQuery.data ?? []).map((e) => ({
+        id: e.id,
+        name: e.name,
+        startDate: e.start_date,
+        endDate: e.end_date,
+        impact: e.impact,
+        description: e.description ?? undefined,
+        source: e.source ?? undefined,
+        location: e.location ?? undefined,
+      })),
+    [eventsQuery.data],
+  );
+
+  const storeChannels: ChannelConfig[] = React.useMemo(
+    () =>
+      (channelsQuery.data ?? []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        color: c.color,
+      })),
+    [channelsQuery.data],
+  );
+
+  const syncStatus = roomsQuery.isLoading || eventsQuery.isLoading
+    ? 'loading'
+    : roomsQuery.isError
+      ? 'error'
+      : 'synced';
+
   // Calcul KPI temps réel automatique
   const kpiData = useRealtimeKPI(contextReservations, storeRooms.length, {
     start: new Date(),
@@ -119,25 +198,39 @@ export const PlanningView = () => {
   });
   
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // Préférences UI persistées (collapse sidebars, mode actif).
+  const leftSidebarCollapsed = usePlanningUiStore((s) => s.leftSidebarCollapsed);
+  const toggleLeftSidebar = usePlanningUiStore((s) => s.toggleLeftSidebar);
+  // Navigation principale (app shell) — pilotée par le bouton Collapse en haut à droite.
+  const navCollapsed = useAppShellStore((s) => s.navCollapsed);
+  const toggleNav = useAppShellStore((s) => s.toggleNav);
+  const rightSidebarCollapsed = usePlanningUiStore((s) => s.rightSidebarCollapsed);
+  const toggleRightSidebar = usePlanningUiStore((s) => s.toggleRightSidebar);
+  const showRightSidebar = !rightSidebarCollapsed;
+  const activeMode = usePlanningUiStore((s) => s.activeMode);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedDetailsRes, setSelectedDetailsRes] = useState<Reservation | null>(null);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
+  const [isFreeRoomsOpen, setIsFreeRoomsOpen] = useState(false);
+  const [smartMoveEnabled, setSmartMoveEnabled] = useState(true);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
+  const [isBlockRoomsOpen, setIsBlockRoomsOpen] = useState(false);
+  // Cible d'inspection/déblocage maintenance (room + blocage room_blocks éventuel).
+  const [unblockTarget, setUnblockTarget] = useState<{ room: RoomRow; block: RoomBlock | null } | null>(null);
   const [selectedEventDate, setSelectedEventDate] = useState<string | null>(null);
   const [hoveredRes, setHoveredRes] = useState<Reservation | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [activeView, setActiveView] = useState<'7J' | '15J' | 'Mois'>('15J');
   const [displayMode, setDisplayMode] = useState<'Gantt' | 'Revenue'>('Gantt');
-  const [showRightSidebar, setShowRightSidebar] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [activeRevCalFilter, setActiveRevCalFilter] = useState<string | null>(null);
   const [revenueSubView, setRevenueSubView] = useState<'KPI' | 'Graphiques'>('KPI');
   const [isRevenueDetailsOpen, setIsRevenueDetailsOpen] = useState(false);
   const [revenueDetailsTab, setRevenueDetailsTab] = useState<'day' | 'events' | 'channels' | 'forecast' | 'alerts' | 'score'>('day');
   const [editReservation, setEditReservation] = useState<Reservation | null>(null);
-  const [confirmMove, setConfirmMove] = useState<{resId: string, newRoom: typeof storeRooms[0], oldPrice: number, newPrice: number} | null>(null);
+  const [confirmMove, setConfirmMove] = useState<{resId: string, newRoom: RoomRow, oldPrice: number, newPrice: number} | null>(null);
   const [isCustomizingMove, setIsCustomizingMove] = useState(false);
   const [moveCustomMode, setMoveCustomMode] = useState<'night' | 'total' | 'free'>('night');
   const [customSupplement, setCustomSupplement] = useState<number>(0);
@@ -156,37 +249,56 @@ export const PlanningView = () => {
   const [dragFormData, setDragFormData] = useState<Record<string, string> | null>(null);
   const [isMouseSelecting, setIsMouseSelecting] = useState(false);
 
-  const [floorFilter, setFloorFilter] = useState<string>('Tous');
-  const [typeFilter, setTypeFilter] = useState<string>('Tous Types');
-  const [statusFilter, setStatusFilter] = useState<string>('Tous Statuts');
+  // Filtres planning — partagés avec la sidebar principale via planningUiStore.
+  const floorFilter = usePlanningUiStore((s) => s.floorFilter);
+  const typeFilter = usePlanningUiStore((s) => s.typeFilter);
+  const statusFilter = usePlanningUiStore((s) => s.statusFilter);
   const [channelFilter, setChannelFilter] = useState<string>('Tous Canaux');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [hoveredEvents, setHoveredEvents] = useState<HotelEvent[] | null>(null);
 
-  // Constants for filters
-  const roomTypes  = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.type))).sort(),   [storeRooms]);
-  const roomScales = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.category))).sort(),[storeRooms]);
-  const channels   = React.useMemo(() => storeChannels.map(c => c.name),                             [storeChannels]);
-  const floors     = React.useMemo(() => Array.from(new Set(storeRooms.map(r => r.floor))).sort(),   [storeRooms]);
-  const statuses = ['Arrivées', 'Départs', 'Occupées', 'Libres', 'Ménage'];
+  // Constants for filters — options (étage/type/statut) are presented by the
+  // sidebar (PlanningSidebarSection) ; only the channel list is used here.
+  const channels   = React.useMemo(() => storeChannels.map(c => c.name),                                                          [storeChannels]);
 
   // Filter Rooms
   const rooms = React.useMemo(() => storeRooms.filter(r => {
-    const passFloor = floorFilter === 'Tous' || r.floor.toString() === floorFilter;
+    const passFloor = floorFilter === 'Tous' || String(r.floor ?? '') === floorFilter;
     const passType = typeFilter === 'Tous Types' || r.type === typeFilter || r.category === typeFilter;
     const passSearch = searchQuery === '' ||
       r.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.type.toLowerCase().includes(searchQuery.toLowerCase());
+      (r.type ?? '').toLowerCase().includes(searchQuery.toLowerCase());
 
     // Status filter for rooms
+    const todayFilterStr = toLocalISODate(new Date());
     let passStatus = true;
-    if (statusFilter === 'Libres') passStatus = r.status === 'clean';
-    if (statusFilter === 'Ménage') passStatus = r.status === 'dirty';
-    if (statusFilter === 'Occupées') {
-      const todayStr = toLocalISODate(new Date());
-       passStatus = contextReservations.some(res =>
-         res.room === r.number && todayStr >= res.arrival.split(' ')[0] && todayStr < res.departure.split(' ')[0]
-       );
+    if (statusFilter === 'Libres') {
+      // Free = no active reservation today (reservation-based, not room.status field)
+      passStatus = !contextReservations.some(res =>
+        res.room === r.number &&
+        todayFilterStr >= res.arrival.split(' ')[0] &&
+        todayFilterStr < res.departure.split(' ')[0] &&
+        res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow'
+      );
+    } else if (statusFilter === 'Ménage') {
+      passStatus = r.housekeeping_status === 'dirty';
+    } else if (statusFilter === 'Occupées') {
+      passStatus = contextReservations.some(res =>
+        res.room === r.number &&
+        todayFilterStr >= res.arrival.split(' ')[0] &&
+        todayFilterStr < res.departure.split(' ')[0] &&
+        res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow'
+      );
+    } else if (statusFilter === 'Arrivées') {
+      passStatus = contextReservations.some(res =>
+        res.room === r.number && res.arrival.startsWith(todayFilterStr)
+        && res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow'
+      );
+    } else if (statusFilter === 'Départs') {
+      passStatus = contextReservations.some(res =>
+        res.room === r.number && res.departure.startsWith(todayFilterStr)
+        && res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow'
+      );
     }
 
     return passFloor && passType && passSearch && passStatus;
@@ -259,8 +371,9 @@ export const PlanningView = () => {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent, targetRoom: typeof storeRooms[0]) => {
+  const handleDrop = (e: React.DragEvent, targetRoom: RoomRow) => {
     e.preventDefault();
+    if (!smartMoveEnabled) return;
     const resId = e.dataTransfer.getData('text/plain');
     if (!resId) return;
 
@@ -299,14 +412,17 @@ export const PlanningView = () => {
     };
 
     const oldRoom = storeRooms.find(r => r.number === res.room);
-    const oldPrice = (oldRoom as any)?.price || getPriceByCategory(oldRoom?.category);
-    const newPrice = (targetRoom as any)?.price || getPriceByCategory(targetRoom.category);
+    const oldPrice = oldRoom?.base_price ?? getPriceByCategory(oldRoom?.category ?? undefined);
+    const newPrice = targetRoom.base_price ?? getPriceByCategory(targetRoom.category ?? undefined);
 
     if (oldRoom?.category !== targetRoom.category) {
       setConfirmMove({ resId, newRoom: targetRoom, oldPrice, newPrice });
     } else {
-      updateReservation(resId, { room: targetRoom.number, roomType: targetRoom.type });
-      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Réservation ${resId} déplacée en chambre ${targetRoom.number}` } }));
+      updateReservation(resId, { room: targetRoom.number, roomType: targetRoom.type ?? undefined });
+      // Persistance DB (corrige P6 : le déplacement survit au rechargement).
+      persistReservationMove({ id: resId, roomId: targetRoom.id, roomNumber: targetRoom.number })
+        .then(() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Réservation déplacée en chambre ${targetRoom.number}` } })))
+        .catch((e) => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Échec de l'enregistrement du déplacement : ${e instanceof Error ? e.message : 'erreur'}` } })));
     }
   };
 
@@ -335,15 +451,20 @@ export const PlanningView = () => {
 
       const newTotal = (res.totalAmount || 0) + (diff * days);
       
-      updateReservation(resId, { 
-        room: newRoom.number, 
-        roomType: newRoom.type,
+      updateReservation(resId, {
+        room: newRoom.number,
+        roomType: newRoom.type ?? undefined,
         totalAmount: newTotal,
         logs: [{ timestamp: new Date().toISOString(), action: note, userId: 'user' }]
       });
-      window.dispatchEvent(new CustomEvent('app-toast', { 
-        detail: { message: `Délogement confirmé. Nouveau total: ${newTotal.toFixed(2)}€` } 
-      }));
+      // Persistance DB : chambre + nouveau total (cohérence prix/DB).
+      persistReservationMove({ id: resId, roomId: newRoom.id, roomNumber: newRoom.number, totalAmount: newTotal })
+        .then(() => window.dispatchEvent(new CustomEvent('app-toast', {
+          detail: { message: `Délogement confirmé. Nouveau total: ${newTotal.toFixed(2)}€` }
+        })))
+        .catch((e) => window.dispatchEvent(new CustomEvent('app-toast', {
+          detail: { message: `Échec de l'enregistrement : ${e instanceof Error ? e.message : 'erreur'}` }
+        })));
     }
     setConfirmMove(null);
     setIsCustomizingMove(false);
@@ -352,13 +473,18 @@ export const PlanningView = () => {
   const handleIgnoreMove = () => {
     if (!confirmMove) return;
     const { resId, newRoom } = confirmMove;
-    updateReservation(resId, { 
-      room: newRoom.number, 
-      roomType: newRoom.type,
+    updateReservation(resId, {
+      room: newRoom.number,
+      roomType: newRoom.type ?? undefined,
       logs: [{ timestamp: new Date().toISOString(), action: `Délogement sans changement de prix: ${newRoom.number}`, userId: 'user' }]
     });
-    window.dispatchEvent(new CustomEvent('app-toast', { 
-      detail: { message: `Délogement effectué. Prix maintenu.` } 
+    // Persistance DB (chambre uniquement, prix maintenu).
+    persistReservationMove({ id: resId, roomId: newRoom.id, roomNumber: newRoom.number })
+      .catch((e) => window.dispatchEvent(new CustomEvent('app-toast', {
+        detail: { message: `Échec de l'enregistrement : ${e instanceof Error ? e.message : 'erreur'}` }
+      })));
+    window.dispatchEvent(new CustomEvent('app-toast', {
+      detail: { message: `Délogement effectué. Prix maintenu.` }
     }));
     setConfirmMove(null);
     setIsCustomizingMove(false);
@@ -371,41 +497,179 @@ export const PlanningView = () => {
 
   const viewLength = activeView === '7J' ? 7 : activeView === '15J' ? 15 : 31;
   const colWidth = 100 / viewLength; // percentage
-  
+
+  // ── KPIs planning (source unique : planning-kpi.service) ─────────────────
+  // Les réservations du contexte sont synchronisées depuis Supabase ; on les
+  // mappe vers le sous-ensemble pur consommé par le moteur KPI centralisé.
+  const kpiReservations = React.useMemo<KpiReservation[]>(() => {
+    const looseToIso = (s?: string): string => {
+      if (!s) return '';
+      const head = s.split(' ')[0].split('T')[0];
+      if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head;
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? '' : toLocalISODate(d);
+    };
+    return contextReservations.map((r) => {
+      const status = r.effectiveStatus === 'noshow' ? 'no_show' : (r.effectiveStatus ?? 'confirmed');
+      return {
+        check_in: r.checkIn || looseToIso(r.arrival),
+        check_out: r.checkOut || looseToIso(r.departure),
+        nights: r.nights ?? null,
+        status,
+        total_amount: r.totalAmount ?? null,
+      };
+    }).filter((r) => r.check_in && r.check_out);
+  }, [contextReservations]);
+
+  const kpiRooms = React.useMemo<KpiRoom[]>(
+    () => storeRooms.map((r) => ({ id: r.id, active: r.active ?? true, status: r.status ?? null })),
+    [storeRooms],
+  );
+
+  const visibleDayKpis = React.useMemo(
+    () => computeRangeKpis(currentDate, viewLength, kpiReservations, kpiRooms),
+    [currentDate, viewLength, kpiReservations, kpiRooms],
+  );
+  const visibleSummary = React.useMemo(() => aggregateKpis(visibleDayKpis), [visibleDayKpis]);
+  const todayKpi = React.useMemo(
+    () => computeDayKpi(new Date(), kpiReservations, kpiRooms),
+    [kpiReservations, kpiRooms],
+  );
+
+  // Numéros de chambre occupés aujourd'hui (pour la modale chambres libres).
+  const todayOccupiedNumbers = React.useMemo(() => {
+    const todayStr = toLocalISODate(new Date());
+    const set = new Set<string>();
+    contextReservations.forEach((res) => {
+      if (res.effectiveStatus === 'cancelled' || res.effectiveStatus === 'noshow' || !res.room) return;
+      const ci = (res.checkIn || res.arrival).split(' ')[0].split('T')[0];
+      const co = (res.checkOut || res.departure).split(' ')[0].split('T')[0];
+      if (ci <= todayStr && todayStr < co) set.add(res.room);
+    });
+    return set;
+  }, [contextReservations]);
+
+  // Ratio chambres propres (housekeeping) — pour la vue rapide opérationnelle.
+  const hkCleanRatio = React.useMemo(() => {
+    if (storeRooms.length === 0) return 0;
+    const clean = storeRooms.filter((r) => r.housekeeping_status === 'clean' || r.housekeeping_status === 'inspected').length;
+    return (clean / storeRooms.length) * 100;
+  }, [storeRooms]);
+
+  // Check-in en ligne effectués aujourd'hui.
+  const onlineCheckinsToday = React.useMemo(() => {
+    const todayStr = toLocalISODate(new Date());
+    return contextReservations.filter((res) => {
+      if (res.checkinStatus !== 'online') return false;
+      const ci = (res.checkIn || res.arrival).split(' ')[0].split('T')[0];
+      return ci === todayStr;
+    }).length;
+  }, [contextReservations]);
+
+  // Snapshot horizon fixe J+0..J+30 (indépendant de la plage affichée) pour un
+  // pickup couvrant tout l'horizon de réservation.
+  const snapshotKpis = React.useMemo(
+    () => computeRangeKpis(new Date(), 31, kpiReservations, kpiRooms),
+    [kpiReservations, kpiRooms],
+  );
+  const pickup = usePickup(new Date(), 31, snapshotKpis);
+  const compression = useMarketCompression(currentDate, viewLength);
+  // Blocages de chambres (room_blocks) sur la plage — source des actions maintenance.
+  const roomBlocks = useRoomBlocks(currentDate, viewLength);
+  const todayIso = React.useMemo(() => toLocalISODate(new Date()), []);
+
+  /**
+   * État de blocage d'une chambre, fusionnant les deux mécanismes réels :
+   *   - statut chambre (rooms.status ∈ {maintenance, out_of_order}) ;
+   *   - blocage daté (room_blocks) actif aujourd'hui.
+   * Retourne null si la chambre est vendable.
+   */
+  const getRoomBlockState = React.useCallback((room: RoomRow): {
+    source: 'status' | 'block';
+    reason: string;
+    startDate: string | null;
+    endDate: string | null;
+    block: RoomBlock | null;
+  } | null => {
+    const activeBlock = roomBlocks.getActiveBlock(room.id, todayIso);
+    if (activeBlock) {
+      return {
+        source: 'block',
+        reason: activeBlock.reason,
+        startDate: activeBlock.start_date,
+        endDate: activeBlock.end_date,
+        block: activeBlock,
+      };
+    }
+    if (room.status === 'maintenance' || room.status === 'out_of_order') {
+      return {
+        source: 'status',
+        reason: room.status === 'out_of_order' ? 'out_of_order' : 'maintenance',
+        startDate: null,
+        endDate: null,
+        block: null,
+      };
+    }
+    return null;
+  }, [roomBlocks, todayIso]);
+
+  /**
+   * Déblocage RÉEL d'une chambre. Selon la source :
+   *   - block  : supprime la ligne room_blocks ;
+   *   - status : remet rooms.status à 'available'.
+   * Invalide rooms + room-blocks → recalcul chambres libres / TO / dispo / planning.
+   */
+  const handleUnblockRoom = React.useCallback((room: RoomRow, block: RoomBlock | null) => {
+    if (block) {
+      roomBlocks.unblock.mutate(block.id, {
+        onSuccess: () => {
+          setUnblockTarget(null);
+          window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Chambre ${room.number} débloquée — à nouveau vendable.` } }));
+        },
+        onError: (e) => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Échec du déblocage : ${e instanceof Error ? e.message : 'erreur'}` } })),
+      });
+    } else {
+      updateRoomMut.mutate({ id: room.id, patch: { status: 'available' } }, {
+        onSuccess: () => {
+          setUnblockTarget(null);
+          window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Chambre ${room.number} remise en service.` } }));
+        },
+        onError: (e) => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Échec de la remise en service : ${e instanceof Error ? e.message : 'erreur'}` } })),
+      });
+    }
+  }, [roomBlocks.unblock, updateRoomMut]);
+
+  // Événements actifs intersectant la plage affichée.
+  const rangeEventsCount = React.useMemo(() => {
+    if (visibleDayKpis.length === 0) return 0;
+    const start = visibleDayKpis[0].date;
+    const end = visibleDayKpis[visibleDayKpis.length - 1].date;
+    return storeEvents.filter((e) => e.startDate <= end && e.endDate >= start).length;
+  }, [storeEvents, visibleDayKpis]);
+
+  // Forecast d'occupation auto (calculé, jamais saisi) par jour visible.
+  const forecast = useForecast(visibleDayKpis, pickup.byDate, compression.byDate, kpiReservations);
+  // Forecast moyen de la plage (pour la barre KPI).
+  const avgForecast = React.useMemo(() => {
+    const vals = visibleDayKpis.map((d) => forecast.byDate[d.date]).filter((v) => v != null) as number[];
+    return vals.length > 0 ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10 : null;
+  }, [visibleDayKpis, forecast.byDate]);
+
   const days = React.useMemo(() => {
     return Array.from({ length: viewLength }, (_, i) => {
       const date = new Date(currentDate);
       date.setDate(currentDate.getDate() + i);
       const dateStr = toLocalISODate(date);
-      
-      const occupiedCount = contextReservations.filter(res => {
-        try {
-          const start = new Date(res.arrival).getTime();
-          const end = new Date(res.departure).getTime();
-          const current = date.getTime();
-          return !isNaN(start) && current >= start && current < end;
-        } catch { return false; }
-      }).length;
 
-      const blockedCount = rooms.filter(r => r.status === 'out_of_order' || r.status === 'maintenance').length;
-      const availableTotal = rooms.length - occupiedCount - blockedCount;
-
-      // Calculate real ADR from actual reservations for this date
-      const dayReservations = contextReservations.filter(res => {
-        try {
-          const start = new Date(res.arrival).getTime();
-          const end = new Date(res.departure).getTime();
-          const current = date.getTime();
-          return !isNaN(start) && !isNaN(end) && current >= start && current < end;
-        } catch { return false; }
-      });
-      
-      const totalRevenue = dayReservations.reduce((sum, res) => sum + (res.totalAmount || 0), 0);
-      const realADR = occupiedCount > 0 ? Math.round(totalRevenue / occupiedCount) : 0;
+      // Source unique : moteur KPI centralisé (cohérent avec la barre KPI).
+      const kpi = visibleDayKpis[i];
 
       const dayEvents = storeEvents.filter(e => {
           return dateStr >= e.startDate && dateStr <= e.endDate;
       });
+
+      const pk = pickup.byDate[dateStr];
+      const comp = compression.byDate[dateStr];
 
       return {
         id: `day-${date.getTime()}`,
@@ -414,19 +678,44 @@ export const PlanningView = () => {
         dayName: ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][date.getDay()],
         monthName: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'][date.getMonth()],
         isWeekend: date.getDay() === 0 || date.getDay() === 6,
-        occ: rooms.length > 0 ? Math.round((occupiedCount / rooms.length) * 100) : 0,
-        available: Math.max(0, availableTotal),
+        occ: kpi ? Math.round(kpi.toRate) : 0,
+        available: kpi ? kpi.free : 0,
+        adr: kpi ? Math.round(kpi.adr) : 0,
         events: dayEvents,
-        adr: realADR || 120 // Fallback to default if no data
+        forecast: forecast.byDate[dateStr] ?? null,
+        pickupRooms: pk && !pk.noBaseline ? pk.rooms : null,
+        pickupRevenue: pk && !pk.noBaseline ? pk.revenue : null,
+        compressionPercent: comp?.percent ?? null,
       };
     });
-  }, [contextReservations, storeEvents, rooms, currentDate, viewLength]);
+  }, [storeEvents, currentDate, viewLength, visibleDayKpis, forecast.byDate, pickup.byDate, compression.byDate]);
+
+  // Intelligence du jour de référence (premier jour visible) pour le volet droit.
+  const rightPanelIntel = React.useMemo<RightPanelIntel>(() => {
+    const d = days[0];
+    const ev = d?.events[0] ?? null;
+    const impactFr: Record<string, string> = { low: 'Faible', medium: 'Moyen', high: 'Fort', critical: 'Très fort' };
+    return {
+      dateLabel: d ? `${d.dateNum} ${d.monthName}` : '',
+      toRate: d?.occ ?? 0,
+      forecast: d?.forecast ?? null,
+      adr: d?.adr ?? 0,
+      revpar: visibleDayKpis[0]?.revpar ?? 0,
+      pickupRooms: d?.pickupRooms ?? null,
+      pickupRevenue: d?.pickupRevenue ?? null,
+      compressionPercent: d?.compressionPercent ?? null,
+      eventName: ev?.name ?? null,
+      eventImpact: ev ? (impactFr[ev.impact] ?? ev.impact) : null,
+    };
+  }, [days, visibleDayKpis]);
 
   const calendarDays = React.useMemo(() => {
     const today = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1); // start of current month
     const year = today.getFullYear();
     const month = today.getMonth();
     const lastDay = new Date(year, month + 1, 0).getDate();
+    // Use total sellable rooms (not filtered) as the denominator for TO and RevPAR
+    const totalRooms = storeRooms.filter(r => r.active !== false && r.status !== 'out_of_order' && r.status !== 'maintenance').length || storeRooms.length;
     const result = [];
     for (let i = 1; i <= lastDay; i++) {
       const date = new Date(year, month, i);
@@ -436,18 +725,18 @@ export const PlanningView = () => {
           const start = new Date(res.arrival).getTime();
           const end = new Date(res.departure).getTime();
           const current = date.getTime();
-          return !isNaN(start) && !isNaN(end) && current >= start && current < end;
+          return !isNaN(start) && !isNaN(end) && current >= start && current < end
+            && res.effectiveStatus !== 'cancelled' && res.effectiveStatus !== 'noshow';
         } catch { return false; }
       });
       const occupiedCount = occupiedRes.length;
       const dayEvents = storeEvents.filter(e => dateStr >= e.startDate && dateStr <= e.endDate);
-      const occ = rooms.length > 0 ? Math.round((occupiedCount / rooms.length) * 100) : 0;
-      
-      // Calculate real revenue from actual reservations
-      const totalRevenue = occupiedRes.reduce((sum, res) => sum + (res.totalAmount || 0), 0);
-      const ca = totalRevenue;
+      const occ = totalRooms > 0 ? Math.round((occupiedCount / totalRooms) * 100) : 0;
+
+      // Per-night revenue: each reservation contributes its prorated daily amount
+      const ca = occupiedRes.reduce((sum, res) => sum + res.revenuePerNight, 0);
       const adr = occupiedCount > 0 ? Math.round(ca / occupiedCount) : 0;
-      
+
       result.push({
         date,
         dateStr,
@@ -457,12 +746,12 @@ export const PlanningView = () => {
         occ,
         ca,
         adr,
-        revpar: rooms.length > 0 ? ca / rooms.length : 0,
+        revpar: totalRooms > 0 ? ca / totalRooms : 0,
         events: dayEvents,
       });
     }
     return result;
-  }, [contextReservations, storeEvents, rooms, monthDate]);
+  }, [contextReservations, storeEvents, storeRooms, monthDate]);
 
   const revenueBaselines = React.useMemo(() => {
     const avgAdr = calendarDays.length ? calendarDays.reduce((sum, d) => sum + d.adr, 0) / calendarDays.length : 0;
@@ -524,6 +813,17 @@ export const PlanningView = () => {
     return byDate;
   }, [calendarDays, revenueBaselines.avgAdr, revenueBaselines.avgRevpar]);
 
+  const monthlyScore = React.useMemo(() => {
+    const values = Object.values(revenueInsightsByDate) as Array<{ score: number }>;
+    if (values.length === 0) return 0;
+    return Math.round(values.reduce((s, d) => s + d.score, 0) / values.length);
+  }, [revenueInsightsByDate]);
+
+  const monthlyScoreLabel = monthlyScore >= 85 ? 'Excellent mois'
+    : monthlyScore >= 75 ? 'Bon mois'
+    : monthlyScore >= 65 ? 'Mois moyen'
+    : 'Mois difficile';
+
   const handleMouseMove = (e: React.MouseEvent) => {
     if (hoveredRes) {
       setTooltipPos({ x: e.clientX + 15, y: e.clientY + 15 });
@@ -542,14 +842,27 @@ export const PlanningView = () => {
     return toLocalISODate(next);
   }, []);
 
-  const isCellReserved = React.useCallback((roomNumber: string, dateStr: string) => {
-    return contextReservations.some((res) => {
-      if (res.room !== roomNumber) return false;
+  // Pre-compute reserved cells as a Set for O(1) lookup instead of O(N) per cell.
+  // Key format: "roomNumber:YYYY-MM-DD"
+  const reservedCellsSet = React.useMemo(() => {
+    const set = new Set<string>();
+    contextReservations.forEach((res) => {
+      if (!res.room) return;
+      if (res.effectiveStatus === 'cancelled' || res.effectiveStatus === 'noshow') return;
       const start = res.arrival.split(' ')[0];
       const end = res.departure.split(' ')[0];
-      return dateStr >= start && dateStr < end;
+      days.forEach((day) => {
+        if (day.dateStr >= start && day.dateStr < end) {
+          set.add(`${res.room}:${day.dateStr}`);
+        }
+      });
     });
-  }, [contextReservations]);
+    return set;
+  }, [contextReservations, days]);
+
+  const isCellReserved = React.useCallback((roomNumber: string, dateStr: string) => {
+    return reservedCellsSet.has(`${roomNumber}:${dateStr}`);
+  }, [reservedCellsSet]);
 
   const hasReservedNightsInRange = React.useCallback((roomNumber: string, startIdx: number, departureIdx: number) => {
     for (let i = startIdx; i < departureIdx; i += 1) {
@@ -588,7 +901,7 @@ export const PlanningView = () => {
     setIsModalOpen(true);
   }, [addOneNight, days, hasReservedNightsInRange]);
 
-  const handleGridCellMouseDown = React.useCallback((e: React.MouseEvent<HTMLDivElement>, room: typeof storeRooms[number], dateIdx: number) => {
+  const handleGridCellMouseDown = React.useCallback((e: React.MouseEvent<HTMLDivElement>, room: RoomRow, dateIdx: number) => {
     if (e.button !== 0) return;
     if (!days[dateIdx]) return;
     if (isCellReserved(room.number, days[dateIdx].dateStr)) return;
@@ -597,15 +910,15 @@ export const PlanningView = () => {
     setIsMouseSelecting(true);
     setDragSel({
       roomNumber: room.number,
-      roomType: room.type,
-      roomCategory: room.category,
+      roomType: room.type ?? '',
+      roomCategory: room.category ?? '',
       startDateIdx: dateIdx,
       endDateIdx: dateIdx,
       active: true,
     });
   }, [days, isCellReserved]);
 
-  const handleGridCellMouseEnter = React.useCallback((room: typeof storeRooms[number], dateIdx: number) => {
+  const handleGridCellMouseEnter = React.useCallback((room: RoomRow, dateIdx: number) => {
     setDragSel((prev) => {
       if (!prev?.active) return prev;
       if (prev.roomNumber !== room.number) return prev;
@@ -639,21 +952,21 @@ export const PlanningView = () => {
     const categoriesMap = new Map<string, { category: string; totalRooms: number; occupiedByDate: Record<string, Set<string>> }>();
     
     storeRooms.forEach(room => {
-      const category = `${room.type} ${room.category}`.trim();
+      const category = `${room.type ?? ''} ${room.category ?? ''}`.trim();
       if (!categoriesMap.has(category)) {
         categoriesMap.set(category, { category, totalRooms: 0, occupiedByDate: {} });
       }
       categoriesMap.get(category)!.totalRooms++;
     });
-    
+
     // Calculer occupation par date pour chaque catégorie
     contextReservations.forEach(res => {
-      if (res.reservationStatus === 'cancelled' || !res.room) return;
-      
+      if (res.effectiveStatus === 'cancelled' || res.effectiveStatus === 'noshow' || !res.room) return;
+
       const room = storeRooms.find(r => r.number === res.room);
       if (!room) return;
-      
-      const category = `${room.type} ${room.category}`.trim();
+
+      const category = `${room.type ?? ''} ${room.category ?? ''}`.trim();
       const catData = categoriesMap.get(category);
       if (!catData) return;
       
@@ -804,31 +1117,9 @@ export const PlanningView = () => {
             />
           </div>
 
+          {/* Filtre canal — Étage/Type/Statut vivent dans la sidebar (maquette) */}
           <div className="flex items-center gap-2 px-2 bg-gray-50 border border-gray-100 rounded-2xl">
-             <select 
-               value={typeFilter}
-               onChange={(e) => setTypeFilter(e.target.value)}
-               className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-3 focus:ring-0 cursor-pointer"
-             >
-                <option>Tous Types</option>
-                <optgroup label="Catégories">
-                  {roomScales.map(s => <option key={s} value={s}>{s}</option>)}
-                </optgroup>
-                <optgroup label="Modèles">
-                  {roomTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                </optgroup>
-             </select>
-             <div className="w-px h-6 bg-gray-200" />
-             <select 
-               value={statusFilter}
-               onChange={(e) => setStatusFilter(e.target.value)}
-               className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-1 focus:ring-0 cursor-pointer"
-             >
-                <option>Tous Statuts</option>
-                {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-             </select>
-             <div className="w-px h-6 bg-gray-200" />
-             <select 
+             <select
                value={channelFilter}
                onChange={(e) => setChannelFilter(e.target.value)}
                className="bg-transparent border-none text-[10px] font-black uppercase text-gray-500 py-2.5 px-3 focus:ring-0 cursor-pointer"
@@ -839,9 +1130,21 @@ export const PlanningView = () => {
           </div>
 
           <div className="flex items-center gap-1">
+             <button
+               onClick={toggleNav}
+               title={navCollapsed ? "Déployer la navigation" : "Réduire la navigation"}
+               aria-label={navCollapsed ? "Déployer la navigation" : "Réduire la navigation"}
+               aria-pressed={navCollapsed}
+               className={cn("p-2.5 rounded-xl transition-all", navCollapsed ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
+             >
+               {navCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+             </button>
              {displayMode === 'Gantt' && (
                <button
-                 onClick={() => setShowRightSidebar(!showRightSidebar)}
+                 onClick={toggleRightSidebar}
+                 title="Volet intelligence (droite)"
+                 aria-label="Afficher/masquer le volet intelligence"
+                 aria-pressed={showRightSidebar}
                  className={cn("p-2.5 rounded-xl transition-all", showRightSidebar ? "text-indigo-600 bg-indigo-50" : "text-gray-400 hover:text-indigo-600 hover:bg-indigo-50")}
                >
                  <Eye size={18} />
@@ -864,6 +1167,29 @@ export const PlanningView = () => {
         </div>
       </div>
 
+      {/* Barre KPI compacte (Gantt) — données réelles, source unique */}
+      {displayMode === 'Gantt' && (
+        <PlanningKpiBar
+          toRate={visibleSummary.avgToRate}
+          adr={visibleSummary.avgAdr}
+          revpar={visibleSummary.avgRevpar}
+          forecast={avgForecast}
+          occupied={todayKpi.occupied}
+          totalRooms={todayKpi.totalRooms}
+          free={todayKpi.free}
+          pickupRooms={pickup.noBaseline ? null : pickup.totalRooms}
+          pickupRevenue={pickup.noBaseline ? null : pickup.totalRevenue}
+          compressionPercent={compression.avgPercent}
+          compressionLevel={compression.avgPercent == null ? null : compressionLevel(compression.avgPercent)}
+          eventsCount={rangeEventsCount}
+          heatmap={visibleDayKpis.map((d) => ({ date: d.date, toRate: d.toRate }))}
+          onFreeRoomsClick={() => setIsFreeRoomsOpen(true)}
+          onEventsClick={() => setIsEventModalOpen(true)}
+          pickupLoading={pickup.isLoading}
+          compressionLoading={compression.isLoading}
+        />
+      )}
+
       {/* Revenue Top Dashboard */}
       {displayMode === 'Revenue' && (
         <div className="bg-white border-b border-gray-100 px-8 py-6 flex items-center justify-between gap-6 shrink-0">
@@ -874,9 +1200,12 @@ export const PlanningView = () => {
                   { label: 'RevPAR', val: `${kpiData.revpar.toFixed(1)} €`, trend: `Chambres vendues: ${kpiData.roomsSold}`, icon: Activity, color: 'text-violet-600', bg: 'bg-violet-50/40', border: 'border-violet-100/50' },
                   { label: 'ADR', val: `${kpiData.adr.toFixed(1)} €`, trend: `Dispo restante: ${kpiData.availableRooms}`, icon: CreditCard, color: 'text-amber-600', bg: 'bg-amber-50/40', border: 'border-amber-100/50' },
                ].map((kpi, i) => (
-                  <div 
-                    key={i} 
-                    onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Détails pour ${kpi.label}` } }))}
+                  <div
+                    key={i}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); } }}
                     className={cn('p-5 rounded-3xl border transition-all cursor-pointer group hover:shadow-xl hover:shadow-gray-200/50', kpi.bg, kpi.border)}
                   >
                     <div className="flex items-center justify-between mb-3">
@@ -903,18 +1232,18 @@ export const PlanningView = () => {
                  <div className="relative w-16 h-16 shrink-0">
                     <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                        <circle cx="18" cy="18" r="16" fill="none" className="stroke-white" strokeWidth="4" />
-                       <circle cx="18" cy="18" r="16" fill="none" className="stroke-indigo-500" strokeWidth="4" strokeDasharray="78 100" />
+                       <circle cx="18" cy="18" r="16" fill="none" className="stroke-indigo-500" strokeWidth="4" strokeDasharray={`${monthlyScore} 100`} />
                     </svg>
-                    <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-indigo-600">78</div>
+                    <div className="absolute inset-0 flex items-center justify-center text-lg font-black text-indigo-600">{monthlyScore}</div>
                  </div>
                  <div>
                     <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1">Score mensuel</div>
                     <div className="flex items-baseline gap-1">
-                       <span className="text-lg font-black text-indigo-600">78</span>
+                       <span className="text-lg font-black text-indigo-600">{monthlyScore}</span>
                        <span className="text-[10px] font-black text-gray-400">/100</span>
                     </div>
                     <div className="flex items-center gap-2">
-                       <span className="text-[10px] font-black text-indigo-400 uppercase">Bon mois</span>
+                       <span className="text-[10px] font-black text-indigo-400 uppercase">{monthlyScoreLabel}</span>
                        <ChevronRight size={10} className="text-indigo-300 group-hover:translate-x-1 transition-transform" />
                     </div>
                  </div>
@@ -972,44 +1301,45 @@ export const PlanningView = () => {
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden">
         {/* Left Unit Sidebar */}
         {displayMode === 'Gantt' && (
-          <div className="w-[170px] flex flex-col bg-white border-r border-gray-100 shrink-0 z-40">
-           <div className="flex flex-col border-b border-gray-100">
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Détails TO %' } }))} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <TrendingUp size={13} className='group-hover:text-indigo-400 transition-colors' />
-                  <span className='text-[9px] font-black uppercase tracking-widest'>TO %</span>
+          <div className={cn("flex flex-col bg-white border-r border-gray-100 shrink-0 z-40 transition-[width] duration-200 ease-out", leftSidebarCollapsed ? "w-[68px]" : "w-[170px]")}>
+           {/* En-tête colonne — aligné avec la ligne DATES (56px) */}
+           <div className="h-[56px] flex items-center px-4 border-r border-b border-gray-100 bg-white">
+              <span className={cn("text-[10px] font-black text-gray-400 uppercase tracking-widest", leftSidebarCollapsed && "hidden")}>Chambres</span>
+              <span className={cn("text-[10px] font-black text-gray-300 uppercase tracking-widest ml-auto", leftSidebarCollapsed && "hidden")}>État</span>
+           </div>
+           {/* Libellés indicateurs — alignés aux lignes du header (6 × 34px) */}
+           <div className={cn("flex flex-col border-b border-gray-100", leftSidebarCollapsed && "[&_button]:justify-center [&_button]:px-0 [&_span]:hidden")}>
+               <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-transparent w-full text-left'>
+                  <TrendingUp size={12} className='group-hover:text-indigo-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>TO (réel)</span>
                </button>
-               <button onClick={() => setIsAvailabilityModalOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <Lock size={13} className='group-hover:text-indigo-400 transition-colors' />
+               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-sky-50/20 w-full text-left'>
+                  <LineChart size={12} className='group-hover:text-sky-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Forecast</span>
+               </button>
+               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-transparent w-full text-left'>
+                  <ArrowUpRight size={12} className='group-hover:text-emerald-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Pickup (ch.)</span>
+               </button>
+               <button onClick={() => { setRevenueDetailsTab('forecast'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-gray-50/30 w-full text-left'>
+                  <Euro size={12} className='group-hover:text-emerald-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Pickup (rev.)</span>
+               </button>
+               <button onClick={() => { setRevenueDetailsTab('day'); setIsRevenueDetailsOpen(true); }} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-transparent w-full text-left'>
+                  <Gauge size={12} className='group-hover:text-indigo-400 transition-colors shrink-0' />
+                  <span className='text-[9px] font-black uppercase tracking-widest'>Comp. marché</span>
+               </button>
+               <button onClick={() => setIsFreeRoomsOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none border-b border-gray-50 bg-sky-50/10 w-full text-left'>
+                  <DoorOpen size={12} className='group-hover:text-sky-400 transition-colors shrink-0' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Ch. libres</span>
                </button>
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Détails ADR' } }))} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <Euro size={13} className='group-hover:text-indigo-400 transition-colors' />
-                  <span className='text-[9px] font-black uppercase tracking-widest'>ADR</span>
-               </button>
-               <button onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: 'Liste des Événements' } }))} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-transparent w-full text-left'>
-                  <Zap size={13} className='group-hover:text-indigo-400 transition-colors' />
+               <button onClick={() => setIsEventModalOpen(true)} className='h-[34px] flex items-center px-4 gap-2 text-gray-400 group hover:bg-gray-50 transition-all outline-none border-none bg-gray-50/30 w-full text-left'>
+                  <Zap size={12} className='group-hover:text-indigo-400 transition-colors shrink-0' />
                   <span className='text-[9px] font-black uppercase tracking-widest'>Événements</span>
                </button>
-           </div>
-
-           <div className="h-[56px] flex items-center px-4 bg-gray-50/30">
-              <div className="relative w-full">
-                 <select 
-                   value={floorFilter}
-                   onChange={(e) => setFloorFilter(e.target.value)}
-                   className="w-full bg-white border border-gray-100 rounded-xl shadow-sm pl-9 pr-4 py-2 text-[10px] font-black text-gray-600 uppercase tracking-widest appearance-none focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
-                 >
-                    <option value="Tous">Tous Étages</option>
-                    {floors.map(f => (
-                      <option key={f} value={f}>Étage {f}</option>
-                    ))}
-                 </select>
-                 <LayoutGrid size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-500 pointer-events-none" />
-                 <ChevronRight size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none rotate-90" />
-              </div>
            </div>
 
            <div ref={sidebarRef} className="flex-1 overflow-hidden scrollbar-hide pointer-events-none">
@@ -1018,28 +1348,48 @@ export const PlanningView = () => {
                   const now = new Date().getTime();
                   return res.room === room.number && now >= new Date(res.arrival).getTime() && now <= new Date(res.departure).getTime();
                 });
+                const blockState = getRoomBlockState(room);
 
                 return (
                   <div key={room.id} className="h-[32px] flex items-center px-4 border-b border-gray-100 group">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                       <span 
-                         className="text-[14px] font-semibold text-gray-900 cursor-help" 
-                         title={`${room.number} - ${room.type} ${room.category}`}
-                       >
-                         {room.number}
-                       </span>
-                       <span className="text-gray-400">·</span>
-                       <span className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-                         {getRoomCode(room.type, room.category)}
-                       </span>
-                       <div className={cn(
-                         "w-4 h-4 rounded-full ml-auto shrink-0 border border-white", 
-                         todayRes ? "bg-blue-500" :
-                         room.status === 'clean' ? "bg-emerald-400" : 
-                         room.status === 'dirty' ? "bg-rose-400" : 
-                         "bg-orange-400"
-                       )} />
-                    </div>
+                    <RoomRowLabel
+                      number={room.number}
+                      code={getRoomCode(room.type ?? '', room.category ?? '')}
+                      housekeepingStatus={room.housekeeping_status}
+                      roomStatus={room.status}
+                      fullLabel={`${room.number} - ${room.type ?? ''} ${room.category ?? ''}`.trim()}
+                      compact={leftSidebarCollapsed}
+                      blocked={blockState != null}
+                      blockedTitle={blockState ? `${blockReasonLabel(blockState.reason)}${blockState.startDate ? ` · ${blockState.startDate} → ${blockState.endDate}` : ''}` : undefined}
+                    />
+                    {activeMode === 'maintenance' && blockState ? (
+                      <button
+                        onClick={() => setUnblockTarget({ room, block: blockState.block })}
+                        title={`${blockReasonLabel(blockState.reason)}${blockState.startDate ? ` · ${blockState.startDate} → ${blockState.endDate}` : ''} — cliquer pour débloquer`}
+                        aria-label={`Débloquer la chambre ${room.number}`}
+                        className="ml-auto shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-lg bg-rose-600 text-white text-[9px] font-black uppercase hover:bg-rose-700 transition-all pointer-events-auto"
+                      >
+                        <Wrench size={11} /> Débloquer
+                      </button>
+                    ) : activeMode === 'housekeeping' && (room.housekeeping_status === 'dirty' || room.housekeeping_status === 'to_clean') ? (
+                      <button
+                        onClick={() => updateRoomMut.mutate({ id: room.id, patch: { housekeeping_status: 'clean' } })}
+                        disabled={updateRoomMut.isPending}
+                        title={`Marquer la chambre ${room.number} propre`}
+                        aria-label={`Marquer la chambre ${room.number} propre`}
+                        className="ml-auto shrink-0 inline-flex items-center gap-1 h-6 px-2 rounded-lg bg-emerald-600 text-white text-[9px] font-black uppercase hover:bg-emerald-700 disabled:opacity-50 transition-all pointer-events-auto"
+                      >
+                        <CheckCircle2 size={11} /> Propre
+                      </button>
+                    ) : (
+                      <div
+                        className={cn(
+                          'w-3.5 h-3.5 rounded-full ml-auto shrink-0 border border-white',
+                          blockState ? 'bg-rose-500' : todayRes ? 'bg-blue-500' : 'bg-gray-200',
+                        )}
+                        title={blockState ? blockReasonLabel(blockState.reason) : todayRes ? 'Occupée aujourd\'hui' : 'Libre aujourd\'hui'}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -1053,6 +1403,19 @@ export const PlanningView = () => {
              <div className="flex-1 overflow-auto custom-scrollbar flex flex-col" onScroll={handleScroll}>
                 {/* Header Stats & Dates (Sticky) */}
                <div className="sticky top-0 z-30 bg-white border-b border-gray-100 w-full overflow-hidden">
+                  {/* 1. Ligne DATES — première ligne du planning (maquette) */}
+                  <div className="flex bg-white w-full flex-nowrap">
+                     {days.map((d, i) => (
+                       <div key={`date-${d.id}`} className={cn("shrink-0 h-[56px] flex flex-col items-center justify-center border-r border-b border-gray-100 transition-all", d.isWeekend ? "bg-[#FFF9F5]/50" : "bg-white", i === 0 && "bg-indigo-50/30 ring-2 ring-inset ring-indigo-100/50")} style={{ width: `${colWidth}%` }}>
+                         <span className={cn("text-[10px] font-black uppercase tracking-widest mb-1", d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.dayName}</span>
+                         <div className="flex items-baseline gap-1.5 leading-none">
+                            <span className={cn("text-[17px] font-black", i === 0 ? "text-indigo-400" : d.isWeekend ? "text-orange-400" : "text-gray-900")}>{d.dateNum}</span>
+                            <span className={cn("text-[11px] font-black uppercase tracking-tighter opacity-70", i === 0 ? "text-indigo-300" : d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.monthName}</span>
+                         </div>
+                       </div>
+                     ))}
+                  </div>
+                  {/* 2. TO (réel) */}
                   <div className="flex text-center flex-nowrap w-full">
                      {days.map(d => (
                        <div key={`occ-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
@@ -1060,21 +1423,69 @@ export const PlanningView = () => {
                        </div>
                      ))}
                   </div>
-                  <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
+                  {/* 3. Forecast d'occupation (calculé) */}
+                  <div className="flex text-center bg-sky-50/20 w-full flex-nowrap">
                      {days.map(d => (
-                       <div key={`avail-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors font-sans shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
-                          <span className="text-[13px] font-black text-indigo-400">{d.available}</span>
+                       <div key={`fc-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={d.forecast != null ? `Forecast occ. ${d.forecast.toFixed(1)}%` : 'Forecast indisponible'}>
+                          <span className={cn("text-[11px] font-black", d.forecast == null ? "text-gray-300" : d.forecast > 80 ? "text-sky-600" : d.forecast > 50 ? "text-sky-400" : "text-sky-300")}>
+                            {d.forecast == null ? '—' : `${Math.round(d.forecast)}%`}
+                          </span>
                        </div>
                      ))}
                   </div>
+                  {/* 4. Pickup (chambres) J vs J-1 */}
                   <div className="flex text-center w-full flex-nowrap">
-                     {days.map(d => (
-                       <div key={`adr-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }}>
-                          <span className="text-[11px] font-black text-violet-300">{d.adr}€</span>
-                       </div>
-                     ))}
+                     {days.map(d => {
+                       const pk = d.pickupRooms;
+                       const tone = pk == null ? 'text-gray-300' : pk > 0 ? 'text-emerald-500' : pk < 0 ? 'text-rose-500' : 'text-gray-400';
+                       return (
+                         <div key={`pk-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center gap-0.5 transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={pk == null ? 'Pickup indisponible (pas d\'historique)' : `Pickup ${pk > 0 ? '+' : ''}${pk} ch. vs hier`}>
+                           {pk != null && pk !== 0 && (pk > 0 ? <ArrowUpRight size={11} className={tone} /> : <ArrowDownRight size={11} className={tone} />)}
+                           <span className={cn("text-[11px] font-black", tone)}>{pk == null ? '—' : `${pk > 0 ? '+' : ''}${pk}`}</span>
+                         </div>
+                       );
+                     })}
                   </div>
-                  {/* Ligne Événements — agrège configStore.events + useEventsStore */}
+                  {/* 5. Pickup (revenu) J vs J-1 */}
+                  <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
+                     {days.map(d => {
+                       const rev = d.pickupRevenue;
+                       const tone = rev == null ? 'text-gray-300' : rev > 0 ? 'text-emerald-500' : rev < 0 ? 'text-rose-500' : 'text-gray-400';
+                       return (
+                         <div key={`pkrev-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={rev == null ? 'Pickup revenu indisponible' : `Pickup ${rev > 0 ? '+' : ''}${Math.round(rev)}€ vs hier`}>
+                           <span className={cn("text-[10px] font-black", tone)}>{rev == null ? '—' : `${rev > 0 ? '+' : ''}${Math.round(rev)}€`}</span>
+                         </div>
+                       );
+                     })}
+                  </div>
+                  {/* 6. Compression marché (Lighthouse) — badge identique à colonne Pression de RMSTableauPro */}
+                  <div className="flex text-center w-full flex-nowrap">
+                     {days.map(d => {
+                       const c = d.compressionPercent;
+                       const ctone = getCompressionTone(c == null ? null : compressionLevel(c));
+                       return (
+                         <div key={`comp-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={c == null ? 'Compression marché indisponible (Lighthouse)' : `Compression marché ${c}%`}>
+                           {c == null
+                             ? <span className="text-[11px] font-black text-gray-300">—</span>
+                             : <span className={cn("px-1.5 py-0.5 text-[10px] font-bold rounded", ctone.bg, ctone.text)}>{c}%</span>
+                           }
+                         </div>
+                       );
+                     })}
+                  </div>
+                  {/* 7. Chambres libres */}
+                  <div className="flex text-center bg-sky-50/10 w-full flex-nowrap">
+                     {days.map(d => {
+                       const free = d.available;
+                       const tone = free == null ? 'text-gray-300' : free === 0 ? 'text-rose-500' : free <= 5 ? 'text-orange-500' : free <= 15 ? 'text-amber-500' : 'text-sky-500';
+                       return (
+                         <div key={`free-${d.id}`} className={cn("h-[34px] border-r border-b border-gray-50 flex items-center justify-center transition-colors shrink-0", d.isWeekend && "bg-gray-50/10")} style={{ width: `${colWidth}%` }} title={`${free ?? '—'} chambre(s) libre(s)`}>
+                           <span className={cn("text-[11px] font-black tabular-nums", tone)}>{free ?? '—'}</span>
+                         </div>
+                       );
+                     })}
+                  </div>
+                  {/* 8. Ligne Événements — agrège configStore.events + useEventsStore */}
                   <div className="flex text-center bg-gray-50/30 w-full flex-nowrap">
                      {days.map(d => {
                        const agg = aggregateEventsForDate(rmsEvents, d.dateStr);
@@ -1128,31 +1539,40 @@ export const PlanningView = () => {
                        );
                      })}
                   </div>
-                  <div className="flex bg-white w-full flex-nowrap">
-                     {days.map((d, i) => (
-                       <div key={`date-${d.id}`} className={cn("shrink-0 h-[56px] flex flex-col items-center justify-center border-r border-gray-100 transition-all", d.isWeekend ? "bg-[#FFF9F5]/50" : "bg-white", i === 0 && "bg-indigo-50/30 ring-2 ring-inset ring-indigo-100/50")} style={{ width: `${colWidth}%` }}>
-                         <span className={cn("text-[10px] font-black uppercase tracking-widest mb-1", d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.dayName}</span>
-                         <div className="flex items-baseline gap-1.5 leading-none">
-                            <span className={cn("text-[17px] font-black", i === 0 ? "text-indigo-400" : d.isWeekend ? "text-orange-400" : "text-gray-900")}>{d.dateNum}</span>
-                            <span className={cn("text-[11px] font-black uppercase tracking-tighter opacity-70", i === 0 ? "text-indigo-300" : d.isWeekend ? "text-orange-300" : "text-gray-400")}>{d.monthName}</span>
-                         </div>
-                       </div>
-                     ))}
-                  </div>
                </div>
 
                {/* Main Grid Body */}
                <div className="relative w-full bg-white flex-1 min-h-[500px]">
                   <div className="absolute inset-0 flex pointer-events-none z-0">
-                     {days.map((d) => (
-                        <div key={`col-${d.id}`} className={cn("shrink-0 border-r", d.isWeekend ? "bg-gray-50/30 border-gray-200/60" : "border-gray-100")} style={{ width: `${colWidth}%` }} />
-                     ))}
+                     {days.map((d) => {
+                        // Mode Revenue : fond teinté par occupation (heatmap).
+                        const revenueTint = activeMode === 'revenue' ? getOccThreshold(d.occ).bg : '';
+                        return (
+                        <div
+                          key={`col-${d.id}`}
+                          className={cn("shrink-0 border-r", revenueTint || (d.isWeekend ? "bg-gray-50/30 border-gray-200/60" : "border-gray-100"))}
+                          style={{ width: `${colWidth}%`, opacity: activeMode === 'revenue' ? 0.5 : 1 }}
+                        />
+                        );
+                     })}
                   </div>
                   <div className="relative z-10 pb-20 w-full">
-                     {rooms.map((room) => (
-                      <div 
-                         key={`row-${room.id}`} 
-                         className="h-[32px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full"
+                     {rooms.map((room) => {
+                      const roomBlockState = getRoomBlockState(room);
+                      const roomUnderMaintenance = roomBlockState != null;
+                      const maintenanceStriped = activeMode === 'maintenance' && roomUnderMaintenance;
+                      const hkRowTint = activeMode === 'housekeeping'
+                        ? (room.housekeeping_status === 'dirty' || room.housekeeping_status === 'to_clean'
+                            ? 'bg-amber-50/40'
+                            : room.housekeeping_status === 'clean'
+                              ? 'bg-emerald-50/20'
+                              : '')
+                        : '';
+                      return (
+                      <div
+                         key={`row-${room.id}`}
+                         className={cn("h-[32px] border-b border-gray-100 relative hover:bg-gray-50/20 transition-colors w-full", hkRowTint)}
+                         style={maintenanceStriped ? { backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(244,63,94,0.08) 6px, rgba(244,63,94,0.08) 12px)' } : undefined}
                          onDragOver={handleDragOver}
                          onDrop={(e) => handleDrop(e, room)}
                        >
@@ -1170,7 +1590,7 @@ export const PlanningView = () => {
                               <div
                                 key={`cell-${room.id}-${day.id}`}
                                 data-chambre={room.number}
-                                data-categorie={`${room.category}/${room.type}`}
+                                data-categorie={`${room.category ?? ''}/${room.type ?? ''}`}
                                 data-date={day.dateStr}
                                 className={cn(
                                   'h-full border-r border-transparent transition-colors relative overflow-hidden',
@@ -1334,8 +1754,8 @@ export const PlanningView = () => {
                            return (
                              <div
                                key={`planning-res-${res.id}-${idx}`}
-                               draggable={true}
-                               onDragStart={(e) => e.dataTransfer.setData('text/plain', res.id)}
+                               draggable={smartMoveEnabled}
+                               onDragStart={(e) => { if (smartMoveEnabled) e.dataTransfer.setData('text/plain', res.id); }}
                                onMouseEnter={(e) => { setHoveredRes(res); setTooltipPos({ x: e.clientX + 15, y: e.clientY + 15 }); }}
                                onMouseLeave={() => setHoveredRes(null)}
                                onClick={() => {
@@ -1344,7 +1764,11 @@ export const PlanningView = () => {
                                }}
                                className={cn(
                                  'absolute h-[26px] top-[3px] rounded-lg border flex items-center px-2 gap-1.5 cursor-pointer transition-all hover:brightness-95 z-20 group overflow-hidden text-xs',
-                                 opacityClass
+                                 opacityClass,
+                                 // Mode Groupe : met en avant les résas de groupe, atténue les autres.
+                                 activeMode === 'groupe' && (res.groupId ? 'ring-2 ring-indigo-500 ring-offset-1' : 'opacity-40'),
+                                 // Mode Ménage : atténue les barres pour laisser lire les pastilles HK.
+                                 activeMode === 'housekeeping' && 'opacity-60',
                                )}
                                style={{ 
                                  left: `calc(${startIndex * colWidth}% + 4px)`, 
@@ -1371,6 +1795,21 @@ export const PlanningView = () => {
                                         </div>
                                       )}
                                       <span className={cn("text-[11px] font-semibold truncate min-w-0 flex-1", viewLength > 15 ? "hidden lg:block" : "")}>{res.client}</span>
+                                      {(() => {
+                                        const badges = deriveBadges({
+                                          checkInIso: res.checkIn || checkInDate,
+                                          checkOutIso: res.checkOut || checkOutDate,
+                                          vip: res.vip,
+                                          loyaltyLevel: res.loyaltyLevel,
+                                          paymentStatus: res.paymentStatus,
+                                          solde: res.solde,
+                                          groupId: res.groupId,
+                                          checkinStatus: res.checkinStatus,
+                                          specialRequests: res.specialRequests,
+                                          mealPlan: res.mealPlan,
+                                        }, today);
+                                        return <ReservationBadges badges={badges} max={viewLength > 15 ? 3 : 5} />;
+                                      })()}
                                       {isOB && (
                                         <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 900, background: '#DC2626', color: '#fff', padding: '2px 6px', borderRadius: 6, flexShrink: 0 }}>OB</span>
                                       )}
@@ -1390,7 +1829,7 @@ export const PlanningView = () => {
                          })
                        })()}
                        </div>
-                     ))}
+                     );})}
                   </div>
                </div>
              </div>
@@ -1422,19 +1861,22 @@ export const PlanningView = () => {
                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Filtres rapides :</span>
                          <div className="flex items-center gap-6">
                              {[
-                               { label: 'Jours critiques', color: 'bg-rose-500', active: true },
-                               { label: 'Événements', color: 'bg-indigo-500', active: false },
-                               { label: 'Sous-performance', color: 'bg-orange-400', active: false }
-                             ].map((f, i) => (
-                               <button 
-                                 key={i} 
-                                 onClick={() => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Filtre actif : ${f.label}` } }))}
-                                 className='flex items-center gap-2 cursor-pointer group outline-none'
-                               >
-                                  <div className={cn('w-2 h-2 rounded-full transition-all', f.color, f.active ? 'scale-125 ring-2 ring-offset-2 ring-gray-100' : 'opacity-40')} />
-                                  <span className={cn('text-[10px] font-black uppercase tracking-widest transition-colors', f.active ? 'text-gray-900' : 'text-gray-400 group-hover:text-indigo-600')}>{f.label}</span>
-                               </button>
-                             ))}
+                               { label: 'Jours critiques', color: 'bg-rose-500' },
+                               { label: 'Événements', color: 'bg-indigo-500' },
+                               { label: 'Sous-performance', color: 'bg-orange-400' }
+                             ].map((f, i) => {
+                               const isActive = activeRevCalFilter === f.label;
+                               return (
+                                 <button
+                                   key={i}
+                                   onClick={() => setActiveRevCalFilter(isActive ? null : f.label)}
+                                   className='flex items-center gap-2 cursor-pointer group outline-none'
+                                 >
+                                   <div className={cn('w-2 h-2 rounded-full transition-all', f.color, isActive ? 'scale-125 ring-2 ring-offset-2 ring-gray-100' : 'opacity-40')} />
+                                   <span className={cn('text-[10px] font-black uppercase tracking-widest transition-colors', isActive ? 'text-gray-900' : 'text-gray-400 group-hover:text-indigo-600')}>{f.label}</span>
+                                 </button>
+                               );
+                             })}
                           </div>
                       </div>
                    </div>
@@ -1478,20 +1920,24 @@ export const PlanningView = () => {
                               <div key={`empty-rev-${i}`} />
                             ))}
 
-                            {calendarDays.map((d) => {
+                            {calendarDays.map((d, dayIdx) => {
                               const insight = revenueInsightsByDate[d.dateStr];
                               const score = insight?.score ?? 65;
-                              const scoreColor = score >= 85 ? 'text-emerald-500 border-emerald-100 bg-emerald-50' : 
-                                               score >= 75 ? 'text-indigo-500 border-indigo-100 bg-indigo-50' : 
+                              const scoreColor = score >= 85 ? 'text-emerald-500 border-emerald-100 bg-emerald-50' :
+                                               score >= 75 ? 'text-indigo-500 border-indigo-100 bg-indigo-50' :
                                                score >= 65 ? 'text-orange-500 border-orange-100 bg-orange-50' : 'text-rose-500 border-rose-100 bg-rose-50';
                               const demandBadge = insight?.demandLevel === 'strong'
                                 ? { label: 'Demande forte', cls: 'text-emerald-600 bg-emerald-50' }
                                 : insight?.demandLevel === 'normal'
                                   ? { label: 'Demande stable', cls: 'text-indigo-600 bg-indigo-50' }
                                   : { label: 'Demande faible', cls: 'text-rose-600 bg-rose-50' };
+                              const matchesFilter = !activeRevCalFilter
+                                || (activeRevCalFilter === 'Jours critiques' && insight?.riskLevel === 'high')
+                                || (activeRevCalFilter === 'Événements' && d.events.length > 0)
+                                || (activeRevCalFilter === 'Sous-performance' && insight?.demandLevel === 'weak');
 
                               return (
-                                <div 
+                                <div
                                   key={`rev-day-${d.dateStr}`}
                                   onClick={() => {
                                     setSelectedCalendarDate(d.dateStr);
@@ -1501,7 +1947,8 @@ export const PlanningView = () => {
                                   className={cn(
                                     "bg-white rounded-[32px] border border-gray-100 p-6 transition-all cursor-pointer hover:shadow-2xl hover:shadow-gray-200/50 hover:scale-[1.02] relative group",
                                     selectedCalendarDate === d.dateStr && "ring-2 ring-indigo-500 shadow-2xl shadow-indigo-100",
-                                    d.isToday && "ring-2 ring-violet-500 bg-violet-50/40"
+                                    d.isToday && "ring-2 ring-violet-500 bg-violet-50/40",
+                                    !matchesFilter && "opacity-25 pointer-events-none"
                                   )}
                                 >
                                    <div className="flex items-center justify-between mb-6">
@@ -1541,15 +1988,21 @@ export const PlanningView = () => {
                                       </div>
 
                                       <div className="h-10 flex items-end gap-1 px-1">
-                                         {[35, 48, 56, 64, 72, 80, 88, Math.max(45, score)].map((h, idx) => (
-                                           <div 
-                                             key={idx} 
+                                         {[
+                                           ...Array.from({ length: 7 }, (_, i) => {
+                                             const prev = calendarDays[dayIdx - 7 + i];
+                                             return prev ? Math.max(5, prev.occ) : 5;
+                                           }),
+                                           Math.max(5, d.occ),
+                                         ].map((h, idx) => (
+                                           <div
+                                             key={idx}
                                              className={cn(
                                                "flex-1 rounded-full transition-all group-hover:opacity-100",
                                                idx === 7 ? "bg-indigo-500" : "bg-gray-100",
                                                idx > 4 && idx < 7 && "bg-indigo-200"
-                                             )} 
-                                             style={{ height: `${h}%` }} 
+                                             )}
+                                             style={{ height: `${h}%` }}
                                            />
                                          ))}
                                       </div>
@@ -1620,6 +2073,124 @@ export const PlanningView = () => {
            )}
         </div>
 
+        {/* Volet latéral droit — Intelligence RMS + opérationnel, collé au bord droit */}
+        {displayMode === 'Gantt' && (
+          <aside
+            className={cn(
+              'shrink-0 bg-white border-l border-gray-100 z-30 transition-[width] duration-200 ease-out overflow-hidden flex flex-col',
+              showRightSidebar ? 'w-[300px]' : 'w-9',
+            )}
+            aria-label="Volet intelligence RMS"
+          >
+            {showRightSidebar ? (
+              <>
+                {/* En-tête du volet — bouton de repli (collapse) */}
+                <div className="h-9 shrink-0 flex items-center justify-between pl-3 pr-2 border-b border-gray-100">
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Intelligence</span>
+                  <button
+                    onClick={toggleRightSidebar}
+                    title="Réduire le volet"
+                    aria-label="Réduire le volet intelligence"
+                    aria-pressed={!showRightSidebar}
+                    className="p-1 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <PlanningRightPanel
+                    startDate={currentDate}
+                    rangeDays={viewLength}
+                    today={todayKpi}
+                    hkCleanRatio={hkCleanRatio}
+                    onlineCheckins={onlineCheckinsToday}
+                    intel={rightPanelIntel}
+                  />
+                </div>
+              </>
+            ) : (
+              /* Replié — fine bande cliquable pour rouvrir le volet */
+              <button
+                onClick={toggleRightSidebar}
+                title="Afficher le volet intelligence"
+                aria-label="Afficher le volet intelligence"
+                aria-pressed={!showRightSidebar}
+                className="w-full h-full flex items-start justify-center pt-3 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+              >
+                <ChevronLeft size={16} />
+              </button>
+            )}
+          </aside>
+        )}
+      </div>
+      {/* ↑ Fin de la ligne principale (sidebar gauche · grille pleine largeur · volet droit collé à droite) */}
+
+      {/* Volet inférieur — légende + actions rapides (maquette), pleine largeur en bas */}
+      {displayMode === 'Gantt' && (
+        <div className="shrink-0 border-t border-gray-100 bg-white px-6 py-2.5 flex items-center gap-6 z-40">
+          {/* Légende des badges réservation */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Légende</span>
+            {[
+              { icon: <span className="w-3 h-3 rounded-[3px] border-2 border-emerald-500" />, label: 'Arrivée' },
+              { icon: <span className="w-3 h-3 rounded-[3px] border-2 border-orange-400" />, label: 'Départ' },
+              { icon: <Star size={12} className="text-amber-500" />, label: 'VIP' },
+              { icon: <Users size={12} className="text-indigo-600" />, label: 'Groupe' },
+              { icon: <CheckCircle2 size={12} className="text-emerald-600" />, label: 'Payée' },
+              { icon: <Euro size={12} className="text-rose-600" />, label: 'Solde dû' },
+              { icon: <Coffee size={12} className="text-orange-500" />, label: 'PdJ' },
+              { icon: <Smartphone size={12} className="text-sky-600" />, label: 'Online' },
+              { icon: <StickyNote size={12} className="text-violet-600" />, label: 'Notes' },
+            ].map((l) => (
+              <div key={l.label} className="flex items-center gap-1.5">
+                {l.icon}
+                <span className="text-[10px] font-bold text-gray-500">{l.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Actions rapides */}
+          <div className="flex items-center gap-3 ml-auto">
+            {activeMode === 'maintenance' && (
+              <button
+                onClick={() => setIsBlockRoomsOpen(true)}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-rose-50 text-rose-600 text-[10px] font-black uppercase tracking-wide hover:bg-rose-100 transition-all"
+              >
+                <Lock size={13} /> Bloquer une chambre
+              </button>
+            )}
+            <button
+              onClick={() => setIsFreeRoomsOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-xl bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-wide hover:bg-indigo-100 transition-all"
+            >
+              <DoorOpen size={13} /> {todayKpi.free} chambres libres
+            </button>
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Recherche…"
+                aria-label="Rechercher une chambre ou un client"
+                className="h-8 w-40 pl-8 pr-3 rounded-xl border border-gray-200 text-[11px] font-semibold text-gray-700 focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+              />
+            </div>
+            <button
+              onClick={() => setSmartMoveEnabled((v) => !v)}
+              title="Activer/désactiver le déplacement intelligent (drag & drop)"
+              aria-label="Déplacement intelligent"
+              aria-pressed={smartMoveEnabled}
+              className="inline-flex items-center gap-2 h-8 px-3 rounded-xl border border-gray-200 text-[10px] font-black uppercase tracking-wide text-gray-500 hover:bg-gray-50 transition-all"
+            >
+              <span>Déplacement intelligent</span>
+              <span className={cn('w-8 h-4 rounded-full relative transition-colors', smartMoveEnabled ? 'bg-indigo-600' : 'bg-gray-200')}>
+                <span className={cn('absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform', smartMoveEnabled ? 'translate-x-4' : 'translate-x-0.5')} />
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
     {/* Tooltip Overlay */}
       <AnimatePresence>
         {hoveredRes && (() => {
@@ -1630,7 +2201,14 @@ export const PlanningView = () => {
             const n = Math.ceil((e.getTime() - s.getTime()) / 86400000);
             return isNaN(n) || n < 1 ? 1 : n;
           })();
-          const balance = hoveredRes.totalAmount - (hoveredRes.payment === 'Payé' ? hoveredRes.totalAmount : hoveredRes.payment === 'Partiel' ? hoveredRes.totalAmount * 0.5 : 0);
+          // Use real solde from Supabase if available; otherwise derive from payment status
+          const balance = hoveredRes.solde != null
+            ? hoveredRes.solde
+            : hoveredRes.paymentStatus === 'paid'
+              ? 0
+              : hoveredRes.paymentStatus === 'partial'
+                ? hoveredRes.totalAmount * 0.5
+                : hoveredRes.totalAmount;
           const statusMeta: Record<string, { label: string; bg: string; text: string; dot: string }> = {
             confirmed:  { label: 'Confirmée',   bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
             pending:    { label: 'En attente',  bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-500' },
@@ -1751,7 +2329,7 @@ export const PlanningView = () => {
                   <div className="flex items-center justify-between px-0.5">
                     <span className="text-[10px] text-gray-400">Occupants</span>
                     <span className="text-[10px] font-semibold text-gray-700">
-                      {hoveredRes.guests?.adults ?? 2} adultes{(hoveredRes.guests?.children ?? 0) > 0 ? `, ${hoveredRes.guests!.children} enfant${hoveredRes.guests!.children! > 1 ? 's' : ''}` : ''}
+                      {hoveredRes.guests?.adults ?? 2} adultes{(hoveredRes.guests?.children ?? 0) > 0 ? `, ${hoveredRes.guests?.children ?? 0} enfant${(hoveredRes.guests?.children ?? 0) > 1 ? 's' : ''}` : ''}
                     </span>
                   </div>
                 </div>
@@ -1851,7 +2429,7 @@ export const PlanningView = () => {
           roomNumber: dragFormData.roomNumber,
           category: dragFormData.category,
         } : undefined}
-        availableRooms={storeRooms.map(r => ({ number: r.number, type: r.type, price: (r as any).price }))}
+        availableRooms={storeRooms.map(r => ({ number: r.number, type: r.type ?? '', price: r.base_price ?? undefined }))}
         allReservations={contextReservations.map(r => ({ id: r.id, room: r.room, arrival: r.arrival, departure: r.departure }))}
         source="planning"
         onSave={(data: ReservationFormData) => {
@@ -1864,7 +2442,7 @@ export const PlanningView = () => {
           };
           const newRes: Reservation = buildReservation({
             ...typedData,
-            roomType: room ? `${room.category}/${room.type}` : 'STD/DLX',
+            roomType: room ? `${room.category ?? 'STD'}/${room.type ?? 'DLX'}` : 'STD/DLX',
           });
           addReservation(newRes);
           setIsModalOpen(false);
@@ -1888,29 +2466,136 @@ export const PlanningView = () => {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #EEF2F7; border-radius: 10px; border: 2px solid white; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #E2E8F0; }
       `}} />
-      <RevenueDetailsModal
-        isOpen={isRevenueDetailsOpen}
-        onClose={() => setIsRevenueDetailsOpen(false)}
-        initialTab={revenueDetailsTab}
-        selectedDate={selectedCalendarDate || undefined}
-        reservations={contextReservations}
-        rooms={rooms}
-        events={storeEvents}
-        rmsEvents={rmsEvents}
-        channels={storeChannels}
-        calendarDays={calendarDays}
-        insightsByDate={revenueInsightsByDate}
-        onRefresh={async () => {
-          // Force re-evaluation of derived data; React Query invalidations are
-          // already handled inside the modal. We just need to bump local state
-          // so memos re-compute against the freshest store snapshots.
-          setMonthDate((d) => new Date(d.getFullYear(), d.getMonth(), 1));
-        }}
+      {isRevenueDetailsOpen && (
+        <Suspense fallback={null}>
+          <RevenueDetailsModal
+            isOpen={isRevenueDetailsOpen}
+            onClose={() => setIsRevenueDetailsOpen(false)}
+            initialTab={revenueDetailsTab}
+            selectedDate={selectedCalendarDate || undefined}
+            reservations={contextReservations}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            rooms={rooms as any}
+            events={storeEvents}
+            rmsEvents={rmsEvents}
+            channels={storeChannels}
+            calendarDays={calendarDays}
+            insightsByDate={revenueInsightsByDate}
+            onRefresh={async () => {
+              // Force re-evaluation of derived data; React Query invalidations are
+              // already handled inside the modal. We just need to bump local state
+              // so memos re-compute against the freshest store snapshots.
+              setMonthDate((d) => new Date(d.getFullYear(), d.getMonth(), 1));
+            }}
+          />
+        </Suspense>
+      )}
+      <ChannelColorModal
+        isOpen={isChannelModalOpen}
+        onClose={() => setIsChannelModalOpen(false)}
       />
-      <ChannelColorModal 
-        isOpen={isChannelModalOpen} 
-        onClose={() => setIsChannelModalOpen(false)} 
+
+      {/* Modal Blocage chambres (room_blocks) */}
+      <BlockRoomsModal
+        isOpen={isBlockRoomsOpen}
+        dateStr={todayIso}
+        rooms={storeRooms.map((r) => ({ id: r.id, number: r.number, type: r.type ?? '' }))}
+        onClose={() => setIsBlockRoomsOpen(false)}
       />
+
+      {/* Modal Confirmation Déblocage chambre */}
+      <AnimatePresence>
+        {unblockTarget && (() => {
+          const { room, block } = unblockTarget;
+          const blockState = getRoomBlockState(room);
+          const reason = block ? block.reason : blockState?.reason ?? 'maintenance';
+          const period = block ? `${block.start_date} → ${block.end_date}` : null;
+          const busy = roomBlocks.unblock.isPending || updateRoomMut.isPending;
+          return (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => !busy && setUnblockTarget(null)}>
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl"
+              >
+                <div className="flex items-center gap-2.5 px-5 py-4 border-b border-gray-100">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-100 text-rose-600">
+                    <Wrench size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900">Débloquer la chambre {room.number}</h3>
+                    <p className="text-[11px] text-gray-500">La chambre redeviendra vendable.</p>
+                  </div>
+                </div>
+                <div className="px-5 py-4 space-y-2">
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Statut</span>
+                    <span className="font-bold text-rose-600">{blockReasonLabel(reason)}</span>
+                  </div>
+                  {period && (
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className="font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Période</span>
+                      <span className="font-bold text-gray-700">{period}</span>
+                    </div>
+                  )}
+                  {block?.notes && (
+                    <div className="text-[11px] text-gray-500 bg-gray-50 rounded-xl px-3 py-2">{block.notes}</div>
+                  )}
+                  <p className="text-[11px] text-gray-500 pt-1">
+                    Après déblocage, la chambre est recalculée dans les chambres libres, le TO,
+                    la disponibilité et le planning.
+                  </p>
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-5 py-3">
+                  {/* Prolonger : uniquement pour les blocages datés (room_blocks) */}
+                  {block ? (
+                    <button
+                      onClick={() => {
+                        const newEnd = new Date(`${block.end_date}T00:00:00`);
+                        newEnd.setDate(newEnd.getDate() + 7);
+                        roomBlocks.extend.mutate(
+                          { id: block.id, newEndDate: toLocalISODate(newEnd) },
+                          {
+                            onSuccess: () => {
+                              setUnblockTarget(null);
+                              window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Blocage chambre ${room.number} prolongé de 7 jours.` } }));
+                            },
+                            onError: (e) => window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Échec de la prolongation : ${e instanceof Error ? e.message : 'erreur'}` } })),
+                          },
+                        );
+                      }}
+                      disabled={busy}
+                      title="Prolonger le blocage de 7 jours"
+                      className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition"
+                    >
+                      <CalendarPlus size={14} /> Prolonger +7j
+                    </button>
+                  ) : <span />}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setUnblockTarget(null)}
+                      disabled={busy}
+                      className="h-9 rounded-xl border border-gray-200 px-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Annuler
+                    </button>
+                    <button
+                      onClick={() => handleUnblockRoom(room, block)}
+                      disabled={busy}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50 transition"
+                    >
+                      <Wrench size={14} />
+                      {busy ? 'Déblocage…' : 'Confirmer le déblocage'}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
 
       {/* Modal Confirmation Délogement */}
       <AnimatePresence>
@@ -2058,6 +2743,26 @@ export const PlanningView = () => {
         roomsByCategory={availabilityData}
       />
 
+      <FreeRoomsModal
+        isOpen={isFreeRoomsOpen}
+        onClose={() => setIsFreeRoomsOpen(false)}
+        rooms={storeRooms}
+        occupiedNumbers={todayOccupiedNumbers}
+        dateIso={toLocalISODate(new Date())}
+        onCreateReservation={(room) => {
+          const checkIn = toLocalISODate(new Date());
+          setDragFormData({
+            roomNumber: room.number,
+            category: room.category ?? '',
+            roomType: `${room.category ?? ''}/${room.type ?? ''}`,
+            checkIn,
+            checkOut: addOneNight(checkIn),
+          });
+          setIsFreeRoomsOpen(false);
+          setIsModalOpen(true);
+        }}
+      />
+
       {/* ── Paramètres du planning ────────────────────────────────── */}
       {showSettingsPanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
@@ -2109,7 +2814,7 @@ export const PlanningView = () => {
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-semibold text-gray-700">Volet latéral</span>
                 <button
-                  onClick={() => setShowRightSidebar(v => !v)}
+                  onClick={toggleRightSidebar}
                   className={cn(
                     'w-10 h-6 rounded-full transition-colors relative',
                     showRightSidebar ? 'bg-indigo-600' : 'bg-gray-200',
@@ -2121,13 +2826,13 @@ export const PlanningView = () => {
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-semibold text-gray-700">Colonne chambre réduite</span>
                 <button
-                  onClick={() => setIsSidebarCollapsed(v => !v)}
+                  onClick={toggleLeftSidebar}
                   className={cn(
                     'w-10 h-6 rounded-full transition-colors relative',
-                    isSidebarCollapsed ? 'bg-indigo-600' : 'bg-gray-200',
+                    leftSidebarCollapsed ? 'bg-indigo-600' : 'bg-gray-200',
                   )}
                 >
-                  <span className={cn('absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform', isSidebarCollapsed ? 'translate-x-4' : 'translate-x-0.5')} />
+                  <span className={cn('absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform', leftSidebarCollapsed ? 'translate-x-4' : 'translate-x-0.5')} />
                 </button>
               </div>
             </div>
@@ -2143,6 +2848,5 @@ export const PlanningView = () => {
         </div>
       )}
     </div>
-  </div>
 );
 };
