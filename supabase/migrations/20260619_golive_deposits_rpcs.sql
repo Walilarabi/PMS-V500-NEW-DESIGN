@@ -142,6 +142,17 @@ BEGIN
       'Le montant d''imputation dépasse le dépôt', 'deposit_amount', v_dep.amount);
   END IF;
 
+  -- Guard: refuse if applied amount exceeds remaining invoice balance (prevents silent over-payment).
+  -- Caller must either split the deposit or issue a credit note for the surplus.
+  v_new_balance := COALESCE(v_inv.total_ttc, 0) - COALESCE(v_inv.paid_amount, 0);
+  IF v_apply_amount > v_new_balance THEN
+    RETURN jsonb_build_object('success', false, 'error',
+      'Le montant d''imputation dépasse le solde restant de la facture',
+      'apply_amount',       v_apply_amount,
+      'invoice_balance',    v_new_balance,
+      'hint', 'Utilisez p_applied_amount = ' || v_new_balance || ' pour imputer exactement le solde');
+  END IF;
+
   UPDATE public.deposits SET
     status                = 'applied',
     applied_to_invoice_id = p_invoice_id,
@@ -149,13 +160,9 @@ BEGIN
     applied_at            = now()
   WHERE id = p_deposit_id;
 
-  v_new_paid := COALESCE(v_inv.paid_amount, 0) + v_apply_amount;
-  IF v_inv.total_ttc IS NOT NULL THEN
-    v_new_paid := LEAST(v_new_paid, v_inv.total_ttc);
-  END IF;
-  UPDATE public.invoices SET paid_amount = v_new_paid WHERE id = p_invoice_id;
-
+  v_new_paid    := COALESCE(v_inv.paid_amount, 0) + v_apply_amount;
   v_new_balance := COALESCE(v_inv.total_ttc, 0) - v_new_paid;
+  UPDATE public.invoices SET paid_amount = v_new_paid WHERE id = p_invoice_id;
 
   INSERT INTO public.audit_logs (hotel_id, actor_user_id, entity, entity_id, action, payload)
   VALUES (v_hotel_id, v_actor_id, 'deposit', p_deposit_id, 'APPLY',
