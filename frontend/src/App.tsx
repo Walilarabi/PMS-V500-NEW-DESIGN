@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense, Component } from 'react';
+import type { ErrorInfo, ReactNode } from 'react';
 import {
   Bed, Wrench, Inbox, AlertTriangle, Lock, Settings, CheckCircle2, Clock,
-  Hourglass, Users, CreditCard, AlertOctagon, Send, Construction,
+  Hourglass, Users, CreditCard, AlertOctagon, Send, Construction, RefreshCw,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Topbar } from '@/src/components/layout/Topbar';
@@ -73,6 +74,52 @@ const SettingsView        = lz(() => import('@/src/pages/SettingsView'),        
 
 // Support / Aide
 const SupportView         = lz(() => import('@/src/pages/support/SupportView'),            'SupportView');
+
+// ── Chunk-load error boundary ─────────────────────────────────────────────
+interface ChunkErrorState { hasError: boolean; retryKey: number; }
+class ChunkErrorBoundary extends Component<{ children: ReactNode }, ChunkErrorState> {
+  state: ChunkErrorState = { hasError: false, retryKey: 0 };
+
+  static getDerivedStateFromError(): Partial<ChunkErrorState> {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, _info: ErrorInfo) {
+    const isChunkErr =
+      error?.message?.includes('Failed to fetch dynamically imported module') ||
+      error?.message?.includes('Loading chunk') ||
+      error?.name === 'ChunkLoadError';
+    if (isChunkErr) {
+      // Auto-retry once after 800 ms; if still failing, show the reload button.
+      setTimeout(() => {
+        this.setState(s => ({ hasError: false, retryKey: s.retryKey + 1 }));
+      }, 800);
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#F9FAFB]">
+          <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mb-4">
+            <RefreshCw className="w-7 h-7 text-amber-500" />
+          </div>
+          <h2 className="text-base font-semibold text-gray-800 mb-1">Chargement interrompu</h2>
+          <p className="text-sm text-gray-500 mb-5 max-w-xs">
+            Le module n'a pas pu se charger. Vérifiez votre connexion puis réessayez.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-[#8B5CF6] text-white text-sm font-semibold rounded-xl hover:bg-[#7C3AED] transition-colors"
+          >
+            Recharger la page
+          </button>
+        </div>
+      );
+    }
+    return <React.Fragment key={this.state.retryKey}>{this.props.children}</React.Fragment>;
+  }
+}
 
 // ── Page-transition skeleton ───────────────────────────────────────────────
 const PageSkeleton = () => (
@@ -342,9 +389,11 @@ export default function App() {
           />
         )}
         <main className="flex-1 overflow-hidden flex flex-col">
-          <Suspense fallback={<PageSkeleton />}>
-            {renderPage(activePage, navigate)}
-          </Suspense>
+          <ChunkErrorBoundary>
+            <Suspense fallback={<PageSkeleton />}>
+              {renderPage(activePage, navigate)}
+            </Suspense>
+          </ChunkErrorBoundary>
         </main>
       </div>
     </div>
