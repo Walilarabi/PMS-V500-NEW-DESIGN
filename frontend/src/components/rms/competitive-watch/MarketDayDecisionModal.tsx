@@ -29,6 +29,7 @@ import {
 } from '@/src/services/revenue/recommendationFeedback.service';
 import { centralPricingEngine } from '@/src/services/revenue/centralPricingEngine.service';
 import { calculateStrategy, calculateRecommendation } from '@/src/services/revenue/rmsEngine';
+import { useCompetitiveWatchData } from '@/src/lib/rms/useCompetitiveWatchData';
 
 export interface MarketDay {
   label: string;
@@ -92,6 +93,8 @@ function buildCompsetPrices(
 export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
   day, compsetHotels, onClose,
 }) => {
+  const { meta } = useCompetitiveWatchData();
+
   // Mode formulaire : 'reject' (Refuser) ou 'maintain' (Maintenir).
   // Les deux modes partagent le même formulaire (tarif manuel + 7 motifs +
   // commentaire + impact estimé) afin que la décision « Maintenir » soit
@@ -125,7 +128,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
     const prices = buildCompsetPrices(compsetHotels, day.q25, day.q75, day.median);
     const all = [
       ...prices,
-      { name: 'Folkestone Opéra (vous)', price: day.calendarPrice ?? day.ourPrice, status: 'available' as const, isUs: true },
+      { name: meta.hotelName ? `${meta.hotelName} (vous)` : 'Notre hôtel (vous)', price: day.calendarPrice ?? day.ourPrice, status: 'available' as const, isUs: true },
     ];
     all.sort((a, b) => b.price - a.price);
     return all;

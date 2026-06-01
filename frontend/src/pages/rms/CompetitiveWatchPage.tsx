@@ -8,7 +8,7 @@
  *                           + interprétation IA / focus / comparaison rapide
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { CompetitiveWatchLayout } from '../../components/rms/competitive-watch/CompetitiveWatchLayout';
@@ -25,7 +25,7 @@ import { QuickComparisonTable } from '../../components/rms/competitive-watch/Qui
 import { DayDetailPanel } from '../../components/rms/competitive-watch/DayDetailPanel';
 import { DataSourceTraceBar } from '../../components/rms/competitive-watch/DataSourceTraceBar';
 import {
-  MARKET_SELECTED_DATE, COMPARISON_SELECTED_DATE,
+  COMPARISON_SELECTED_DATE,
 } from '../../data/rms/mockCompetitiveWatchData';
 import type { ComparePeriodKey } from '../../data/rms/mockCompetitiveWatchData';
 import { useCompetitiveWatchData } from '../../lib/rms/useCompetitiveWatchData';
@@ -34,13 +34,19 @@ import { useCompetitiveWatchPrefs } from '../../store/competitiveWatchPrefsStore
 export const CompetitiveWatchPage: React.FC = () => {
   const [view, setView] = useState<CompetitiveView>('market');
   const [period, setPeriod] = useState<ComparePeriodKey>('hier');
-  const [marketDay, setMarketDay] = useState<string>(MARKET_SELECTED_DATE);
+  const [marketDay, setMarketDay] = useState<string>('');
   const [comparisonDay, setComparisonDay] = useState<string>(COMPARISON_SELECTED_DATE);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const { meta } = useCompetitiveWatchData();
+  const { meta, visibleMarketMonth } = useCompetitiveWatchData();
   const shiftMonth = useCompetitiveWatchPrefs((s) => s.shiftMonth);
   const isMarket = view === 'market';
+
+  useEffect(() => {
+    if (marketDay === '' && visibleMarketMonth.length > 0) {
+      setMarketDay(visibleMarketMonth[0].label);
+    }
+  }, [visibleMarketMonth, marketDay]);
 
   return (
     <CompetitiveWatchLayout>

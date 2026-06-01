@@ -97,7 +97,7 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
     const all = [
       ...prices,
       {
-        name: 'Folkestone Opéra (vous)',
+        name: meta.hotelName ? `${meta.hotelName} (vous)` : 'Notre hôtel (vous)',
         price: day.ourPrice ?? 0,
         status: day.ourPrice != null ? ('available' as const) : ('sold_out' as const),
         isUs: true,

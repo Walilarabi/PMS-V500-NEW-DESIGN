@@ -1638,7 +1638,7 @@ function CompsetDetailModal({ date, onClose }: { date: string; onClose: () => vo
         </div>
 
         <div className="px-6 py-4 border-b border-gray-200 grid grid-cols-4 gap-4">
-          <div><p className="text-xs text-gray-500 uppercase">Notre prix</p><p className="text-xl font-bold text-blue-600">{dayData.ourPrice}€</p></div>
+          <div><p className="text-xs text-gray-500 uppercase">Tarif en vente</p><p className="text-xl font-bold text-blue-600">{dayData.ourPrice}€</p></div>
           <div><p className="text-xs text-gray-500 uppercase">Médiane</p><p className="text-xl font-bold text-gray-900">{dayData.compsetMedian}€</p></div>
           <div><p className="text-xs text-gray-500 uppercase">Min – Max</p><p className="text-xl font-bold text-gray-900">{dayData.compsetMin ?? '—'}€ – {dayData.compsetMax ?? '—'}€</p></div>
           <div><p className="text-xs text-gray-500 uppercase">Notre rang</p><p className="text-xl font-bold text-emerald-600">{ourPosition > 0 ? `#${ourPosition} / ${totalRanked}` : '—'}</p></div>
