@@ -76,38 +76,68 @@ const SettingsView        = lz(() => import('@/src/pages/SettingsView'),        
 const SupportView         = lz(() => import('@/src/pages/support/SupportView'),            'SupportView');
 
 // ── Chunk-load error boundary ─────────────────────────────────────────────
-interface ChunkErrorState { hasError: boolean; retryKey: number; }
-class ChunkErrorBoundary extends Component<{ children: ReactNode }, ChunkErrorState> {
-  state: ChunkErrorState = { hasError: false, retryKey: 0 };
+interface ChunkErrorState {
+  hasError: boolean;
+  retryKey: number;
+  errorMessage: string;
+  errorStack: string;
+}
 
-  static getDerivedStateFromError(): Partial<ChunkErrorState> {
-    return { hasError: true };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyComponent = Component<{ children: ReactNode }, ChunkErrorState> & any;
+
+class ChunkErrorBoundary extends Component<{ children: ReactNode }, ChunkErrorState> {
+  state: ChunkErrorState = { hasError: false, retryKey: 0, errorMessage: '', errorStack: '' };
+
+  static getDerivedStateFromError(error: Error): Partial<ChunkErrorState> {
+    return {
+      hasError: true,
+      errorMessage: error?.message ?? String(error),
+      errorStack: error?.stack ?? '',
+    };
   }
 
-  componentDidCatch(error: Error, _info: ErrorInfo) {
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[Flowtym] Render error caught:', error.message, '\n', error.stack, '\nComponent stack:', info.componentStack);
+
     const isChunkErr =
       error?.message?.includes('Failed to fetch dynamically imported module') ||
       error?.message?.includes('Loading chunk') ||
       error?.name === 'ChunkLoadError';
     if (isChunkErr) {
-      // Auto-retry once after 800 ms; if still failing, show the reload button.
       setTimeout(() => {
-        this.setState(s => ({ hasError: false, retryKey: s.retryKey + 1 }));
+        (this as unknown as AnyComponent).setState((s: ChunkErrorState) => ({ hasError: false, retryKey: s.retryKey + 1 }));
       }, 800);
     }
   }
 
   render() {
-    if (this.state.hasError) {
+    const self = this as unknown as AnyComponent;
+    if (self.state.hasError) {
+      const { errorMessage, errorStack } = self.state as ChunkErrorState;
+      const isNetwork = errorMessage.includes('fetch') || errorMessage.includes('chunk') || errorMessage.includes('Loading');
       return (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#F9FAFB]">
           <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mb-4">
             <RefreshCw className="w-7 h-7 text-amber-500" />
           </div>
-          <h2 className="text-base font-semibold text-gray-800 mb-1">Chargement interrompu</h2>
-          <p className="text-sm text-gray-500 mb-5 max-w-xs">
-            Le module n'a pas pu se charger. Vérifiez votre connexion puis réessayez.
-          </p>
+          <h2 className="text-base font-semibold text-gray-800 mb-1">Erreur de chargement</h2>
+          {isNetwork ? (
+            <p className="text-sm text-gray-500 mb-5 max-w-xs">
+              Le module n'a pas pu se charger. Vérifiez votre connexion puis réessayez.
+            </p>
+          ) : (
+            <div className="mb-5 max-w-md w-full text-left">
+              <p className="text-sm font-mono font-semibold text-red-600 bg-red-50 rounded p-2 mb-2 break-all">
+                {errorMessage}
+              </p>
+              {errorStack && (
+                <pre className="text-[10px] text-gray-400 bg-gray-100 rounded p-2 overflow-auto max-h-40 text-left whitespace-pre-wrap">
+                  {errorStack.split('\n').slice(0, 8).join('\n')}
+                </pre>
+              )}
+            </div>
+          )}
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-[#8B5CF6] text-white text-sm font-semibold rounded-xl hover:bg-[#7C3AED] transition-colors"
@@ -117,7 +147,7 @@ class ChunkErrorBoundary extends Component<{ children: ReactNode }, ChunkErrorSt
         </div>
       );
     }
-    return <React.Fragment key={this.state.retryKey}>{this.props.children}</React.Fragment>;
+    return <React.Fragment key={self.state.retryKey}>{self.props.children}</React.Fragment>;
   }
 }
 
