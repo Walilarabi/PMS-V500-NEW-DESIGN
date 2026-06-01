@@ -345,19 +345,35 @@ export function useCompetitiveWatchData(): CompetitiveWatchData {
       baseDataset = lighthouseData!;
     }
 
-    // ─── Quality gate : filtre la fenêtre temporelle + dédup + outliers ────
+    // ─── Quality gate ────────────────────────────────────────────────────────
+    // Deux passes distinctes :
+    //  • chartReport  : filterOutliers=false → TOUTES les dates de la fenêtre
+    //    apparaissent dans le graphique (marché épuisé, restrictions, LOS inclus).
+    //  • kpiReport    : filterOutliers=true  → les outliers sont exclus des
+    //    agrégats KPI (médiane, moyenne, gap) pour ne pas biaiser les indicateurs.
 
-    const qualityReport = applyQualityGate(baseDataset, {
+    const kpiReport = applyQualityGate(baseDataset, {
       window: { start: window.start, end: window.end },
       filterOutliers: true,
     });
 
+    const chartReport = applyQualityGate(baseDataset, {
+      window: { start: window.start, end: window.end },
+      filterOutliers: false,
+    });
+
     const filteredDataset = rebuildLighthouseFromFilteredDays(
       baseDataset,
-      qualityReport.keptDays
+      kpiReport.keptDays
     );
 
-    if (filteredDataset.days.length === 0) {
+    // Dataset graphique : contient toutes les dates de la fenêtre (outliers inclus)
+    const chartDataset = rebuildLighthouseFromFilteredDays(
+      baseDataset,
+      chartReport.keptDays
+    );
+
+    if (chartDataset.days.length === 0) {
       return emptyData(source, range, window, {
         source: effectiveSource as CompetitiveSource,
         lighthouseImportedAt: lighthouseData?.importedAt ?? null,
@@ -365,15 +381,17 @@ export function useCompetitiveWatchData(): CompetitiveWatchData {
         totalCompetitors: baseDataset.competitorNames.length,
         keptCompetitors: 0,
         keptDays: 0,
-        excludedDays: qualityReport.exclusions.length,
-        exclusionSummary: summarizeExclusions(qualityReport.exclusions),
+        excludedDays: kpiReport.exclusions.length,
+        exclusionSummary: summarizeExclusions(kpiReport.exclusions),
         competitorScores,
       });
     }
 
-    // ─── Calcul des datasets enfants depuis le dataset filtré ──────────────
+    // ─── Calcul des datasets enfants ─────────────────────────────────────────
+    // marketMonth utilise chartDataset (toutes les dates) ;
+    // KPIs, comparaisons et distribution utilisent filteredDataset (sans outliers).
 
-    const marketMonth = buildMarketMonth(filteredDataset);
+    const marketMonth = buildMarketMonth(chartDataset);
 
     return {
       isLive: true,
@@ -398,9 +416,9 @@ export function useCompetitiveWatchData(): CompetitiveWatchData {
         expediaImportedAt: expediaData?.importedAt ?? null,
         totalCompetitors: baseDataset.competitorNames.length,
         keptCompetitors: filteredDataset.competitorNames.length,
-        keptDays: qualityReport.totalAfter,
-        excludedDays: qualityReport.totalBefore - qualityReport.totalAfter,
-        exclusionSummary: summarizeExclusions(qualityReport.exclusions),
+        keptDays: kpiReport.totalAfter,
+        excludedDays: kpiReport.totalBefore - kpiReport.totalAfter,
+        exclusionSummary: summarizeExclusions(kpiReport.exclusions),
         competitorScores,
       },
     };

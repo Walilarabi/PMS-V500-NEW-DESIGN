@@ -69,7 +69,7 @@ import {
   type WeightingStrategy,
 } from '../../services/revenue/sourceWeighting.service';
 import { centralPricingEngine } from '../../services/revenue/centralPricingEngine.service';
-import { fetchRmsSettings, updateRmsSettings, applyMarkup, type RmsSettings } from '../../services/rms-settings.service';
+import { fetchRmsSettings, updateRmsSettings, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 import { toast } from '../../hooks/use-toast';
 import { useAuth } from '@/src/domains/auth/AuthContext';
@@ -359,8 +359,10 @@ export function RMSTableauPro() {
   // Subscription au CENTRAL PRICING ENGINE — version() incrémentée à chaque
   // accept/reject/maintain depuis n'importe quel module (Veille, Reco,
   // Calendrier). Sert de signal d'invalidation du useEffect d'enrichissement.
+  // Référence stable : évite une re-subscription à chaque render (memory leak).
+  // subscribe retourne déjà un cleanup () => listeners.delete(listener).
   const centralPricingEngineVersion = useSyncExternalStore(
-    (cb) => centralPricingEngine.subscribe(cb),
+    centralPricingEngine.subscribe,
     () => centralPricingEngine.version(),
     () => centralPricingEngine.version(),
   );
@@ -526,11 +528,13 @@ export function RMSTableauPro() {
       // Source 2 : salons importés (legacy Excel)
       // Source 3 : événements Lighthouse (fallback)
       const events: RMSEventRow[] = [];
+      // Clé de dédup : nom + plage de dates → deux événements de même nom
+      // mais sur des périodes différentes sont des événements distincts.
       const seenNames = new Set<string>();
 
       // Module Événements (RMSMarketEvent → RMSEventRow)
       for (const ev of rmsModuleEvents) {
-        const key = ev.name.toLowerCase();
+        const key = `${ev.name.toLowerCase()}|${ev.startDate}|${ev.endDate}`;
         if (seenNames.has(key)) continue;
         seenNames.add(key);
         events.push({
@@ -547,7 +551,7 @@ export function RMSTableauPro() {
 
       // Salons Excel (complète si pas déjà couvert)
       for (const se of salonEvents) {
-        const key = se.name.toLowerCase();
+        const key = `${se.name.toLowerCase()}|${se.startDate}|${se.endDate}`;
         if (seenNames.has(key)) continue;
         seenNames.add(key);
         events.push({
@@ -561,17 +565,28 @@ export function RMSTableauPro() {
         });
       }
 
-      // Compléter avec les events Lighthouse si rien dans les autres pour cette date
+      // Compléter avec les events Lighthouse si rien dans les autres pour cette date.
+      // lhData.events est une chaîne unique (colonne Excel) : peut contenir plusieurs
+      // événements séparés par virgule → on les éclate en lignes distinctes.
       if (events.length === 0 && lhData?.events) {
-        events.push({
-          name: lhData.events,
-          startDate: row.date,
-          endDate: row.date,
-          location: null,
-          impact: null,
-          link: null,
-          source: 'lighthouse',
-        });
+        const lhEventNames = lhData.events
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+        for (const name of lhEventNames) {
+          const key = `${name.toLowerCase()}|${row.date}|${row.date}`;
+          if (seenNames.has(key)) continue;
+          seenNames.add(key);
+          events.push({
+            name,
+            startDate: row.date,
+            endDate: row.date,
+            location: null,
+            impact: null,
+            link: null,
+            source: 'lighthouse',
+          });
+        }
       }
 
       const partial: Partial<DayRMSData> = {
