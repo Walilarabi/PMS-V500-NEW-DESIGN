@@ -927,7 +927,8 @@ function impactCoefficients(level: 'low' | 'medium' | 'high' | 'critical') {
 
 const SEED_PARIS_SALONS: RMSMarketEvent[] = RAW_PARIS_2026.map((r, idx) => {
   const sourceId = resolveSourceId(r.sourceRaw) ?? 'src_paris_je_taime';
-  const source = EVENT_SOURCE_LIBRARY.find((s) => s.id === sourceId)!;
+  const source = EVENT_SOURCE_LIBRARY.find((s) => s.id === sourceId);
+  const sourceName = source?.name ?? 'Source inconnue';
   const venue = normalizeVenue(r.venueRaw);
   const impact = impactFromBadge(r.impactBadge);
   const coefs = impactCoefficients(impact.level);
@@ -958,12 +959,12 @@ const SEED_PARIS_SALONS: RMSMarketEvent[] = RAW_PARIS_2026.map((r, idx) => {
     impact: { ...coefs, level: impact.level },
     influencePrice: impact.price,
     sources: [sourceId],
-    primarySource: source.name,
+    primarySource: sourceName,
     rmsSynced: isPast || !['new', 'estimated'].includes(status),
     syncedAt: isPast ? new Date().toISOString() : undefined,
     history: [
       { at: '2026-03-25T00:00:00Z', action: 'imported' as const, source: 'DATES SALONS — MISE A JOUR 25-03-2026.xlsx' },
-      { at: '2026-05-15T08:00:00Z', action: 'synced' as const, source: source.name },
+      { at: '2026-05-15T08:00:00Z', action: 'synced' as const, source: sourceName },
     ],
     createdAt: '2026-03-25T00:00:00Z',
     updatedAt: '2026-05-15T08:00:00Z',
@@ -1064,7 +1065,8 @@ const SEED_PARIS_CONCERTS: RMSMarketEvent[] = RAW_PARIS_CONCERTS.map((rc) => {
           ? 'critical'
           : 'high');
   const venue = normalizeVenue(rc.venueRaw);
-  const source = EVENT_SOURCE_LIBRARY.find((s) => s.id === rc.sourceId)!;
+  const source = EVENT_SOURCE_LIBRARY.find((s) => s.id === rc.sourceId);
+  const sourceName = source?.name ?? 'Source inconnue';
 
   const start = rc.dates.slice().sort()[0];
   const end = rc.dates.slice().sort().reverse()[0];
@@ -1090,12 +1092,12 @@ const SEED_PARIS_CONCERTS: RMSMarketEvent[] = RAW_PARIS_CONCERTS.map((rc) => {
       ''
     }`,
     sources: [rc.sourceId],
-    primarySource: source.name,
+    primarySource: sourceName,
     rmsSynced: true,
     syncedAt: new Date().toISOString(),
     history: [
-      { at: '2026-04-01T10:00:00Z', action: 'imported', source: source.name },
-      { at: '2026-05-15T08:00:00Z', action: 'synced', source: source.name },
+      { at: '2026-04-01T10:00:00Z', action: 'imported', source: sourceName },
+      { at: '2026-05-15T08:00:00Z', action: 'synced', source: sourceName },
     ],
     createdAt: '2026-04-01T10:00:00Z',
     updatedAt: '2026-05-15T08:00:00Z',
