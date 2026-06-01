@@ -18,6 +18,8 @@ import {
   mapSupabaseError,
   NotFoundError,
   ConflictError,
+  CheckoutBlockedError,
+  type CheckoutBlockedReason,
 } from '@/src/domains/_shared/errors';
 import { writeAuditLog } from '@/src/domains/finance/repository';
 
@@ -278,22 +280,37 @@ export async function checkInReservation(
 }
 
 /**
- * checkOut — Statut checked_in → checked_out
+ * checkOut — Statut checked_in → checked_out via RPC sécurisée.
+ * La RPC valide : facture émise obligatoire, balance = 0 (avoirs émis déduits).
+ * Throws CheckoutBlockedError avec reason + label lisible si le checkout est refusé.
  */
 export async function checkOutReservation(
   id: string,
   expectedVersion: number,
 ): Promise<ReservationRow> {
-  const row = await updateReservationStatus(id, 'checked_out', expectedVersion);
-
-  await writeAuditLog({
-    entity: 'reservation',
-    entity_id: id,
-    action: 'CHECK_OUT',
-    payload: { checked_out_at: new Date().toISOString(), version: row.version ?? null },
+  const { data, error } = await supabase.rpc('checkout_reservation', {
+    p_reservation_id:   id,
+    p_expected_version: expectedVersion,
   });
 
-  return row;
+  if (error) throw mapSupabaseError(error);
+
+  if (!data.success) {
+    throw new CheckoutBlockedError(
+      (data.reason as CheckoutBlockedReason) ?? 'not_found',
+      data.error ?? 'Départ refusé',
+      data.outstanding_balance != null ? Number(data.outstanding_balance) : undefined,
+    );
+  }
+
+  // Fetch the updated row for cache patching
+  const { data: row, error: fetchErr } = await supabase
+    .from('reservations')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (fetchErr) throw mapSupabaseError(fetchErr);
+  return reservationRowSchema.parse(row);
 }
 
 /**
