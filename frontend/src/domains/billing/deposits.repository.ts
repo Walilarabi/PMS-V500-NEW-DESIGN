@@ -146,30 +146,20 @@ export async function applyDepositToInvoice(
   id: string,
   invoiceId: string,
   appliedAmount?: number,
-): Promise<DepositRow> {
-  const original = await getDeposit(id);
-  if (original.status !== 'captured') {
-    throw new ConflictError('Le dépôt doit être capturé avant d\'être imputé.');
-  }
-  const amount = appliedAmount ?? original.amount;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase.from('deposits') as any)
-    .update({
-      status:                 'applied',
-      applied_to_invoice_id:  invoiceId,
-      applied_amount:         amount,
-      applied_at:             new Date().toISOString(),
-    })
-    .eq('id', id)
-    .select('*')
-    .maybeSingle();
-  if (error) throw mapSupabaseError(error);
-  if (!data) throw new ConflictError('Dépôt introuvable.');
-  await writeAuditLog({
-    entity: 'deposit',
-    entity_id: id,
-    action: 'APPLY',
-    payload: { invoice_id: invoiceId, applied_amount: amount },
+): Promise<{ depositId: string; invoiceId: string; appliedAmount: number; invoiceBalance: number }> {
+  // Uses RPC for atomicity: locks deposit row, prevents double-apply,
+  // updates invoices.paid_amount so balance (GENERATED) decreases correctly.
+  const { data, error } = await supabase.rpc('apply_deposit_to_invoice', {
+    p_deposit_id:     id,
+    p_invoice_id:     invoiceId,
+    p_applied_amount: appliedAmount ?? null,
   });
-  return depositRowSchema.parse(data);
+  if (error) throw mapSupabaseError(error);
+  if (!data.success) throw new ConflictError(data.error ?? 'Imputation échouée.');
+  return {
+    depositId:      data.deposit_id,
+    invoiceId:      data.invoice_id,
+    appliedAmount:  data.applied_amount,
+    invoiceBalance: data.invoice_balance,
+  };
 }
