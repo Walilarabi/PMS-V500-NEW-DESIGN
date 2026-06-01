@@ -31,6 +31,13 @@ import {
   dedupEvents,
   scoreToLevel,
 } from '../services/event-impact.engine';
+import {
+  loadEventsFromSupabase,
+  createEventInSupabase,
+  updateEventInSupabase,
+  deleteEventFromSupabase,
+  batchUpsertEventsInSupabase,
+} from '../services/events/eventsRepository';
 
 export interface SyncLogEntry {
   at: string;
@@ -100,11 +107,15 @@ interface EventsStore {
   pendingValidation: RMSMarketEvent[];
   autoSync: boolean;
   lastSearchAt?: string;
+  /** true après le premier chargement réussi depuis Supabase. */
+  supabaseSynced: boolean;
 
   // mutations
   addEvent: (ev: RMSMarketEvent) => void;
   updateEvent: (id: string, patch: Partial<RMSMarketEvent>) => void;
   deleteEvent: (id: string) => void;
+  /** Charge les événements depuis Supabase et remplace le store (sans toucher au cache local). */
+  syncFromSupabase: () => Promise<void>;
   duplicateEvent: (id: string) => void;
   setStatus: (id: string, status: EventStatus) => void;
   attachHotels: (id: string, hotelIds: string[]) => void;
@@ -153,45 +164,67 @@ export const useEventsStore = create<EventsStore>()(
       refusedEvents: [],
       pendingValidation: [],
       autoSync: true,
+      supabaseSynced: false,
 
-      addEvent: (ev) =>
+      syncFromSupabase: async () => {
+        const result = await loadEventsFromSupabase();
+        if (result === null) return; // pas d'auth — on garde le localStorage
+        // Remplace les events du store par les données Supabase.
+        // Si Supabase est vide, on conserve les events locaux (première session).
+        if (result.events.length > 0) {
+          set({ events: result.events, supabaseSynced: true });
+        } else {
+          set({ supabaseSynced: true });
+        }
+      },
+
+      addEvent: (ev) => {
+        const enriched: RMSMarketEvent = {
+          ...ev,
+          impact: { ...ev.impact, level: scoreToLevel(aggregateImpact(ev.impact)) },
+          createdAt: ev.createdAt ?? now(),
+          updatedAt: now(),
+          history: [
+            ...(ev.history ?? []),
+            { at: now(), action: 'created' as const, source: 'manual' },
+          ],
+        };
+        set((s) => ({ events: [...s.events, enriched] }));
+        // Write-through Supabase (fire-and-forget).
+        createEventInSupabase(enriched).catch(() => { /* offline ok */ });
+      },
+
+      updateEvent: (id, patch) => {
+        let updated: RMSMarketEvent | null = null;
         set((s) => ({
-          events: [
-            ...s.events,
-            {
-              ...ev,
-              impact: { ...ev.impact, level: scoreToLevel(aggregateImpact(ev.impact)) },
-              createdAt: ev.createdAt ?? now(),
+          events: s.events.map((e) => {
+            if (e.id !== id) return e;
+            const next: RMSMarketEvent = {
+              ...e,
+              ...patch,
+              impact: patch.impact
+                ? { ...patch.impact, level: scoreToLevel(aggregateImpact(patch.impact)) }
+                : e.impact,
               updatedAt: now(),
               history: [
-                ...(ev.history ?? []),
-                { at: now(), action: 'created' as const, source: 'manual' },
+                ...e.history,
+                { at: now(), action: 'manual_edit' as const },
               ],
-            },
-          ],
-        })),
+            };
+            updated = next;
+            return next;
+          }),
+        }));
+        if (updated) {
+          updateEventInSupabase(id, updated).catch(() => { /* offline ok */ });
+        }
+      },
 
-      updateEvent: (id, patch) =>
-        set((s) => ({
-          events: s.events.map((e) =>
-            e.id === id
-              ? {
-                  ...e,
-                  ...patch,
-                  impact: patch.impact
-                    ? { ...patch.impact, level: scoreToLevel(aggregateImpact(patch.impact)) }
-                    : e.impact,
-                  updatedAt: now(),
-                  history: [
-                    ...e.history,
-                    { at: now(), action: 'manual_edit' as const },
-                  ],
-                }
-              : e,
-          ),
-        })),
-
-      deleteEvent: (id) => set((s) => ({ events: s.events.filter((e) => e.id !== id) })),
+      deleteEvent: (id) => {
+        set((s) => ({ events: s.events.filter((e) => e.id !== id) }));
+        // Soft delete Supabase (fire-and-forget).
+        deleteEventFromSupabase(id).catch(() => { /* offline ok */ });
+      },
 
       duplicateEvent: (id) =>
         set((s) => {
@@ -264,6 +297,11 @@ export const useEventsStore = create<EventsStore>()(
         const merged = Array.from(byId.values());
         const { deduped, merged: dups } = dedupEvents(merged);
         set({ events: deduped });
+        // Sync Supabase batch (fire-and-forget) — uniquement les nouveaux/modifiés.
+        const toSync = deduped.filter((e) => incoming.some((i) => i.id === e.id));
+        if (toSync.length > 0) {
+          batchUpsertEventsInSupabase(toSync).catch(() => { /* offline ok */ });
+        }
         // Propagation RMS automatique — déclenche le Central Pricing Engine et
         // le signal eventIntensity pour l'autopilote (effets de bord async).
         const newAndUpdated = incoming.filter(
@@ -451,6 +489,8 @@ export const useEventsStore = create<EventsStore>()(
           ...current,
           ...p,
           filters: { ...DEFAULT_FILTERS, ...(p.filters ?? {}) },
+          // Réinitialise supabaseSynced à chaque démarrage — force un rechargement Supabase.
+          supabaseSynced: false,
         };
       },
     },

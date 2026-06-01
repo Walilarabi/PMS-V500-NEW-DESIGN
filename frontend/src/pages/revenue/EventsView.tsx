@@ -100,6 +100,16 @@ export const EventsView: React.FC = () => {
   const kpis = useMemo(() => getKpis(), [getKpis]);
   const lastSearchAt = useEventsStore((s) => s.lastSearchAt);
 
+  // ── Sync Supabase au montage ─────────────────────────────────────────────
+  const syncFromSupabase = useEventsStore((s) => s.syncFromSupabase);
+  const supabaseSynced = useEventsStore((s) => s.supabaseSynced);
+  useEffect(() => {
+    if (!supabaseSynced) {
+      syncFromSupabase();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // KPI Visiteurs estimés (somme des estimatedVisitors filtrés)
   const filteredEvents = getFilteredEvents();
   const estimatedVisitors = useMemo(
