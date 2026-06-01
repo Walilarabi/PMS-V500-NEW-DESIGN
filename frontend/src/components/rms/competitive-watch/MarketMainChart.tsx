@@ -21,6 +21,7 @@ import { CHART_COLORS, DEMAND_BANDS } from '../../../lib/rms/chartColors';
 import { ChartLegend } from './ChartLegend';
 import { MarketHoverTooltip } from './MarketHoverTooltip';
 import { MarketDayDecisionModal, type MarketDay } from './MarketDayDecisionModal';
+import { useRateCalendarStore } from '../store/rateCalendarStore';
 
 type MetricMode = 'price' | 'demand';
 
@@ -43,6 +44,27 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
   const [mode, setMode] = useState<MetricMode>('price');
   const { visibleMarketMonth, compsetHotels } = useCompetitiveWatchData();
 
+  // Tarif calendrier (source de vérité) pour alimenter le moteur RMS dans la modale
+  const { roomTypes } = useRateCalendarStore();
+  const referenceRoom = roomTypes.find((r) => r.isReference) ?? roomTypes[0] ?? null;
+  const referencePlan = referenceRoom
+    ? (referenceRoom.ratePlans.find((p) => p.isReference) ?? referenceRoom.ratePlans[0] ?? null)
+    : null;
+  const getCalendarPrice = (date: string): number | undefined => {
+    if (!referencePlan) return undefined;
+    const cells = referencePlan.prices;
+    const exact = cells.find((p) => p.date === date);
+    if (exact) return exact.price;
+    if (cells.length === 0) return undefined;
+    let bestDelta = Infinity;
+    let bestPrice = cells[0].price;
+    for (const c of cells) {
+      const delta = Math.abs(new Date(c.date).getTime() - new Date(date).getTime());
+      if (delta < bestDelta) { bestDelta = delta; bestPrice = c.price; }
+    }
+    return bestPrice;
+  };
+
   // Modale décision RM ouverte au clic
   const [modalDay, setModalDay] = useState<MarketDay | null>(null);
 
@@ -60,6 +82,7 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
       date: datum.date,
       demand: datum.demand,
       ourPrice: datum.ourPrice,
+      calendarPrice: getCalendarPrice(datum.date),
       median: datum.median,
       mean: datum.mean,
       q25: datum.q25,

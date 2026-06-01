@@ -28,12 +28,16 @@ import {
   type FeedbackEntry,
 } from '@/src/services/revenue/recommendationFeedback.service';
 import { centralPricingEngine } from '@/src/services/revenue/centralPricingEngine.service';
+import { calculateStrategy, calculateRecommendation } from '@/src/services/revenue/rmsEngine';
 
 export interface MarketDay {
   label: string;
   date: string;
   demand: number;
+  /** Prix issu de Lighthouse (benchmark marché). */
   ourPrice: number;
+  /** Prix issu du Calendrier tarifaire (source de vérité BAR). Absent si le calendrier n'est pas chargé. */
+  calendarPrice?: number;
   median: number;
   mean: number;
   q25: number;
@@ -121,7 +125,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
     const prices = buildCompsetPrices(compsetHotels, day.q25, day.q75, day.median);
     const all = [
       ...prices,
-      { name: 'Folkestone Opéra (vous)', price: day.ourPrice, status: 'available' as const, isUs: true },
+      { name: 'Folkestone Opéra (vous)', price: day.calendarPrice ?? day.ourPrice, status: 'available' as const, isUs: true },
     ];
     all.sort((a, b) => b.price - a.price);
     return all;
@@ -134,27 +138,44 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
 
   if (!day) return null;
 
-  const gap = day.ourPrice - day.median;
-  const gapPct = (gap / day.median) * 100;
+  // Tarif courant = calendrier (source de vérité BAR) ; fallback Lighthouse si calendrier non chargé
+  const currentPrice = day.calendarPrice ?? day.ourPrice;
+
+  const gap = currentPrice - day.median;
+  const gapPct = day.median > 0 ? (gap / day.median) * 100 : 0;
   const min = day.q25;
   const max = day.q75;
 
-  // Tarif recommandé : logique simple basée sur demande + écart médiane
-  const recommendedPrice = (() => {
-    if (day.demand >= 75 && day.ourPrice < day.median) return Math.round(day.median * 0.98);
-    if (day.demand <= 25 && day.ourPrice > day.median) return Math.round(day.median * 1.02);
-    if (day.demand >= 60 && day.ourPrice < day.median * 0.95) return Math.round(day.median * 0.96);
-    return day.ourPrice;
-  })();
-  const recommendationDelta = recommendedPrice - day.ourPrice;
+  // Tarif recommandé via le moteur RMS centralisé (11 facteurs + pondération NRF).
+  // Vérifie d'abord si une décision existe déjà dans le central pricing engine.
+  const existingRecord = centralPricingEngine.get(day.date);
+  const engineResult = existingRecord
+    ? null  // déjà seedé — on lira suggestedPrice depuis le store
+    : calculateRecommendation({
+        currentPrice,
+        medianPrice: day.median,
+        marketPressure: day.demand,
+        occupancyRate: day.demand,
+        date: day.date,
+        source: 'lighthouse',
+      });
+  const recommendedPrice = existingRecord?.suggestedPrice
+    ?? engineResult?.suggestedPrice
+    ?? currentPrice;
+
+  const engineStrategy = calculateStrategy({
+    marketPressure: day.demand,
+    occupancyRate: day.demand,
+  });
+
+  const recommendationDelta = recommendedPrice - currentPrice;
   const recommendationDirection: 'up' | 'down' | 'hold' =
     recommendationDelta > 0 ? 'up' : recommendationDelta < 0 ? 'down' : 'hold';
 
   const pressureLabel =
     day.demand >= 85 ? 'Extrême' : day.demand >= 65 ? 'Forte'
     : day.demand >= 40 ? 'Modérée' : 'Faible';
-  const strategy =
-    day.demand >= 70 ? 'Yield agressif' : day.demand <= 30 ? 'Défensive' : 'Équilibrée';
+  const strategy = engineStrategy;
 
   // Explication métier
   const explanation = (() => {
@@ -168,14 +189,14 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
   })();
 
   const ctx = {
-    ourPrice: day.ourPrice,
+    ourPrice: currentPrice,
     recommendedPrice,
     median: day.median,
     rank: ourRank ?? undefined,
     pressure: (pressureLabel === 'Extrême' ? 'extreme'
       : pressureLabel === 'Forte' ? 'high'
       : pressureLabel === 'Modérée' ? 'medium' : 'low') as 'extreme' | 'high' | 'medium' | 'low',
-    strategy,
+    strategy: String(strategy),
   };
 
   /**
@@ -186,10 +207,10 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
    * en temps réel via la version() du store.
    */
   const seedRecord = () => centralPricingEngine.getOrSeed(day.date, {
-    current: day.ourPrice,
+    current: currentPrice,
     suggested: recommendedPrice,
-    confidence: 85,
-    strategy,
+    confidence: engineResult?.confidence ?? 85,
+    strategy: String(strategy),
   });
 
   const handleAccept = () => {
@@ -202,11 +223,11 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
   };
   const handleRefuse = () => {
     setFormMode('reject');
-    setManualPrice(String(day.ourPrice));
+    setManualPrice(String(currentPrice));
   };
   const handleMaintain = () => {
     setFormMode('maintain');
-    setManualPrice(String(day.ourPrice));
+    setManualPrice(String(currentPrice));
   };
 
   const submitForm = () => {
@@ -242,7 +263,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
       ].filter(Boolean).join(' · '),
       context: {
         ...ctx,
-        recommendedPrice: manual ?? (formMode === 'maintain' ? day.ourPrice : recommendedPrice),
+        recommendedPrice: manual ?? (formMode === 'maintain' ? currentPrice : recommendedPrice),
       },
     });
     setLastFeedback(e);
@@ -401,7 +422,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
                         )}
                       </div>
                       <div className="text-[11px] text-slate-500 mt-1">
-                        vs tarif actuel <b>{day.ourPrice}€</b>
+                        vs tarif actuel <b>{currentPrice}€</b>
                       </div>
                     </div>
                   </div>
@@ -434,7 +455,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
                       onClick={handleMaintain}
                       icon={<Equal size={18} />}
                       label="Maintenir"
-                      hint={`Garder ${day.ourPrice}€`}
+                      hint={`Garder ${currentPrice}€`}
                       color="slate"
                     />
                   </div>
@@ -490,7 +511,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
                     />
                     <span className="text-[12px] text-slate-500">€</span>
                     <span className="text-[11px] text-slate-400 ml-2">
-                      Reco {recommendedPrice}€ · Actuel {day.ourPrice}€
+                      Reco {recommendedPrice}€ · Actuel {currentPrice}€
                     </span>
                   </div>
                 </Field>
@@ -539,8 +560,8 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
                 {manualPrice && Number(manualPrice) > 0 && (
                   <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 p-3 text-[11.5px] text-amber-800">
                     <b>Impact estimé :</b>{' '}
-                    {Number(manualPrice) - day.ourPrice > 0 ? '+' : ''}
-                    {Number(manualPrice) - day.ourPrice}€ vs actuel ·{' '}
+                    {Number(manualPrice) - currentPrice > 0 ? '+' : ''}
+                    {Number(manualPrice) - currentPrice}€ vs actuel ·{' '}
                     {Number(manualPrice) - recommendedPrice > 0 ? '+' : ''}
                     {Number(manualPrice) - recommendedPrice}€ vs reco
                   </div>

@@ -62,13 +62,13 @@ import { useOperationalData } from '../../hooks/useOperationalData';
 import { recordRmsDecision } from '../../services/rms-decisions.service';
 import { pricingPlanningSync } from '../../services/revenue/pricingPlanningSync.service';
 import { OverrideStatusBanner } from '../../components/revenue/OverrideStatusBanner';
-import {
-  sourceWeighting,
-  seasonFromDate,
-  type WeightingSeason,
-  type WeightingStrategy,
-} from '../../services/revenue/sourceWeighting.service';
 import { centralPricingEngine } from '../../services/revenue/centralPricingEngine.service';
+import {
+  calculateStrategy as engineCalculateStrategy,
+  calculateRecommendation as engineCalculateRecommendation,
+  type Strategy as EngineStrategy,
+  type Recommendation as EngineRecommendation,
+} from '../../services/revenue/rmsEngine';
 import { fetchRmsSettings, updateRmsSettings, type RmsSettings } from '../../services/rms-settings.service';
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 import { toast } from '../../hooks/use-toast';
@@ -78,17 +78,8 @@ import { useAuth } from '@/src/domains/auth/AuthContext';
 // TYPES MÉTIER
 // ═══════════════════════════════════════════════════════════════════════════
 
-type Strategy =
-  | 'Agressive'
-  | 'Équilibrée'
-  | 'Défensive'
-  | 'Opportuniste'
-  | 'Haute demande'
-  | 'Last Minute'
-  | 'Occupation faible'
-  | 'Yield Max';
-
-type Recommendation = 'Augmenter' | 'Baisser' | 'Maintenir';
+type Strategy = EngineStrategy;
+type Recommendation = EngineRecommendation;
 
 type ValidationStatus = 'En attente' | 'Acceptée' | 'Refusée' | 'Maintenue';
 
@@ -184,19 +175,7 @@ function toTooltipData(ev: RMSEventRow): EventTooltipData {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function calculateStrategy(data: Partial<DayRMSData>): Strategy {
-  const {
-    occupancyRate = 50, leadTimeMajority = 14, pickupRate = 0,
-    marketPressure = 0, availability = 10,
-  } = data;
-
-  if (occupancyRate > 90 && marketPressure > 80) return 'Yield Max';
-  if (occupancyRate > 85 && pickupRate > 15) return 'Haute demande';
-  if (leadTimeMajority < 3 && availability > 15) return 'Last Minute';
-  if (occupancyRate < 30 && leadTimeMajority < 7) return 'Occupation faible';
-  if (marketPressure > 70 && occupancyRate < 60) return 'Opportuniste';
-  if (occupancyRate < 40 && leadTimeMajority > 30) return 'Agressive';
-  if (occupancyRate > 70 && leadTimeMajority < 7) return 'Défensive';
-  return 'Équilibrée';
+  return engineCalculateStrategy(data);
 }
 
 function calculateRecommendation(data: Partial<DayRMSData> & {
@@ -208,109 +187,9 @@ function calculateRecommendation(data: Partial<DayRMSData> & {
   recommendation: Recommendation;
   suggestedPrice: number;
   confidence: number;
-  /** Détail pondération marché appliquée (NRF compensation). */
   weighting: { percent: number; delta: number; applied: boolean; ruleId: string | null; rawSuggested: number };
 } {
-  const {
-    strategy = 'Équilibrée', currentPrice = 280, medianPrice = 300,
-    occupancyRate = 50, marketPressure = 0, pickupRate = 0,
-    date,
-    source = 'lighthouse',
-    roomTypeCode = null,
-    channel = null,
-  } = data;
-
-  let recommendation: Recommendation = 'Maintenir';
-  let priceAdjustment = 1.0;
-  let confidence = 70;
-
-  switch (strategy) {
-    case 'Yield Max':
-      recommendation = 'Augmenter'; priceAdjustment = 1.20; confidence = 95; break;
-    case 'Haute demande':
-      recommendation = 'Augmenter'; priceAdjustment = 1.15; confidence = 90; break;
-    case 'Opportuniste':
-      recommendation = 'Augmenter'; priceAdjustment = 1.12; confidence = 85; break;
-    case 'Défensive':
-      if (currentPrice < medianPrice * 0.95) {
-        recommendation = 'Augmenter'; priceAdjustment = 1.08; confidence = 75;
-      } else {
-        recommendation = 'Maintenir'; priceAdjustment = 1.0; confidence = 80;
-      }
-      break;
-    case 'Agressive':
-      recommendation = 'Baisser'; priceAdjustment = 0.88; confidence = 80; break;
-    case 'Occupation faible':
-      recommendation = 'Baisser'; priceAdjustment = 0.90; confidence = 85; break;
-    case 'Last Minute':
-      if (occupancyRate < 50) {
-        recommendation = 'Baisser'; priceAdjustment = 0.92; confidence = 75;
-      } else {
-        recommendation = 'Maintenir'; priceAdjustment = 1.0; confidence = 70;
-      }
-      break;
-    case 'Équilibrée':
-      if (currentPrice < medianPrice * 0.92) {
-        recommendation = 'Augmenter'; priceAdjustment = 1.05; confidence = 65;
-      } else if (currentPrice > medianPrice * 1.08) {
-        recommendation = 'Baisser'; priceAdjustment = 0.97; confidence = 65;
-      } else {
-        recommendation = 'Maintenir'; priceAdjustment = 1.0; confidence = 70;
-      }
-      break;
-  }
-
-  if (marketPressure > 80) {
-    confidence += 10;
-    if (recommendation === 'Augmenter') priceAdjustment += 0.03;
-  }
-  if (pickupRate > 20) {
-    confidence += 5;
-    if (recommendation === 'Augmenter') priceAdjustment += 0.02;
-  }
-
-  // ─── Calcul du prix suggéré ──────────────────────────────────────────────
-  // Ancienne formule : currentPrice * priceAdjustment → quand strat = Maintenir,
-  // priceAdjustment = 1 → suggestedPrice === currentPrice (bug métier).
-  //
-  // Nouvelle formule :
-  //   1. base = médiane marché si disponible et > 0, sinon currentPrice
-  //   2. base est PONDÉRÉE pour compenser les tarifs NRF Lighthouse/Expedia
-  //      (par défaut +5% paramétrable par source / canal / room / saison / stratégie)
-  //   3. on applique le multiplicateur de la stratégie
-  // → quand strat = Maintenir, suggestedPrice = base pondérée (≠ currentPrice
-  //   en général), ce qui rend la recommandation utile et différenciée.
-  const referencePrice = medianPrice > 0 ? medianPrice : currentPrice;
-  const season: WeightingSeason = date ? seasonFromDate(date) : 'mid';
-  const stratKey: WeightingStrategy =
-    strategy === 'Yield Max' || strategy === 'Haute demande' || strategy === 'Opportuniste'
-      ? 'aggressive'
-      : strategy === 'Défensive' || strategy === 'Last Minute' || strategy === 'Occupation faible'
-        ? 'defensive'
-        : 'balanced';
-
-  const weight = sourceWeighting.apply(referencePrice, {
-    source,
-    channel,
-    roomTypeCode,
-    season,
-    strategy: stratKey,
-  });
-  const weightedReference = weight.weightedPrice;
-  const rawSuggested = Math.round(weightedReference * priceAdjustment);
-
-  return {
-    recommendation,
-    suggestedPrice: rawSuggested,
-    confidence: Math.min(100, confidence),
-    weighting: {
-      percent: weight.percent,
-      delta: weight.delta,
-      applied: weight.applied,
-      ruleId: weight.ruleId,
-      rawSuggested: Math.round(referencePrice * priceAdjustment), // sans pondération
-    },
-  };
+  return engineCalculateRecommendation(data);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
