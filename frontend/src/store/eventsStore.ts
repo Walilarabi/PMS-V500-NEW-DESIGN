@@ -24,7 +24,7 @@ import type {
   EventSearchResult,
 } from '../types/events';
 import { IMPACT_LEVEL_ORDER } from '../types/events';
-import { EVENT_SOURCE_LIBRARY, SEED_PARIS_EVENTS } from '../data/eventSourceLibrary';
+import { EVENT_SOURCE_LIBRARY } from '../data/eventSourceLibrary';
 import {
   aggregateImpact,
   buildMarketPressureIndex,
@@ -109,6 +109,9 @@ interface EventsStore {
   lastSearchAt?: string;
   /** true après le premier chargement réussi depuis Supabase. */
   supabaseSynced: boolean;
+  /** Non-null quand la dernière écriture Supabase a échoué (affiché dans l'UI). */
+  saveError: string | null;
+  clearSaveError: () => void;
 
   // mutations
   addEvent: (ev: RMSMarketEvent) => void;
@@ -157,7 +160,7 @@ const now = () => new Date().toISOString();
 export const useEventsStore = create<EventsStore>()(
   persist(
     (set, get) => ({
-      events: SEED_PARIS_EVENTS,
+      events: [],
       sources: EVENT_SOURCE_LIBRARY,
       filters: DEFAULT_FILTERS,
       syncLogs: [],
@@ -165,6 +168,7 @@ export const useEventsStore = create<EventsStore>()(
       pendingValidation: [],
       autoSync: true,
       supabaseSynced: false,
+      saveError: null,
 
       syncFromSupabase: async () => {
         const result = await loadEventsFromSupabase();
@@ -178,6 +182,8 @@ export const useEventsStore = create<EventsStore>()(
         }
       },
 
+      clearSaveError: () => set({ saveError: null }),
+
       addEvent: (ev) => {
         const enriched: RMSMarketEvent = {
           ...ev,
@@ -190,8 +196,9 @@ export const useEventsStore = create<EventsStore>()(
           ],
         };
         set((s) => ({ events: [...s.events, enriched] }));
-        // Write-through Supabase (fire-and-forget).
-        createEventInSupabase(enriched).catch(() => { /* offline ok */ });
+        createEventInSupabase(enriched)
+          .then((r) => { if (!r.ok) set({ saveError: r.error ?? 'Événement non sauvegardé (Supabase)' }); })
+          .catch(() => { /* hors-ligne — silencieux */ });
       },
 
       updateEvent: (id, patch) => {
@@ -216,14 +223,17 @@ export const useEventsStore = create<EventsStore>()(
           }),
         }));
         if (updated) {
-          updateEventInSupabase(id, updated).catch(() => { /* offline ok */ });
+          updateEventInSupabase(id, updated)
+            .then((r) => { if (!r.ok) set({ saveError: r.error ?? 'Modification non sauvegardée (Supabase)' }); })
+            .catch(() => { /* hors-ligne — silencieux */ });
         }
       },
 
       deleteEvent: (id) => {
         set((s) => ({ events: s.events.filter((e) => e.id !== id) }));
-        // Soft delete Supabase (fire-and-forget).
-        deleteEventFromSupabase(id).catch(() => { /* offline ok */ });
+        deleteEventFromSupabase(id)
+          .then((r) => { if (!r.ok) set({ saveError: r.error ?? 'Suppression non sauvegardée (Supabase)' }); })
+          .catch(() => { /* hors-ligne — silencieux */ });
       },
 
       duplicateEvent: (id) =>
@@ -300,7 +310,9 @@ export const useEventsStore = create<EventsStore>()(
         // Sync Supabase batch (fire-and-forget) — uniquement les nouveaux/modifiés.
         const toSync = deduped.filter((e) => incoming.some((i) => i.id === e.id));
         if (toSync.length > 0) {
-          batchUpsertEventsInSupabase(toSync).catch(() => { /* offline ok */ });
+          batchUpsertEventsInSupabase(toSync)
+            .then((r) => { if (!r.ok) set({ saveError: r.error ?? 'Import non sauvegardé (Supabase)' }); })
+            .catch(() => { /* hors-ligne — silencieux */ });
         }
         // Propagation RMS automatique — déclenche le Central Pricing Engine et
         // le signal eventIntensity pour l'autopilote (effets de bord async).
@@ -470,7 +482,7 @@ export const useEventsStore = create<EventsStore>()(
     }),
     {
       name: 'flowtym_events_module',
-      version: 4, // ajout Mega Entertainment & Concert Impact Engine (concerts SDF/Bercy)
+      version: 5, // événements initiaux vides — suppression SEED_PARIS_EVENTS fictifs
       partialize: (s) => ({
         events: s.events,
         sources: s.sources,

@@ -74,6 +74,8 @@ export const EventsView: React.FC = () => {
     filters, setFilters, resetFilters, getKpis, getFilteredEvents,
     pendingValidation, clearPendingValidation,
   } = useEventsStore();
+  const saveError = useEventsStore((s) => s.saveError);
+  const clearSaveError = useEventsStore((s) => s.clearSaveError);
   const hotelName = useConfigStore((s) => s.hotel.name);
   const hotelCity = useConfigStore((s) => s.hotel.city);
 
@@ -170,6 +172,21 @@ export const EventsView: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="px-4 pt-4 pb-10 space-y-3">
+
+        {/* ─── Alerte erreur Supabase ──────────────────────────────────────── */}
+        {saveError && (
+          <div role="alert" className="flex items-start gap-2 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-red-500" />
+            <div className="flex-1">
+              <span className="font-medium">Sauvegarde Supabase échouée.</span>
+              {' '}La modification est enregistrée localement mais non persistée en base.{' '}
+              <span className="text-red-600">{saveError}</span>
+            </div>
+            <button onClick={clearSaveError} aria-label="Fermer" className="ml-2 hover:text-red-600">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* ─── 1. EN-TÊTE ─────────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-start justify-between gap-3">
