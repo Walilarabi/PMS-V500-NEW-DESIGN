@@ -221,11 +221,12 @@ export function buildCompetitiveKpiCards(data: LighthouseImport): KpiDatum[] {
     },
     {
       id: 'notre-tarif',
-      label: 'Notre tarif moyen',
+      label: 'Prix observé (relevé)',
       value: fmtEUR(k.ourAverage),
-      sub: data.ourHotelName,
+      sub: `relevé Lighthouse · ${data.ourHotelName}`,
       tone: 'blue',
       icon: 'building',
+      tooltip: 'Valeur issue du dernier relevé concurrentiel Lighthouse. Peut différer du tarif actuellement publié dans le calendrier tarifaire.',
     },
     {
       id: 'ecart',

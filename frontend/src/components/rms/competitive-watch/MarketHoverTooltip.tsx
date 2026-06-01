@@ -117,9 +117,15 @@ export const MarketHoverTooltip: React.FC<MarketHoverTooltipProps> = ({ active, 
         </span>
       </div>
 
-      {/* Notre tarif + écart */}
-      <div className="flex items-baseline justify-between gap-3 mb-2">
-        <span className="text-[11px] font-medium text-slate-600">Folkestone Opéra</span>
+      {/* Prix observé lors du relevé + écart */}
+      <div className="flex items-baseline justify-between gap-3 mb-1">
+        <span
+          className="text-[11px] font-medium text-slate-600 flex items-center gap-1"
+          title="Valeur issue du dernier relevé concurrentiel Lighthouse. Peut différer du tarif actuellement publié dans le calendrier tarifaire."
+        >
+          Prix observé lors du relevé
+          <AlertCircle className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+        </span>
         <span className="flex items-baseline gap-2">
           <span className="text-[14px] font-bold text-blue-600 tabular-nums">
             {d.ourPrice != null ? `${d.ourPrice}€` : 'N/A'}
@@ -130,6 +136,9 @@ export const MarketHoverTooltip: React.FC<MarketHoverTooltipProps> = ({ active, 
             </span>
           )}
         </span>
+      </div>
+      <div className="text-[9.5px] text-amber-600 mb-2 leading-tight">
+        ≠ tarif en vente (voir Calendrier tarifaire)
       </div>
 
       {/* Min / Max + IQR — uniquement si données disponibles */}

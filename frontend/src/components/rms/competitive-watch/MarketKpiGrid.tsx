@@ -8,7 +8,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import {
-  Tag, TrendingUp, Building2, TrendingDown, Gauge, Users, Award,
+  Tag, TrendingUp, Building2, TrendingDown, Gauge, Users, Award, Info,
 } from 'lucide-react';
 import type { KpiDatum, KpiTone } from '../../../data/rms/mockCompetitiveWatchData';
 import { useCompetitiveWatchData } from '../../../lib/rms/useCompetitiveWatchData';
@@ -49,8 +49,17 @@ const KpiCard: React.FC<{ kpi: KpiDatum; index: number }> = ({ kpi, index }) => 
         <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${tone.iconBg}`}>
           <KpiIcon icon={kpi.icon} className={`w-4 h-4 ${tone.iconColor}`} />
         </span>
-        <span className="text-[11.5px] font-semibold text-slate-500 dark:text-slate-400 leading-tight">
+        <span className="text-[11.5px] font-semibold text-slate-500 dark:text-slate-400 leading-tight flex items-center gap-1">
           {kpi.label}
+          {kpi.tooltip && (
+            <span
+              title={kpi.tooltip}
+              className="inline-flex items-center cursor-help text-amber-500 dark:text-amber-400 shrink-0"
+              aria-label={kpi.tooltip}
+            >
+              <Info className="w-3 h-3" />
+            </span>
+          )}
         </span>
       </div>
       <div className={`${isText ? 'text-[18px]' : 'text-[26px]'} font-extrabold leading-none ${tone.value}`}>

@@ -28,7 +28,7 @@ type MetricMode = 'price' | 'demand';
 const LEGEND_ITEMS = [
   { label: 'Demande du marché (%)', color: '#1E293B', marker: 'square' as const },
   { label: 'Tarif médian compset', color: CHART_COLORS.median, marker: 'line' as const },
-  { label: 'Folkestone Opéra', color: CHART_COLORS.ourHotel, marker: 'line' as const },
+  { label: 'Prix observé lors du relevé', color: CHART_COLORS.ourHotel, marker: 'line' as const },
   { label: 'Écart interquartile (25-75%)', color: CHART_COLORS.iqrBand, marker: 'gradient' as const, colorTo: CHART_COLORS.iqrBandFill },
 ];
 
@@ -136,7 +136,14 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
             <Info className="w-3.5 h-3.5 text-slate-400" />
           </div>
           <p className="text-[12.5px] text-slate-500 dark:text-slate-400 mt-0.5">
-            Notre positionnement face au compset
+            Positionnement observé lors du dernier relevé Lighthouse
+          </p>
+          <p
+            className="text-[10.5px] text-amber-600 dark:text-amber-500 mt-0.5 flex items-center gap-1"
+            title="Valeur issue du dernier relevé concurrentiel Lighthouse. Peut différer du tarif actuellement publié dans le calendrier tarifaire."
+          >
+            <Info className="w-3 h-3 shrink-0" />
+            Prix observé ≠ tarif en vente (voir Calendrier tarifaire)
           </p>
         </div>
         <div className="flex items-center gap-2">

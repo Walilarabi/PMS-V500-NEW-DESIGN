@@ -27,13 +27,20 @@ interface StatCellProps {
   valueColor?: string;
   sub?: React.ReactNode;
   info?: boolean;
+  /** Texte affiché au survol de l'icône ⓘ */
+  tooltip?: string;
 }
 
-const StatCell: React.FC<StatCellProps> = ({ label, value, valueColor, sub, info }) => (
+const StatCell: React.FC<StatCellProps> = ({ label, value, valueColor, sub, info, tooltip }) => (
   <div className="px-4 py-1 first:pl-0">
     <div className="flex items-center gap-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
       {label}
-      {info && <Info className="w-3 h-3" />}
+      {info && (
+        <Info
+          className="w-3 h-3 shrink-0"
+          title={tooltip}
+        />
+      )}
     </div>
     <div
       className="text-[20px] font-extrabold leading-tight mt-1"
@@ -173,7 +180,13 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* 6 indicateurs */}
         <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-y-3 divide-slate-100 dark:divide-slate-800">
-          <StatCell label="Notre tarif" value={day.ourPrice != null ? `${day.ourPrice}€` : 'N/A'} valueColor="#2563EB" />
+          <StatCell
+            label="Prix observé (relevé)"
+            value={day.ourPrice != null ? `${day.ourPrice}€` : 'N/A'}
+            valueColor="#2563EB"
+            info
+            tooltip="Valeur issue du dernier relevé concurrentiel Lighthouse. Peut différer du tarif actuellement publié dans le calendrier tarifaire."
+          />
           <StatCell label="Tarif médian compset" value={day.median != null ? `${day.median}€` : 'N/A'} valueColor="#16A34A" info />
           <StatCell label="Tarif moyen compset" value={day.mean != null ? `${day.mean}€` : 'N/A'} info />
           <StatCell

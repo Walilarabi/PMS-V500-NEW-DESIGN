@@ -21,6 +21,8 @@ export interface KpiDatum {
   sub: string;
   tone: KpiTone;
   icon: 'tag' | 'trending-up' | 'building' | 'trending-down' | 'gauge' | 'users' | 'award';
+  /** Explication affichée au survol de l'icône ⓘ sur la carte KPI. */
+  tooltip?: string;
 }
 
 /** Statut tarifaire d'un jour — visible dans le tooltip et la barre de légende. */
