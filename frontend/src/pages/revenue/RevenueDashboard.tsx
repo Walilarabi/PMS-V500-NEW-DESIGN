@@ -39,6 +39,29 @@ export const RevenueDashboard: React.FC = () => {
 
   const hasLighthouse = lighthouseImport !== null && lighthouseImport.days.length > 0;
 
+  // Lit le prix du Calendrier tarifaire (chambre + plan de référence).
+  // Remplace lhData.ourPrice (Lighthouse — potentiellement périmé) par la
+  // source de vérité BAR en temps réel. Fallback : 0 = non disponible.
+  const getPriceFromCalendar = useMemo(() => {
+    const referenceRoom = roomTypes.find((r) => r.isReference) ?? roomTypes[0] ?? null;
+    const referencePlan = referenceRoom
+      ? (referenceRoom.ratePlans.find((p) => p.isReference) ?? referenceRoom.ratePlans[0] ?? null)
+      : null;
+    if (!referencePlan || referencePlan.prices.length === 0) return (_date: string) => 0;
+    const cells = referencePlan.prices;
+    const byDate = new Map(cells.map((c) => [c.date, c.price]));
+    return (date: string): number => {
+      if (byDate.has(date)) return byDate.get(date)!;
+      let bestDelta = Infinity;
+      let bestPrice = 0;
+      for (const c of cells) {
+        const delta = Math.abs(new Date(c.date).getTime() - new Date(date).getTime());
+        if (delta < bestDelta) { bestDelta = delta; bestPrice = c.price; }
+      }
+      return bestPrice;
+    };
+  }, [roomTypes]);
+
   // ─── Supabase KPIs (always computed) ────────────────────────────────────
   const supabaseKpis = useMemo(() => {
     const rows = resData?.rows ?? [];
@@ -135,7 +158,12 @@ export const RevenueDashboard: React.FC = () => {
   const today = new Date().toISOString().slice(0, 10);
   // Prendre 30 jours à partir d'aujourd'hui (ou les 30 premiers si tous dans le futur)
   const futureDays = days.filter(d => d.date >= today);
-  const window30 = (futureDays.length > 0 ? futureDays : days).slice(0, 30);
+  // Enrichir ourPrice avec le prix calendrier (source de vérité BAR).
+  // Fallback : garder le prix Lighthouse si le calendrier n'a pas de cellule pour ce jour.
+  const window30 = (futureDays.length > 0 ? futureDays : days).slice(0, 30).map(d => {
+    const calPrice = getPriceFromCalendar(d.date);
+    return calPrice > 0 ? { ...d, ourPrice: calPrice } : d;
+  });
   const window7 = window30.slice(0, 7);
   const prev7 = window30.slice(7, 14);
 
