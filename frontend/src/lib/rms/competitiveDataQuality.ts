@@ -147,7 +147,10 @@ export function applyQualityGate(
     }
     seen.add(day.date);
 
-    // 4) Prix valides
+    // 4) Prix invalides → on GARDE le jour dans la série mais on le signale.
+    // Un jour sans tarif (marché épuisé, restrictions LOS, compset indisponible)
+    // DOIT apparaître dans le graphique avec sa demande Lighthouse.
+    // Le filtrage ne concerne que les valeurs calculées, jamais l'existence de la date.
     if (
       !Number.isFinite(day.ourPrice) ||
       day.ourPrice <= 0 ||
@@ -159,7 +162,7 @@ export function applyQualityGate(
         reason: 'invalid-price',
         detail: `our=${day.ourPrice} median=${day.compsetMedian}`,
       });
-      continue;
+      // NE PAS faire `continue` — le jour reste dans `valid` pour le graphique.
     }
 
     valid.push(day);

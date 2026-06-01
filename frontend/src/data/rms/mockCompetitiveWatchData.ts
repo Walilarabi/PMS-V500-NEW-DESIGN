@@ -23,15 +23,33 @@ export interface KpiDatum {
   icon: 'tag' | 'trending-up' | 'building' | 'trending-down' | 'gauge' | 'users' | 'award';
 }
 
+/** Statut tarifaire d'un jour — visible dans le tooltip et la barre de légende. */
+export type MarketDayStatus =
+  | 'ok'               // données complètes
+  | 'sold_out'         // marché épuisé (tous concurrents sold_out)
+  | 'restricted'       // restrictions LOS / CTA / etc. (aucun tarif exploitable)
+  | 'no_pricing'       // notre hôtel sans tarif mais compset OK
+  | 'insufficient_data'; // données insuffisantes pour calculer la médiane
+
 export interface MarketDay {
   date: string;        // ISO
   label: string;       // « 16 juin »
-  demand: number;      // 0-100
-  ourPrice: number;    // €
-  median: number;      // €
-  mean: number;        // €
-  q25: number;         // € quartile 25
-  q75: number;         // € quartile 75
+  demand: number;      // 0-100 (toujours présent si Lighthouse le fournit)
+  /** null quand notre hôtel est épuisé / sans tarif exploitable */
+  ourPrice: number | null;
+  /** null quand la médiane compset ne peut pas être calculée */
+  median: number | null;
+  mean: number | null;
+  q25: number | null;
+  q75: number | null;
+  /** Statut tarifaire du jour — détermine l'affichage visuel. */
+  marketStatus?: MarketDayStatus;
+  /** Nombre de concurrents avec tarif disponible. */
+  availableCount?: number;
+  /** Nombre de concurrents épuisés. */
+  soldOutCount?: number;
+  /** Nombre de concurrents avec restriction (LOS, CTA, etc.). */
+  restrictedCount?: number;
 }
 
 export interface ComparisonDay {

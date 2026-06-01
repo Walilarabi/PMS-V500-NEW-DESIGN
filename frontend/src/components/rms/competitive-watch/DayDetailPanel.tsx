@@ -86,11 +86,15 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
   // ─── Calculs métier (ordres, rang, recommandation) ─────────────────────────
   const enrichedCompset = useMemo(() => {
     if (!day) return [];
-    const prices = buildCompsetPrices(compsetHotels, day.q25, day.q75, day.median);
-    // On insère notre hôtel et on classe par prix décroissant (#1 = plus cher)
+    const prices = buildCompsetPrices(compsetHotels, day.q25 ?? 0, day.q75 ?? 0, day.median ?? 0);
     const all = [
       ...prices,
-      { name: 'Folkestone Opéra (vous)', price: day.ourPrice, status: 'available' as const, isUs: true },
+      {
+        name: 'Folkestone Opéra (vous)',
+        price: day.ourPrice ?? 0,
+        status: day.ourPrice != null ? ('available' as const) : ('sold_out' as const),
+        isUs: true,
+      },
     ];
     all.sort((a, b) => b.price - a.price);
     return all;
@@ -102,17 +106,22 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
   }, [enrichedCompset]);
 
   if (!day) return <EmptyDetail />;
-  const gap = day.ourPrice - day.median;
-  const gapPct = ((gap / day.median) * 100).toFixed(1);
+  const gap = day.ourPrice != null && day.median != null ? day.ourPrice - day.median : null;
+  const gapPct = gap != null && day.median != null && day.median > 0
+    ? ((gap / day.median) * 100).toFixed(1)
+    : null;
   const demandColor = getDemandColor(day.demand);
 
-  // Recommandation : si on est sous la médiane et que la demande > 60%, recommander une hausse
+  // Recommandation : uniquement si les données tarifaires sont disponibles
   const recommendedPrice = (() => {
+    if (day.ourPrice == null || day.median == null) return null;
     if (day.demand >= 75 && day.ourPrice < day.median) return Math.round(day.median * 0.98);
     if (day.demand <= 25 && day.ourPrice > day.median) return Math.round(day.median * 1.02);
     return day.ourPrice;
   })();
-  const recommendationDelta = recommendedPrice - day.ourPrice;
+  const recommendationDelta = recommendedPrice != null && day.ourPrice != null
+    ? recommendedPrice - day.ourPrice
+    : null;
 
   // Stratégie / pression / statut dérivés
   const pressureLabel: 'Faible' | 'Modérée' | 'Forte' | 'Extrême' =
@@ -124,9 +133,9 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
       date: day.date,
       action: 'accept',
       context: {
-        ourPrice: day.ourPrice,
-        recommendedPrice,
-        median: day.median,
+        ourPrice: day.ourPrice ?? 0,
+        recommendedPrice: recommendedPrice ?? day.ourPrice ?? 0,
+        median: day.median ?? 0,
         rank: ourRank ?? undefined,
         pressure: pressureLabel === 'Extrême' ? 'extreme' : pressureLabel === 'Forte' ? 'high' : pressureLabel === 'Modérée' ? 'medium' : 'low',
         strategy,
@@ -140,9 +149,9 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
       date: day.date,
       action: 'maintain',
       context: {
-        ourPrice: day.ourPrice,
-        recommendedPrice: day.ourPrice,
-        median: day.median,
+        ourPrice: day.ourPrice ?? 0,
+        recommendedPrice: day.ourPrice ?? 0,
+        median: day.median ?? 0,
         rank: ourRank ?? undefined,
         strategy,
       },
@@ -164,14 +173,14 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* 6 indicateurs */}
         <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-y-3 divide-slate-100 dark:divide-slate-800">
-          <StatCell label="Notre tarif" value={`${day.ourPrice}€`} valueColor="#2563EB" />
-          <StatCell label="Tarif médian compset" value={`${day.median}€`} valueColor="#16A34A" info />
-          <StatCell label="Tarif moyen compset" value={`${day.mean}€`} info />
+          <StatCell label="Notre tarif" value={day.ourPrice != null ? `${day.ourPrice}€` : 'N/A'} valueColor="#2563EB" />
+          <StatCell label="Tarif médian compset" value={day.median != null ? `${day.median}€` : 'N/A'} valueColor="#16A34A" info />
+          <StatCell label="Tarif moyen compset" value={day.mean != null ? `${day.mean}€` : 'N/A'} info />
           <StatCell
             label="Écart vs médiane"
-            value={`${gap >= 0 ? '+' : ''}${gap}€`}
+            value={gap != null ? `${gap >= 0 ? '+' : ''}${gap}€` : 'N/A'}
             valueColor="#EF4444"
-            sub={<span className="text-red-400">({gapPct}%)</span>}
+            sub={gapPct != null ? <span className="text-red-400">({gapPct}%)</span> : undefined}
           />
           <div className="px-4 py-1">
             <div className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
@@ -226,7 +235,7 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
             <tbody>
               {enrichedCompset.map((hotel, i) => {
                 const isUs = 'isUs' in hotel && hotel.isUs;
-                const delta = hotel.price - day.median;
+                const delta = day.median != null ? hotel.price - day.median : null;
                 return (
                   <tr
                     key={hotel.name}
@@ -244,9 +253,9 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
                     </td>
                     <td className={cn(
                       'px-3 py-1.5 text-right tabular-nums',
-                      delta > 0 ? 'text-rose-600' : delta < 0 ? 'text-emerald-600' : 'text-slate-500',
+                      delta == null ? 'text-slate-400' : delta > 0 ? 'text-rose-600' : delta < 0 ? 'text-emerald-600' : 'text-slate-500',
                     )}>
-                      {delta > 0 ? '+' : ''}{delta}€
+                      {delta != null ? `${delta > 0 ? '+' : ''}${delta}€` : '—'}
                     </td>
                     <td className="px-3 py-1.5 text-center">
                       <span className={cn(
@@ -346,9 +355,9 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
         onClose={() => setRejectOpen(false)}
         date={day.date}
         context={{
-          ourPrice: day.ourPrice,
-          recommendedPrice,
-          median: day.median,
+          ourPrice: day.ourPrice ?? 0,
+          recommendedPrice: recommendedPrice ?? day.ourPrice ?? 0,
+          median: day.median ?? 0,
           rank: ourRank ?? undefined,
           pressure: pressureLabel === 'Extrême' ? 'extreme' : pressureLabel === 'Forte' ? 'high' : pressureLabel === 'Modérée' ? 'medium' : 'low',
           strategy,

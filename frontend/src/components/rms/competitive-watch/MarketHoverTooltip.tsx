@@ -15,23 +15,36 @@
  *   - Δ J-1 / J-7
  */
 import React from 'react';
-import { TrendingUp, TrendingDown, Minus, Calendar } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Calendar, AlertCircle } from 'lucide-react';
+import type { MarketDayStatus } from '../../../data/rms/mockCompetitiveWatchData';
 
 interface HoverTooltipDay {
   label: string;
   date: string;
   demand: number;
-  ourPrice: number;
-  median: number;
-  mean: number;
-  q25: number;
-  q75: number;
+  ourPrice: number | null;
+  median: number | null;
+  mean: number | null;
+  q25: number | null;
+  q75: number | null;
   min?: number;
   max?: number;
   event?: string;
   deltaD1?: number;
   deltaD7?: number;
+  marketStatus?: MarketDayStatus;
+  availableCount?: number;
+  soldOutCount?: number;
+  restrictedCount?: number;
 }
+
+const STATUS_META: Record<MarketDayStatus, { label: string; bg: string; text: string }> = {
+  ok:               { label: 'Données complètes',       bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  sold_out:         { label: 'Marché épuisé',            bg: 'bg-rose-50',    text: 'text-rose-700'    },
+  restricted:       { label: 'Restrictions détectées',  bg: 'bg-amber-50',   text: 'text-amber-700'   },
+  no_pricing:       { label: 'Tarifs indisponibles',     bg: 'bg-slate-50',   text: 'text-slate-600'   },
+  insufficient_data:{ label: 'Données insuffisantes',   bg: 'bg-slate-50',   text: 'text-slate-600'   },
+};
 
 export interface MarketHoverTooltipProps {
   active?: boolean;
@@ -61,10 +74,17 @@ export const MarketHoverTooltip: React.FC<MarketHoverTooltipProps> = ({ active, 
   if (!d) return null;
 
   const pressure = pressureMeta(d.demand);
-  const gap = d.ourPrice - d.median;
-  const gapPct = ((gap / d.median) * 100).toFixed(1);
-  const min = d.min ?? d.q25;
-  const max = d.max ?? d.q75;
+  const status = d.marketStatus ?? 'ok';
+  const statusMeta = STATUS_META[status];
+
+  const gap = d.ourPrice != null && d.median != null ? d.ourPrice - d.median : null;
+  const gapPct = gap != null && d.median != null && d.median > 0
+    ? ((gap / d.median) * 100).toFixed(1)
+    : null;
+  const min = d.min ?? d.q25 ?? undefined;
+  const max = d.max ?? d.q75 ?? undefined;
+
+  const hasPricing = status === 'ok';
 
   return (
     <div
@@ -81,29 +101,54 @@ export const MarketHoverTooltip: React.FC<MarketHoverTooltipProps> = ({ active, 
         </span>
       </div>
 
+      {/* Statut marché — visible uniquement si données incomplètes */}
+      {status !== 'ok' && (
+        <div className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg mb-2 ${statusMeta.bg}`}>
+          <AlertCircle className={`w-3 h-3 shrink-0 ${statusMeta.text}`} />
+          <span className={`text-[10.5px] font-semibold ${statusMeta.text}`}>{statusMeta.label}</span>
+        </div>
+      )}
+
       {/* Médiane marché (info principale) */}
       <div className="flex items-baseline justify-between gap-3 mb-1">
         <span className="text-[11px] font-medium text-slate-600">Tarif médian</span>
-        <span className="text-[16px] font-bold text-emerald-600 tabular-nums">{d.median}€</span>
+        <span className="text-[16px] font-bold text-emerald-600 tabular-nums">
+          {d.median != null ? `${d.median}€` : 'N/A'}
+        </span>
       </div>
 
       {/* Notre tarif + écart */}
       <div className="flex items-baseline justify-between gap-3 mb-2">
         <span className="text-[11px] font-medium text-slate-600">Folkestone Opéra</span>
         <span className="flex items-baseline gap-2">
-          <span className="text-[14px] font-bold text-blue-600 tabular-nums">{d.ourPrice}€</span>
-          <span className={`text-[11px] font-semibold tabular-nums ${gap >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-            {gap > 0 ? '+' : ''}{gap}€ ({gap > 0 ? '+' : ''}{gapPct}%)
+          <span className="text-[14px] font-bold text-blue-600 tabular-nums">
+            {d.ourPrice != null ? `${d.ourPrice}€` : 'N/A'}
           </span>
+          {gap != null && gapPct != null && (
+            <span className={`text-[11px] font-semibold tabular-nums ${gap >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+              {gap > 0 ? '+' : ''}{gap}€ ({gap > 0 ? '+' : ''}{gapPct}%)
+            </span>
+          )}
         </span>
       </div>
 
-      {/* Min / Max + IQR */}
-      <div className="grid grid-cols-3 gap-2 mb-2">
-        <Cell label="Min" value={`${min}€`} accent="text-slate-700" />
-        <Cell label="Moy." value={`${d.mean}€`} accent="text-slate-700" />
-        <Cell label="Max" value={`${max}€`} accent="text-slate-700" />
-      </div>
+      {/* Min / Max + IQR — uniquement si données disponibles */}
+      {hasPricing && (
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          <Cell label="Min" value={min != null ? `${min}€` : '—'} accent="text-slate-700" />
+          <Cell label="Moy." value={d.mean != null ? `${d.mean}€` : '—'} accent="text-slate-700" />
+          <Cell label="Max" value={max != null ? `${max}€` : '—'} accent="text-slate-700" />
+        </div>
+      )}
+
+      {/* Détail concurrents si statut non-ok */}
+      {status !== 'ok' && (
+        <div className="grid grid-cols-3 gap-2 mb-2">
+          <Cell label="Dispo." value={String(d.availableCount ?? 0)} accent="text-emerald-700" />
+          <Cell label="Épuisé" value={String(d.soldOutCount ?? 0)} accent="text-rose-600" />
+          <Cell label="Restr." value={String(d.restrictedCount ?? 0)} accent="text-amber-700" />
+        </div>
+      )}
 
       {/* Variations J-1 / J-7 */}
       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">

@@ -74,10 +74,10 @@ export const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, v
         title={d.label}
         badge={{ text: `Demande ${d.demand}%`, color: tierColor }}
         rows={[
-          { label: 'Folkestone Opéra', value: `${d.ourPrice}€`, color: '#2563EB', bold: true },
-          { label: 'Tarif médian compset', value: `${d.median}€`, color: '#22C55E' },
-          { label: 'Tarif moyen compset', value: `${d.mean}€`, color: '#64748B' },
-          { label: 'Écart interquartile', value: `${d.q25}€ – ${d.q75}€`, color: '#94A3B8' },
+          { label: 'Folkestone Opéra', value: d.ourPrice != null ? `${d.ourPrice}€` : 'N/A', color: '#2563EB', bold: true },
+          { label: 'Tarif médian compset', value: d.median != null ? `${d.median}€` : 'N/A', color: '#22C55E' },
+          { label: 'Tarif moyen compset', value: d.mean != null ? `${d.mean}€` : 'N/A', color: '#64748B' },
+          { label: 'Écart interquartile', value: d.q25 != null && d.q75 != null ? `${d.q25}€ – ${d.q75}€` : 'N/A', color: '#94A3B8' },
         ]}
       />
     );

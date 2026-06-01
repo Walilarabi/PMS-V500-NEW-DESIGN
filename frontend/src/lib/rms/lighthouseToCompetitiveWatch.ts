@@ -29,6 +29,7 @@ import type {
   DistributionSegment,
   KpiDatum,
   MarketDay,
+  MarketDayStatus,
   MiniComparison,
   QuickComparisonRow,
 } from '../../data/rms/mockCompetitiveWatchData';
@@ -285,19 +286,19 @@ function shortDateLabel(iso: string): string {
 
 /**
  * Calcule mean / q25 / q75 des prix concurrents disponibles pour un jour.
- * Tombe sur la médiane Lighthouse si on n'a pas assez de prix valides.
+ * Retourne null si aucun concurrent n'est disponible (marché épuisé, restrictions).
  */
 function dayPriceStats(day: LighthouseDayData): {
-  mean: number;
-  q25: number;
-  q75: number;
+  mean: number | null;
+  q25: number | null;
+  q75: number | null;
 } {
   const prices = day.competitors
     .filter((c) => c.price != null && c.status === 'available')
     .map((c) => c.price as number);
 
   if (prices.length === 0) {
-    return { mean: day.compsetMedian, q25: day.compsetMedian, q75: day.compsetMedian };
+    return { mean: null, q25: null, q75: null };
   }
 
   const sorted = [...prices].sort((a, b) => a - b);
@@ -313,24 +314,60 @@ function dayPriceStats(day: LighthouseDayData): {
 
 /**
  * Convertit l'import Lighthouse en mois marché (MarketDay[]) consommable par
- * MarketMainChart / DayDetailPanel. Garde la même structure que le mock.
+ * MarketMainChart / DayDetailPanel.
+ *
+ * RÈGLE MÉTIER : TOUTES les dates dans la période sélectionnée doivent apparaître,
+ * même si le marché est épuisé, les concurrents en restriction, ou les tarifs absents.
+ * Les prix null génèrent des lacunes dans les courbes Recharts (comportement attendu).
  */
 export function buildMarketMonth(data: LighthouseImport): MarketDay[] {
-  return data.days
-    .filter((d) => d.ourPrice > 0 && d.compsetMedian > 0)
-    .map((d) => {
-      const stats = dayPriceStats(d);
-      return {
-        date: d.date,
-        label: shortDateLabel(d.date),
-        demand: Math.round(d.marketDemandPercent),
-        ourPrice: Math.round(d.ourPrice),
-        median: Math.round(d.compsetMedian),
-        mean: stats.mean,
-        q25: stats.q25,
-        q75: stats.q75,
-      };
-    });
+  return data.days.map((d) => {
+    const availableCount = d.competitors.filter(
+      (c) => c.status === 'available' && c.price != null,
+    ).length;
+    const soldOutCount = d.competitors.filter((c) => c.status === 'sold_out').length;
+    const restrictedCount = d.competitors.filter((c) => c.status === 'restricted').length;
+
+    const hasValidOurPrice = Number.isFinite(d.ourPrice) && d.ourPrice > 0;
+    const hasValidMedian = Number.isFinite(d.compsetMedian) && d.compsetMedian > 0;
+
+    // Statut — ordre de priorité :
+    // 1. ok            : les deux prix disponibles
+    // 2. insufficient  : notre tarif dispo, mais médiane compset absente
+    // 3. sold_out      : marché épuisé
+    // 4. restricted    : restrictions LOS/CTA uniquement
+    // 5. no_pricing    : cas générique sans donnée
+    let marketStatus: MarketDayStatus;
+    if (hasValidOurPrice && hasValidMedian) {
+      marketStatus = 'ok';
+    } else if (hasValidOurPrice && !hasValidMedian) {
+      marketStatus = 'insufficient_data';
+    } else if (soldOutCount > 0 && availableCount === 0) {
+      marketStatus = 'sold_out';
+    } else if (restrictedCount > 0 && availableCount === 0) {
+      marketStatus = 'restricted';
+    } else {
+      marketStatus = 'no_pricing';
+    }
+
+    // Stats IQR uniquement si des concurrents disponibles existent
+    const stats = availableCount > 0 ? dayPriceStats(d) : { mean: null, q25: null, q75: null };
+
+    return {
+      date: d.date,
+      label: shortDateLabel(d.date),
+      demand: Math.round(d.marketDemandPercent ?? 0),
+      ourPrice: hasValidOurPrice ? Math.round(d.ourPrice) : null,
+      median: hasValidMedian ? Math.round(d.compsetMedian) : null,
+      mean: stats.mean,
+      q25: stats.q25,
+      q75: stats.q75,
+      marketStatus,
+      availableCount,
+      soldOutCount,
+      restrictedCount,
+    };
+  });
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */

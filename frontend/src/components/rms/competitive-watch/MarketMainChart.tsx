@@ -73,13 +73,24 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
       visibleMarketMonth.map((d, i, arr) => {
         const prev1 = arr[i - 1];
         const prev7 = arr[i - 7];
+        // iqrRange: null when q25/q75 unavailable → Recharts Area renders no fill for that day
+        const iqrRange =
+          d.q25 != null && d.q75 != null ? ([d.q25, d.q75] as [number, number]) : null;
+        const deltaD1 =
+          prev1?.ourPrice != null && d.ourPrice != null
+            ? d.ourPrice - prev1.ourPrice
+            : undefined;
+        const deltaD7 =
+          prev7?.ourPrice != null && d.ourPrice != null
+            ? d.ourPrice - prev7.ourPrice
+            : undefined;
         return {
           ...d,
-          iqrRange: [d.q25, d.q75] as [number, number],
-          deltaD1: prev1 ? d.ourPrice - prev1.ourPrice : undefined,
-          deltaD7: prev7 ? d.ourPrice - prev7.ourPrice : undefined,
-          min: d.q25,
-          max: d.q75,
+          iqrRange,
+          deltaD1,
+          deltaD7,
+          min: d.q25 ?? undefined,
+          max: d.q75 ?? undefined,
         };
       }),
     [visibleMarketMonth],
