@@ -1,10 +1,10 @@
 /**
  * FLOWTYM — Credit Notes repository.
- * Avoirs : nouvelles factures négatives (jamais mutation de la facture originale).
+ * Avoirs : draft → issued (immutable) → voided (traced, never deleted).
+ * All mutations go through RPCs for atomicity, amount guards, and audit trail.
  */
 import { supabase } from '@/src/lib/supabase';
 import { mapSupabaseError, ConflictError } from '@/src/domains/_shared/errors';
-import { writeAuditLog } from '@/src/domains/finance/repository';
 import { z } from 'zod';
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
@@ -19,12 +19,16 @@ export const creditNoteRowSchema = z.object({
   original_invoice_id:  z.string().uuid().nullable(),
   reservation_id:       z.string().uuid().nullable(),
   guest_id:             z.string().uuid().nullable(),
+  deposit_id:           z.string().uuid().nullable().optional(),
   total_ht:             z.number(),
   total_tva:            z.number(),
   total_ttc:            z.number(),
   reason:               z.string(),
   status:               creditNoteStatusSchema,
   issued_at:            z.string().nullable(),
+  voided_at:            z.string().nullable().optional(),
+  voided_by:            z.string().uuid().nullable().optional(),
+  void_reason:          z.string().nullable().optional(),
   bill_to_name:         z.string().nullable(),
   notes:                z.string().nullable(),
   created_by:           z.string().uuid().nullable(),
@@ -34,15 +38,16 @@ export const creditNoteRowSchema = z.object({
 export type CreditNoteRow = z.infer<typeof creditNoteRowSchema>;
 
 export const createCreditNoteSchema = z.object({
-  originalInvoiceId: z.string().uuid().optional(),
-  reservationId:     z.string().uuid().optional(),
-  guestId:           z.string().uuid().optional(),
-  totalHt:           z.number(),
-  totalTva:          z.number(),
-  totalTtc:          z.number(),
-  reason:            z.string().min(1),
-  billToName:        z.string().optional(),
-  notes:             z.string().optional(),
+  invoiceId:       z.string().uuid(),
+  totalTtc:        z.number().positive(),
+  reason:          z.string().min(1),
+  totalHt:         z.number().optional(),
+  totalTva:        z.number().min(0).default(0),
+  notes:           z.string().optional(),
+  depositId:       z.string().uuid().optional(),
+  reservationId:   z.string().uuid().optional(),
+  guestId:         z.string().uuid().optional(),
+  billToName:      z.string().optional(),
 });
 export type CreateCreditNoteInput = z.infer<typeof createCreditNoteSchema>;
 
@@ -75,81 +80,57 @@ export async function getCreditNote(id: string): Promise<CreditNoteRow> {
   return creditNoteRowSchema.parse(data);
 }
 
-// ─── Mutations ────────────────────────────────────────────────────────────────
+// ─── Mutations — all via RPC for atomicity ────────────────────────────────────
 
 export async function createCreditNote(
-  hotelId: string,
   input: CreateCreditNoteInput,
-): Promise<CreditNoteRow> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: numData, error: numError } = await (supabase as any)
-    .rpc('next_credit_note_number', { p_hotel_id: hotelId });
-  if (numError) throw mapSupabaseError(numError);
-  const creditNoteNumber = numData as string;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase.from('credit_notes') as any)
-    .insert({
-      hotel_id:             hotelId,
-      credit_note_number:   creditNoteNumber,
-      original_invoice_id:  input.originalInvoiceId ?? null,
-      reservation_id:       input.reservationId ?? null,
-      guest_id:             input.guestId ?? null,
-      total_ht:             input.totalHt,
-      total_tva:            input.totalTva,
-      total_ttc:            input.totalTtc,
-      reason:               input.reason,
-      bill_to_name:         input.billToName ?? null,
-      notes:                input.notes ?? null,
-      status:               'draft',
-    })
-    .select('*')
-    .single();
-  if (error) throw mapSupabaseError(error);
-  const row = creditNoteRowSchema.parse(data);
-  await writeAuditLog({
-    entity: 'credit_note',
-    entity_id: row.id,
-    action: 'INSERT',
-    payload: {
-      credit_note_number: creditNoteNumber,
-      original_invoice_id: input.originalInvoiceId,
-      total_ttc: input.totalTtc,
-    },
+): Promise<string> {
+  // Returns the new credit note UUID.
+  // RPC guards: hotel isolation, amount ≤ refundable, atomic number generation.
+  const { data, error } = await supabase.rpc('create_credit_note', {
+    p_invoice_id:     input.invoiceId,
+    p_total_ttc:      input.totalTtc,
+    p_reason:         input.reason,
+    p_total_ht:       input.totalHt ?? null,
+    p_total_tva:      input.totalTva ?? 0,
+    p_notes:          input.notes ?? null,
+    p_deposit_id:     input.depositId ?? null,
+    p_reservation_id: input.reservationId ?? null,
+    p_guest_id:       input.guestId ?? null,
+    p_bill_to_name:   input.billToName ?? null,
   });
-  return row;
+  if (error) throw mapSupabaseError(error);
+  return data as string;
 }
 
-export async function issueCreditNote(id: string): Promise<CreditNoteRow> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase.from('credit_notes') as any)
-    .update({ status: 'issued', issued_at: new Date().toISOString() })
-    .eq('id', id)
-    .eq('status', 'draft')
-    .select('*')
-    .maybeSingle();
-  if (error) throw mapSupabaseError(error);
-  if (!data) throw new ConflictError('Avoir introuvable ou déjà émis.');
-  const row = creditNoteRowSchema.parse(data);
-  await writeAuditLog({
-    entity: 'credit_note',
-    entity_id: id,
-    action: 'ISSUE',
-    payload: { credit_note_number: row.credit_note_number, total_ttc: row.total_ttc },
+export async function issueCreditNote(
+  id: string,
+): Promise<{ creditNoteId: string; creditNoteNumber: string }> {
+  // Transitions draft → issued. Immutability trigger locks record after this.
+  const { data, error } = await supabase.rpc('issue_credit_note', {
+    p_credit_note_id: id,
   });
-  return row;
+  if (error) throw mapSupabaseError(error);
+  if (!data.success) throw new ConflictError(data.error ?? 'Émission échouée.');
+  return {
+    creditNoteId:     data.credit_note_id,
+    creditNoteNumber: data.credit_note_number,
+  };
 }
 
-export async function voidCreditNote(id: string): Promise<CreditNoteRow> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase.from('credit_notes') as any)
-    .update({ status: 'voided' })
-    .eq('id', id)
-    .in('status', ['draft', 'issued'])
-    .select('*')
-    .maybeSingle();
+export async function voidCreditNote(
+  id: string,
+  reason?: string,
+): Promise<{ creditNoteId: string; previousStatus: string }> {
+  // Transitions draft|issued → voided with trace. Never deletes.
+  const { data, error } = await supabase.rpc('void_credit_note', {
+    p_credit_note_id: id,
+    p_reason:         reason ?? null,
+  });
   if (error) throw mapSupabaseError(error);
-  if (!data) throw new ConflictError('Avoir introuvable.');
-  await writeAuditLog({ entity: 'credit_note', entity_id: id, action: 'VOID', payload: {} });
-  return creditNoteRowSchema.parse(data);
+  if (!data.success) throw new ConflictError(data.error ?? 'Annulation échouée.');
+  return {
+    creditNoteId:   data.credit_note_id,
+    previousStatus: data.previous_status,
+  };
 }
