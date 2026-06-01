@@ -16,6 +16,9 @@
 import { useMemo } from 'react';
 import { useLighthouseStore } from '../../store/lighthouseStore';
 import { useExpediaStore } from '../../store/expediaStore';
+import { useEventsStore } from '../../store/eventsStore';
+import { useSalonsStore } from '../../store/salonsStore';
+import { eventsActiveOn } from '../../services/events-bridge.service';
 import {
   useCompetitiveWatchPrefs,
   resolveRangeWindow,
@@ -273,8 +276,11 @@ export function useCompetitiveWatchData(): CompetitiveWatchData {
   const lighthouseData = useLighthouseStore((s) => s.importData);
   const expediaData = useExpediaStore((s) => s.importData);
   const { range, source } = useCompetitiveWatchPrefs();
+  // Sources d'événements — toutes fusionnées dans le résultat final (Étape 5)
+  const allEvents = useEventsStore((s) => s.events);
+  const salons = useSalonsStore((s) => s.importData?.events ?? []);
 
-  return useMemo<CompetitiveWatchData>(() => {
+  const rawData = useMemo<CompetitiveWatchData>(() => {
     const window = resolveRangeWindow(range);
 
     // Détermine la source effective : si l'utilisateur demande Lighthouse
@@ -423,4 +429,25 @@ export function useCompetitiveWatchData(): CompetitiveWatchData {
       },
     };
   }, [lighthouseData, expediaData, range, source]);
+
+  // Enrichissement des jours marché avec les événements de toutes les sources.
+  // Fait hors du useMemo principal pour séparer les préoccupations.
+  return useMemo<CompetitiveWatchData>(() => {
+    const enriched = rawData.marketMonth.map((day) => {
+      const fromEvents = eventsActiveOn(allEvents, day.date).map((e) => e.name);
+      const fromSalons = salons
+        .filter((e) => day.date >= e.startDate && day.date <= e.endDate)
+        .map((e) => e.name);
+      const fromLighthouse = day.event
+        ? day.event.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
+      const merged = [...new Set([...fromEvents, ...fromSalons, ...fromLighthouse])];
+      return merged.length > 0 ? { ...day, event: merged.join(', ') } : day;
+    });
+    return {
+      ...rawData,
+      marketMonth: enriched,
+      visibleMarketMonth: enriched,
+    };
+  }, [rawData, allEvents, salons]);
 }

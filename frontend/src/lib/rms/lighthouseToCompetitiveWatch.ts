@@ -366,6 +366,7 @@ export function buildMarketMonth(data: LighthouseImport): MarketDay[] {
       availableCount,
       soldOutCount,
       restrictedCount,
+      event: d.events || undefined,
     };
   });
 }

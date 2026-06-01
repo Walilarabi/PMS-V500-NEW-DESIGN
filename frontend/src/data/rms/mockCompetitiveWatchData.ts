@@ -50,6 +50,8 @@ export interface MarketDay {
   soldOutCount?: number;
   /** Nombre de concurrents avec restriction (LOS, CTA, etc.). */
   restrictedCount?: number;
+  /** Événements actifs sur ce jour (toutes sources : eventsStore + salons + Lighthouse). */
+  event?: string;
 }
 
 export interface ComparisonDay {
