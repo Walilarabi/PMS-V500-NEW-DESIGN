@@ -41,7 +41,6 @@ const GuestTimelineSection: React.FC<{ guestId: string }> = ({ guestId }) => {
             scope={{ guestId }}
             enabled={open}
             title="Historique"
-            maxItems={50}
             className="h-[420px]"
           />
         </div>

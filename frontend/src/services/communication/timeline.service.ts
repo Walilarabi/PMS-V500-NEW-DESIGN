@@ -14,16 +14,22 @@ import { mapSupabaseError } from '@/src/domains/_shared/errors';
 export type TimelineEntryType = 'message' | 'badge' | 'note' | 'incident';
 
 export interface TimelineAttachment {
+  id?: string;
   name?: string;
   url?: string;
+  path?: string;
   mime?: string;
   size?: number;
 }
 
+export type TimelineCategory = 'communication' | 'crm' | 'reservation' | 'finance' | 'incident' | 'note';
+
 export interface TimelineEntry {
-  entry_type: TimelineEntryType;
+  entry_type: TimelineEntryType | 'reservation' | 'finance' | 'attachment';
   entry_id: string;
   occurred_at: string;
+  /** Catégorie pour les filtres (v2). */
+  category?: TimelineCategory;
   /** email | sms | whatsapp | internal | crm */
   channel: string | null;
   /** inbound | outbound | null */
@@ -88,6 +94,48 @@ export async function resolveReservationRefIds(
   if (error || !data || data.length !== 1) return null;
   const row = data[0] as { id: string; guest_id: string | null };
   return { reservationId: row.id, guestId: row.guest_id ?? null };
+}
+
+// ─── Journal 360° (v2) — événements PMS + finance + filtres ───────────────────
+
+export interface Timeline360Filters {
+  categories?: TimelineCategory[];
+  channels?: string[];
+  actor?: string | null;
+  from?: string | null;
+  to?: string | null;
+  search?: string | null;
+}
+
+export interface FetchTimeline360Params extends TimelineScope, Timeline360Filters {
+  limit?: number;
+  before?: string | null;
+}
+
+/**
+ * Journal 360° : agrégateur étendu (communication + cycle de vie réservation +
+ * finance), avec filtres serveur et pagination keyset.
+ */
+export async function fetchTimeline360(params: FetchTimeline360Params): Promise<TimelineEntry[]> {
+  if (!params.guestId && !params.reservationId) return [];
+  const { data, error } = await (supabase.rpc as unknown as RpcFn)('communication_timeline_v2', {
+    p_guest_id: params.guestId ?? null,
+    p_reservation_id: params.reservationId ?? null,
+    p_categories: params.categories && params.categories.length ? params.categories : null,
+    p_channels: params.channels && params.channels.length ? params.channels : null,
+    p_actor: params.actor ?? null,
+    p_from: params.from ?? null,
+    p_to: params.to ?? null,
+    p_search: params.search ?? null,
+    p_limit: Math.min(params.limit ?? 50, 200),
+    p_before: params.before ?? null,
+  });
+  if (error) throw mapSupabaseError(error);
+  return ((data ?? []) as TimelineEntry[]).map((e) => ({
+    ...e,
+    attachments: Array.isArray(e.attachments) ? e.attachments : [],
+    metadata: (e.metadata ?? {}) as Record<string, unknown>,
+  }));
 }
 
 export interface AddInternalNoteParams extends TimelineScope {

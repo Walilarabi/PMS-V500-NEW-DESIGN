@@ -4,13 +4,22 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }));
-vi.mock('@/src/lib/supabase', () => ({ supabase: { rpc: rpcMock } }));
+const { rpcMock, fromMock } = vi.hoisted(() => ({ rpcMock: vi.fn(), fromMock: vi.fn() }));
+vi.mock('@/src/lib/supabase', () => ({ supabase: { rpc: rpcMock, from: fromMock } }));
 vi.mock('@/src/domains/_shared/errors', () => ({ mapSupabaseError: (e: unknown) => e }));
 
-import { fetchCommunicationTimeline, addInternalNote } from './timeline.service';
+import {
+  fetchCommunicationTimeline, addInternalNote, fetchTimeline360, resolveReservationRefIds,
+} from './timeline.service';
 
-beforeEach(() => rpcMock.mockReset());
+function makeBuilder(result: { data: unknown; error: unknown }) {
+  const b: Record<string, ReturnType<typeof vi.fn>> & { then?: unknown } = {};
+  for (const m of ['select', 'eq', 'limit']) b[m] = vi.fn(() => b);
+  (b as { then: unknown }).then = (resolve: (v: unknown) => unknown) => resolve(result);
+  return b;
+}
+
+beforeEach(() => { rpcMock.mockReset(); fromMock.mockReset(); });
 
 describe('fetchCommunicationTimeline', () => {
   it('ne fait aucun appel et renvoie [] sans scope', async () => {
@@ -47,6 +56,54 @@ describe('fetchCommunicationTimeline', () => {
   it('propage une erreur RPC', async () => {
     rpcMock.mockResolvedValue({ data: null, error: { message: 'boom' } });
     await expect(fetchCommunicationTimeline({ guestId: 'g1' })).rejects.toEqual({ message: 'boom' });
+  });
+});
+
+describe('fetchTimeline360', () => {
+  it('ne fait aucun appel sans scope', async () => {
+    expect(await fetchTimeline360({})).toEqual([]);
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it('mappe les filtres (catégories/canaux/période/recherche) vers la RPC v2', async () => {
+    rpcMock.mockResolvedValue({ data: [], error: null });
+    await fetchTimeline360({
+      guestId: 'g1', categories: ['finance', 'reservation'], channels: ['email'],
+      actor: 'u1', from: '2026-01-01T00:00:00Z', to: '2026-12-31T23:59:59Z', search: 'facture', limit: 40,
+    });
+    expect(rpcMock).toHaveBeenCalledWith('communication_timeline_v2', expect.objectContaining({
+      p_guest_id: 'g1', p_categories: ['finance', 'reservation'], p_channels: ['email'],
+      p_actor: 'u1', p_search: 'facture', p_limit: 40,
+    }));
+  });
+
+  it('convertit les tableaux de filtres vides en null', async () => {
+    rpcMock.mockResolvedValue({ data: [], error: null });
+    await fetchTimeline360({ guestId: 'g1', categories: [], channels: [] });
+    expect(rpcMock).toHaveBeenCalledWith('communication_timeline_v2', expect.objectContaining({
+      p_categories: null, p_channels: null,
+    }));
+  });
+});
+
+describe('resolveReservationRefIds', () => {
+  it('renvoie les UUID sur correspondance unique', async () => {
+    fromMock.mockReturnValue(makeBuilder({ data: [{ id: 'res-uuid', guest_id: 'guest-uuid' }], error: null }));
+    const r = await resolveReservationRefIds('FLW-2026-001');
+    expect(fromMock).toHaveBeenCalledWith('reservations');
+    expect(r).toEqual({ reservationId: 'res-uuid', guestId: 'guest-uuid' });
+  });
+
+  it('renvoie null si 0 ou plusieurs correspondances (jamais ambigu)', async () => {
+    fromMock.mockReturnValue(makeBuilder({ data: [{ id: 'a' }, { id: 'b' }], error: null }));
+    expect(await resolveReservationRefIds('DUP')).toBeNull();
+    fromMock.mockReturnValue(makeBuilder({ data: [], error: null }));
+    expect(await resolveReservationRefIds('NONE')).toBeNull();
+  });
+
+  it('renvoie null pour une référence vide', async () => {
+    expect(await resolveReservationRefIds('')).toBeNull();
+    expect(fromMock).not.toHaveBeenCalled();
   });
 });
 
