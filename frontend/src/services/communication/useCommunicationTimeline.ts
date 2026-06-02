@@ -16,6 +16,9 @@ import {
 } from './timeline.service';
 import { uploadAttachment, type UploadAttachmentParams } from './attachments.service';
 
+/** Curseur composite de pagination (occurred_at + entry_id) du dernier item. */
+export type TimelineCursor = { at: string; id: string };
+
 export function communicationTimelineKey(scope: TimelineScope) {
   return ['comm-timeline', scope.guestId ?? null, scope.reservationId ?? null] as const;
 }
@@ -60,11 +63,23 @@ export function useTimeline360(
   const hasScope = Boolean(scope.guestId || scope.reservationId);
   return useInfiniteQuery({
     queryKey: timeline360Key(scope, filters),
-    queryFn: ({ pageParam }) =>
-      fetchTimeline360({ ...scope, ...filters, before: pageParam as string | null, limit: PAGE_SIZE }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (lastPage: TimelineEntry[]) =>
-      lastPage.length === PAGE_SIZE ? lastPage[lastPage.length - 1].occurred_at : undefined,
+    queryFn: ({ pageParam }) => {
+      const cursor = pageParam as TimelineCursor | null;
+      return fetchTimeline360({
+        ...scope, ...filters,
+        beforeAt: cursor?.at ?? null,
+        beforeId: cursor?.id ?? null,
+        limit: PAGE_SIZE,
+      });
+    },
+    initialPageParam: null as TimelineCursor | null,
+    // Curseur COMPOSITE (occurred_at, entry_id) → pagination déterministe, sans
+    // doublon ni perte même quand plusieurs événements partagent le même instant.
+    getNextPageParam: (lastPage: TimelineEntry[]): TimelineCursor | undefined => {
+      if (lastPage.length < PAGE_SIZE) return undefined;
+      const last = lastPage[lastPage.length - 1];
+      return { at: last.occurred_at, id: last.entry_id };
+    },
     enabled: (opts.enabled ?? true) && hasScope,
     staleTime: 30_000,
   });

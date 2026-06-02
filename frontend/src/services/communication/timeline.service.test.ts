@@ -84,6 +84,22 @@ describe('fetchTimeline360', () => {
       p_categories: null, p_channels: null,
     }));
   });
+
+  it('transmet le curseur composite (beforeAt + beforeId)', async () => {
+    rpcMock.mockResolvedValue({ data: [], error: null });
+    await fetchTimeline360({ guestId: 'g1', beforeAt: '2026-06-15T10:00:00Z', beforeId: 'abc-123' });
+    expect(rpcMock).toHaveBeenCalledWith('communication_timeline_v2', expect.objectContaining({
+      p_before_at: '2026-06-15T10:00:00Z', p_before_id: 'abc-123',
+    }));
+  });
+
+  it('curseur null par défaut (première page)', async () => {
+    rpcMock.mockResolvedValue({ data: [], error: null });
+    await fetchTimeline360({ guestId: 'g1' });
+    expect(rpcMock).toHaveBeenCalledWith('communication_timeline_v2', expect.objectContaining({
+      p_before_at: null, p_before_id: null,
+    }));
+  });
 });
 
 describe('resolveReservationRefIds', () => {

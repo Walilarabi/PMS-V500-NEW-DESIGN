@@ -109,7 +109,9 @@ export interface Timeline360Filters {
 
 export interface FetchTimeline360Params extends TimelineScope, Timeline360Filters {
   limit?: number;
-  before?: string | null;
+  /** Curseur composite (occurred_at, entry_id) du dernier item de la page précédente. */
+  beforeAt?: string | null;
+  beforeId?: string | null;
 }
 
 /**
@@ -128,7 +130,8 @@ export async function fetchTimeline360(params: FetchTimeline360Params): Promise<
     p_to: params.to ?? null,
     p_search: params.search ?? null,
     p_limit: Math.min(params.limit ?? 50, 200),
-    p_before: params.before ?? null,
+    p_before_at: params.beforeAt ?? null,
+    p_before_id: params.beforeId ?? null,
   });
   if (error) throw mapSupabaseError(error);
   return ((data ?? []) as TimelineEntry[]).map((e) => ({
