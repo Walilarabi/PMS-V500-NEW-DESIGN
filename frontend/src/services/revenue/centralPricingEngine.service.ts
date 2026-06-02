@@ -153,6 +153,8 @@ export const centralPricingEngine = {
     if (existing) {
       // Si toujours en attente et le moteur a un nouveau suggested, on update
       // SANS toucher au statut ni à finalPrice.
+      // Pas de notify() ici : getOrSeed est appelé depuis useEffect d'enrichissement
+      // qui dépend de centralPricingEngineVersion — notifier ici crée une boucle infinie.
       if (existing.status === 'pending' && seed.suggested !== existing.suggestedPrice) {
         const updated: PricingRecord = {
           ...existing,
@@ -173,7 +175,8 @@ export const centralPricingEngine = {
           ],
         };
         records.set(key, updated);
-        notify();
+        // Persist silencieusement sans notifier (évite la boucle de re-render).
+        persistToStorage(records);
         return updated;
       }
       return existing;
@@ -198,7 +201,8 @@ export const centralPricingEngine = {
       updatedAt: nowISO(),
     };
     records.set(key, record);
-    notify();
+    // Persist silencieusement sans notifier (évite la boucle de re-render).
+    persistToStorage(records);
     return record;
   },
 
