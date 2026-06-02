@@ -20,6 +20,35 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useGuestProfile360 } from '@/src/domains/guests/hooks';
 import type { GuestProfile360, HistoryEntry } from '@/src/services/crm/crm.service';
+import { CommunicationTimeline } from '@/src/components/communication/CommunicationTimeline';
+
+/** Section "Journal des communications" repliée par défaut (chargée à l'ouverture). */
+const GuestTimelineSection: React.FC<{ guestId: string }> = ({ guestId }) => {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="mb-2.5 flex w-full items-center justify-between text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-600"
+      >
+        <span>Journal des communications</span>
+        <span className="text-[9px] font-semibold text-violet-500">{open ? 'Réduire' : 'Afficher'}</span>
+      </button>
+      {open && (
+        <div className="max-h-[420px]">
+          <CommunicationTimeline
+            scope={{ guestId }}
+            enabled={open}
+            title="Historique"
+            maxItems={50}
+            className="h-[420px]"
+          />
+        </div>
+      )}
+    </section>
+  );
+};
 
 const MONTHS_FR = [
   'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
@@ -266,6 +295,9 @@ const ProfileBody = ({ profile }: { profile: GuestProfile360 }) => {
             <p className="text-[11px] text-gray-300 font-medium">Données insuffisantes.</p>
           )}
         </section>
+
+        {/* Journal des communications (L3) */}
+        <GuestTimelineSection guestId={guest.id} />
 
         {/* Identity */}
         <section>

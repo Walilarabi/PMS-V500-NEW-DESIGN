@@ -7,6 +7,7 @@ import { FileText, CreditCard, Users, AlertCircle, Search, Star, Award, X, Edit,
 import { COUNTRIES, NatSelector, GUAR_ICONS, RATE_PLANS, GUAR_CFG, SEGMENTS } from './reservationConstants';
 import { CHANNELS } from '../../constants/channels';
 import { RefundModal } from '../billing/RefundModal';
+import { CommunicationTimeline } from '@/src/components/communication/CommunicationTimeline';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FLOWTYM — FICHE RÉSERVATION COMPLÈTE
@@ -2908,6 +2909,26 @@ interface FicheReservationProps {
   onUpdate?: (updated: Reservation) => void;
 }
 
+/** Onglet "Journal" — Journal Unifié des communications (L3, données réelles). */
+const TabCommunications: React.FC<{ res: any }> = ({ res }) => {
+  const guestId = res.guestId ?? res.guest_id ?? null;
+  const reservationId = res.reservationUuid ?? res.reservation_id ?? null;
+  if (!guestId && !reservationId) {
+    return (
+      <div style={{ padding: 28, textAlign: 'center', color: '#94A3B8', fontSize: 13, lineHeight: 1.6 }}>
+        Le journal des communications n'est pas rattaché depuis cette vue
+        (identifiants client / réservation non transmis).<br />
+        Ouvrez la fiche depuis Flowday pour consulter l'historique complet.
+      </div>
+    );
+  }
+  return (
+    <div style={{ minHeight: 440 }}>
+      <CommunicationTimeline scope={{ guestId, reservationId }} title="Journal des communications" className="h-[460px]" />
+    </div>
+  );
+};
+
 const TABS = [
   { id: 'reservation', label: 'Réservation',    icon: Ico.res     },
   { id: 'facturation', label: 'Facturation',     icon: Ico.bill    },
@@ -2916,6 +2937,7 @@ const TABS = [
   { id: 'lost',        label: 'Objets oubliés',  icon: Ico.lost    },
   { id: 'reviews',     label: 'Avis',            icon: Ico.review  },
   { id: 'loyalty',     label: 'Élite Stay',      icon: Ico.loyalty },
+  { id: 'communications', label: 'Journal',      icon: <MessageSquare size={13} /> },
 ];
 
 export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
@@ -3124,6 +3146,7 @@ export const ReservationDetailsModal: React.FC<FicheReservationProps> = ({
               {activeTab === 'lost'        && <TabLostItems />}
               {activeTab === 'reviews'     && <TabReviews res={reservation} />}
               {activeTab === 'loyalty'     && <TabLoyalty res={reservation} allReservations={allReservations} />}
+              {activeTab === 'communications' && <TabCommunications res={reservation} />}
             </motion.div>
           </AnimatePresence>
         </div>

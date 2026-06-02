@@ -21,6 +21,7 @@ import { HousekeepingAssignmentModal } from '@/src/components/today/modals/House
 import { RoomChangeModal } from '@/src/components/today/modals/RoomChangeModal';
 import { CommunicationModal } from '@/src/components/today/modals/CommunicationModal';
 import { BadgesModal } from '@/src/components/today/modals/BadgesModal';
+import { CommunicationTimelineDrawer } from '@/src/components/communication/CommunicationTimelineDrawer';
 import type {
   BadgeType, CommunicationChannel, ReservationModalState, RoomRow, SortKey,
 } from '@/src/components/today/types';
@@ -125,6 +126,7 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
   const [roomChangeModal, setRoomChangeModal] = useState<RoomRow | null>(null);
   const [communicationModal, setCommunicationModal] = useState<RoomRow | null>(null);
   const [badgesModal, setBadgesModal] = useState<RoomRow | null>(null);
+  const [journalRow, setJournalRow] = useState<RoomRow | null>(null);
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
   const [selectedRoomIds, setSelectedRoomIds] = useState<number[]>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -554,6 +556,7 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
                             <button onClick={() => { setRoomChangeModal(row); closeMenu(); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-violet-50 hover:text-violet-600 transition-colors"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-violet-600"><ArrowRightLeft size={16} /></div><div><div className="font-semibold">Changement de chambre</div><div className="text-xs text-gray-400">Déloger le client</div></div></button>
                             <button onClick={() => { setCommunicationModal(row); closeMenu(); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><Send size={16} /></div><div><div className="font-semibold">Communication client</div><div className="text-xs text-gray-400">Email / WhatsApp</div></div></button>
                             <button onClick={() => { setBadgesModal(row); closeMenu(); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition-colors"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><Tag size={16} /></div><div><div className="font-semibold">Gérer les badges</div><div className="text-xs text-gray-400">VIP, Fidèle, etc.</div></div></button>
+                            <button onClick={() => { setJournalRow(row); closeMenu(); }} className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-sky-50 hover:text-sky-600 transition-colors"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 text-sky-600"><Clock size={16} /></div><div><div className="font-semibold">Journal des communications</div><div className="text-xs text-gray-400">Timeline unifiée</div></div></button>
                           </div>
                         )}
                       </td>
@@ -756,6 +759,8 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
           isOpen={true}
           reservation={{
             id: detailsRow.reservationId || String(detailsRow.id),
+            guestId: detailsRow.guestId ?? null,
+            reservationUuid: detailsRow.reservationUuid ?? null,
             client: detailsRow.guest,
             guestName: detailsRow.guest,
             room: detailsRow.room,
@@ -776,6 +781,12 @@ const OperationsTable = ({ initialRooms }: { initialRooms?: RoomRow[] }) => {
       {roomChangeModal && <RoomChangeModal row={roomChangeModal} onClose={() => setRoomChangeModal(null)} onSave={handleRoomChange} />}
       {communicationModal && <CommunicationModal row={communicationModal} onClose={() => setCommunicationModal(null)} onSend={handleMessageSent} />}
       {badgesModal && <BadgesModal row={badgesModal} onClose={() => setBadgesModal(null)} onSave={handleBadgesSave} />}
+      <CommunicationTimelineDrawer
+        open={Boolean(journalRow)}
+        onClose={() => setJournalRow(null)}
+        scope={{ guestId: journalRow?.guestId ?? null, reservationId: journalRow?.reservationUuid ?? null }}
+        subtitle={journalRow ? `${journalRow.guest} · Chambre ${journalRow.room}` : undefined}
+      />
       <NewReservationModal
         isOpen={newReservationOpen}
         onClose={() => setNewReservationOpen(false)}
