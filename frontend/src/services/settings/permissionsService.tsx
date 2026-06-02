@@ -56,19 +56,21 @@ const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
     set_backups: 'none', set_rgpd: 'none',
   },
   // R4 : comptabilite — Finance complète, lecture resa/clients, aucun id_doc.
+  // Périmètre strict (CP-2) : pas d'accès Revenue → rev_view 'none'.
   accountant: {
     res_view: 'read', res_create: 'none', res_groups: 'none',
     cli_view: 'read', cli_export: 'write', cli_merge: 'none',
-    rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
+    rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'admin', fin_payment: 'admin', fin_close: 'admin', fin_export: 'admin',
     hk_status: 'none', hk_assign: 'none', hk_maintain: 'none',
     set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
     set_integrations: 'none', set_fiscal: 'read', set_audit: 'read',
     set_backups: 'none', set_rgpd: 'none',
   },
-  // R4 : revenue_manager — Revenue complet, lecture resa, aucune finance.
+  // R4 : revenue_manager — Revenue complet, aucune finance.
+  // Périmètre strict (CP-3) : pas d'accès Réservations → res_view 'none'.
   revenue: {
-    res_view: 'read', res_create: 'none', res_groups: 'none',
+    res_view: 'none', res_create: 'none', res_groups: 'none',
     cli_view: 'none', cli_export: 'none', cli_merge: 'none',
     rev_view: 'admin', rev_decisions: 'admin', rev_pricing: 'admin', rev_autopilot: 'write',
     fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',

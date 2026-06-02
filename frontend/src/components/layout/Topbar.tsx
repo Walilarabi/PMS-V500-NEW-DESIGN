@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Zap, Calendar, Users, TrendingUp, CreditCard,
   BarChart2, Settings, Shield, Headphones,
@@ -6,6 +6,8 @@ import {
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
 import { useSasNavBadges } from '@/src/domains/sas/hooks';
+import { useAuth } from '@/src/domains/auth/AuthContext';
+import { hasPermission, type AccessLevel } from '@/src/services/settings/permissionsService';
 import { HotelSelector } from './HotelSelector';
 import { UserAvatar } from './UserAvatar';
 
@@ -58,20 +60,53 @@ const PAGE_TO_NAV: Record<string, string> = {
   support: 'support',
 };
 
-const NAV_ITEMS = [
+/**
+ * R4 — Filtrage de navigation par capability (frontière officielle) :
+ *   session.role (DB) → normalizeRole() → RoleId → hasPermission(capability)
+ * Aucun rôle DB n'est référencé en dur ici. `requires` est une liste de
+ * capabilities en logique OU (le menu apparaît si AU MOINS une est satisfaite
+ * au niveau requis). Un item sans `requires` est toujours visible
+ * (Flowday = home opérationnel, Paramètres = profil perso, Support = aide).
+ */
+interface NavItem {
+  id: string;
+  label: string;
+  icon: typeof Zap;
+  defaultPage: PageId;
+  hasBadge?: boolean;
+  requires?: { caps: string[]; level: AccessLevel };
+}
+
+const NAV_ITEMS: NavItem[] = [
   { id: 'flowday',      label: 'Flowday',      icon: Zap,        defaultPage: 'flowboard' as PageId },
-  { id: 'sas',          label: 'SAS',           icon: Shield,     defaultPage: 'sas_incoming' as PageId, hasBadge: true },
-  { id: 'reservations', label: 'Réservations',  icon: Calendar,   defaultPage: 'reservations' as PageId },
-  { id: 'clients',      label: 'Clients',       icon: Users,      defaultPage: 'clients' as PageId },
-  { id: 'revenue',      label: 'Revenue',       icon: TrendingUp, defaultPage: 'rev_dashboard' as PageId },
-  { id: 'finance',      label: 'Finance',       icon: CreditCard, defaultPage: 'facturation' as PageId },
-  { id: 'analysis',     label: 'Analyse',       icon: BarChart2,  defaultPage: 'analysis' as PageId },
+  { id: 'sas',          label: 'SAS',           icon: Shield,     defaultPage: 'sas_incoming' as PageId, hasBadge: true, requires: { caps: ['res_view'], level: 'write' } },
+  { id: 'reservations', label: 'Réservations',  icon: Calendar,   defaultPage: 'reservations' as PageId, requires: { caps: ['res_view'], level: 'read' } },
+  { id: 'clients',      label: 'Clients',       icon: Users,      defaultPage: 'clients' as PageId, requires: { caps: ['cli_view'], level: 'read' } },
+  { id: 'revenue',      label: 'Revenue',       icon: TrendingUp, defaultPage: 'rev_dashboard' as PageId, requires: { caps: ['rev_view'], level: 'read' } },
+  { id: 'finance',      label: 'Finance',       icon: CreditCard, defaultPage: 'facturation' as PageId, requires: { caps: ['fin_invoice', 'fin_export'], level: 'read' } },
+  { id: 'analysis',     label: 'Analyse',       icon: BarChart2,  defaultPage: 'analysis' as PageId, requires: { caps: ['rev_view', 'fin_export'], level: 'read' } },
   { id: 'settings',     label: 'Paramètres',    icon: Settings,   defaultPage: 'settings' as PageId },
   { id: 'support',      label: 'Support',       icon: Headphones, defaultPage: 'support' as PageId },
 ];
 
 export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
   const { data: sasBadges } = useSasNavBadges();
+  const { session } = useAuth();
+
+  // Filtrage par capability. Pas de session (dev / pré-auth) → tout visible,
+  // parité avec usePermission(). Le rôle 'admin' (direction) passe tous les
+  // tests via le court-circuit interne de hasPermission().
+  const navItems = useMemo(
+    () =>
+      NAV_ITEMS.filter((item) => {
+        if (!item.requires) return true;
+        if (!session) return true;
+        return item.requires.caps.some((cap) =>
+          hasPermission(session.role, cap, item.requires!.level),
+        );
+      }),
+    [session],
+  );
 
   const activeNav = activePage.startsWith('settings') ? 'settings' : PAGE_TO_NAV[activePage] ?? 'flowday';
   const pendingCount = sasBadges?.pending_count ?? 0;
@@ -101,7 +136,7 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
       {/* ── Navigation principale — centrée ───────────────────────── */}
       <nav className="flex-1 flex items-center justify-center" aria-label="Navigation principale">
         <div className="flex items-center gap-0.5 bg-gray-50 p-1 rounded-2xl border border-gray-100">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const isActive = activeNav === item.id;
             const isSas = item.id === 'sas';
 
