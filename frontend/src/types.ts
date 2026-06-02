@@ -156,6 +156,7 @@ export type PageId =
   | 'settings_guarantees'
   | 'settings_no_show'
   | 'settings_email_templates'
+  | 'settings_communication'
   | 'settings_pos'
   | 'settings_locks'
   | 'settings_kiosk'

@@ -101,6 +101,7 @@ import {
 } from './pages/IntegrationPages';
 // Wave 17 — Import / Export
 import { ImportExportPage } from './pages/ImportExportPage';
+import { CommunicationSettingsPage } from './pages/CommunicationSettingsPage';
 
 /**
  * Toutes les pages Settings ont désormais leur composant dédié natif.
@@ -383,6 +384,7 @@ const SettingsContent: React.FC<{
   if (activePage === 'settings_guarantees') return <GuaranteesPage />;
   if (activePage === 'settings_no_show') return <NoShowPage />;
   if (activePage === 'settings_email_templates') return <EmailTemplatesPage />;
+  if (activePage === 'settings_communication') return <CommunicationSettingsPage />;
 
   // ─── Wave 15 — Établissement restant ──────────────────────────────────
   if (activePage === 'settings_multihotel') return <MultiHotelPage />;

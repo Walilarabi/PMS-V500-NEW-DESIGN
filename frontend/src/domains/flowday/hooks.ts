@@ -17,15 +17,20 @@ import { useReservations } from '@/src/domains/reservations/hooks';
 import { useRooms } from '@/src/domains/hotel/hooks';
 import type { ReservationRow } from '@/src/domains/reservations/schemas';
 import type { RoomRow as DbRoomRow, GuestRow } from '@/src/lib/supabase.types';
+import { normalizeBadges } from '@/src/services/communication/badges';
 
 /* ------------------------------------------------------------------------- */
 /*                       RoomRow shape used by Flowday UI                    */
 /* ------------------------------------------------------------------------- */
 
-export type FlowdayBadge = 'vip' | 'prioritaire' | 'nouveau' | 'fidele' | 'incident';
+export type FlowdayBadge =
+  | 'vip' | 'habitue' | 'corporate' | 'attention'
+  | 'pmr' | 'blacklist' | 'litige' | 'preference';
 
 export type FlowdayRoomRow = {
   id: number;
+  /** UUID Supabase du client (badges + logs de communication). */
+  guestId?: string;
   priority: 'Critique' | 'Élevée' | 'Moyenne' | 'Faible';
   room: string;
   type: string;
@@ -273,6 +278,8 @@ export function useFlowdayDataset(): FlowdayDataset {
       return {
         id: idx + 1,
         reservationUuid: res.id,
+        guestId: res.guest_id ?? undefined,
+        badges: normalizeBadges(guest?.badges) as FlowdayBadge[],
         priority: computePriority(movement, res.payment_status),
         room: dbRoom?.number ?? res.room_number ?? '—',
         type: dbRoom?.type ?? res.room_type ?? 'STD',

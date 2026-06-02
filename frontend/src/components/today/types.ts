@@ -1,10 +1,17 @@
 /**
  * FLOWTYM — Shared types for the Flowday (TodayView) module.
  */
-export type BadgeType = 'vip' | 'prioritaire' | 'nouveau' | 'fidele' | 'incident';
+// Badges canoniques (voir src/services/communication/badges.ts).
+export type BadgeType =
+  | 'vip' | 'habitue' | 'corporate' | 'attention'
+  | 'pmr' | 'blacklist' | 'litige' | 'preference';
 
 export type RoomRow = {
   id: number;
+  /** UUID Supabase du client (pour persistance badges + logs de communication). */
+  guestId?: string;
+  /** UUID Supabase de la réservation. */
+  reservationUuid?: string;
   priority: string;
   room: string;
   type: string;

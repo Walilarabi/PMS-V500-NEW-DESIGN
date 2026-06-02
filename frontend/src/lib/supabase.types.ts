@@ -87,6 +87,8 @@ export interface GuestRow {
   total_spent: number | null;
   total_stays: number | null;
   blacklisted: boolean | null;
+  vip: boolean | null;
+  badges: string[] | null;
   notes: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -139,9 +141,114 @@ export interface AuditLogRow {
   created_at: string;
 }
 
+export interface HotelEmailSettingsRow {
+  hotel_id: string;
+  provider: 'smtp' | 'resend' | 'gmail_oauth' | 'microsoft_graph';
+  from_email: string | null;
+  from_name: string | null;
+  reply_to: string | null;
+  smtp_host: string | null;
+  smtp_port: number | null;
+  smtp_username: string | null;
+  smtp_secure: boolean;
+  oauth_account: string | null;
+  is_active: boolean;
+  connection_status: 'disconnected' | 'connected' | 'error';
+  last_tested_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HotelWhatsappSettingsRow {
+  hotel_id: string;
+  meta_business_id: string | null;
+  waba_id: string | null;
+  phone_number_id: string | null;
+  display_phone_number: string | null;
+  is_active: boolean;
+  connection_status: 'disconnected' | 'connected' | 'error';
+  last_tested_at: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommunicationTemplateRow {
+  id: string;
+  hotel_id: string;
+  channel: 'email' | 'whatsapp';
+  kind: 'confirmation' | 'pre_arrival' | 'checkin' | 'invoice' | 'reminder' | 'free';
+  name: string;
+  subject: string | null;
+  body: string;
+  language: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CommunicationLogRow {
+  id: string;
+  hotel_id: string;
+  channel: 'email' | 'whatsapp';
+  direction: 'outbound' | 'inbound';
+  guest_id: string | null;
+  reservation_id: string | null;
+  to_address: string | null;
+  from_address: string | null;
+  subject: string | null;
+  body: string | null;
+  template_kind: string | null;
+  status: 'queued' | 'sent' | 'failed';
+  provider: string | null;
+  provider_message_id: string | null;
+  error_message: string | null;
+  created_by: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+export interface GuestBadgeHistoryRow {
+  id: string;
+  hotel_id: string;
+  guest_id: string;
+  reservation_id: string | null;
+  old_badges: string[];
+  new_badges: string[];
+  changed_by: string | null;
+  source: string;
+  changed_at: string;
+}
+
 export interface Database {
   public: {
     Tables: {
+      hotel_email_settings: {
+        Row: HotelEmailSettingsRow;
+        Insert: Partial<HotelEmailSettingsRow> & { hotel_id: string };
+        Update: Partial<HotelEmailSettingsRow>;
+      };
+      hotel_whatsapp_settings: {
+        Row: HotelWhatsappSettingsRow;
+        Insert: Partial<HotelWhatsappSettingsRow> & { hotel_id: string };
+        Update: Partial<HotelWhatsappSettingsRow>;
+      };
+      communication_templates: {
+        Row: CommunicationTemplateRow;
+        Insert: Partial<CommunicationTemplateRow> & { hotel_id: string; channel: string; kind: string; name: string; body: string };
+        Update: Partial<CommunicationTemplateRow>;
+      };
+      communication_logs: {
+        Row: CommunicationLogRow;
+        Insert: Partial<CommunicationLogRow> & { hotel_id: string; channel: string };
+        Update: Partial<CommunicationLogRow>;
+      };
+      guest_badge_history: {
+        Row: GuestBadgeHistoryRow;
+        Insert: Partial<GuestBadgeHistoryRow> & { hotel_id: string; guest_id: string };
+        Update: never;
+      };
       hotels: {
         Row: HotelRow;
         Insert: Partial<HotelRow> & { name: string };
@@ -182,6 +289,18 @@ export interface Database {
     Functions: {
       get_user_hotel_id: { Args: Record<string, never>; Returns: string };
       get_user_role: { Args: Record<string, never>; Returns: AdminUserRole };
+      set_guest_badges: {
+        Args: { p_guest_id: string; p_badges: string[]; p_reservation_id?: string | null; p_source?: string };
+        Returns: string[];
+      };
+      set_communication_secret: {
+        Args: { p_channel: string; p_secret_key: string; p_value: string };
+        Returns: undefined;
+      };
+      has_communication_secret: {
+        Args: { p_channel: string; p_secret_key: string };
+        Returns: boolean;
+      };
       provision_user_for_hotel: {
         Args: {
           p_auth_user_id: string;

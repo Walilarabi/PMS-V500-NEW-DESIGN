@@ -111,6 +111,7 @@ export const SETTINGS_NAVIGATION: SettingsDomain[] = [
       { id: 'settings_payment_modes',    label: 'Paiements & dépôts',       icon: CreditCard },
       { id: 'settings_no_show',          label: 'No-show & dépassement',    icon: AlertOctagon },
       { id: 'settings_email_templates',  label: 'Templates email / SMS',    icon: Mail },
+      { id: 'settings_communication',    label: 'Communication (Email / WhatsApp)', icon: Send },
     ],
   },
   {
