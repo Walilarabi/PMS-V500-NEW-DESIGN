@@ -27,6 +27,10 @@ export interface CardexDocument {
 
 export interface Reservation {
   id: string;
+  /** UUID Supabase réel de la réservation (≠ id si id = référence). Journal 360. */
+  reservationUuid?: string;
+  /** UUID Supabase du client. Journal 360. */
+  guestId?: string;
   priority: string;
   room: string;
   roomType: string;

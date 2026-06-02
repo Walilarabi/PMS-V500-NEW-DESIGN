@@ -2402,7 +2402,7 @@ export const PlanningView = () => {
         <ReservationDetailsModal
           isOpen={true}
           onClose={() => setIsDetailsModalOpen(false)}
-          reservation={selectedDetailsRes}
+          reservation={{ ...selectedDetailsRes, guestId: selectedDetailsRes.guestId, reservationUuid: selectedDetailsRes.reservationUuid }}
           onUpdate={(updated) => updateReservation(updated.id, updated)}
         />
       )}

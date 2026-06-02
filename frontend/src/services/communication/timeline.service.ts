@@ -70,6 +70,26 @@ export async function fetchCommunicationTimeline(params: FetchTimelineParams): P
   }));
 }
 
+/**
+ * Résout les UUID réels (réservation + client) à partir d'une référence
+ * lisible, pour les vues legacy qui ne propagent pas les UUID (ex. Planning).
+ * RLS hôtel appliquée. Renvoie null si 0 ou plusieurs correspondances
+ * (jamais de donnée ambiguë → jamais de faux rattachement).
+ */
+export async function resolveReservationRefIds(
+  reference: string,
+): Promise<{ reservationId: string; guestId: string | null } | null> {
+  if (!reference) return null;
+  const { data, error } = await supabase
+    .from('reservations')
+    .select('id, guest_id')
+    .eq('reference', reference)
+    .limit(2);
+  if (error || !data || data.length !== 1) return null;
+  const row = data[0] as { id: string; guest_id: string | null };
+  return { reservationId: row.id, guestId: row.guest_id ?? null };
+}
+
 export interface AddInternalNoteParams extends TimelineScope {
   body: string;
 }

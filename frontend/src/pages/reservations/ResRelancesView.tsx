@@ -30,6 +30,8 @@ function toModalRes(r: ReservationRow): any {
   const balance = r.solde ?? Math.max(0, (r.total_amount ?? 0) - (r.paid_amount ?? 0));
   return {
     id:          r.id,
+    guestId:     r.guest_id ?? undefined,
+    reservationUuid: r.id,
     reference:   r.reference ?? r.id.slice(0, 8).toUpperCase(),
     client:      r.guest_name  ?? 'Client inconnu',
     guestName:   r.guest_name  ?? 'Client inconnu',

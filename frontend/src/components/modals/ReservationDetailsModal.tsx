@@ -8,6 +8,8 @@ import { COUNTRIES, NatSelector, GUAR_ICONS, RATE_PLANS, GUAR_CFG, SEGMENTS } fr
 import { CHANNELS } from '../../constants/channels';
 import { RefundModal } from '../billing/RefundModal';
 import { CommunicationTimeline } from '@/src/components/communication/CommunicationTimeline';
+import { useQuery } from '@tanstack/react-query';
+import { resolveReservationRefIds } from '@/src/services/communication/timeline.service';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FLOWTYM — FICHE RÉSERVATION COMPLÈTE
@@ -2909,16 +2911,31 @@ interface FicheReservationProps {
   onUpdate?: (updated: Reservation) => void;
 }
 
-/** Onglet "Journal" — Journal Unifié des communications (L3, données réelles). */
+/** Onglet "Journal" — Journal Unifié des communications (L3.1, données réelles). */
 const TabCommunications: React.FC<{ res: any }> = ({ res }) => {
-  const guestId = res.guestId ?? res.guest_id ?? null;
-  const reservationId = res.reservationUuid ?? res.reservation_id ?? null;
+  const directGuest = res.guestId ?? res.guest_id ?? null;
+  const directResa  = res.reservationUuid ?? res.reservation_id ?? null;
+  const needResolve = !directGuest && !directResa;
+  const reference   = res.reference ?? res.ref ?? res.id ?? null;
+
+  // Repli pour vues legacy (ex. Planning) : résolution des UUID par référence.
+  const resolveQ = useQuery({
+    queryKey: ['resolve-res-ids', reference],
+    queryFn: () => resolveReservationRefIds(String(reference)),
+    enabled: needResolve && Boolean(reference),
+    staleTime: 60_000,
+  });
+
+  const guestId = directGuest ?? resolveQ.data?.guestId ?? null;
+  const reservationId = directResa ?? resolveQ.data?.reservationId ?? null;
+
+  if (needResolve && resolveQ.isLoading) {
+    return <div style={{ padding: 28, textAlign: 'center', color: '#94A3B8', fontSize: 13 }}>Chargement du journal…</div>;
+  }
   if (!guestId && !reservationId) {
     return (
       <div style={{ padding: 28, textAlign: 'center', color: '#94A3B8', fontSize: 13, lineHeight: 1.6 }}>
-        Le journal des communications n'est pas rattaché depuis cette vue
-        (identifiants client / réservation non transmis).<br />
-        Ouvrez la fiche depuis Flowday pour consulter l'historique complet.
+        Aucun historique rattaché à cette réservation pour le moment.
       </div>
     );
   }

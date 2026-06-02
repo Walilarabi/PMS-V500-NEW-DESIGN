@@ -375,7 +375,7 @@ export const ResFilteredView: React.FC<ResFilteredViewProps> = ({
       {/* Détail modal */}
       {selectedId && selectedRow && (
         <ReservationDetailsModal
-          reservation={selectedRow as any}
+          reservation={{ ...(selectedRow as any), guestId: selectedRow.guest_id ?? undefined, reservationUuid: selectedRow.id }}
           onClose={() => setSelectedId(null)}
         />
       )}

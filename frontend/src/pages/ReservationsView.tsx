@@ -40,6 +40,8 @@ interface ResTableRow {
   ref: string;
   /** UUID Supabase — uniquement pour les relations backend */
   id: string;
+  /** UUID client (pour le Journal 360) */
+  guestId?: string;
   status: string;
   statusKey: string;
   client: string;
@@ -119,6 +121,7 @@ const mapRow = (row: ReservationRow): ResTableRow => {
     // Référence partenaire : external_ref > reference > fallback court
     ref:         row.external_ref ?? row.reference ?? row.id.slice(0, 8).toUpperCase(),
     id:          row.id,
+    guestId:     row.guest_id ?? undefined,
     status:      statusLabel,
     statusKey:   row.status ?? 'pending',
     client:      row.guest_name  ?? 'Client inconnu',
@@ -396,6 +399,8 @@ export const ReservationsView = () => {
     if (!selectedDetail) return null;
     return {
       id:          selectedDetail.id,
+      guestId:     selectedDetail.guestId,
+      reservationUuid: selectedDetail.id,
       reference:   selectedDetail.ref,
       client:      selectedDetail.client,
       guestName:   selectedDetail.client,
