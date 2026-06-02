@@ -63,13 +63,20 @@ export async function uploadAttachment(params: UploadAttachmentParams): Promise<
   return data as string;
 }
 
-/** URL signée temporaire pour télécharger/afficher une pièce jointe. */
-export async function getAttachmentUrl(storagePath: string, expiresInSec = 3600): Promise<string | null> {
-  const { data, error } = await supabase.storage
-    .from(ATTACHMENTS_BUCKET)
-    .createSignedUrl(storagePath, expiresInSec);
+/**
+ * URL signée temporaire (TTL court) via la PORTE AUDITÉE (R1) : la signature
+ * directe côté client est fermée ; cet appel journalise l'accès (view/download)
+ * et vérifie les permissions de rôle côté serveur avant de signer.
+ */
+export async function getAttachmentUrl(
+  attachmentId: string,
+  action: 'view' | 'download' = 'download',
+): Promise<string | null> {
+  const { data, error } = await supabase.functions.invoke('attachment-access', {
+    body: { attachmentId, action },
+  });
   if (error) return null;
-  return data?.signedUrl ?? null;
+  return (data as { url?: string } | null)?.url ?? null;
 }
 
 /** Supprime la métadonnée puis l'objet Storage. */

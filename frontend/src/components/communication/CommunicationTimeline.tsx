@@ -64,9 +64,9 @@ const CATEGORIES: { key: 'all' | TimelineCategory; label: string }[] = [
 const AttachmentChip: React.FC<{ att: TimelineAttachment }> = ({ att }) => {
   const [loading, setLoading] = useState(false);
   const open = async () => {
-    if (!att.path) return;
+    if (!att.id) return;
     setLoading(true);
-    const url = await getAttachmentUrl(att.path);
+    const url = await getAttachmentUrl(att.id, 'download'); // porte auditée (R1)
     setLoading(false);
     if (url) window.open(url, '_blank', 'noopener');
   };
