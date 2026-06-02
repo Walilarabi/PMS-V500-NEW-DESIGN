@@ -39,6 +39,53 @@ function json(payload: unknown, status = 200): Response {
   });
 }
 
+/**
+ * Dual-write Conversations (L2) — strictement secondaire et GUARDÉ.
+ * TOUTE erreur est avalée : ne doit jamais affecter l'envoi ni la réponse.
+ * communication_logs reste la source de vérité.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function recordConversationMessage(svc: any, p: {
+  hotelId: string; channel: 'email' | 'sms' | 'whatsapp' | 'internal';
+  contactAddress: string; guestId: string | null; reservationId: string | null;
+  subject: string | null; body: string | null; templateKind: string | null;
+  status: 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
+  provider: string | null; providerMessageId: string | null; errorMessage: string | null;
+  fromAddress: string | null; createdBy: string | null; sentAt: string | null;
+  communicationLogId: string | null;
+}): Promise<void> {
+  try {
+    const { data: thread } = await svc
+      .from('conversation_threads')
+      .upsert({
+        hotel_id: p.hotelId, channel: p.channel, contact_address: p.contactAddress ?? '',
+        guest_id: p.guestId, reservation_id: p.reservationId, subject: p.subject,
+      }, { onConflict: 'hotel_id,channel,contact_address' })
+      .select('id')
+      .maybeSingle();
+    const threadId = thread?.id;
+    if (!threadId) return;
+
+    await svc.from('conversation_messages').insert({
+      thread_id: threadId, hotel_id: p.hotelId, channel: p.channel, direction: 'outbound',
+      status: p.status, guest_id: p.guestId, reservation_id: p.reservationId,
+      from_address: p.fromAddress, to_address: p.contactAddress, subject: p.subject,
+      body: p.body, template_kind: p.templateKind, provider: p.provider,
+      provider_message_id: p.providerMessageId, error_message: p.errorMessage,
+      created_by: p.createdBy, communication_log_id: p.communicationLogId, sent_at: p.sentAt,
+    });
+
+    if (p.guestId) {
+      await svc.from('conversation_participants')
+        .insert({ thread_id: threadId, hotel_id: p.hotelId, role: 'guest', guest_id: p.guestId, address: p.contactAddress })
+        .select('id').maybeSingle()
+        .then(() => undefined, () => undefined);
+    }
+  } catch (_e) {
+    // No-op volontaire.
+  }
+}
+
 /** Normalise un numéro en E.164 sans le '+' (format attendu par Cloud API). */
 function normalizePhone(raw: string): string | null {
   const digits = String(raw).replace(/[^\d+]/g, '');
@@ -144,24 +191,38 @@ serve(async (req) => {
       else errorMessage = metaErr?.message ? `Meta: ${metaErr.message}` : `Cloud API: ${JSON.stringify(data)}`;
     }
 
-    // ── Journaliser ────────────────────────────────────────────────────────────
-    await svc.from('communication_logs').insert({
+    // ── Journaliser (source de vérité legacy) ──────────────────────────────────
+    const waSentAt = ok ? new Date().toISOString() : null;
+    const waBody = template ? `[template:${template.name}]` : text;
+    const waTo = `+${phone}`;
+    const { data: waLog } = await svc.from('communication_logs').insert({
       hotel_id: hotelId,
       channel: 'whatsapp',
       direction: 'outbound',
       guest_id: guestId ?? null,
       reservation_id: reservationId ?? null,
-      to_address: `+${phone}`,
+      to_address: waTo,
       from_address: settings.display_phone_number ?? settings.phone_number_id,
       subject: null,
-      body: template ? `[template:${template.name}]` : text,
+      body: waBody,
       template_kind: templateKind ?? (template ? 'template' : 'free'),
       status: ok ? 'sent' : 'failed',
       provider: 'whatsapp_cloud',
       provider_message_id: providerMessageId,
       error_message: errorMessage,
       created_by: createdBy,
-      sent_at: ok ? new Date().toISOString() : null,
+      sent_at: waSentAt,
+    }).select('id').maybeSingle();
+
+    // ── Dual-write Conversations (L2) — secondaire et GUARDÉ ────────────────────
+    await recordConversationMessage(svc, {
+      hotelId, channel: 'whatsapp', contactAddress: waTo, guestId: guestId ?? null,
+      reservationId: reservationId ?? null, subject: null, body: waBody,
+      templateKind: templateKind ?? (template ? 'template' : 'free'),
+      status: ok ? 'sent' : 'failed', provider: 'whatsapp_cloud',
+      providerMessageId, errorMessage,
+      fromAddress: settings.display_phone_number ?? settings.phone_number_id,
+      createdBy, sentAt: waSentAt, communicationLogId: waLog?.id ?? null,
     });
 
     if (!ok) {

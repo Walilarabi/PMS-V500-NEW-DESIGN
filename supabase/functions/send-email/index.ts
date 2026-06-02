@@ -44,6 +44,54 @@ function json(payload: unknown, status = 200): Response {
   });
 }
 
+/**
+ * Dual-write Conversations (L2) — strictement secondaire et GUARDÉ.
+ * Upsert le thread (clé naturelle hotel/canal/contact), insère le message et
+ * upsert le participant guest. TOUTE erreur est avalée : ce bloc ne doit jamais
+ * affecter l'envoi ni la réponse. communication_logs reste la source de vérité.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function recordConversationMessage(svc: any, p: {
+  hotelId: string; channel: 'email' | 'sms' | 'whatsapp' | 'internal';
+  contactAddress: string; guestId: string | null; reservationId: string | null;
+  subject: string | null; body: string | null; templateKind: string | null;
+  status: 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
+  provider: string | null; providerMessageId: string | null; errorMessage: string | null;
+  fromAddress: string | null; createdBy: string | null; sentAt: string | null;
+  communicationLogId: string | null;
+}): Promise<void> {
+  try {
+    const { data: thread } = await svc
+      .from('conversation_threads')
+      .upsert({
+        hotel_id: p.hotelId, channel: p.channel, contact_address: p.contactAddress ?? '',
+        guest_id: p.guestId, reservation_id: p.reservationId, subject: p.subject,
+      }, { onConflict: 'hotel_id,channel,contact_address' })
+      .select('id')
+      .maybeSingle();
+    const threadId = thread?.id;
+    if (!threadId) return;
+
+    await svc.from('conversation_messages').insert({
+      thread_id: threadId, hotel_id: p.hotelId, channel: p.channel, direction: 'outbound',
+      status: p.status, guest_id: p.guestId, reservation_id: p.reservationId,
+      from_address: p.fromAddress, to_address: p.contactAddress, subject: p.subject,
+      body: p.body, template_kind: p.templateKind, provider: p.provider,
+      provider_message_id: p.providerMessageId, error_message: p.errorMessage,
+      created_by: p.createdBy, communication_log_id: p.communicationLogId, sent_at: p.sentAt,
+    });
+
+    if (p.guestId) {
+      await svc.from('conversation_participants')
+        .insert({ thread_id: threadId, hotel_id: p.hotelId, role: 'guest', guest_id: p.guestId, address: p.contactAddress })
+        .select('id').maybeSingle()
+        .then(() => undefined, () => undefined); // dédup => ignore
+    }
+  } catch (_e) {
+    // No-op volontaire : le socle Conversations est secondaire.
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any;
 
@@ -313,8 +361,9 @@ serve(async (req) => {
         result = { ok: false, error: `Provider inconnu : ${settings.provider}` };
     }
 
-    // ── Journaliser ────────────────────────────────────────────────────────────
-    await svc.from('communication_logs').insert({
+    // ── Journaliser (source de vérité legacy) ──────────────────────────────────
+    const sentAt = result.ok ? new Date().toISOString() : null;
+    const { data: logRow } = await svc.from('communication_logs').insert({
       hotel_id: hotelId,
       channel: 'email',
       direction: 'outbound',
@@ -330,7 +379,20 @@ serve(async (req) => {
       provider_message_id: result.id ?? null,
       error_message: result.ok ? null : result.error ?? 'Erreur inconnue',
       created_by: createdBy,
-      sent_at: result.ok ? new Date().toISOString() : null,
+      sent_at: sentAt,
+    }).select('id').maybeSingle();
+
+    // ── Dual-write Conversations (L2) — STRICTEMENT secondaire et GUARDÉ ────────
+    // Tout échec ici (tables non encore déployées, etc.) est avalé : il ne doit
+    // JAMAIS impacter l'envoi ni la réponse. communication_logs reste la vérité.
+    await recordConversationMessage(svc, {
+      hotelId, channel: 'email', contactAddress: to, guestId: guestId ?? null,
+      reservationId: reservationId ?? null, subject, body: htmlBody,
+      templateKind: templateKind ?? null, status: result.ok ? 'sent' : 'failed',
+      provider: settings.provider, providerMessageId: result.id ?? null,
+      errorMessage: result.ok ? null : result.error ?? 'Erreur inconnue',
+      fromAddress: settings.from_email, createdBy, sentAt,
+      communicationLogId: logRow?.id ?? null,
     });
 
     // Mettre à jour le statut de connexion en cas d'échec d'auth
