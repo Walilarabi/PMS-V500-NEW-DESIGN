@@ -3,6 +3,17 @@
 Finalisation des 3 actions opérationnelles du menu « ⋮ » de Flowday / Vue du jour :
 **Envoyer un email**, **Envoyer un WhatsApp**, **Modifier le badge client**.
 
+> **Évolution Lot L0 + L1 (centre Communication Enterprise)**
+> - **L0 — cohérence** : trigger `guests_sync_badges_flags` (migration `20260628`)
+>   réconcilie en permanence `guests.badges` ↔ `guests.vip`/`blacklisted` (badge fait
+>   autorité), supprimant tout risque de désync entre Flowday et le CRM. Toutes les
+>   edge functions consolidées sous `supabase/functions/` (racine) + `supabase/config.toml`.
+> - **L1 — UI** : module déplacé de *Réservations > Communication* vers un **domaine
+>   transverse `Paramètres > Communication`** avec 6 sous-pages : Email, SMS, WhatsApp,
+>   Templates, Automatisation, Journal (`src/pages/settings/pages/communication/`).
+>   Email/WhatsApp pleinement fonctionnels ; Journal lit `communication_logs` (réel) ;
+>   Templates lit `fetchTemplates` (réel) ; SMS/Automatisation = feuille de route (lots L4/L6).
+
 ---
 
 ## 1. Audit de l'existant (avant)
@@ -43,7 +54,7 @@ RPC (SECURITY DEFINER, isolation `hotel_id` validée côté serveur) :
 
 ---
 
-## 3. Edge functions (Deno) — `frontend/supabase/functions/`
+## 3. Edge functions (Deno) — `supabase/functions/`
 
 - **`send-email/`** — envoie depuis l'adresse de l'hôtel. Dispatch provider :
   `resend` | `smtp` (denomailer) | `gmail_oauth` (Gmail API + refresh) | `microsoft_graph`

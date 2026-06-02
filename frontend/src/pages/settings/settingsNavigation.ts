@@ -20,7 +20,7 @@ import {
   Package, Percent, Plug, Receipt, RefreshCw, Settings2, Share2, Shield,
   ShieldCheck, Sparkles, Star, Tag, Target, Timer, Upload, UserCheck, Users,
   Wand2, Webhook, Wrench, Zap, Coffee, Bed, Plane, ClipboardList, Banknote,
-  Send,
+  Send, Smartphone, MessageSquare, Inbox,
 } from 'lucide-react';
 import type { PageId } from '@/src/types';
 
@@ -111,7 +111,19 @@ export const SETTINGS_NAVIGATION: SettingsDomain[] = [
       { id: 'settings_payment_modes',    label: 'Paiements & dépôts',       icon: CreditCard },
       { id: 'settings_no_show',          label: 'No-show & dépassement',    icon: AlertOctagon },
       { id: 'settings_email_templates',  label: 'Templates email / SMS',    icon: Mail },
-      { id: 'settings_communication',    label: 'Communication (Email / WhatsApp)', icon: Send },
+    ],
+  },
+  {
+    id: 'communication',
+    label: 'Communication',
+    icon: Send,
+    items: [
+      { id: 'settings_comm_email',      label: 'Email hôtel',       icon: Mail },
+      { id: 'settings_comm_sms',        label: 'SMS',               icon: Smartphone },
+      { id: 'settings_comm_whatsapp',   label: 'WhatsApp Business', icon: MessageSquare },
+      { id: 'settings_comm_templates',  label: 'Templates',         icon: FileText },
+      { id: 'settings_comm_automation', label: 'Automatisation',    icon: Zap },
+      { id: 'settings_comm_journal',    label: 'Journal',           icon: Inbox },
     ],
   },
   {

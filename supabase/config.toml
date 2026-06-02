@@ -1,0 +1,28 @@
+# =============================================================================
+# FLOWTYM PMS — Configuration Supabase CLI (racine canonique du projet)
+# -----------------------------------------------------------------------------
+# Ce fichier déclare le dossier Supabase de référence : migrations + edge
+# functions vivent désormais ensemble sous ./supabase. Déployer depuis la
+# racine du dépôt :
+#   supabase db push
+#   supabase functions deploy send-email
+#   supabase functions deploy send-whatsapp
+#   supabase functions deploy send-dispute-email
+#
+# NOTE : remplacer `project_id` par la référence réelle du projet lié
+# (supabase link --project-ref <ref>). Valeur indicative ici.
+# =============================================================================
+
+project_id = "flowtym-pms"
+
+# ── Edge Functions ───────────────────────────────────────────────────────────
+# Les fonctions de communication exigent un JWT utilisateur : le hotel_id est
+# dérivé du token appelant (get_user_hotel_id) → isolation multi-tenant.
+[functions.send-email]
+verify_jwt = true
+
+[functions.send-whatsapp]
+verify_jwt = true
+
+[functions.send-dispute-email]
+verify_jwt = true

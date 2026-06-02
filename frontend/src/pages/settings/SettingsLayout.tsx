@@ -101,7 +101,12 @@ import {
 } from './pages/IntegrationPages';
 // Wave 17 — Import / Export
 import { ImportExportPage } from './pages/ImportExportPage';
-import { CommunicationSettingsPage } from './pages/CommunicationSettingsPage';
+import { EmailSettingsPage } from './pages/communication/EmailSettingsPage';
+import { WhatsAppSettingsPage } from './pages/communication/WhatsAppSettingsPage';
+import { SmsSettingsPage } from './pages/communication/SmsSettingsPage';
+import { TemplatesPage as CommTemplatesPage } from './pages/communication/TemplatesPage';
+import { AutomationPage as CommAutomationPage } from './pages/communication/AutomationPage';
+import { CommunicationJournalPage } from './pages/communication/CommunicationJournalPage';
 
 /**
  * Toutes les pages Settings ont désormais leur composant dédié natif.
@@ -384,7 +389,14 @@ const SettingsContent: React.FC<{
   if (activePage === 'settings_guarantees') return <GuaranteesPage />;
   if (activePage === 'settings_no_show') return <NoShowPage />;
   if (activePage === 'settings_email_templates') return <EmailTemplatesPage />;
-  if (activePage === 'settings_communication') return <CommunicationSettingsPage />;
+
+  // ─── Communication (domaine transverse) ───────────────────────────────
+  if (activePage === 'settings_comm_email') return <EmailSettingsPage />;
+  if (activePage === 'settings_comm_sms') return <SmsSettingsPage />;
+  if (activePage === 'settings_comm_whatsapp') return <WhatsAppSettingsPage />;
+  if (activePage === 'settings_comm_templates') return <CommTemplatesPage />;
+  if (activePage === 'settings_comm_automation') return <CommAutomationPage />;
+  if (activePage === 'settings_comm_journal') return <CommunicationJournalPage />;
 
   // ─── Wave 15 — Établissement restant ──────────────────────────────────
   if (activePage === 'settings_multihotel') return <MultiHotelPage />;
