@@ -35,23 +35,25 @@ interface InviteRow {
   invited_at: string;
 }
 
+// R4 : aligné sur l'enum DB admin_user_role. 'petit_dejeuner' (typo) → 'breakfast',
+// ajout de 'comptabilite'.
 const ROLES = [
-  'direction','reception','gouvernante','femme_de_chambre',
-  'maintenance','petit_dejeuner','revenue_manager','admin_hotel',
+  'direction','admin_hotel','reception','gouvernante','femme_de_chambre',
+  'maintenance','breakfast','comptabilite','revenue_manager',
 ] as const;
 
 const ROLE_LABELS: Record<string, string> = {
-  direction: 'Direction', reception: 'Réception', gouvernante: 'Gouvernante',
-  femme_de_chambre: 'Femme de chambre', maintenance: 'Maintenance',
-  petit_dejeuner: 'Petit déjeuner', revenue_manager: 'Revenue Manager',
-  admin_hotel: 'Admin hôtel',
+  direction: 'Direction', admin_hotel: 'Admin hôtel', reception: 'Réception',
+  gouvernante: 'Gouvernante', femme_de_chambre: 'Femme de chambre', maintenance: 'Maintenance',
+  breakfast: 'Petit-déjeuner', comptabilite: 'Comptabilité', revenue_manager: 'Revenue Manager',
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  direction: 'bg-purple-100 text-purple-700', reception: 'bg-blue-100 text-blue-700',
+  direction: 'bg-purple-100 text-purple-700', admin_hotel: 'bg-[#8B5CF6]/10 text-[#8B5CF6]',
+  reception: 'bg-blue-100 text-blue-700',
   gouvernante: 'bg-pink-100 text-pink-700', femme_de_chambre: 'bg-rose-100 text-rose-700',
-  maintenance: 'bg-orange-100 text-orange-700', petit_dejeuner: 'bg-amber-100 text-amber-700',
-  revenue_manager: 'bg-teal-100 text-teal-700', admin_hotel: 'bg-[#8B5CF6]/10 text-[#8B5CF6]',
+  maintenance: 'bg-orange-100 text-orange-700', breakfast: 'bg-amber-100 text-amber-700',
+  comptabilite: 'bg-emerald-100 text-emerald-700', revenue_manager: 'bg-teal-100 text-teal-700',
 };
 
 function useUsers() {

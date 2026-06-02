@@ -18,7 +18,7 @@ import React, { useMemo } from 'react';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 
 export type AccessLevel = 'none' | 'read' | 'write' | 'admin';
-export type RoleId = 'admin' | 'manager' | 'receptionist' | 'housekeeping' | 'reader';
+export type RoleId = 'admin' | 'manager' | 'receptionist' | 'accountant' | 'revenue' | 'housekeeping' | 'reader';
 
 export const ACCESS_LEVEL_ORDER: Record<AccessLevel, number> = {
   none: 0,
@@ -32,24 +32,49 @@ const STORAGE_KEY = 'flowtym.roles.permissions';
 /** Matrice par défaut — synchronisée avec RolesAccessPage.DEFAULT_MATRIX. */
 const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
   admin: {},  // admin = tout, géré par le helper hasPermission ci-dessous
+  // R4 : manager = admin_hotel — opérationnel étendu, gère les users hôtel
+  // (set_users 'write') mais PAS l'effacement RGPD (set_rgpd 'none').
   manager: {
     res_view: 'admin', res_create: 'admin', res_groups: 'write',
     cli_view: 'admin', cli_export: 'write', cli_merge: 'write',
     rev_view: 'admin', rev_decisions: 'admin', rev_pricing: 'admin', rev_autopilot: 'write',
     fin_invoice: 'admin', fin_payment: 'admin', fin_close: 'admin', fin_export: 'admin',
     hk_status: 'read', hk_assign: 'read', hk_maintain: 'read',
-    set_hotel: 'write', set_rooms: 'write', set_users: 'none', set_api: 'none',
+    set_hotel: 'write', set_rooms: 'write', set_users: 'write', set_api: 'none',
     set_integrations: 'write', set_fiscal: 'write', set_audit: 'read',
-    set_backups: 'read', set_rgpd: 'read',
+    set_backups: 'read', set_rgpd: 'none',
   },
   receptionist: {
     res_view: 'admin', res_create: 'admin', res_groups: 'read',
     cli_view: 'admin', cli_export: 'read', cli_merge: 'none',
-    rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
+    // R4 : la réception ne gère pas le Revenue (rev_view 'read' → 'none').
+    rev_view: 'none', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
     fin_invoice: 'write', fin_payment: 'write', fin_close: 'none', fin_export: 'none',
     hk_status: 'read', hk_assign: 'none', hk_maintain: 'none',
     set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
     set_integrations: 'none', set_fiscal: 'none', set_audit: 'none',
+    set_backups: 'none', set_rgpd: 'none',
+  },
+  // R4 : comptabilite — Finance complète, lecture resa/clients, aucun id_doc.
+  accountant: {
+    res_view: 'read', res_create: 'none', res_groups: 'none',
+    cli_view: 'read', cli_export: 'write', cli_merge: 'none',
+    rev_view: 'read', rev_decisions: 'none', rev_pricing: 'none', rev_autopilot: 'none',
+    fin_invoice: 'admin', fin_payment: 'admin', fin_close: 'admin', fin_export: 'admin',
+    hk_status: 'none', hk_assign: 'none', hk_maintain: 'none',
+    set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'read', set_audit: 'read',
+    set_backups: 'none', set_rgpd: 'none',
+  },
+  // R4 : revenue_manager — Revenue complet, lecture resa, aucune finance.
+  revenue: {
+    res_view: 'read', res_create: 'none', res_groups: 'none',
+    cli_view: 'none', cli_export: 'none', cli_merge: 'none',
+    rev_view: 'admin', rev_decisions: 'admin', rev_pricing: 'admin', rev_autopilot: 'write',
+    fin_invoice: 'none', fin_payment: 'none', fin_close: 'none', fin_export: 'none',
+    hk_status: 'none', hk_assign: 'none', hk_maintain: 'none',
+    set_hotel: 'none', set_rooms: 'none', set_users: 'none', set_api: 'none',
+    set_integrations: 'none', set_fiscal: 'none', set_audit: 'read',
     set_backups: 'none', set_rgpd: 'none',
   },
   housekeeping: {
@@ -79,18 +104,23 @@ const DEFAULT_PERMISSIONS: Record<RoleId, Record<string, AccessLevel>> = {
 function normalizeRole(role: string | null | undefined): RoleId {
   if (!role) return 'reader';
   const r = role.toLowerCase();
-  // Rôles internes RBAC
+  // Rôles internes RBAC (compatibilité localStorage)
   if (r === 'admin') return 'admin';
   if (r === 'manager') return 'manager';
   if (r === 'receptionist') return 'receptionist';
+  if (r === 'accountant') return 'accountant';
+  if (r === 'revenue') return 'revenue';
   if (r === 'housekeeping') return 'housekeeping';
-  // Rôles DB (enum admin_user_role)
+  // Rôles DB (enum admin_user_role) — source de vérité
   if (r === 'direction') return 'admin';
+  if (r === 'admin_hotel') return 'manager';
   if (r === 'reception') return 'receptionist';
   if (r === 'gouvernante') return 'housekeeping';
   if (r === 'femme_de_chambre') return 'housekeeping';
   if (r === 'maintenance') return 'housekeeping';
   if (r === 'breakfast') return 'housekeeping';
+  if (r === 'comptabilite') return 'accountant';
+  if (r === 'revenue_manager') return 'revenue';
   return 'reader';
 }
 

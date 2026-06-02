@@ -12,7 +12,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Users, Mail, ShieldCheck, RefreshCw, UserPlus, Power, X, Copy, CheckCircle2,
-  Crown, Shield, Hammer, BookOpen, Briefcase,
+  Crown, Shield, Hammer, BookOpen, Briefcase, Wrench, Coffee, TrendingUp,
 } from 'lucide-react';
 
 import { useToast } from '@/src/hooks/use-toast';
@@ -22,35 +22,43 @@ import {
   useSetUserActive, useSetUserRole,
 } from '@/src/domains/users/hooks';
 import type { AppUserRow, InvitationRow, AppUserRole } from '@/src/domains/users/repository';
+import { ASSIGNABLE_ROLES } from '@/src/domains/users/repository';
 
+// R4 : aligné sur l'enum DB admin_user_role (rôles fantômes supprimés).
 const ROLE_LABEL: Record<string, string> = {
-  owner: 'Propriétaire',
   direction: 'Direction',
-  admin: 'Administrateur',
+  admin_hotel: 'Administrateur hôtel',
   reception: 'Réception',
-  housekeeping: 'Étages',
-  accountant: 'Comptabilité',
-  rms: 'Yield / RMS',
+  gouvernante: 'Gouvernante',
+  femme_de_chambre: 'Femme de chambre',
+  maintenance: 'Maintenance',
+  breakfast: 'Petit-déjeuner',
+  comptabilite: 'Comptabilité',
+  revenue_manager: 'Revenue Manager',
 };
 
 const ROLE_TONE: Record<string, string> = {
-  owner: 'bg-violet-50 text-violet-700 border-violet-100',
   direction: 'bg-indigo-50 text-indigo-700 border-indigo-100',
-  admin: 'bg-rose-50 text-rose-700 border-rose-100',
+  admin_hotel: 'bg-rose-50 text-rose-700 border-rose-100',
   reception: 'bg-sky-50 text-sky-700 border-sky-100',
-  housekeeping: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-  accountant: 'bg-amber-50 text-amber-700 border-amber-100',
-  rms: 'bg-pink-50 text-pink-700 border-pink-100',
+  gouvernante: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  femme_de_chambre: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  maintenance: 'bg-amber-50 text-amber-700 border-amber-100',
+  breakfast: 'bg-orange-50 text-orange-700 border-orange-100',
+  comptabilite: 'bg-amber-50 text-amber-700 border-amber-100',
+  revenue_manager: 'bg-pink-50 text-pink-700 border-pink-100',
 };
 
 const ROLE_ICON: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
-  owner: Crown,
-  direction: Shield,
-  admin: ShieldCheck,
+  direction: Crown,
+  admin_hotel: ShieldCheck,
   reception: BookOpen,
-  housekeeping: Hammer,
-  accountant: Briefcase,
-  rms: ShieldCheck,
+  gouvernante: Hammer,
+  femme_de_chambre: Hammer,
+  maintenance: Wrench,
+  breakfast: Coffee,
+  comptabilite: Briefcase,
+  revenue_manager: TrendingUp,
 };
 
 export const UsersView: React.FC = () => {
@@ -250,7 +258,7 @@ const UserRow: React.FC<{
           </span>
           <div className="min-w-0">
             <p className="text-xs font-bold text-gray-800 truncate">{user.full_name ?? '—'}</p>
-            <p className="text-[10px] text-gray-400">{user.role === 'owner' ? '👑 ' : ''}{ROLE_LABEL[user.role] ?? user.role}</p>
+            <p className="text-[10px] text-gray-400">{user.role === 'direction' ? '👑 ' : ''}{ROLE_LABEL[user.role] ?? user.role}</p>
           </div>
         </div>
       </td>
@@ -266,7 +274,7 @@ const UserRow: React.FC<{
             data-testid={`users-role-${user.id}`}
             className={`bg-transparent text-[11px] font-bold cursor-pointer ${ROLE_TONE[user.role]?.split(' ')[1] ?? 'text-gray-700'}`}
           >
-            {(['owner', 'direction', 'admin', 'reception', 'housekeeping', 'accountant', 'rms'] as const).map((r) => (
+            {ASSIGNABLE_ROLES.map((r) => (
               <option key={r} value={r}>{ROLE_LABEL[r]}</option>
             ))}
           </select>
@@ -420,7 +428,7 @@ const InviteModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpe
               data-testid="users-invite-role"
               className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm"
             >
-              {(['owner', 'direction', 'admin', 'reception', 'housekeeping', 'accountant', 'rms'] as const).map((r) => (
+              {ASSIGNABLE_ROLES.map((r) => (
                 <option key={r} value={r}>{ROLE_LABEL[r]}</option>
               ))}
             </select>

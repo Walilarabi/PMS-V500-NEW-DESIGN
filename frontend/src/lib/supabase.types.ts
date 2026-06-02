@@ -9,14 +9,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
-/** Roles defined as a Postgres enum `admin_user_role`. */
+/** Roles defined as a Postgres enum `admin_user_role` (R4 : 9 valeurs). */
 export type AdminUserRole =
   | 'reception'
   | 'gouvernante'
   | 'femme_de_chambre'
   | 'maintenance'
   | 'breakfast'
-  | 'direction';
+  | 'direction'
+  | 'admin_hotel'
+  | 'comptabilite'
+  | 'revenue_manager';
 
 /** `reservation_status` enum (DB) + free-text statuses observed in the app. */
 export type ReservationStatus = 'confirmed' | 'checked_in' | 'checked_out' | 'cancelled';

@@ -5,7 +5,19 @@ import { z } from 'zod';
 import { supabase } from '@/src/lib/supabase';
 import { mapSupabaseError } from '@/src/domains/_shared/errors';
 
-export type AppUserRole = 'owner' | 'direction' | 'admin' | 'reception' | 'housekeeping' | 'accountant' | 'rms';
+// R4 : aligné sur l'enum DB admin_user_role (source de vérité unique).
+// Les anciens rôles fantômes (owner, admin, housekeeping, accountant, rms) sont
+// supprimés — ils n'existaient pas en base.
+export type AppUserRole =
+  | 'direction'
+  | 'admin_hotel'
+  | 'reception'
+  | 'gouvernante'
+  | 'femme_de_chambre'
+  | 'maintenance'
+  | 'breakfast'
+  | 'comptabilite'
+  | 'revenue_manager';
 
 export const appUserRowSchema = z.object({
   id: z.string(),
@@ -58,12 +70,17 @@ export async function setUserActive(id: string, isActive: boolean): Promise<AppU
 }
 
 export async function setUserRole(id: string, role: AppUserRole): Promise<AppUserRow> {
+  // R4 : passe par la RPC SECURITY DEFINER set_user_hotel_role() qui applique
+  // la garde anti-élévation (admin_hotel ne peut pas attribuer direction/admin_hotel).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const builder = supabase.from('users') as any;
-  const { data, error } = await builder
-    .update({ role })
-    .eq('id', id)
+  const rpc = supabase.rpc as any;
+  const { error: rpcError } = await rpc('set_user_hotel_role', { p_user_id: id, p_new_role: role });
+  if (rpcError) throw mapSupabaseError(rpcError);
+  // Relecture de la ligne mise à jour (RLS users_admin_manage garantit l'isolation).
+  const { data, error } = await supabase
+    .from('users')
     .select('id, hotel_id, auth_id, full_name, email, role, is_active, last_login_at, created_at')
+    .eq('id', id)
     .single();
   if (error) throw mapSupabaseError(error);
   return appUserRowSchema.parse(data);
@@ -150,22 +167,28 @@ export async function updateSelfPassword(newPassword: string): Promise<void> {
 
 /* ---------------------------------------------- Labels ---------- */
 
+// R4 : labels alignés sur l'enum DB. breakfast affiché « Petit-déjeuner ».
 export const USER_ROLE_LABEL: Record<string, string> = {
+  direction: 'Direction',
+  admin_hotel: 'Administrateur hôtel',
   reception: 'Réception',
   gouvernante: 'Gouvernante',
   femme_de_chambre: 'Femme de chambre',
   maintenance: 'Maintenance',
-  breakfast: 'Restauration',
-  direction: 'Direction',
-  // legacy values kept for tolerance:
-  owner: 'Propriétaire',
-  admin: 'Administrateur',
-  housekeeping: 'Ménage',
-  accountant: 'Comptable',
-  rms: 'RMS',
+  breakfast: 'Petit-déjeuner',
+  comptabilite: 'Comptabilité',
+  revenue_manager: 'Revenue Manager',
 };
 
 /** Valid roles for invitations (matches the `admin_user_role` enum in DB). */
 export const ASSIGNABLE_ROLES: AppUserRole[] = [
-  'reception', 'gouvernante', 'femme_de_chambre', 'maintenance', 'breakfast', 'direction',
-] as unknown as AppUserRole[];
+  'direction',
+  'admin_hotel',
+  'reception',
+  'gouvernante',
+  'femme_de_chambre',
+  'maintenance',
+  'breakfast',
+  'comptabilite',
+  'revenue_manager',
+];

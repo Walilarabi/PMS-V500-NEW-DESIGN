@@ -1,0 +1,18 @@
+-- ROLLBACK r4b — IRRÉVERSIBLE en PostgreSQL standard.
+-- ALTER TYPE ... DROP VALUE n'existe pas. Les valeurs admin_hotel, comptabilite,
+-- revenue_manager restent présentes dans l'enum.
+--
+-- MITIGATION : tant qu'aucun utilisateur ne porte ces rôles, leur présence est
+-- inoffensive (aucune policy ne s'active). Le « rollback » consiste à ne pas les
+-- utiliser et à exécuter les rollbacks r4c/r4d (policies + permissions docs).
+--
+-- SUPPRESSION RÉELLE (urgence uniquement, nécessite snapshot préalable) :
+--   1. Vérifier qu'aucune ligne users.role / user_hotels.role ne porte ces valeurs.
+--   2. Recréer le type admin_user_role sans les 3 valeurs :
+--      a. CREATE TYPE admin_user_role_old AS ENUM (
+--           'reception','gouvernante','femme_de_chambre','maintenance','breakfast','direction');
+--      b. ALTER TABLE users        ALTER COLUMN role TYPE admin_user_role_old USING role::text::admin_user_role_old;
+--      c. ALTER TABLE user_hotels  ALTER COLUMN role TYPE admin_user_role_old USING role::text::admin_user_role_old;
+--      d. (Recréer toute fonction/policy castant ::admin_user_role)
+--      e. DROP TYPE admin_user_role; ALTER TYPE admin_user_role_old RENAME TO admin_user_role;
+--   Opération lourde — à éviter ; préférer la mitigation ci-dessus.
