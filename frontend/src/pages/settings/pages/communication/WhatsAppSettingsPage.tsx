@@ -11,7 +11,7 @@ import {
   getWhatsAppSettings, saveWhatsAppSettings, setSecret, hasSecret, testWhatsApp,
   type WhatsAppSettings,
 } from '@/src/services/communication/communicationSettings.service';
-import { CommHeader, StatusPill, Field, SecretField, inputCls } from './shared';
+import { CommHeader, CommPage, StatusPill, Field, SecretField, inputCls } from './shared';
 
 export const WhatsAppSettingsPage: React.FC = () => {
   const [s, setS] = useState<Partial<WhatsAppSettings>>({});
@@ -48,7 +48,7 @@ export const WhatsAppSettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <CommPage>
       <CommHeader eyebrow="Communication" title="WhatsApp Business" subtitle="Connectez le compte WhatsApp Business de l'hôtel (Cloud API Meta)." icon={<MessageCircle size={16} className="text-emerald-600" />} />
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
         {loading ? (
@@ -106,7 +106,7 @@ export const WhatsAppSettingsPage: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </CommPage>
   );
 };
 

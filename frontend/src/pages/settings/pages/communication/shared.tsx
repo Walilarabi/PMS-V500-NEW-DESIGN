@@ -12,6 +12,21 @@ import type { ConnectionStatus } from '@/src/services/communication/communicatio
 export const inputCls =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500';
 
+/** Toast applicatif global (écouté par le Toaster). */
+export function commToast(message: string, type: 'success' | 'error' = 'success') {
+  window.dispatchEvent(new CustomEvent('app-toast', { detail: { message, type } }));
+}
+
+/**
+ * Conteneur de page Communication : occupe toute la largeur de l'écran et
+ * gère le scroll vertical propre (le `<main>` parent est en overflow-hidden).
+ */
+export const CommPage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="flex-1 overflow-y-auto bg-slate-50/60">
+    <div className="w-full px-6 pt-6 pb-12">{children}</div>
+  </div>
+);
+
 /** En-tête de section premium, cohérent sur toutes les sous-pages. */
 export const CommHeader: React.FC<{ eyebrow: string; title: string; subtitle?: string; icon?: React.ReactNode }> = ({ eyebrow, title, subtitle, icon }) => (
   <div className="mb-6">

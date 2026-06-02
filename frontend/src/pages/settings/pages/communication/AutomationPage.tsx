@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import { Zap } from 'lucide-react';
-import { CommHeader, ComingSoonPanel } from './shared';
+import { CommHeader, CommPage, ComingSoonPanel } from './shared';
 
 const SCENARIOS = [
   'J-7 arrivée → email automatique',
@@ -20,7 +20,7 @@ const SCENARIOS = [
 ];
 
 export const AutomationPage: React.FC = () => (
-  <div className="mx-auto max-w-3xl">
+  <CommPage>
     <CommHeader eyebrow="Communication" title="Automatisation" subtitle="Déclencheurs, conditions et actions multi-canal — entièrement paramétrables." icon={<Zap size={16} className="text-violet-600" />} />
     <ComingSoonPanel lot="Lot L6" title="Moteur de workflows de communication">
       <p>Tout sera paramétrable (aucun scénario codé en dur). Cas cibles :</p>
@@ -30,7 +30,7 @@ export const AutomationPage: React.FC = () => (
         ))}
       </ul>
     </ComingSoonPanel>
-  </div>
+  </CommPage>
 );
 
 export default AutomationPage;

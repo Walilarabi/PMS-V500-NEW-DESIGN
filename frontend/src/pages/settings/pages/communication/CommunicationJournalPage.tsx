@@ -10,7 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Inbox, Mail, MessageCircle, Loader2, CheckCircle2, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { listCommunicationLogs, type CommunicationLogEntry } from '@/src/services/communication/communicationService';
-import { CommHeader } from './shared';
+import { CommHeader, CommPage } from './shared';
 
 const STATUS_META: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
   sent:   { label: 'Envoyé',  cls: 'bg-emerald-50 text-emerald-700', icon: <CheckCircle2 size={13} /> },
@@ -42,7 +42,7 @@ export const CommunicationJournalPage: React.FC = () => {
   const selectCls = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500';
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <CommPage>
       <CommHeader eyebrow="Communication" title="Journal des communications" subtitle="Historique des messages envoyés (email / WhatsApp), rattachés au client et à la réservation." icon={<Inbox size={16} className="text-violet-600" />} />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -101,7 +101,7 @@ export const CommunicationJournalPage: React.FC = () => {
         )}
       </div>
       <p className="mt-3 text-center text-xs text-slate-400">Le journal unifié transverse (fiche client / réservation / Flowday) et les réponses entrantes arrivent aux lots L2/L3.</p>
-    </div>
+    </CommPage>
   );
 };
 

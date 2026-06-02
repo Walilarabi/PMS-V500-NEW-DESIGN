@@ -12,7 +12,7 @@ import {
   getEmailSettings, saveEmailSettings, setSecret, hasSecret, testEmail,
   type EmailSettings, type EmailProvider,
 } from '@/src/services/communication/communicationSettings.service';
-import { CommHeader, StatusPill, Field, SecretField, inputCls } from './shared';
+import { CommHeader, CommPage, StatusPill, Field, SecretField, inputCls } from './shared';
 
 export const EmailSettingsPage: React.FC = () => {
   const [s, setS] = useState<Partial<EmailSettings>>({ provider: 'smtp', smtp_secure: true });
@@ -52,7 +52,7 @@ export const EmailSettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <CommPage>
       <CommHeader eyebrow="Communication" title="Email hôtel" subtitle="Connectez l'email de l'hôtel pour envoyer des messages réels depuis Flowday." icon={<Mail size={16} className="text-violet-600" />} />
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
         {loading ? (
@@ -140,7 +140,7 @@ export const EmailSettingsPage: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </CommPage>
   );
 };
 
