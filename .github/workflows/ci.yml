@@ -29,15 +29,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Bloquant : la suite complète passe (1208/1208). Toute régression
+      # (test cassé ou nouveau test rouge) bloque désormais la PR.
+      - name: Unit tests
+        run: npm test
+
       # Bloquant : le build a déjà cassé sur main faute de dépendances
       # déclarées (react-hot-toast, @tanstack/react-virtual, @dnd-kit/*,
       # papaparse). Ce gate empêche que cela se reproduise.
       - name: Production build
         run: npm run build
-
-      # Informatif pour l'instant : 5 tests préexistants échouent (mocks RMS
-      # obsolètes — invalidateStaticCache). Une fois corrigés, retirer le
-      # `continue-on-error` pour rendre les tests bloquants.
-      - name: Unit tests
-        run: npm test
-        continue-on-error: true
