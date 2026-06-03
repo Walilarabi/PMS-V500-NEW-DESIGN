@@ -8,14 +8,26 @@ import {
 } from '@/src/pages/settings/settingsNavigation';
 
 describe('settingsNavigation', () => {
-  it('contient les 10 domaines obligatoires', () => {
-    expect(SETTINGS_NAVIGATION.length).toBe(10);
+  it('contient les domaines transverses dans l\'ordre attendu', () => {
+    // Ordre courant : les 10 domaines historiques + 2 domaines transverses
+    // ajoutés ensuite (partners en distribution, communication en R-comm).
     const ids = SETTINGS_NAVIGATION.map((d) => d.id);
     expect(ids).toEqual([
+      'establishment', 'inventory', 'pricing', 'partners', 'distribution',
+      'reservations', 'communication', 'finance', 'housekeeping',
+      'automation', 'security', 'integrations',
+    ]);
+  });
+
+  it('inclut les 10 domaines obligatoires', () => {
+    const ids = new Set(SETTINGS_NAVIGATION.map((d) => d.id));
+    for (const required of [
       'establishment', 'inventory', 'pricing', 'distribution',
       'reservations', 'finance', 'housekeeping',
       'automation', 'security', 'integrations',
-    ]);
+    ]) {
+      expect(ids.has(required)).toBe(true);
+    }
   });
 
   it('chaque domaine a au moins un sous-menu', () => {

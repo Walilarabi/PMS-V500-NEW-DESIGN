@@ -23,6 +23,14 @@ vi.mock('../data/supabaseAdapter', () => ({
     const { useRateCalendarStore } = await import('../store/rateCalendarStore');
     return { roomTypes: useRateCalendarStore.getState().roomTypes, dateColumns: [] };
   }),
+  // Le store importe aussi ces fonctions ; on les mocke pour que la chaîne
+  // addRoomType → invalidateStaticCache() → loadData() ne plante pas.
+  invalidateStaticCache: vi.fn(),
+  fetchCalendarRangeOnly: vi.fn(async () => ({ dateColumns: [] })),
+  prefetchRange: vi.fn(async () => {}),
+  persistAddRatePlan: vi.fn(async () => ({ error: null })),
+  persistUpdateRatePlan: vi.fn(async () => ({ error: null })),
+  persistDeleteRatePlan: vi.fn(async () => ({ error: null })),
 }));
 
 import { useRateCalendarStore } from '../store/rateCalendarStore';

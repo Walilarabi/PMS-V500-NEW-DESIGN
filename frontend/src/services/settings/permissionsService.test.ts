@@ -34,12 +34,14 @@ describe('permissionsService — hasPermission', () => {
   it('manager dispose des permissions definies par defaut', () => {
     expect(hasPermission('manager', 'rev_pricing', 'admin')).toBe(true);
     expect(hasPermission('manager', 'rev_pricing', 'write')).toBe(true);
-    expect(hasPermission('manager', 'set_users', 'write')).toBe(false);
+    // R4 : manager = admin_hotel → gère les utilisateurs de l'hôtel (set_users 'write').
+    expect(hasPermission('manager', 'set_users', 'write')).toBe(true);
   });
 
   it('receptionniste ne peut pas modifier les tarifs', () => {
     expect(hasPermission('receptionist', 'rev_pricing', 'write')).toBe(false);
-    expect(hasPermission('receptionist', 'rev_view', 'read')).toBe(true);
+    // R4 : la réception ne gère pas le Revenue → rev_view 'none' (plus aucun accès).
+    expect(hasPermission('receptionist', 'rev_view', 'read')).toBe(false);
     expect(hasPermission('receptionist', 'fin_payment', 'write')).toBe(true);
     expect(hasPermission('receptionist', 'fin_close', 'write')).toBe(false);
   });
@@ -109,10 +111,11 @@ describe('permissionsService — capabilities Phase 5 (set_rooms, set_integratio
     expect(hasPermission('manager', 'set_fiscal', 'write')).toBe(true);
   });
 
-  it("manager peut lire les sauvegardes / RGPD mais pas les déclencher", () => {
+  it("manager peut lire les sauvegardes mais n'a aucun accès RGPD (R4)", () => {
     expect(hasPermission('manager', 'set_backups', 'read')).toBe(true);
     expect(hasPermission('manager', 'set_backups', 'write')).toBe(false);
-    expect(hasPermission('manager', 'set_rgpd', 'read')).toBe(true);
+    // R4 : l'effacement RGPD reste réservé à la direction → set_rgpd 'none'.
+    expect(hasPermission('manager', 'set_rgpd', 'read')).toBe(false);
     expect(hasPermission('manager', 'set_rgpd', 'write')).toBe(false);
   });
 
