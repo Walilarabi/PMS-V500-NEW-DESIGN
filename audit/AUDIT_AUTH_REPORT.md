@@ -146,14 +146,15 @@ Matrice de droits implémentée dans `pages/admin/AdminTeam.tsx` + flags `AdminC
 ---
 
 ## Corrections réalisées (cette session)
-1. ✅ `frontend/src/domains/admin/AdminContext.tsx` — `user_id` → `auth_id` (débloque /admin).
+1. ✅ `frontend/src/domains/admin/AdminContext.tsx` — `user_id` → `auth_id` (débloque /admin). **Poussé.**
 
-## Migrations SQL fournies (PRÊTES, non appliquées — branche/validation requise)
-- `audit/migrations/20260605_01_fix_portal_audit_log_insert_policy.sql`
-- `audit/migrations/20260605_02_fix_pl_my_hotels_dead_branch.sql`
-- `audit/migrations/20260605_03_harden_function_search_path.sql`
-- `audit/migrations/20260605_04_add_gen_audit_log_invite_rpc.sql`
-- `audit/rls_isolation_tests.sql` (tests reproductibles, lecture seule)
+### Migrations APPLIQUÉES EN PROD & PROUVÉES (ciblé, autorisé, non destructif, par étape)
+- ✅ **01** `portal_audit_log` policy INSERT durcie. Preuve : CAS légitime ALLOWED ; CAS cross-tenant + usurpation acteur **BLOQUÉS** (RLS 42501). Table 0 ligne, tests rollback.
+- ✅ **02** `pl_my_hotels()` branche morte supprimée. Preuve : multi-hôtel inchangé (89=15+74), `SECURITY DEFINER` + `search_path` OK, plus de UNION.
+- ✅ **03** `search_path` fixe sur **40 fonctions** (0 restante mutable). Preuve : smoke test trigger `updated_at` OK (rollback).
+- ⚠️ **04** `gen_audit_log_invite` : créée puis **ANNULÉE** (rollback) — la cible `hr_document_audit_logs` REJETTE `action='invite_user'` (CHECK limité docs/contrats). **Révèle que le fallback d'audit de `invite-user` échouait déjà.** Décision requise (étendre le CHECK / cibler `audit_logs`). Voir le fichier 04.
+
+Rollbacks fournis : `audit/migrations/rollback/20260605_0{1,2,3,4}_rollback.sql`. Tests : `audit/rls_isolation_tests.sql`.
 
 ## Correctifs préparés, déploiement en attente d'autorisation
 - `audit/edge-functions/invite-platform-admin.ts` + recâblage `AdminTeam.tsx` (création Super Admin).
