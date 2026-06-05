@@ -43,7 +43,7 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const { data, error } = await (supabase as any)
         .from('platform_admins')
         .select('id, email, full_name, role')
-        .eq('user_id', user.id)
+        .eq('auth_id', user.id)
         .eq('is_active', true)
         .maybeSingle();
       if (error) throw error;
