@@ -419,7 +419,10 @@ const ONB_ROLES = [
 
 const OnboardingWizard: React.FC<{ onClose: () => void; onDone: () => void }> = ({ onClose, onDone }) => {
   const { data: apps = [] } = usePlatformApps();
+  const { data: hotels = [] } = useHotels();
   const available = apps.filter(a => a.is_available);
+  const [mode, setMode] = useState<'new' | 'existing'>('new');
+  const [hotelId, setHotelId] = useState('');
   const [hotel, setHotel] = useState({ name: '', company: '', siret: '', address: '', city: '', country: 'France', email: '', phone: '', notes: '' });
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [contact, setContact] = useState({ first_name: '', last_name: '', email: '', phone: '', role: 'hotel_admin' });
@@ -430,19 +433,22 @@ const OnboardingWizard: React.FC<{ onClose: () => void; onDone: () => void }> = 
 
   const submit = useMutation({
     mutationFn: async () => {
+      const payload = mode === 'existing'
+        ? { hotel_id: hotelId, apps: selectedApps, contact }
+        : { hotel, apps: selectedApps, contact };
       const { data, error } = await supabase.functions.invoke('invite-hotel-primary-contact', {
-        body: { hotel, apps: selectedApps, contact },
+        body: payload,
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data;
     },
-    onSuccess: (data: { apps_activated?: string[]; already_existed?: boolean }) => {
+    onSuccess: (data: { apps_activated?: string[]; already_existed?: boolean; hotel_created?: boolean }) => {
       const list = (data?.apps_activated ?? []).join(' + ');
       toast.success(
         data?.already_existed
           ? `Accès mis à jour — ${contact.email} (${list}).`
-          : `Hôtel créé · invitation envoyée à ${contact.email} (${list}).`,
+          : `${data?.hotel_created ? 'Hôtel créé · ' : ''}Invitation envoyée à ${contact.email} (${list}).`,
         { duration: 6000 },
       );
       onDone();
@@ -451,9 +457,10 @@ const OnboardingWizard: React.FC<{ onClose: () => void; onDone: () => void }> = 
   });
 
   const handle = () => {
-    if (!hotel.name.trim())        { toast.error("Le nom de l'hôtel est requis."); return; }
-    if (selectedApps.length === 0) { toast.error('Sélectionnez au moins une application.'); return; }
-    if (!contact.email.trim())     { toast.error("L'email du contact est requis."); return; }
+    if (mode === 'new' && !hotel.name.trim()) { toast.error("Le nom de l'hôtel est requis."); return; }
+    if (mode === 'existing' && !hotelId)      { toast.error('Sélectionnez un hôtel existant.'); return; }
+    if (selectedApps.length === 0)            { toast.error('Sélectionnez au moins une application.'); return; }
+    if (!contact.email.trim())                { toast.error("L'email du contact est requis."); return; }
     submit.mutate();
   };
 
@@ -476,22 +483,42 @@ const OnboardingWizard: React.FC<{ onClose: () => void; onDone: () => void }> = 
         {/* 1. Hôtel */}
         <div>
           <div className="flex items-center gap-2 mb-3"><Building2 size={13} className="text-[#8B5CF6]" /><span className="text-[11px] font-black uppercase tracking-widest text-gray-500">1 · Hôtel</span></div>
-          <div className="space-y-3">
-            <FRow label="Nom commercial *"><FInp value={hotel.name} onChange={v => setH('name', v)} placeholder="Hôtel de la Paix" /></FRow>
-            <div className="grid grid-cols-2 gap-3">
-              <FRow label="Société"><FInp value={hotel.company} onChange={v => setH('company', v)} placeholder="SARL Exploitation" /></FRow>
-              <FRow label="SIRET"><FInp value={hotel.siret} onChange={v => setH('siret', v)} /></FRow>
-            </div>
-            <FRow label="Adresse"><FInp value={hotel.address} onChange={v => setH('address', v)} /></FRow>
-            <div className="grid grid-cols-2 gap-3">
-              <FRow label="Ville"><FInp value={hotel.city} onChange={v => setH('city', v)} /></FRow>
-              <FRow label="Pays"><FInp value={hotel.country} onChange={v => setH('country', v)} /></FRow>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <FRow label="Email principal"><FInp value={hotel.email} onChange={v => setH('email', v)} placeholder="contact@hotel.fr" /></FRow>
-              <FRow label="Téléphone"><FInp value={hotel.phone} onChange={v => setH('phone', v)} placeholder="+33…" /></FRow>
-            </div>
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl mb-3">
+            <button type="button" onClick={() => setMode('new')}
+              className={cn('flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-colors', mode === 'new' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600')}>
+              Nouvel hôtel
+            </button>
+            <button type="button" onClick={() => setMode('existing')}
+              className={cn('flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-colors', mode === 'existing' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400 hover:text-gray-600')}>
+              Hôtel existant
+            </button>
           </div>
+          {mode === 'existing' ? (
+            <FRow label="Hôtel *">
+              <select value={hotelId} onChange={e => setHotelId(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 text-[12px] outline-none focus:ring-2 focus:ring-[#8B5CF6]/30">
+                <option value="">Choisir un hôtel…</option>
+                {hotels.map(h => <option key={h.id} value={h.id}>{h.name}{h.city ? ` — ${h.city}` : ''}</option>)}
+              </select>
+            </FRow>
+          ) : (
+            <div className="space-y-3">
+              <FRow label="Nom commercial *"><FInp value={hotel.name} onChange={v => setH('name', v)} placeholder="Hôtel de la Paix" /></FRow>
+              <div className="grid grid-cols-2 gap-3">
+                <FRow label="Société"><FInp value={hotel.company} onChange={v => setH('company', v)} placeholder="SARL Exploitation" /></FRow>
+                <FRow label="SIRET"><FInp value={hotel.siret} onChange={v => setH('siret', v)} /></FRow>
+              </div>
+              <FRow label="Adresse"><FInp value={hotel.address} onChange={v => setH('address', v)} /></FRow>
+              <div className="grid grid-cols-2 gap-3">
+                <FRow label="Ville"><FInp value={hotel.city} onChange={v => setH('city', v)} /></FRow>
+                <FRow label="Pays"><FInp value={hotel.country} onChange={v => setH('country', v)} /></FRow>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FRow label="Email principal"><FInp value={hotel.email} onChange={v => setH('email', v)} placeholder="contact@hotel.fr" /></FRow>
+                <FRow label="Téléphone"><FInp value={hotel.phone} onChange={v => setH('phone', v)} placeholder="+33…" /></FRow>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 2. Applications */}
