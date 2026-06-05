@@ -7,6 +7,7 @@ import {
   ChevronRight, Star, FileText, Rocket, Layers, UserPlus, Send, Loader2,
 } from 'lucide-react';
 import { supabase } from '@/src/lib/supabase';
+import { useAdmin } from '@/src/domains/admin/AdminContext';
 import { cn } from '@/src/lib/utils';
 import toast from 'react-hot-toast';
 
@@ -41,7 +42,7 @@ interface AddonSub {
 interface AddOnItem { id: string; name: string; slug: string; price: number; billing_type: string; is_active: boolean; }
 
 type FilterStatus = 'all' | 'active' | 'inactive';
-type DrawerTab = 'general' | 'contact' | 'subscription' | 'notes';
+type DrawerTab = 'general' | 'contact' | 'apps' | 'subscription' | 'notes';
 
 const EMPTY: Omit<Hotel, 'id' | 'created_at'> = {
   name: '', city: '', country: 'France', address: '', zip: '',
@@ -51,6 +52,7 @@ const EMPTY: Omit<Hotel, 'id' | 'created_at'> = {
 };
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
+  inactive:  { label: 'Inactive',   color: 'bg-gray-100 text-gray-400' },
   trial:     { label: 'Essai',      color: 'bg-blue-50 text-blue-600' },
   active:    { label: 'Actif',      color: 'bg-emerald-50 text-emerald-600' },
   past_due:  { label: 'En retard',  color: 'bg-amber-50 text-amber-600' },
@@ -185,7 +187,7 @@ export const AdminHotels: React.FC = () => {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-hotels-v3'] });
-      qc.invalidateQueries({ queryKey: ['admin-dash-v2'] });
+      qc.invalidateQueries({ queryKey: ['admin-dash-v3'] });
       toast.success('Hôtel enregistré.');
       setDrawerHotel(null); setShowNew(false); setEditMode(false);
     },
@@ -197,7 +199,7 @@ export const AdminHotels: React.FC = () => {
       const { error } = await db.from('hotels').update({ active }).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-hotels-v3'] }); qc.invalidateQueries({ queryKey: ['admin-dash-v2'] }); toast.success('Statut mis à jour.'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-hotels-v3'] }); qc.invalidateQueries({ queryKey: ['admin-dash-v3'] }); toast.success('Statut mis à jour.'); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -207,7 +209,7 @@ export const AdminHotels: React.FC = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-hotels-v3'] }); qc.invalidateQueries({ queryKey: ['admin-dash-v2'] });
+      qc.invalidateQueries({ queryKey: ['admin-hotels-v3'] }); qc.invalidateQueries({ queryKey: ['admin-dash-v3'] });
       toast.success('Hôtel supprimé.'); setDeleteTarget(null); setDeleteConfirm('');
     },
     onError: (e: Error) => toast.error(e.message),
@@ -605,7 +607,8 @@ const OnboardingWizard: React.FC<{ onClose: () => void; onDone: () => void }> = 
 const DRAWER_TABS: { id: DrawerTab; label: string; icon: React.ElementType }[] = [
   { id: 'general',      label: 'Général',      icon: Building2 },
   { id: 'contact',      label: 'Contact',      icon: Phone },
-  { id: 'subscription', label: 'Abonnement',   icon: Package },
+  { id: 'apps',         label: 'Applications', icon: Layers },
+  { id: 'subscription', label: 'Forfait PMS',  icon: CreditCard },
   { id: 'notes',        label: 'Notes',        icon: FileText },
 ];
 
@@ -629,7 +632,7 @@ const HotelDrawer: React.FC<{
         </div>
       </div>
       <div className="flex items-center gap-2">
-        {!editMode && tab !== 'subscription' && (
+        {!editMode && tab !== 'subscription' && tab !== 'apps' && (
           <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#8B5CF6]/10 text-[#8B5CF6] text-[12px] font-bold hover:bg-[#8B5CF6]/20">
             <Edit2 size={12} /> Modifier
           </button>
@@ -658,7 +661,16 @@ const HotelDrawer: React.FC<{
       )
     )}
     {tab === 'contact'      && <HotelContactView hotel={hotel} />}
-    {tab === 'subscription' && <HotelSubscriptionTab hotelId={hotel.id} hotelName={hotel.name} />}
+    {tab === 'apps'         && <HotelAppsTab hotelId={hotel.id} hotelName={hotel.name} />}
+    {tab === 'subscription' && (
+      <>
+        <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-100 text-[11px] text-amber-700 flex items-start gap-2">
+          <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+          <span>Cette section concerne <strong>uniquement le Forfait PMS</strong> (grille tarifaire). Elle ne gère <strong>pas</strong> l'accès aux applications PMS/RH → voir l'onglet <strong>Applications</strong>.</span>
+        </div>
+        <HotelSubscriptionTab hotelId={hotel.id} hotelName={hotel.name} />
+      </>
+    )}
     {tab === 'notes'        && <HotelNotesView hotel={hotel} />}
   </Drawer>
 );
@@ -782,7 +794,7 @@ const HotelSubscriptionTab: React.FC<{ hotelId: string; hotelName: string }> = (
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-hotel-sub', hotelId] });
       qc.invalidateQueries({ queryKey: ['admin-hotel-subs'] });
-      qc.invalidateQueries({ queryKey: ['admin-dash-v2'] });
+      qc.invalidateQueries({ queryKey: ['admin-dash-v3'] });
       toast.success(`Abonnement assigné à ${hotelName}.`);
       setAssigning(false);
     },
@@ -957,6 +969,153 @@ const HotelSubscriptionTab: React.FC<{ hotelId: string; hotelName: string }> = (
       <div className="border-t border-gray-100 pt-4">
         <AddOnsSection hotelId={hotelId} />
       </div>
+    </div>
+  );
+};
+
+// ─── Applications tab (accès PMS/RH par hôtel) ────────────────────────────────
+
+interface AppCatItem { id: string; code: string; name: string; description: string | null; color: string | null; is_available: boolean; }
+interface AppRow {
+  app: AppCatItem;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sub: any | null;
+  users: { id: string; email: string; full_name: string | null }[];
+}
+
+function useHotelApps(hotelId: string | null) {
+  return useQuery<AppRow[]>({
+    queryKey: ['hotel-apps', hotelId],
+    enabled: !!hotelId,
+    queryFn: async () => {
+      const { data: apps, error } = await db.from('platform_apps')
+        .select('id,code,name,description,color,is_available').order('sort_order');
+      if (error) throw error;
+      const { data: subs } = await db.from('hotel_app_subscriptions')
+        .select('*, plan:subscription_plans(name,price_monthly)').eq('hotel_id', hotelId);
+      const subByApp: Record<string, unknown> = {};
+      (subs ?? []).forEach((s: { app_id: string }) => { subByApp[s.app_id] = s; });
+      const { data: access } = await db.from('user_app_access')
+        .select('app_id, user:users(id,email,full_name)').eq('hotel_id', hotelId);
+      const usersByApp: Record<string, { id: string; email: string; full_name: string | null }[]> = {};
+      (access ?? []).forEach((a: { app_id: string; user: { id: string; email: string; full_name: string | null } }) => {
+        (usersByApp[a.app_id] ||= []).push(a.user);
+      });
+      return (apps ?? []).map((a: AppCatItem) => ({ app: a, sub: subByApp[a.id] ?? null, users: usersByApp[a.id] ?? [] }));
+    },
+    staleTime: 15_000,
+  });
+}
+
+const ActBtn: React.FC<{ onClick: () => void; disabled?: boolean; tone: 'emerald' | 'amber' | 'red'; icon: React.ElementType; children: React.ReactNode }> = ({ onClick, disabled, tone, icon: Icon, children }) => {
+  const tones = {
+    emerald: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
+    amber:   'bg-amber-50 text-amber-700 hover:bg-amber-100',
+    red:     'bg-red-50 text-red-600 hover:bg-red-100',
+  };
+  return (
+    <button onClick={onClick} disabled={disabled} className={cn('flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-bold disabled:opacity-50', tones[tone])}>
+      <Icon size={13} />{children}
+    </button>
+  );
+};
+
+const HotelAppsTab: React.FC<{ hotelId: string; hotelName: string }> = ({ hotelId, hotelName }) => {
+  const qc = useQueryClient();
+  const { admin } = useAdmin();
+  const { data: rows = [], isLoading } = useHotelApps(hotelId);
+
+  const act = useMutation({
+    mutationFn: async ({ row, status }: { row: AppRow; status: string }) => {
+      const { app, sub } = row;
+      if (sub) {
+        const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+        if (status === 'active' && sub.status !== 'active') updates.started_at = new Date().toISOString();
+        const { error } = await db.from('hotel_app_subscriptions').update(updates).eq('id', sub.id);
+        if (error) throw error;
+      } else {
+        const trialEnds = new Date(Date.now() + 30 * 864e5).toISOString();
+        const { error } = await db.from('hotel_app_subscriptions').insert({
+          hotel_id: hotelId, app_id: app.id, status,
+          trial_ends_at: status === 'trial' ? trialEnds : null,
+          created_by: admin?.id ?? null,
+        });
+        if (error) throw error;
+      }
+      // audit best-effort (ne bloque pas l'action)
+      await db.from('platform_logs').insert({
+        admin_id: admin?.id ?? null, admin_email: admin?.email ?? null,
+        action: `app_${status}`, entity: 'hotel_app_subscription', entity_id: hotelId,
+        hotel_id: hotelId, hotel_name: hotelName, level: 'info',
+        payload: { app: app.code, previous: sub?.status ?? 'inactive' },
+      });
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['hotel-apps', hotelId] }); toast.success('Application mise à jour.'); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  if (isLoading) return <div className="text-center py-8 text-sm text-gray-400">Chargement…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="p-3 rounded-xl bg-[#8B5CF6]/5 border border-[#8B5CF6]/15 text-[11px] text-[#6D28D9] flex items-start gap-2">
+        <Layers size={13} className="shrink-0 mt-0.5" />
+        <span>Accès applicatifs de l'hôtel (PMS, RH, futures apps). Indépendant du <strong>Forfait PMS</strong> (grille tarifaire, onglet voisin).</span>
+      </div>
+      {rows.map(row => {
+        const { app, sub, users } = row;
+        const status = sub?.status ?? 'inactive';
+        const meta = STATUS_META[status] ?? STATUS_META.inactive;
+        const disabled = !app.is_available;
+        return (
+          <div key={app.id} className={cn('rounded-2xl border p-4', disabled ? 'border-gray-100 bg-gray-50/50 opacity-70' : 'border-gray-100')}>
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: (app.color ?? '#8B5CF6') + '1A', color: app.color ?? '#8B5CF6' }}>
+                  <Package size={16} />
+                </div>
+                <div>
+                  <div className="text-[13px] font-black text-gray-900 flex items-center gap-2">
+                    {app.name}
+                    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', meta.color)}>{meta.label}</span>
+                  </div>
+                  <div className="text-[10px] text-gray-400">{app.description}</div>
+                </div>
+              </div>
+            </div>
+
+            {disabled ? (
+              <div className="text-[11px] text-gray-400 italic mt-1">Bientôt disponible — activation à venir.</div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2 text-[11px] mb-3">
+                  <div><span className="text-gray-400">Depuis :</span> <span className="font-semibold text-gray-700">{sub?.started_at ? new Date(sub.started_at).toLocaleDateString('fr-FR') : '—'}</span></div>
+                  {sub?.trial_ends_at && status === 'trial' && <div><span className="text-gray-400">Fin essai :</span> <span className="font-semibold text-blue-600">{new Date(sub.trial_ends_at).toLocaleDateString('fr-FR')}</span></div>}
+                  {sub?.expires_at && <div><span className="text-gray-400">Expire :</span> <span className="font-semibold text-gray-700">{new Date(sub.expires_at).toLocaleDateString('fr-FR')}</span></div>}
+                  <div><span className="text-gray-400">Plan :</span> <span className="font-semibold text-gray-700">{sub?.plan?.name ?? '—'}</span></div>
+                  <div><span className="text-gray-400">Prix :</span> <span className="font-semibold text-gray-700">{sub?.price_monthly != null ? `${sub.price_monthly} ${sub.currency ?? 'EUR'}/mois` : '—'}</span></div>
+                  <div><span className="text-gray-400">Maj :</span> <span className="font-semibold text-gray-700">{sub?.updated_at ? new Date(sub.updated_at).toLocaleDateString('fr-FR') : '—'}</span></div>
+                </div>
+
+                <div className="mb-3">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Utilisateurs autorisés ({users.length})</div>
+                  {users.length === 0
+                    ? <div className="text-[11px] text-gray-400">Aucun utilisateur rattaché à cette app.</div>
+                    : <div className="flex flex-wrap gap-1">{users.map(u => <span key={u.id} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{u.full_name || u.email}</span>)}</div>}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {status === 'inactive' && <ActBtn onClick={() => act.mutate({ row, status: 'trial' })} disabled={act.isPending} tone="emerald" icon={CheckCircle2}>Activer (essai 30j)</ActBtn>}
+                  {status === 'trial' && <ActBtn onClick={() => act.mutate({ row, status: 'active' })} disabled={act.isPending} tone="emerald" icon={CheckCircle2}>Passer en actif</ActBtn>}
+                  {(status === 'trial' || status === 'active') && <ActBtn onClick={() => act.mutate({ row, status: 'suspended' })} disabled={act.isPending} tone="amber" icon={Power}>Suspendre</ActBtn>}
+                  {(status === 'suspended' || status === 'cancelled' || status === 'expired') && <ActBtn onClick={() => act.mutate({ row, status: 'active' })} disabled={act.isPending} tone="emerald" icon={ArrowUpRight}>Réactiver</ActBtn>}
+                  {status !== 'inactive' && status !== 'cancelled' && <ActBtn onClick={() => act.mutate({ row, status: 'cancelled' })} disabled={act.isPending} tone="red" icon={XCircle}>Annuler</ActBtn>}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
