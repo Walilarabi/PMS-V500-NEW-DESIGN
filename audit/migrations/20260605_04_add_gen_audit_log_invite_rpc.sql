@@ -1,48 +1,46 @@
 -- ============================================================================
--- AUDIT FLOWTYM — #4  ⚠️ NON APPLIQUÉ EN PROD (annulé après test) — DÉCISION REQUISE
+-- AUDIT FLOWTYM — #4 (CORRIGÉ & VALIDÉ) — Traçage officiel des invitations
 -- ----------------------------------------------------------------------------
--- Constat de test (2026-06-05) : l'edge function `invite-user` loggue l'audit
---   d'invitation avec action='invite_user' dans public.hr_document_audit_logs.
---   OR la contrainte CHECK `hr_document_audit_logs_action_check` n'autorise QUE :
---     template_upload, template_update, template_archive, document_upload,
---     document_view, document_download, document_delete, contract_generate,
---     contract_send, contract_sign
---   => 'invite_user' est REJETÉ (erreur 23514). Le chemin d'audit principal ET
---      le fallback de l'edge function échouaient donc déjà (non-fatal, try/catch).
---      L'audit des invitations n'est jamais écrit aujourd'hui.
+-- Objectif : chaque invitation utilisateur (edge function `invite-user`) est
+--   tracée dans le JOURNAL D'AUDIT OFFICIEL `public.audit_logs` (hash-chaîné,
+--   immuable), via la RPC `gen_audit_log_invite` déjà appelée par l'edge function.
 --
--- Cette table (hr_document_audit_logs) est donc la MAUVAISE cible pour un audit
--- d'invitation. Deux options propres, à VALIDER avant application :
+-- Garanties :
+--   • Ne contourne pas l'audit : écrit dans le journal officiel audit_logs,
+--     le trigger BEFORE INSERT `audit_chain_link()` calcule seq/prev_hash/entry_hash.
+--   • Ne désactive AUCUNE contrainte : audit_logs.action est en texte libre
+--     (aucun CHECK) ; on ajoute simplement la valeur d'action 'user_invited'.
+--   • Pas de doublon : `invite-user` appelle cette RPC EN PREMIER ; le fallback
+--     vers hr_document_audit_logs ne s'exécute QUE si la RPC échoue. La RPC
+--     réussissant désormais, il n'y a qu'une seule entrée d'audit.
 --
---   OPTION A (recommandée) — étendre le CHECK pour autoriser 'invite_user'
---     puis créer la RPC ci-dessous. Non destructif (ADD via DROP/ADD constraint).
---
---     ALTER TABLE public.hr_document_audit_logs
---       DROP CONSTRAINT hr_document_audit_logs_action_check,
---       ADD  CONSTRAINT hr_document_audit_logs_action_check
---       CHECK (action = ANY (ARRAY[
---         'template_upload','template_update','template_archive',
---         'document_upload','document_view','document_download','document_delete',
---         'contract_generate','contract_send','contract_sign',
---         'invite_user'  -- ← ajout
---       ]));
---
---     CREATE OR REPLACE FUNCTION public.gen_audit_log_invite(
---       p_hotel_id uuid, p_actor_id uuid, p_actor_email text,
---       p_entity_id uuid, p_details text
---     ) RETURNS void LANGUAGE plpgsql SECURITY DEFINER
---       SET search_path TO 'public','pg_catalog' AS $f$
---     BEGIN
---       INSERT INTO public.hr_document_audit_logs
---         (id, hotel_id, actor_user_id, actor_email, action, entity_type, entity_id, details)
---       VALUES (gen_random_uuid(), p_hotel_id, p_actor_id, p_actor_email,
---               'invite_user', 'user', p_entity_id, COALESCE(p_details,'{}')::jsonb);
---     END; $f$;
---
---   OPTION B — cibler le journal général public.audit_logs (hash-chaîné, immuable).
---     Nécessite de respecter son mécanisme d'insertion (seq/prev_hash/entry_hash,
---     colonnes NOT NULL entity/entity_id/payload). À étudier séparément.
---
--- STATUT : la fonction a été créée puis IMMÉDIATEMENT SUPPRIMÉE en prod (rollback)
---          car non conforme au CHECK existant. Aucune trace laissée.
+-- Convention : entity='user', action='user_invited', entity_id = id du user invité,
+--   actor_user_id/actor_label = invitant, payload = { email, role, access_type, ... }.
 -- ============================================================================
+
+CREATE OR REPLACE FUNCTION public.gen_audit_log_invite(
+  p_hotel_id    uuid,
+  p_actor_id    uuid,
+  p_actor_email text,
+  p_entity_id   uuid,
+  p_details     text
+) RETURNS void
+  LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path TO 'public', 'pg_catalog'
+AS $function$
+BEGIN
+  INSERT INTO public.audit_logs
+    (hotel_id, actor_user_id, actor_label, entity, entity_id, action, payload)
+  VALUES (
+    p_hotel_id,
+    p_actor_id,
+    p_actor_email,
+    'user',
+    COALESCE(p_entity_id, p_actor_id),       -- entity_id NOT NULL : id du user invité
+    'user_invited',
+    COALESCE(NULLIF(p_details, ''), '{}')::jsonb
+  );
+  -- seq / prev_hash / entry_hash sont calculés par le trigger audit_chain_link().
+END;
+$function$;
