@@ -99,7 +99,7 @@ Matrice de droits implémentée dans `pages/admin/AdminTeam.tsx` + flags `AdminC
 
 ### ❌ BUG — Création Super Admin / membre d'équipe (Admin) cassée
 - `pages/admin/AdminTeam.tsx:73` : `insert({ email, role, is_active })` dans `platform_admins` **sans `auth_id`** (NOT NULL) → l'INSERT échoue. De plus aucun email n'est envoyé.
-- **Correctif requis** (fourni) : edge function service-role `invite-platform-admin` (lookup/inviteUserByEmail → récupère `auth_id` → insert `platform_admins`), puis `AdminTeam` appelle `supabase.functions.invoke('invite-platform-admin')`. Voir `audit/edge-functions/invite-platform-admin.ts`. ⚠️ Déploiement en attente d'autorisation (écriture prod).
+- **Correctif** : edge function service-role `invite-platform-admin` (lookup/inviteUserByEmail → récupère `auth_id` → upsert `platform_admins`). ✅ **Déployée en prod** (v2, ACTIVE, `verify_jwt=false` pour CORS — auth manuelle : Authorization + getUser + check `super_admin`). ✅ `AdminTeam.tsx` **recâblé** pour appeler `supabase.functions.invoke('invite-platform-admin')` (commit poussé). ⚠️ **Test fonctionnel = UAT** : l'invocation réelle (garde 401/403 + création) non testable depuis l'environnement d'audit (egress réseau bloqué vers `*.supabase.co/functions`). À valider en navigateur avec une session super_admin.
 
 ---
 

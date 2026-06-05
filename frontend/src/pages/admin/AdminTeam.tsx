@@ -70,8 +70,14 @@ export const AdminTeam: React.FC = () => {
     mutationFn: async ({ email, role }: { email: string; role: string }) => {
       const existing = members.find(m => m.email.toLowerCase() === email.toLowerCase());
       if (existing) throw new Error('Cet email est déjà membre de l\'équipe.');
-      const { error } = await db.from('platform_admins').insert({ email, role, is_active: true });
+      // L'insert direct échouait : platform_admins.auth_id est NOT NULL et n'est
+      // connu qu'après création/lookup du compte Auth. On délègue à l'edge function
+      // service-role `invite-platform-admin` (lookup/invite → auth_id → upsert).
+      const { data, error } = await supabase.functions.invoke('invite-platform-admin', {
+        body: { email, role },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-team'] });
