@@ -4,7 +4,7 @@ import {
   Building2, MapPin, Search, Plus, Edit2, Trash2, Power,
   CheckCircle2, XCircle, X, Save, AlertTriangle, Mail,
   Phone, Globe, Package, CreditCard, Clock, ArrowUpRight,
-  ChevronRight, Star, FileText,
+  ChevronRight, Star, FileText, Rocket, Layers, UserPlus, Send, Loader2,
 } from 'lucide-react';
 import { supabase } from '@/src/lib/supabase';
 import { cn } from '@/src/lib/utils';
@@ -139,6 +139,21 @@ function useAddOnsCatalog() {
   });
 }
 
+interface PlatformApp { id: string; code: string; name: string; description: string | null; color: string | null; is_available: boolean; }
+
+function usePlatformApps() {
+  return useQuery<PlatformApp[]>({
+    queryKey: ['platform-apps'],
+    queryFn: async () => {
+      const { data, error } = await db.from('platform_apps')
+        .select('id,code,name,description,color,is_available').order('sort_order');
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const AdminHotels: React.FC = () => {
@@ -153,6 +168,7 @@ export const AdminHotels: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<Hotel | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [showNew, setShowNew]         = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const filtered = hotels.filter(h => {
     const q = search.toLowerCase();
@@ -228,10 +244,16 @@ export const AdminHotels: React.FC = () => {
             {inactiveCount > 0 && <span className="text-gray-400"> · {inactiveCount} inactifs</span>}
           </p>
         </div>
-        <button onClick={openNew}
-          className="flex items-center gap-2 px-4 py-2 bg-[#8B5CF6] text-white rounded-xl text-[13px] font-bold hover:bg-[#7C3AED] shadow-sm shadow-[#8B5CF6]/30">
-          <Plus size={15} /> Ajouter un hôtel
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowOnboarding(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-[13px] font-bold hover:bg-emerald-700 shadow-sm shadow-emerald-600/30">
+            <Rocket size={15} /> Onboarding hôtel
+          </button>
+          <button onClick={openNew}
+            className="flex items-center gap-2 px-4 py-2 bg-[#8B5CF6] text-white rounded-xl text-[13px] font-bold hover:bg-[#7C3AED] shadow-sm shadow-[#8B5CF6]/30">
+            <Plus size={15} /> Ajouter un hôtel
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -346,6 +368,18 @@ export const AdminHotels: React.FC = () => {
         </Drawer>
       )}
 
+      {/* Onboarding wizard */}
+      {showOnboarding && (
+        <OnboardingWizard
+          onClose={() => setShowOnboarding(false)}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: ['admin-hotels-v3'] });
+            qc.invalidateQueries({ queryKey: ['admin-dash-v3'] });
+            setShowOnboarding(false);
+          }}
+        />
+      )}
+
       {/* Delete confirm */}
       {deleteTarget && (
         <Modal onClose={() => { setDeleteTarget(null); setDeleteConfirm(''); }}>
@@ -372,6 +406,170 @@ export const AdminHotels: React.FC = () => {
         </Modal>
       )}
     </div>
+  );
+};
+
+// ─── Onboarding wizard (créer hôtel + apps + premier contact) ─────────────────
+
+const ONB_ROLES = [
+  { id: 'hotel_admin', label: 'Admin Hôtel', desc: 'Accès à toutes les applications souscrites' },
+  { id: 'pms_manager', label: 'Manager PMS', desc: 'Accès Flowtym PMS uniquement' },
+  { id: 'rh_manager',  label: 'Manager RH',  desc: 'Accès Flowtym RH uniquement' },
+];
+
+const OnboardingWizard: React.FC<{ onClose: () => void; onDone: () => void }> = ({ onClose, onDone }) => {
+  const { data: apps = [] } = usePlatformApps();
+  const available = apps.filter(a => a.is_available);
+  const [hotel, setHotel] = useState({ name: '', company: '', siret: '', address: '', city: '', country: 'France', email: '', phone: '', notes: '' });
+  const [selectedApps, setSelectedApps] = useState<string[]>([]);
+  const [contact, setContact] = useState({ first_name: '', last_name: '', email: '', phone: '', role: 'hotel_admin' });
+  const setH = (k: string, v: string) => setHotel(f => ({ ...f, [k]: v }));
+  const setC = (k: string, v: string) => setContact(f => ({ ...f, [k]: v }));
+  const toggleApp = (code: string) =>
+    setSelectedApps(s => s.includes(code) ? s.filter(x => x !== code) : [...s, code]);
+
+  const submit = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('invite-hotel-primary-contact', {
+        body: { hotel, apps: selectedApps, contact },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: (data: { apps_activated?: string[]; already_existed?: boolean }) => {
+      const list = (data?.apps_activated ?? []).join(' + ');
+      toast.success(
+        data?.already_existed
+          ? `Accès mis à jour — ${contact.email} (${list}).`
+          : `Hôtel créé · invitation envoyée à ${contact.email} (${list}).`,
+        { duration: 6000 },
+      );
+      onDone();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const handle = () => {
+    if (!hotel.name.trim())        { toast.error("Le nom de l'hôtel est requis."); return; }
+    if (selectedApps.length === 0) { toast.error('Sélectionnez au moins une application.'); return; }
+    if (!contact.email.trim())     { toast.error("L'email du contact est requis."); return; }
+    submit.mutate();
+  };
+
+  return (
+    <Drawer onClose={onClose}>
+      <div className="flex items-center justify-between mb-5 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <Rocket size={18} className="text-emerald-600" />
+          </div>
+          <div>
+            <h2 className="text-base font-black text-gray-900">Onboarding hôtel</h2>
+            <p className="text-[11px] text-gray-400">Créer l'hôtel, activer les apps, inviter le 1er contact</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><X size={15} /></button>
+      </div>
+
+      <div className="space-y-5">
+        {/* 1. Hôtel */}
+        <div>
+          <div className="flex items-center gap-2 mb-3"><Building2 size={13} className="text-[#8B5CF6]" /><span className="text-[11px] font-black uppercase tracking-widest text-gray-500">1 · Hôtel</span></div>
+          <div className="space-y-3">
+            <FRow label="Nom commercial *"><FInp value={hotel.name} onChange={v => setH('name', v)} placeholder="Hôtel de la Paix" /></FRow>
+            <div className="grid grid-cols-2 gap-3">
+              <FRow label="Société"><FInp value={hotel.company} onChange={v => setH('company', v)} placeholder="SARL Exploitation" /></FRow>
+              <FRow label="SIRET"><FInp value={hotel.siret} onChange={v => setH('siret', v)} /></FRow>
+            </div>
+            <FRow label="Adresse"><FInp value={hotel.address} onChange={v => setH('address', v)} /></FRow>
+            <div className="grid grid-cols-2 gap-3">
+              <FRow label="Ville"><FInp value={hotel.city} onChange={v => setH('city', v)} /></FRow>
+              <FRow label="Pays"><FInp value={hotel.country} onChange={v => setH('country', v)} /></FRow>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FRow label="Email principal"><FInp value={hotel.email} onChange={v => setH('email', v)} placeholder="contact@hotel.fr" /></FRow>
+              <FRow label="Téléphone"><FInp value={hotel.phone} onChange={v => setH('phone', v)} placeholder="+33…" /></FRow>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. Applications */}
+        <div>
+          <div className="flex items-center gap-2 mb-3"><Layers size={13} className="text-[#8B5CF6]" /><span className="text-[11px] font-black uppercase tracking-widest text-gray-500">2 · Applications à activer *</span></div>
+          <div className="space-y-2">
+            {available.map(a => {
+              const on = selectedApps.includes(a.code);
+              return (
+                <button key={a.id} type="button" onClick={() => toggleApp(a.code)}
+                  className={cn('w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-colors',
+                    on ? 'border-emerald-500 bg-emerald-50/60' : 'border-gray-200 hover:border-gray-300')}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                    style={{ background: (a.color ?? '#8B5CF6') + '1A', color: a.color ?? '#8B5CF6' }}>
+                    <Package size={14} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-[12px] font-black text-gray-900">{a.name}</div>
+                    <div className="text-[10px] text-gray-400">{a.description}</div>
+                  </div>
+                  <div className={cn('w-5 h-5 rounded-md border-2 flex items-center justify-center', on ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300')}>
+                    {on && <CheckCircle2 size={12} className="text-white" />}
+                  </div>
+                </button>
+              );
+            })}
+            {available.length === 0 && <p className="text-[12px] text-gray-400 py-2">Aucune application disponible.</p>}
+          </div>
+        </div>
+
+        {/* 3. Premier contact */}
+        <div>
+          <div className="flex items-center gap-2 mb-3"><UserPlus size={13} className="text-[#8B5CF6]" /><span className="text-[11px] font-black uppercase tracking-widest text-gray-500">3 · Premier contact</span></div>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <FRow label="Prénom"><FInp value={contact.first_name} onChange={v => setC('first_name', v)} /></FRow>
+              <FRow label="Nom"><FInp value={contact.last_name} onChange={v => setC('last_name', v)} /></FRow>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FRow label="Email *"><FInp value={contact.email} onChange={v => setC('email', v)} placeholder="manager@hotel.fr" /></FRow>
+              <FRow label="Téléphone"><FInp value={contact.phone} onChange={v => setC('phone', v)} /></FRow>
+            </div>
+            <FRow label="Rôle initial">
+              <div className="space-y-2">
+                {ONB_ROLES.map(r => {
+                  const on = contact.role === r.id;
+                  return (
+                    <button key={r.id} type="button" onClick={() => setC('role', r.id)}
+                      className={cn('w-full flex items-center gap-2.5 p-2.5 rounded-xl border-2 text-left transition-colors',
+                        on ? 'border-[#8B5CF6] bg-[#8B5CF6]/5' : 'border-gray-200 hover:border-gray-300')}>
+                      <div className="flex-1">
+                        <div className="text-[12px] font-bold text-gray-900">{r.label}</div>
+                        <div className="text-[10px] text-gray-400">{r.desc}</div>
+                      </div>
+                      {on && <div className="w-4 h-4 rounded-full bg-[#8B5CF6] flex items-center justify-center"><CheckCircle2 size={11} className="text-white" /></div>}
+                    </button>
+                  );
+                })}
+              </div>
+            </FRow>
+          </div>
+        </div>
+
+        {/* Récap + action */}
+        <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 text-[11px] text-gray-500 flex items-start gap-2">
+          <Send size={13} className="text-gray-400 shrink-0 mt-0.5" />
+          <span>Un email d'invitation sera envoyé au contact pour créer son mot de passe et accéder à {selectedApps.length ? selectedApps.join(' + ') : '…'}. Les apps non souscrites resteront inaccessibles.</span>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-bold text-gray-600 hover:bg-gray-50">Annuler</button>
+          <button onClick={handle} disabled={submit.isPending}
+            className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-[13px] font-bold disabled:opacity-60 flex items-center justify-center gap-2 hover:bg-emerald-700">
+            {submit.isPending ? <Loader2 size={14} className="animate-spin" /> : <Rocket size={14} />}
+            {submit.isPending ? 'Création…' : 'Créer & inviter'}
+          </button>
+        </div>
+      </div>
+    </Drawer>
   );
 };
 
