@@ -7,6 +7,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Topbar } from '@/src/components/layout/Topbar';
 import { Sidebar } from '@/src/components/layout/Sidebar';
+import { useActiveHotelApps } from '@/src/domains/auth/useAppAccess';
 import { useAppShellStore } from '@/src/store/appShellStore';
 import { PageId } from '@/src/types';
 import type { ClientsPage } from '@/src/pages/clients/ClientsLayout';
@@ -156,6 +157,20 @@ const Placeholder = ({ title, icon: Icon = Construction }: { title: string; icon
     <div className="mt-6 px-4 py-2 bg-[#8B5CF6]/8 rounded-xl text-xs font-bold text-[#8B5CF6] uppercase tracking-widest">
       Coming soon
     </div>
+  </div>
+);
+
+// Accès PMS non autorisé pour l'hôtel actif (enforcement user_app_access).
+const AppAccessDenied = () => (
+  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#F9FAFB]">
+    <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center mb-6">
+      <Lock className="w-9 h-9 text-red-400" strokeWidth={1.75} />
+    </div>
+    <h1 className="text-xl font-bold text-gray-900 mb-2">Application non autorisée</h1>
+    <p className="text-sm text-gray-400 max-w-sm">
+      Votre compte n'a pas accès à l'application PMS pour cet hôtel. Sélectionnez un
+      autre hôtel via le sélecteur en haut, ou contactez votre administrateur.
+    </p>
   </div>
 );
 
@@ -354,6 +369,10 @@ export default function App() {
   useSupabaseSync();  // Synchronise les rooms et réservations depuis Supabase vers les stores locaux
   useCentralPricingSync();  // Propage les décisions du Central Pricing Engine → Calendrier tarifaire (chambre/plan de référence)
 
+  // Enforcement applicatif : l'utilisateur doit avoir l'app PMS autorisée pour
+  // l'hôtel actif (fail-open anti-lock-out — cf. useActiveHotelApps).
+  const { hasPms } = useActiveHotelApps();
+
   // Navigation normalisée — redirige les anciennes routes Revenue vers les nouvelles
   const navigate = useCallback((page: PageId) => {
     setActivePage(normalizePage(page));
@@ -389,11 +408,15 @@ export default function App() {
           />
         )}
         <main className="flex-1 overflow-hidden flex flex-col">
-          <ChunkErrorBoundary>
-            <Suspense fallback={<PageSkeleton />}>
-              {renderPage(activePage, navigate)}
-            </Suspense>
-          </ChunkErrorBoundary>
+          {!hasPms ? (
+            <AppAccessDenied />
+          ) : (
+            <ChunkErrorBoundary>
+              <Suspense fallback={<PageSkeleton />}>
+                {renderPage(activePage, navigate)}
+              </Suspense>
+            </ChunkErrorBoundary>
+          )}
         </main>
       </div>
     </div>

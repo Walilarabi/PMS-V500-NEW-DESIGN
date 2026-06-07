@@ -73,11 +73,14 @@ function buildSession(
   // tenantId = l'hôtel actif (is_active=true), sinon fallback sur profile.hotel_id (legacy)
   const activeHotel = accessibleHotels.find((h) => h.isActive);
   const resolvedTenantId = activeHotel?.hotelId ?? profile?.hotel_id ?? null;
+  // R5 : le rôle EFFECTIF suit l'hôtel actif (multi-hôtels = un rôle par hôtel).
+  // Aligné sur get_user_role() côté serveur. Fallback sur le rôle legacy du profil.
+  const effectiveRole = activeHotel?.role ?? profile?.role ?? null;
   return {
     userId: authUserId,
     email,
     tenantId: resolvedTenantId,
-    role: profile?.role ?? null,
+    role: effectiveRole,
     fullName: profile?.full_name ?? null,
     accessibleHotels,
   };
