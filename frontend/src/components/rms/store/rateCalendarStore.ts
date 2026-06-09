@@ -205,17 +205,23 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
     const room = get().roomTypes.find((r) => r.roomTypeId === roomTypeId);
     const plan = room?.ratePlans.find((p) => p.planId === planId);
     const cell = plan?.prices.find((c) => c.date === date);
-    if (!cell) return;
+    if (!cell) {
+      console.warn('[rateCalendarStore] persistPrice: cell not found', { roomTypeId, planId, date });
+      return;
+    }
     // plan_id doit être un UUID Supabase (pas un id local "plan_xxx")
     if (!/^[0-9a-f-]{36}$/i.test(planId)) return;
-    void getCurrentHotelIdSafe().then((hotelId) => {
+    void getCurrentHotelIdSafe().then(async (hotelId) => {
       if (!hotelId) return;
-      void (supabase as any)
+      const { error } = await (supabase as any)
         .from('rate_prices')
         .upsert({
           hotel_id: hotelId, room_type_code: roomTypeId, plan_id: planId, stay_date: date,
           price: cell.price ?? 0, plan_closed: !!cell.planClosed, source: 'manual',
         }, { onConflict: 'hotel_id,room_type_code,plan_id,stay_date' });
+      if (error) {
+        console.error('[rateCalendarStore] persistPrice failed:', error.message, { roomTypeId, planId, date });
+      }
     });
   };
 
@@ -371,7 +377,12 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
     updatePrice: (roomTypeId, planId, date, newPrice) => {
       const { roomTypes, rulesEngine } = get();
       const key = `${roomTypeId}:${planId}:${date}`;
-      
+
+      if (!Number.isFinite(newPrice) || newPrice < 0) {
+        console.warn('[rateCalendarStore] updatePrice rejected: invalid price', newPrice);
+        return;
+      }
+
       // ✅ ÉDITION DIRECTE : Update prix sans cascade pour l'instant
       // La cascade sera réactivée plus tard comme option
       const room = roomTypes.find((r) => r.roomTypeId === roomTypeId);

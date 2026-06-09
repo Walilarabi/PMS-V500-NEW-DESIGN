@@ -1609,7 +1609,7 @@ function CompsetDetailModal({ date, onClose }: { date: string; onClose: () => vo
     );
   }
 
-  const ourHotelName = importData!.ourHotelName;
+  const ourHotelName = importData?.ourHotelName ?? '';
   const allHotels: { name: string; price: number; isUs: boolean; status: string }[] = [
     { name: ourHotelName, price: dayData.ourPrice, isUs: true, status: 'available' },
     ...dayData.competitors.map(c => ({

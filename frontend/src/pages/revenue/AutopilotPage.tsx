@@ -73,7 +73,7 @@ export const AutopilotPage: React.FC = () => {
   );
 
   const strategy = STRATEGY_BY_ID[activeStrategyId];
-  const levelInfo = AUTOMATION_LEVELS.find((l) => l.level === automationLevel)!;
+  const levelInfo = AUTOMATION_LEVELS.find((l) => l.level === automationLevel) ?? AUTOMATION_LEVELS[0];
   const canRun = automationLevel >= 3;
   const syncedCount = decisionLog.filter((d) => d.syncStatus === 'synced').length;
   const failedCount = decisionLog.filter((d) => d.syncStatus === 'failed').length;

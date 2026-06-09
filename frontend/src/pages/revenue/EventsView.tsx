@@ -105,10 +105,13 @@ export const EventsView: React.FC = () => {
   // ── Sync Supabase au montage ─────────────────────────────────────────────
   const syncFromSupabase = useEventsStore((s) => s.syncFromSupabase);
   const supabaseSynced = useEventsStore((s) => s.supabaseSynced);
+  const syncError = useEventsStore((s) => s.syncError);
+  const clearSyncError = useEventsStore((s) => s.clearSyncError);
   useEffect(() => {
     if (!supabaseSynced) {
       syncFromSupabase();
     }
+  // syncFromSupabase est une action Zustand stable — pas de stale closure
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -172,6 +175,27 @@ export const EventsView: React.FC = () => {
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/60">
       <div className="px-4 pt-4 pb-10 space-y-3">
+
+        {/* ─── Alerte erreur synchronisation Supabase ─────────────────────── */}
+        {syncError && (
+          <div role="alert" className="flex items-start gap-2 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+            <div className="flex-1">
+              <span className="font-medium">Synchronisation Supabase échouée.</span>
+              {' '}Les données affichées sont celles du cache local.{' '}
+              <span className="text-amber-700">{syncError}</span>
+            </div>
+            <button
+              onClick={() => { clearSyncError(); syncFromSupabase(); }}
+              className="ml-2 text-xs font-semibold underline hover:text-amber-700"
+            >
+              Réessayer
+            </button>
+            <button onClick={clearSyncError} aria-label="Fermer" className="ml-1 hover:text-amber-700">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         {/* ─── Alerte erreur Supabase ──────────────────────────────────────── */}
         {saveError && (

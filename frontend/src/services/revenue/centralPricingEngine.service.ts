@@ -111,6 +111,11 @@ let records: Map<string, PricingRecord> = loadFromStorage();
 const listeners = new Set<() => void>();
 let version = 0;
 
+const MAX_HISTORY = 20;
+function capHistory(history: PricingHistoryEntry[]): PricingHistoryEntry[] {
+  return history.length > MAX_HISTORY ? history.slice(-MAX_HISTORY) : history;
+}
+
 function notify() {
   version++;
   listeners.forEach((l) => l());
@@ -163,7 +168,7 @@ export const centralPricingEngine = {
           confidence: seed.confidence,
           strategy: seed.strategy,
           updatedAt: nowISO(),
-          history: [
+          history: capHistory([
             ...existing.history,
             {
               timestamp: nowISO(),
@@ -172,7 +177,7 @@ export const centralPricingEngine = {
               previousPrice: existing.suggestedPrice,
               newPrice: seed.suggested,
             },
-          ],
+          ]),
         };
         records.set(key, updated);
         // Persist silencieusement sans notifier (évite la boucle de re-render).
@@ -225,7 +230,7 @@ export const centralPricingEngine = {
       source: opts.source,
       updatedAt: nowISO(),
       updatedBy: opts.userId ?? null,
-      history: [
+      history: capHistory([
         ...r.history,
         {
           timestamp: nowISO(),
@@ -235,7 +240,7 @@ export const centralPricingEngine = {
           newPrice: finalPrice,
           userId: opts.userId ?? null,
         },
-      ],
+      ]),
     };
     records.set(key, updated);
     notify();
@@ -289,7 +294,7 @@ export const centralPricingEngine = {
       comment: opts.comment,
       updatedAt: nowISO(),
       updatedBy: opts.userId ?? null,
-      history: [
+      history: capHistory([
         ...r.history,
         {
           timestamp: nowISO(),
@@ -301,7 +306,7 @@ export const centralPricingEngine = {
           comment: opts.comment,
           userId: opts.userId ?? null,
         },
-      ],
+      ]),
     };
     records.set(key, updated);
     notify();
@@ -351,7 +356,7 @@ export const centralPricingEngine = {
       comment: opts.comment,
       updatedAt: nowISO(),
       updatedBy: opts.userId ?? null,
-      history: [
+      history: capHistory([
         ...r.history,
         {
           timestamp: nowISO(),
@@ -363,7 +368,7 @@ export const centralPricingEngine = {
           comment: opts.comment,
           userId: opts.userId ?? null,
         },
-      ],
+      ]),
     };
     records.set(key, updated);
     notify();
@@ -397,10 +402,10 @@ export const centralPricingEngine = {
       ...r,
       finalPrice,
       updatedAt: nowISO(),
-      history: [
+      history: capHistory([
         ...r.history,
         { timestamp: nowISO(), action: 'autopush', source, newPrice: finalPrice },
-      ],
+      ]),
     };
     records.set(key, updated);
     notify();

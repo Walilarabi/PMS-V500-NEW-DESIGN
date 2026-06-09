@@ -109,9 +109,12 @@ interface EventsStore {
   lastSearchAt?: string;
   /** true après le premier chargement réussi depuis Supabase. */
   supabaseSynced: boolean;
+  /** Non-null quand la synchronisation initiale Supabase a échoué. */
+  syncError: string | null;
   /** Non-null quand la dernière écriture Supabase a échoué (affiché dans l'UI). */
   saveError: string | null;
   clearSaveError: () => void;
+  clearSyncError: () => void;
 
   // mutations
   addEvent: (ev: RMSMarketEvent) => void;
@@ -168,21 +171,29 @@ export const useEventsStore = create<EventsStore>()(
       pendingValidation: [],
       autoSync: true,
       supabaseSynced: false,
+      syncError: null,
       saveError: null,
 
       syncFromSupabase: async () => {
-        const result = await loadEventsFromSupabase();
-        if (result === null) return; // pas d'auth — on garde le localStorage
-        // Remplace les events du store par les données Supabase.
-        // Si Supabase est vide, on conserve les events locaux (première session).
-        if (result.events.length > 0) {
-          set({ events: result.events, supabaseSynced: true });
-        } else {
-          set({ supabaseSynced: true });
+        try {
+          const result = await loadEventsFromSupabase();
+          if (result === null) return; // pas d'auth — on garde le localStorage
+          // Remplace les events du store par les données Supabase.
+          // Si Supabase est vide, on conserve les events locaux (première session).
+          if (result.events.length > 0) {
+            set({ events: result.events, supabaseSynced: true, syncError: null });
+          } else {
+            set({ supabaseSynced: true, syncError: null });
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Erreur de synchronisation';
+          console.error('[eventsStore] syncFromSupabase failed:', msg);
+          set({ syncError: msg });
         }
       },
 
       clearSaveError: () => set({ saveError: null }),
+      clearSyncError: () => set({ syncError: null }),
 
       addEvent: (ev) => {
         const enriched: RMSMarketEvent = {
@@ -503,6 +514,7 @@ export const useEventsStore = create<EventsStore>()(
           filters: { ...DEFAULT_FILTERS, ...(p.filters ?? {}) },
           // Réinitialise supabaseSynced à chaque démarrage — force un rechargement Supabase.
           supabaseSynced: false,
+          syncError: null,
         };
       },
     },

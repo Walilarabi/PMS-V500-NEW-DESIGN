@@ -80,6 +80,7 @@ export function RecommandationRMTable({
       const today = new Date().toISOString().slice(0, 10);
       list = list.filter(d => d.date >= today);
     }
+    if (sourceFilter === 'lighthouse') list = list.filter(d => d.medianPrice > 0);
     if (statusFilter === 'pending') list = list.filter(d => d.validationStatus === 'En attente');
     if (statusFilter === 'validated') list = list.filter(d => d.validationStatus !== 'En attente');
     if (search.trim()) {
@@ -91,7 +92,7 @@ export function RecommandationRMTable({
       );
     }
     return list;
-  }, [enriched, futurOnly, statusFilter, search]);
+  }, [enriched, futurOnly, sourceFilter, statusFilter, search]);
 
   const stats = useMemo(() => {
     if (enriched.length === 0) {
