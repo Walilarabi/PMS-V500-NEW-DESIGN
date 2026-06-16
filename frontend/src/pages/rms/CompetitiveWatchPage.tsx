@@ -8,7 +8,7 @@
  *                           + interprétation IA / focus / comparaison rapide
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { CompetitiveWatchLayout } from '../../components/rms/competitive-watch/CompetitiveWatchLayout';
@@ -30,23 +30,36 @@ import {
 import type { ComparePeriodKey } from '../../data/rms/mockCompetitiveWatchData';
 import { useCompetitiveWatchData } from '../../lib/rms/useCompetitiveWatchData';
 import { useCompetitiveWatchPrefs } from '../../store/competitiveWatchPrefsStore';
+import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 
-export const CompetitiveWatchPage: React.FC = () => {
+const CompetitiveWatchPageInner: React.FC = () => {
   const [view, setView] = useState<CompetitiveView>('market');
   const [period, setPeriod] = useState<ComparePeriodKey>('hier');
-  const [marketDay, setMarketDay] = useState<string>('');
-  const [comparisonDay, setComparisonDay] = useState<string>(COMPARISON_SELECTED_DATE);
+  // Le jour sélectionné est dérivé, pas stocké, pour éviter une boucle de
+  // re-render via useEffect. `userSelected*` = sélection explicite de l'user ;
+  // si rien n'est sélectionné, on prend le 1er jour visible.
+  const [userSelectedMarketDay, setUserSelectedMarketDay] = useState<string | null>(null);
+  const [userSelectedComparisonDay, setUserSelectedComparisonDay] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const { meta, visibleMarketMonth } = useCompetitiveWatchData();
   const shiftMonth = useCompetitiveWatchPrefs((s) => s.shiftMonth);
   const isMarket = view === 'market';
 
-  useEffect(() => {
-    if (marketDay === '' && visibleMarketMonth.length > 0) {
-      setMarketDay(visibleMarketMonth[0].label);
+  // Dérivation pure du jour affiché — pas de useEffect, pas de setState.
+  // Si l'user a explicitement choisi un jour ET qu'il est encore visible
+  // dans la fenêtre actuelle, on le garde ; sinon on prend le 1er.
+  const marketDay = useMemo(() => {
+    if (userSelectedMarketDay && visibleMarketMonth.some((d) => d.label === userSelectedMarketDay)) {
+      return userSelectedMarketDay;
     }
-  }, [visibleMarketMonth, marketDay]);
+    return visibleMarketMonth[0]?.label ?? '';
+  }, [userSelectedMarketDay, visibleMarketMonth]);
+
+  const comparisonDay = useMemo(() => {
+    if (userSelectedComparisonDay) return userSelectedComparisonDay;
+    return COMPARISON_SELECTED_DATE;
+  }, [userSelectedComparisonDay]);
 
   return (
     <CompetitiveWatchLayout>
@@ -108,7 +121,7 @@ export const CompetitiveWatchPage: React.FC = () => {
           >
             <div className="flex flex-col lg:flex-row gap-4 items-start">
               <div className="flex-1 min-w-0 w-full">
-                <MarketMainChart selectedLabel={marketDay} onSelectDay={setMarketDay} />
+                <MarketMainChart selectedLabel={marketDay} onSelectDay={setUserSelectedMarketDay} />
               </div>
               {!sidebarCollapsed && (
                 <motion.div
@@ -138,7 +151,7 @@ export const CompetitiveWatchPage: React.FC = () => {
                   period={period}
                   onPeriodChange={setPeriod}
                   selectedLabel={comparisonDay}
-                  onSelectDay={setComparisonDay}
+                  onSelectDay={setUserSelectedComparisonDay}
                 />
               </div>
               {!sidebarCollapsed && (
@@ -179,5 +192,13 @@ export const CompetitiveWatchPage: React.FC = () => {
     </CompetitiveWatchLayout>
   );
 };
+
+// Wrapper avec ErrorBoundary : si la Veille crash (data invalide, store
+// corrompu, etc.), elle ne fait plus tomber le reste de l'app.
+export const CompetitiveWatchPage: React.FC = () => (
+  <ErrorBoundary>
+    <CompetitiveWatchPageInner />
+  </ErrorBoundary>
+);
 
 export default CompetitiveWatchPage;

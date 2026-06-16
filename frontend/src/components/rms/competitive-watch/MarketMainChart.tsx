@@ -44,8 +44,10 @@ export const MarketMainChart: React.FC<MarketMainChartProps> = ({
   const [mode, setMode] = useState<MetricMode>('price');
   const { visibleMarketMonth, compsetHotels } = useCompetitiveWatchData();
 
-  // Tarif calendrier (source de vérité) pour alimenter le moteur RMS dans la modale
-  const { roomTypes } = useRateCalendarStore();
+  // Tarif calendrier (source de vérité) pour alimenter le moteur RMS dans la modale.
+  // ⚠️ Atomic selector OBLIGATOIRE — sans selector, on s'abonne à TOUTE la
+  // store rateCalendar (toutes ses mutations re-renderaient ce composant).
+  const roomTypes = useRateCalendarStore((s) => s.roomTypes);
   const referenceRoom = roomTypes.find((r) => r.isReference) ?? roomTypes[0] ?? null;
   const referencePlan = referenceRoom
     ? (referenceRoom.ratePlans.find((p) => p.isReference) ?? referenceRoom.ratePlans[0] ?? null)
