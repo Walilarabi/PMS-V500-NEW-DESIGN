@@ -272,13 +272,23 @@ function emptyData(
 /* MAIN HOOK                                                                  */
 /* ───────────────────────────────────────────────────────────────────────── */
 
+// Référence stable pour le fallback "pas de salons importés".
+// Sans ça, `useSalonsStore((s) => s.importData?.events ?? [])` retournerait
+// un NOUVEL `[]` à chaque render → useMemo en aval re-compute → useEffect
+// dans CompetitiveWatchPage re-fire → boucle infinie (React error #185).
+const EMPTY_SALONS = [] as never[];
+
 export function useCompetitiveWatchData(): CompetitiveWatchData {
   const lighthouseData = useLighthouseStore((s) => s.importData);
   const expediaData = useExpediaStore((s) => s.importData);
-  const { range, source } = useCompetitiveWatchPrefs();
+  // ⚠️ Selectors atomiques OBLIGATOIRES (Zustand v5 + React 18 strict).
+  // Sans selector explicite, useStore() retourne un snapshot non-stable et
+  // provoque "getSnapshot should be cached" + crash en chaîne sur la Veille.
+  const range = useCompetitiveWatchPrefs((s) => s.range);
+  const source = useCompetitiveWatchPrefs((s) => s.source);
   // Sources d'événements — toutes fusionnées dans le résultat final (Étape 5)
   const allEvents = useEventsStore((s) => s.events);
-  const salons = useSalonsStore((s) => s.importData?.events ?? []);
+  const salons = useSalonsStore((s) => s.importData?.events ?? EMPTY_SALONS);
 
   const rawData = useMemo<CompetitiveWatchData>(() => {
     const window = resolveRangeWindow(range);
