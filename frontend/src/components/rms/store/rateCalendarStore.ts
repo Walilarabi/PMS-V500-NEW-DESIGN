@@ -155,24 +155,30 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
   // et applique dedupRoomTypes avant de stocker. Garantit qu'aucun chemin
   // d'écriture (mutation locale, import, RMS push, cascade, supabase load)
   // ne peut produire de doublons dans le store.
+  //
+  // ⚠️ IMPORTANT : on capture le set Zustand original AVANT toute
+  // réassignation. Sinon, safeSet appellerait safeSet en boucle (React
+  // error #185 — Maximum update depth exceeded).
   type SetterArg = Parameters<typeof set>[0];
-  const safeSet = (partial: SetterArg) => {
+  const rawSet = set;
+  const safeSet: typeof set = ((partial: SetterArg) => {
     if (typeof partial === 'function') {
-      set((state) => {
+      rawSet((state) => {
         const next = (partial as (s: RateCalendarStore) => Partial<RateCalendarStore>)(state);
-        if (next && 'roomTypes' in next && Array.isArray((next as { roomTypes?: unknown }).roomTypes)) {
+        if (next && typeof next === 'object' && 'roomTypes' in next && Array.isArray((next as { roomTypes?: unknown }).roomTypes)) {
           return { ...next, roomTypes: dedupRoomTypes((next as { roomTypes: RoomTypeData[] }).roomTypes) };
         }
         return next;
       });
     } else if (partial && typeof partial === 'object' && 'roomTypes' in partial && Array.isArray((partial as { roomTypes?: unknown }).roomTypes)) {
-      set({ ...partial, roomTypes: dedupRoomTypes((partial as { roomTypes: RoomTypeData[] }).roomTypes) } as SetterArg);
+      rawSet({ ...partial, roomTypes: dedupRoomTypes((partial as { roomTypes: RoomTypeData[] }).roomTypes) } as SetterArg);
     } else {
-      set(partial);
+      rawSet(partial);
     }
-  };
-  // Remplace `set` par `safeSet` dans le scope du store
-  set = safeSet as typeof set;
+  }) as typeof set;
+  // Remplace `set` par `safeSet` dans le scope du store (les actions
+  // déclarées plus bas utiliseront safeSet, qui délègue à rawSet).
+  set = safeSet;
 
   return {
     viewMode: "1month",
