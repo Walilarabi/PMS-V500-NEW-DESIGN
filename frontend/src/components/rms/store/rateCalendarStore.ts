@@ -172,15 +172,15 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
   // réassigner `set = safeSet`. Sans ça, les appels internes `set(...)` de
   // safeSet se résoudraient vers safeSet lui-même (le binding `set` est
   // réassigné en aval) → récursion infinie → "Maximum call stack size
-  // exceeded" à la première écriture, ce qui gèle TOUT le store
-  // (loadData, openRoomPanel, openRatePanel, updatePrice…).
+  // exceeded" / React error #185 à la première écriture, ce qui gèle TOUT
+  // le store (loadData, openRoomPanel, openRatePanel, updatePrice…).
   type SetterArg = Parameters<typeof set>[0];
   const rawSet = set;
-  const safeSet = (partial: SetterArg) => {
+  const safeSet: typeof set = ((partial: SetterArg) => {
     if (typeof partial === 'function') {
       rawSet((state) => {
         const next = (partial as (s: RateCalendarStore) => Partial<RateCalendarStore>)(state);
-        if (next && 'roomTypes' in next && Array.isArray((next as { roomTypes?: unknown }).roomTypes)) {
+        if (next && typeof next === 'object' && 'roomTypes' in next && Array.isArray((next as { roomTypes?: unknown }).roomTypes)) {
           return { ...next, roomTypes: dedupRoomTypes((next as { roomTypes: RoomTypeData[] }).roomTypes) };
         }
         return next;
@@ -190,9 +190,10 @@ export const useRateCalendarStore = create<RateCalendarStore>((set, get) => {
     } else {
       rawSet(partial);
     }
-  };
-  // Remplace `set` par `safeSet` dans le scope du store
-  set = safeSet as typeof set;
+  }) as typeof set;
+  // Remplace `set` par `safeSet` dans le scope du store (les actions
+  // déclarées plus bas utiliseront safeSet, qui délègue à rawSet).
+  set = safeSet;
 
   // ── Persistance calendrier (UPSERT — insert-or-update) ───────────────────
   // Toutes les éditions du calendrier (prix, restrictions, ouverture/fermeture)
