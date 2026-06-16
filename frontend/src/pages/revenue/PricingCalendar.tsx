@@ -13,12 +13,13 @@ import { CalendarDays } from 'lucide-react';
 import { RevenueHeader } from '@/src/components/revenue/RevenueHeader';
 import { CalendarGrid } from '@/src/components/rms/calendar/CalendarGrid';
 import { ToastProvider } from '@/src/components/rms/calendar/Toast';
+import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 
 // [CM] import { useState } from 'react';
 // [CM] import { Radio } from 'lucide-react';
 // [CM] import { ChannelManagerPanel } from '@/src/components/revenue/ChannelManagerPanel';
 
-export const PricingCalendar: React.FC = () => {
+const PricingCalendarInner: React.FC = () => {
   // [CM] const [cmPanelOpen, setCmPanelOpen] = useState(false);
 
   return (
@@ -39,3 +40,13 @@ export const PricingCalendar: React.FC = () => {
     </div>
   );
 };
+
+// Wrapper avec ErrorBoundary : la grille tarifaire (CalendarGrid + sous-
+// composants Zustand-bound) est complexe et historiquement source de
+// crashes silencieux. L'isolation évite que le calendrier fasse tomber
+// l'app entière si un sous-composant throw.
+export const PricingCalendar: React.FC = () => (
+  <ErrorBoundary>
+    <PricingCalendarInner />
+  </ErrorBoundary>
+);

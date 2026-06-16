@@ -26,6 +26,7 @@ import { DecisionRow } from '@/src/components/rms/automation/DecisionRow';
 import { STRATEGY_BY_ID } from '@/src/lib/rms/strategies';
 import { AutopilotForecastPanel } from '@/src/components/revenue/automation/AutopilotForecastPanel';
 import { RmsEnterpriseFeed } from '@/src/components/revenue/automation/RmsEnterpriseFeed';
+import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 
 const LEVEL_ACCENT: Record<AutomationLevel, string> = {
   1: '#6B7280',
@@ -51,7 +52,7 @@ const Kpi: React.FC<{
   </div>
 );
 
-export const AutopilotPage: React.FC = () => {
+const AutopilotPageInner: React.FC = () => {
   const automationLevel = useRmsAutomationStore((s) => s.automationLevel);
   const activeStrategyId = useRmsAutomationStore((s) => s.activeStrategyId);
   const autoMode = useRmsAutomationStore((s) => s.autoMode);
@@ -293,5 +294,14 @@ export const AutopilotPage: React.FC = () => {
     </div>
   );
 };
+
+// Wrapper avec ErrorBoundary : isolation contre les crashes runtime
+// (Zustand instable, données corrompues, sous-composant qui throw) pour
+// éviter que l'Autopilote fasse tomber l'app entière.
+export const AutopilotPage: React.FC = () => (
+  <ErrorBoundary>
+    <AutopilotPageInner />
+  </ErrorBoundary>
+);
 
 export default AutopilotPage;

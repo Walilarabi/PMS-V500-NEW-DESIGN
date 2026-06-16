@@ -73,6 +73,7 @@ import { fetchRmsSettings, updateRmsSettings, type RmsSettings } from '../../ser
 import { EventTooltip, type EventTooltipData } from '../../components/shared/EventTooltip';
 import { toast } from '../../hooks/use-toast';
 import { useAuth } from '@/src/domains/auth/AuthContext';
+import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES MÉTIER
@@ -230,7 +231,18 @@ function generateSkeletonRMSData(startDate: Date, days: number): DayRMSData[] {
 // COMPOSANT PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Wrapper public exporté : ErrorBoundary isole les crashes runtime du
+// tableau RMS (data Lighthouse corrompue, store inattendu, etc.) pour
+// éviter qu'un bug local fasse tomber toute l'app.
 export function RMSTableauPro() {
+  return (
+    <ErrorBoundary>
+      <RMSTableauProInner />
+    </ErrorBoundary>
+  );
+}
+
+function RMSTableauProInner() {
   const { session } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [viewPeriod, setViewPeriod] = useState<ViewPeriod>('15days');
