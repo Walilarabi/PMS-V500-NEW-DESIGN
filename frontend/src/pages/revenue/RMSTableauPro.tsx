@@ -271,7 +271,12 @@ export function RMSTableauPro() {
   };
 
   // ─── Store RMS Calendrier ───────────────────────────────────────────────
-  const { roomTypes, loadData } = useRateCalendarStore();
+  // Sélecteurs ATOMIQUES obligatoires (Zustand v5 + React 18 strict). La
+  // destructuration `const { roomTypes, loadData } = useRateCalendarStore()`
+  // souscrit au state entier → re-render à chaque set() global, même non
+  // pertinent, cause potentielle de boucles via useEffect en cascade.
+  const roomTypes = useRateCalendarStore((s) => s.roomTypes);
+  const loadData = useRateCalendarStore((s) => s.loadData);
 
   useEffect(() => {
     if (roomTypes.length === 0) {

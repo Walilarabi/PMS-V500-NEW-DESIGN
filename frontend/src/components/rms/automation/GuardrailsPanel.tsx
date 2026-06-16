@@ -7,7 +7,7 @@
  * stratégie de fallback.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Shield, ArrowDownToLine, ArrowUpToLine, Activity, Percent, Brain,
   Gauge, Clock, CalendarX, BedDouble, Radio, ShieldCheck, LifeBuoy,
@@ -107,7 +107,15 @@ const Chips: React.FC<{
 export const GuardrailsPanel: React.FC = () => {
   const params = useRmsAutomationStore((s) => s.params);
   const updateParams = useRmsAutomationStore((s) => s.updateParams);
-  const roomTypes = useRateCalendarStore((s) => s.roomTypes.map((r) => r.roomTypeName));
+  // ⚠️ Selecteur atomique : retourne le tableau brut (référence stable via
+  // dedupRoomTypes du store). Le `.map(name)` se fait dans un useMemo pour
+  // éviter qu'à chaque render Zustand v5 voie une nouvelle référence
+  // d'array → boucle infinie React #185.
+  const rawRoomTypes = useRateCalendarStore((s) => s.roomTypes);
+  const roomTypes = useMemo(
+    () => rawRoomTypes.map((r) => r.roomTypeName),
+    [rawRoomTypes],
+  );
   const [draft, setDraft] = useState({ label: '', from: '', to: '' });
 
   const set = <K extends keyof AutopilotParams>(key: K, value: AutopilotParams[K]) =>

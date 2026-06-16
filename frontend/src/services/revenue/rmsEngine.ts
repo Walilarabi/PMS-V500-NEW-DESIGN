@@ -20,6 +20,15 @@ import {
   type WeightingStrategy,
 } from './sourceWeighting.service';
 
+/**
+ * Prix de référence safe (€) utilisé en ultime fallback quand TOUTES les
+ * sources tarifaires sont absentes (médiane Lighthouse manquante ET prix
+ * calendrier absent). Évite que le moteur ne produise une recommandation à
+ * 0 €, qui était physiquement absurde et rendait les recommandations
+ * inutilisables pour le RM. Aligné sur SAFE_DEFAULT_PRICE de calendarPriceSync.
+ */
+const ENGINE_SAFE_DEFAULT_PRICE = 150;
+
 // ─── Types exportés ──────────────────────────────────────────────────────────
 
 export type Strategy =
@@ -157,7 +166,22 @@ export function calculateRecommendation(input: RmsEngineInput): RecommendationRe
   // Base = médiane marché pondérée NRF, puis multiplicateur stratégie.
   // Quand stratégie = Maintenir, priceAdjustment = 1 → suggestedPrice ≠
   // currentPrice (la médiane pondérée est le prix cible, pas le prix actuel).
-  const referencePrice = medianPrice > 0 ? medianPrice : currentPrice;
+  //
+  // Garde-fou anti-zéro : si AUCUNE des deux sources n'est dispo (calendrier
+  // pas chargé ET Lighthouse manquant), on retombe sur ENGINE_SAFE_DEFAULT_PRICE
+  // au lieu de retourner 0 €. Cette protection était absente : conséquence,
+  // toutes les recos affichaient 0 € quand la médiane marché tardait à
+  // arriver, faisant croire à un bug moteur alors que c'était un trou de
+  // données amont. La confiance est alors réduite pour signaler le fallback.
+  let referencePrice: number;
+  if (medianPrice > 0) {
+    referencePrice = medianPrice;
+  } else if (currentPrice > 0) {
+    referencePrice = currentPrice;
+  } else {
+    referencePrice = ENGINE_SAFE_DEFAULT_PRICE;
+    confidence = Math.max(40, confidence - 25);
+  }
   const season: WeightingSeason = date ? seasonFromDate(date) : 'mid';
   const stratKey: WeightingStrategy =
     strategy === 'Yield Max' || strategy === 'Haute demande' || strategy === 'Opportuniste'
@@ -175,10 +199,13 @@ export function calculateRecommendation(input: RmsEngineInput): RecommendationRe
   });
 
   const rawSuggested = Math.round(weight.weightedPrice * priceAdjustment);
+  // Garde-fou ultime : Math.round() peut produire 0 si weightedPrice est très
+  // petit. On garantit qu'on ne sort JAMAIS 0 € comme reco (impossible métier).
+  const safeSuggested = rawSuggested > 0 ? rawSuggested : ENGINE_SAFE_DEFAULT_PRICE;
 
   return {
     recommendation,
-    suggestedPrice: rawSuggested,
+    suggestedPrice: safeSuggested,
     confidence: Math.min(100, confidence),
     weighting: {
       percent: weight.percent,
