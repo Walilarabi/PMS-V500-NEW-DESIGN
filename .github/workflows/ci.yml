@@ -1,0 +1,140 @@
+# =============================================================================
+# FLOWTYM CI — Qualité & sécurité avant merge / déploiement
+# =============================================================================
+# Trois jobs en parallèle qui s'exécutent sur push main + sur toute PR :
+#   1. typecheck       → tsc --noEmit (interdit toute nouvelle TS2304 = crash runtime)
+#   2. test            → vitest run (suite unitaire + tests régression sécurité)
+#   3. build           → vite build (s'assure que le bundle se produit)
+#
+# Objectif : empêcher en CI toute régression du type des bugs déjà fixés :
+#   - V6 (reservation undefined ReservationDetailsModal)
+#   - V7 (CHANNELS undefined DistributionAnalytics)
+#   - kpiData undefined PlanningViewLive (déjà fixé pre-sprint)
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel previous in-flight runs of the same workflow+ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Variables Supabase stub : tsc + vitest n'ont pas besoin de vraies clés,
+  # mais src/lib/supabase.ts throw au load sans elles.
+  VITE_SUPABASE_URL: https://stub.supabase.co
+  VITE_SUPABASE_ANON_KEY: stub-anon-key-for-ci-only
+
+jobs:
+  # ─── Job 1 : type-check (lint) ────────────────────────────────────────────
+  typecheck:
+    name: Type-check (tsc --noEmit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: TypeScript compile
+        working-directory: frontend
+        run: npm run lint  # = tsc --noEmit
+
+      # Quality gate : interdire toute nouvelle "Cannot find name" (TS2304).
+      # C'est le pattern de bug qui crashe l'app à l'exécution (V6/V7/kpiData).
+      - name: Quality gate — zéro TS2304 (variables fantômes)
+        working-directory: frontend
+        run: |
+          if npx tsc --noEmit 2>&1 | grep -q "TS2304"; then
+            echo "::error::TS2304 detected — risque de crash runtime (variables fantômes type kpiData/CHANNELS)"
+            npx tsc --noEmit 2>&1 | grep "TS2304" | head -20
+            exit 1
+          fi
+          echo "✅ Aucune TS2304 — pas de variable fantôme"
+
+  # ─── Job 2 : tests unitaires + régression sécurité ────────────────────────
+  test:
+    name: Unit + regression tests (vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Vitest run
+        working-directory: frontend
+        run: npm test
+
+      # Bloque le merge si l'un des fichiers de régression sécurité échoue
+      # (ex : quelqu'un retire le fix V6/V7 par inadvertance).
+      - name: Security regression tests must pass
+        working-directory: frontend
+        run: npx vitest run src/__tests__/security-sprint1-regression.test.ts
+
+  # ─── Job 3 : build de prod ────────────────────────────────────────────────
+  build:
+    name: Production build (vite build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Vite build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build report — top 5 chunks
+        working-directory: frontend
+        run: |
+          echo "Top 5 chunks par taille :"
+          ls -lhS dist/assets/*.js | head -5 || true
+
+  # ─── Job 4 (informatif, non bloquant) : audit de dépendances ──────────────
+  npm-audit:
+    name: npm audit (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true  # informational only — ne bloque pas le merge
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit production deps only
+        working-directory: frontend
+        run: |
+          npm audit --omit=dev --audit-level=high || true
