@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, lazy, Suspense } from 'react';
+import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -146,7 +147,7 @@ const getRoomCode = (type: string, category: string): string => {
   return mapping[fullType] || `${type.substring(0, 3).toUpperCase()} ${category.substring(0, 2).toUpperCase()}`;
 };
 
-export const PlanningView = () => {
+const PlanningViewInner = () => {
   const { addReservation, updateReservation, reservations: contextReservations } = useReservations();
   const rmsEvents = useEventsStore((s) => s.events);
 
@@ -524,6 +525,35 @@ export const PlanningView = () => {
     [currentDate, viewLength, kpiReservations, kpiRooms],
   );
   const visibleSummary = React.useMemo(() => aggregateKpis(visibleDayKpis), [visibleDayKpis]);
+
+  // ── KPI agrégés pour le mode Calendrier Revenu (en-tête 5 tuiles) ────────
+  // BUG HISTORIQUE : `kpiData` était référencé 8× dans la vue Revenue (lignes
+  // 1185-1188) mais jamais défini → ReferenceError à chaque clic sur le
+  // bouton "Calendrier Revenu" qui passe displayMode à 'Revenue'. Le crash
+  // était systématique. Définition dérivée des sources réelles disponibles :
+  //   - to / totalRevenue / revpar / adr : agrégats de la plage visible
+  //   - roomsSold : somme des occupied sur la plage
+  //   - availableRooms : capacité du jour - occupé du jour
+  //   - reservationsCount : réservations actives sur la plage (non annulées)
+  const kpiData = React.useMemo(() => {
+    const totalRoomsSold = visibleDayKpis.reduce((s, d) => s + d.occupied, 0);
+    const todayOccupied = visibleDayKpis[0]?.occupied ?? 0;
+    const todayTotalRooms = visibleDayKpis[0]?.totalRooms ?? 0;
+    const availableRooms = Math.max(0, todayTotalRooms - todayOccupied);
+    const reservationsCount = contextReservations.filter(
+      (r) => r.effectiveStatus !== 'cancelled' && r.effectiveStatus !== 'noshow',
+    ).length;
+    return {
+      to: visibleSummary.avgToRate,
+      totalRevenue: visibleSummary.totalRevenue,
+      revpar: visibleSummary.avgRevpar,
+      adr: visibleSummary.avgAdr,
+      roomsSold: totalRoomsSold,
+      availableRooms,
+      reservationsCount,
+    };
+  }, [visibleSummary, visibleDayKpis, contextReservations]);
+
   const todayKpi = React.useMemo(
     () => computeDayKpi(new Date(), kpiReservations, kpiRooms),
     [kpiReservations, kpiRooms],
@@ -2837,3 +2867,13 @@ export const PlanningView = () => {
     </div>
 );
 };
+
+// Wrapper avec ErrorBoundary : Planning est l'entrée principale du module
+// Flowday, source historique de crashes (kpiData manquant, données amont
+// corrompues, useEffect cascades). L'isolation évite que le Planning fasse
+// tomber l'app entière.
+export const PlanningView = () => (
+  <ErrorBoundary>
+    <PlanningViewInner />
+  </ErrorBoundary>
+);
