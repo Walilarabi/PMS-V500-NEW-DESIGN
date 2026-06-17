@@ -27,9 +27,32 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const GRAPH_VERSION = Deno.env.get('META_GRAPH_VERSION') ?? 'v21.0';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+// V5 SECURITY SPRINT 1 — CORS allowlist (plus de wildcard).
+// Les Edge Functions Deno traitent une requête à la fois → safe de re-bind
+// `corsHeaders` au début de chaque handler avant tout appel à json().
+const ALLOWED_ORIGINS = new Set<string>([
+  ...(Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((o) => o.trim()).filter(Boolean),
+  'http://localhost:3000',
+  'http://localhost:5173',
+]);
+const DEFAULT_ORIGIN = [...ALLOWED_ORIGINS][0] ?? '';
+
+function buildCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') ?? '';
+  const allow = ALLOWED_ORIGINS.has(origin) ? origin : DEFAULT_ORIGIN;
+  return {
+    'Access-Control-Allow-Origin': allow,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  };
+}
+
+let corsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Origin': DEFAULT_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Vary': 'Origin',
 };
 
 function json(payload: unknown, status = 200): Response {
@@ -95,6 +118,9 @@ function normalizePhone(raw: string): string | null {
 }
 
 serve(async (req) => {
+  // V5 : rebind corsHeaders au début de chaque requête en fonction de l'Origin.
+  corsHeaders = buildCorsHeaders(req);
+
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
