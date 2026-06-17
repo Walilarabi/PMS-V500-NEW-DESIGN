@@ -412,7 +412,10 @@ const TabReservation: React.FC<{ res: Reservation; onUpdate?: (updated: Reservat
   };
 
   const generatePaymentLink = (processor: string) => {
-     const ref = reservation?.reference ?? crypto.randomUUID().slice(0, 8).toUpperCase();
+     // V6 fix : la variable `reservation` n'existait pas dans le scope du
+     // TabReservation (la prop s'appelle `res`). Lecture de `reservation?.reference`
+     // levait ReferenceError au clic sur "Lien Stripe / Lien PayPal" → modale crash.
+     const ref = res?.reference ?? crypto.randomUUID().slice(0, 8).toUpperCase();
      setPaymentLink(`https://pay.flowtym.com/${processor.toLowerCase()}/${ref}`);
      window.dispatchEvent(new CustomEvent('app-toast', { detail: { message: `Lien de paiement ${processor} généré` } }));
   };
