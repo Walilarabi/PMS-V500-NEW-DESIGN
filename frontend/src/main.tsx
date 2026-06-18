@@ -14,6 +14,20 @@ import { toast } from '@/src/hooks/use-toast';
 // Capture window.onerror + unhandledrejection vers le ring buffer monitoring
 installGlobalErrorHandlers();
 
+// Sentry — pilot integration (Option A, exception au gel produit).
+// Activée uniquement si VITE_SENTRY_DSN est configuré côté Vercel env.
+// Sinon : no-op silencieux. Utilise le module observability (devops-sprint-1)
+// qui pose la PII redaction conservatrice.
+const sentryDsn = (import.meta.env as Record<string, string | undefined>).VITE_SENTRY_DSN;
+if (sentryDsn) {
+  void Promise.all([
+    import('@sentry/browser'),
+    import('@/src/lib/observability'),
+  ])
+    .then(([Sentry, obs]) => obs.installSentry(Sentry, sentryDsn))
+    .catch(() => {/* observabilité ne doit jamais casser l'app */});
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
