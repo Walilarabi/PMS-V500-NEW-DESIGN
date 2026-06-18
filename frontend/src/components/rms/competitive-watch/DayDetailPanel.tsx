@@ -17,6 +17,8 @@ import { DEMAND_BANDS } from '../../../lib/rms/chartColors';
 import { CompsetDistributionBar } from './CompsetDistributionBar';
 import { RejectionReasonModal } from './RejectionReasonModal';
 import { recommendationFeedback, type FeedbackEntry } from '../../../services/revenue/recommendationFeedback.service';
+import { centralPricingEngine } from '@/src/services/revenue/centralPricingEngine.service';
+import { calculateDayRecommendation } from '@/src/lib/rms/dayRecommendation';
 import { cn } from '@/src/lib/utils';
 
 /* ── Variante marché ────────────────────────────────────────────────────── */
@@ -119,23 +121,40 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
     : null;
   const demandColor = getDemandColor(day.demand);
 
-  // Recommandation : uniquement si les données tarifaires sont disponibles
-  const recommendedPrice = (() => {
-    if (day.ourPrice == null || day.median == null) return null;
-    if (day.demand >= 75 && day.ourPrice < day.median) return Math.round(day.median * 0.98);
-    if (day.demand <= 25 && day.ourPrice > day.median) return Math.round(day.median * 1.02);
-    return day.ourPrice;
-  })();
-  const recommendationDelta = recommendedPrice != null && day.ourPrice != null
-    ? recommendedPrice - day.ourPrice
-    : null;
+  // Recommandation tarifaire : déléguée au helper unique partagé avec la
+  // popup « Décision RM ». Garantit que les deux écrans affichent toujours
+  // le même tarif recommandé pour la même date (incident 18/06/2026 où la
+  // popup affichait 375 € et ce panel 298 € via deux calculs divergents).
+  const reco = calculateDayRecommendation({
+    date: day.date,
+    ourPrice: day.ourPrice ?? null,
+    median: day.median ?? null,
+    demand: day.demand,
+  });
+  const recommendedPrice = reco.recommendedPrice;
+  const recommendationDelta = reco.recommendationDelta;
+  const pressureLabel = reco.pressureLabel;
+  const strategy = reco.strategy;
 
-  // Stratégie / pression / statut dérivés
-  const pressureLabel: 'Faible' | 'Modérée' | 'Forte' | 'Extrême' =
-    day.demand >= 85 ? 'Extrême' : day.demand >= 60 ? 'Forte' : day.demand >= 35 ? 'Modérée' : 'Faible';
-  const strategy = day.demand >= 70 ? 'Yield agressif' : day.demand <= 30 ? 'Défensive' : 'Équilibrée';
+  // Avant le fix, ce panel loggait uniquement le feedback IA sans informer
+  // le central pricing engine. Conséquence : la décision « Acceptée » prise
+  // ici n'apparaissait pas dans RMS Tableau / Calendrier / Recommandations.
+  // Maintenant, on passe par le moteur central comme la popup.
+  const seedRecord = () => {
+    if (recommendedPrice == null) return;
+    centralPricingEngine.getOrSeed(day.date, {
+      current: reco.currentPrice,
+      suggested: recommendedPrice,
+      confidence: reco.confidence,
+      strategy: String(strategy),
+    });
+  };
 
   const handleAccept = () => {
+    seedRecord();
+    if (recommendedPrice != null) {
+      centralPricingEngine.accept(day.date, { source: 'veille' });
+    }
     const entry = recommendationFeedback.log({
       date: day.date,
       action: 'accept',
@@ -145,13 +164,17 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
         median: day.median ?? 0,
         rank: ourRank ?? undefined,
         pressure: pressureLabel === 'Extrême' ? 'extreme' : pressureLabel === 'Forte' ? 'high' : pressureLabel === 'Modérée' ? 'medium' : 'low',
-        strategy,
+        strategy: String(strategy),
       },
     });
     setLastFeedback(entry);
   };
 
   const handleMaintain = () => {
+    seedRecord();
+    if (recommendedPrice != null) {
+      centralPricingEngine.maintain(day.date, { source: 'veille' });
+    }
     const entry = recommendationFeedback.log({
       date: day.date,
       action: 'maintain',
@@ -160,7 +183,7 @@ const MarketDetail: React.FC<{ selectedLabel: string }> = ({ selectedLabel }) =>
         recommendedPrice: day.ourPrice ?? 0,
         median: day.median ?? 0,
         rank: ourRank ?? undefined,
-        strategy,
+        strategy: String(strategy),
       },
     });
     setLastFeedback(entry);

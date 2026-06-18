@@ -28,7 +28,7 @@ import {
   type FeedbackEntry,
 } from '@/src/services/revenue/recommendationFeedback.service';
 import { centralPricingEngine } from '@/src/services/revenue/centralPricingEngine.service';
-import { calculateStrategy, calculateRecommendation } from '@/src/services/revenue/rmsEngine';
+import { calculateDayRecommendation } from '@/src/lib/rms/dayRecommendation';
 import { useCompetitiveWatchData } from '@/src/lib/rms/useCompetitiveWatchData';
 
 export interface MarketDay {
@@ -141,44 +141,31 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
 
   if (!day) return null;
 
-  // Tarif courant = calendrier (source de vérité BAR) ; fallback Lighthouse si calendrier non chargé
-  const currentPrice = day.calendarPrice ?? day.ourPrice;
+  // Recommandation tarifaire : déléguée au helper unique partagé avec
+  // DayDetailPanel. Garantit une seule source de vérité par date (incident
+  // 18/06/2026 où popup et panel calculaient deux tarifs divergents).
+  const reco = calculateDayRecommendation({
+    date: day.date,
+    ourPrice: day.ourPrice ?? null,
+    calendarPrice: day.calendarPrice,
+    median: day.median ?? null,
+    demand: day.demand,
+  });
+  const currentPrice = reco.currentPrice;
+  // Fallback affichage : si pas de reco possible (no-data), on garde le prix
+  // actuel pour ne pas casser la mise en page.
+  const recommendedPrice = reco.recommendedPrice ?? currentPrice;
+  const recommendationDelta = reco.recommendationDelta ?? 0;
+  const pressureLabel = reco.pressureLabel;
+  const strategy = reco.strategy;
 
   const gap = currentPrice - day.median;
   const gapPct = day.median > 0 ? (gap / day.median) * 100 : 0;
   const min = day.q25;
   const max = day.q75;
 
-  // Tarif recommandé via le moteur RMS centralisé (11 facteurs + pondération NRF).
-  // Vérifie d'abord si une décision existe déjà dans le central pricing engine.
-  const existingRecord = centralPricingEngine.get(day.date);
-  const engineResult = existingRecord
-    ? null  // déjà seedé — on lira suggestedPrice depuis le store
-    : calculateRecommendation({
-        currentPrice,
-        medianPrice: day.median,
-        marketPressure: day.demand,
-        occupancyRate: day.demand,
-        date: day.date,
-        source: 'lighthouse',
-      });
-  const recommendedPrice = existingRecord?.suggestedPrice
-    ?? engineResult?.suggestedPrice
-    ?? currentPrice;
-
-  const engineStrategy = calculateStrategy({
-    marketPressure: day.demand,
-    occupancyRate: day.demand,
-  });
-
-  const recommendationDelta = recommendedPrice - currentPrice;
   const recommendationDirection: 'up' | 'down' | 'hold' =
     recommendationDelta > 0 ? 'up' : recommendationDelta < 0 ? 'down' : 'hold';
-
-  const pressureLabel =
-    day.demand >= 85 ? 'Extrême' : day.demand >= 65 ? 'Forte'
-    : day.demand >= 40 ? 'Modérée' : 'Faible';
-  const strategy = engineStrategy;
 
   // Explication métier
   const explanation = (() => {
@@ -212,7 +199,7 @@ export const MarketDayDecisionModal: React.FC<MarketDayDecisionModalProps> = ({
   const seedRecord = () => centralPricingEngine.getOrSeed(day.date, {
     current: currentPrice,
     suggested: recommendedPrice,
-    confidence: engineResult?.confidence ?? 85,
+    confidence: reco.confidence > 0 ? reco.confidence : 85,
     strategy: String(strategy),
   });
 
