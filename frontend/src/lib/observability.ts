@@ -145,6 +145,15 @@ export interface SentryLike {
  *     const Sentry = await import('@sentry/browser');
  *     installSentry(Sentry, import.meta.env.VITE_SENTRY_DSN);
  *   }
+ *
+ * ⚠️ Config volontairement RESTRICTIVE pour la conformité RGPD :
+ *   - sendDefaultPii: false → pas d'IP, pas d'User-Agent
+ *   - tracesSampleRate: 0 → pas de tracing (peut leak URLs avec query params)
+ *   - autoSessionTracking: false → pas de session ID rattaché aux events
+ *   - integrations filtrées → pas de Replay (capture DOM), pas de
+ *     BrowserTracing, pas de console capture, pas de breadcrumbs fetch/xhr
+ *     non filtrés
+ *   - beforeSend + beforeBreadcrumb → double couche de redaction PII
  */
 export function installSentry(Sentry: SentryLike, dsn: string): void {
   if (!dsn) return;
@@ -152,10 +161,60 @@ export function installSentry(Sentry: SentryLike, dsn: string): void {
     dsn,
     release: (import.meta.env as Record<string, string>).VITE_APP_VERSION ?? 'dev',
     environment: (import.meta.env as Record<string, string>).MODE ?? 'production',
-    tracesSampleRate: 0.1,
+    // Pas de traces (URLs/query params potentiellement sensibles)
+    tracesSampleRate: 0,
+    // Pas d'IP, pas d'User-Agent, pas de cookies envoyés par Sentry SDK
+    sendDefaultPii: false,
+    // Pas de session tracking (user ID + temps de session sont du PII)
+    autoSessionTracking: false,
+    // Filtrer les intégrations par défaut : retirer Replay (capture DOM),
+    // BrowserTracing (URLs sensibles), CaptureConsole (console.log peut leak),
+    // BrowserApiErrors (parsing fetch).
+    integrations(defaultIntegrations: Array<{ name: string }>) {
+      const BLOCKED = new Set([
+        'Replay',           // capture DOM screenshots
+        'BrowserTracing',   // URLs + perf metrics
+        'BrowserProfiling', // CPU profile
+        'CaptureConsole',   // console.* — risque PII
+        'HttpClient',       // body de requêtes
+      ]);
+      return defaultIntegrations.filter((i) => !BLOCKED.has(i.name));
+    },
     beforeSend(event: unknown) {
-      // Defense en profondeur : re-redact côté Sentry au cas où.
+      // Defense en profondeur : re-redact côté Sentry côté envoi de l'event final.
+      // Le redactPII parcourt récursivement (couvre user, extra, contexts,
+      // tags, breadcrumbs résiduels).
       return redactPII(event);
+    },
+    beforeBreadcrumb(breadcrumb: Record<string, unknown>) {
+      // Filtrer les breadcrumbs automatiques :
+      const category = String(breadcrumb.category ?? '');
+      // 1. Bloquer console (peut contenir PII via console.log(user))
+      if (category === 'console') return null;
+      // 2. Pour XHR/fetch : conserver méthode + URL nettoyée, retirer body
+      if (category === 'xhr' || category === 'fetch') {
+        const data = (breadcrumb.data ?? {}) as Record<string, unknown>;
+        // Nettoyer l'URL des query params sensibles
+        if (typeof data.url === 'string') {
+          data.url = data.url.replace(
+            /([?&])(access_token|refresh_token|token|jwt|password|apikey|api_key|secret)=[^&]*/gi,
+            '$1$2=[REDACTED]',
+          );
+        }
+        // Retirer body si présent (Sentry ne le capture pas par défaut mais
+        // ceinture + bretelles)
+        delete data.body;
+        delete data.requestBody;
+        delete data.responseBody;
+        breadcrumb.data = data;
+      }
+      // 3. Pour UI events (clicks) : retirer le texte des inputs (peut être PII)
+      if (category === 'ui.click' || category === 'ui.input') {
+        const msg = String(breadcrumb.message ?? '');
+        // Retirer les valeurs > 3 caractères (heuristique)
+        breadcrumb.message = msg.replace(/value="[^"]{4,}"/g, 'value="[REDACTED]"');
+      }
+      return breadcrumb;
     },
   });
   installCustomSink((evt) => {
