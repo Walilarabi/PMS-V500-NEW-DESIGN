@@ -8,6 +8,27 @@
 
 ---
 
+> ## ⏸ STATUT D'EXÉCUTION : DIFFÉRÉ post-pilote
+>
+> **Décision commanditaire 2026-06-18** :
+> Le risque comptable adressé par ce sprint est **réel** mais actuellement **documenté, maîtrisé et acceptable** pour un pilote contrôlé grâce à l'**audit trail immuable append-only** déjà en place (chaîne crypto SHA-256 sur `audit_logs`, triggers `no_update`, `no_delete`).
+>
+> **L'exécution de ce sprint est mise en attente jusqu'à** :
+> 1. Stabilisation du pilote Folkestone Opéra
+> 2. Collecte des premiers retours d'exploitation réels
+> 3. Décision explicite de réactivation du sprint
+>
+> **Décisions ouvertes validées (§10 du plan)** :
+> - `reverse_payment` : différé à un sprint ultérieur
+> - Feature flag de désactivation : ✅ validé (à inclure dès la conception)
+> - Déploiement : staging puis production (pas direct prod)
+> - `mark_overdue_invoices` : différé
+> - Admin override avec audit obligatoire : ✅ conservé
+>
+> Le document conserve sa valeur de **plan d'implémentation prêt à exécuter** dès réactivation. Aucun développement, aucune migration, aucune adaptation frontend n'est entrepris à ce jour.
+
+---
+
 ## Sommaire
 
 1. [Architecture cible](#1-architecture-cible)
