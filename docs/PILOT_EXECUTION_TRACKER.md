@@ -20,11 +20,15 @@ Aucun contenu théorique. Aucun rapport stratégique. Aucune nouvelle roadmap.
 
 ## 🚦 3 priorités absolues bloquant J0
 
-| # | Sujet | Statut |
+**Ordre d'exécution imposé** :
+
+| Ordre | Sujet | Statut |
 |---|---|---|
-| 1 | Email transactionnel opérationnel | ⏳ ouvert |
-| 2 | Référent Folkestone officiellement désigné | ⏳ ouvert |
-| 3 | TAU exécuté et validé (10/10 + signatures) | ⏳ ouvert |
+| 1️⃣ | **P3 Email transactionnel opérationnel** (priorité absolue) | ⏳ ouvert |
+| 2️⃣ | **P6 Référent Folkestone officiellement désigné** (priorité suivante) | ⏳ ouvert |
+| 3️⃣ | **P8 TAU exécuté et validé** (10/10 + signatures) | ⏳ ouvert |
+
+**Fenêtre J0 cible** : **4 à 6 semaines** à compter du 2026-06-18, **sous réserve de fermeture P3 + P6 + P8**.
 
 **Tant qu'au moins un de ces 3 sujets reste ouvert : pilote NON lançable.**
 
@@ -72,8 +76,9 @@ Aucun contenu théorique. Aucun rapport stratégique. Aucune nouvelle roadmap.
 - Identification P6 (référent)
 
 **Date J0 estimée**
-- À déterminer après décision D1 (date cible) et confirmation P3/P6
-- Plus tôt réaliste : J0 = 4 semaines à compter de la fermeture de P6
+- Fenêtre cible **4 à 6 semaines** (entre le 2026-07-13 et le 2026-07-27, lundi)
+- Sous réserve de fermeture **P3 + P6 + P8** dans l'ordre imposé
+- Le prochain reporting reflétera **uniquement** l'avancement de ces 3 sujets
 
 ---
 
