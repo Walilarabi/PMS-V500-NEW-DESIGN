@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import {
   Zap, Calendar, Users, TrendingUp, CreditCard,
-  BarChart2, Settings, Shield, Headphones,
+  BarChart2, Settings, Shield, Headphones, Bug,
 } from 'lucide-react';
+import { DEBUG_TOGGLE_EVENT } from '@/src/components/DebugPanel';
 import { cn } from '@/src/lib/utils';
 import { PageId } from '@/src/types';
 import { useSasNavBadges } from '@/src/domains/sas/hooks';
@@ -75,6 +76,8 @@ interface NavItem {
   defaultPage: PageId;
   hasBadge?: boolean;
   requires?: { caps: string[]; level: AccessLevel };
+  /** Si défini, le clic déclenche une action côté UI au lieu de naviguer. */
+  action?: 'toggle-debug';
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -87,6 +90,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'analysis',     label: 'Analyse',       icon: BarChart2,  defaultPage: 'analysis' as PageId, requires: { caps: ['rev_view', 'fin_export'], level: 'read' } },
   { id: 'settings',     label: 'Paramètres',    icon: Settings,   defaultPage: 'settings' as PageId },
   { id: 'support',      label: 'Support',       icon: Headphones, defaultPage: 'support' as PageId },
+  { id: 'debug',        label: 'Debug',         icon: Bug,        defaultPage: 'support' as PageId, action: 'toggle-debug' },
 ];
 
 export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
@@ -143,7 +147,13 @@ export const Topbar = ({ activePage, setActivePage }: TopbarProps) => {
             return (
               <button
                 key={item.id}
-                onClick={() => setActivePage(item.defaultPage)}
+                onClick={() => {
+                  if (item.action === 'toggle-debug') {
+                    window.dispatchEvent(new Event(DEBUG_TOGGLE_EVENT));
+                    return;
+                  }
+                  setActivePage(item.defaultPage);
+                }}
                 className={cn(
                   'relative flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-[13px] font-semibold uppercase tracking-wide transition-all duration-200',
                   isActive
