@@ -1381,6 +1381,34 @@ const AIRecommendationsCard: React.FC<{
   channels: Channel[];
   totals: { totalRevenue: number; commissionPct: number; directShare: number };
 }> = ({ channels, totals }) => {
+  // Guard : sans aucun canal (mock vide + pas encore de réservations
+  // réelles), les accès `[0]` ci-dessous étaient `undefined.name` →
+  // TypeError au render → l'ErrorBoundary global de l'App rattrapait
+  // et la page Distribution & OTA crashait entièrement. Cause restante
+  // après le fix ecc0756 (qui avait corrigé les NaN mais pas l'accès
+  // au premier élément d'un tableau vide).
+  if (channels.length === 0) {
+    return (
+      <div className="rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-50 via-white to-sky-50/40 p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-lg shadow-violet-500/25">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              Recommandations IA — optimisation du mix
+            </h3>
+            <p className="mt-1 text-xs text-slate-600">
+              Aucune donnée canal disponible pour le moment. Les
+              recommandations seront générées dès qu'au moins une
+              réservation aura été enregistrée par canal.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const worstCommission = [...channels].sort((a, b) => b.commissionRate - a.commissionRate)[0];
   const bestPerf = [...channels].sort((a, b) => b.performanceScore - a.performanceScore)[0];
   const weakest = [...channels].sort((a, b) => a.performanceScore - b.performanceScore)[0];
