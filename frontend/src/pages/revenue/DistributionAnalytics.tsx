@@ -305,7 +305,9 @@ export function DistributionAnalytics() {
       const fromReservations = computeChannelData(reservationsQ.data?.rows ?? [], roomCount);
       if (fromReservations.length > 0) return fromReservations;
       if (hasLiveChannels && liveChannels && liveChannels.length > 0) return liveChannels;
-      return CHANNELS;
+      // V7 fix : `CHANNELS` était référencé mais jamais importé/défini.
+      // Aucune donnée disponible → tableau vide. L'UI gère le skeleton/empty state.
+      return [];
     },
     [reservationsQ.data, roomCount, hasLiveChannels, liveChannels],
   );

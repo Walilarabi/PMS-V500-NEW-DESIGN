@@ -1,10 +1,17 @@
 // FLOWTYM — Edge Function : déclenche un backup logique du tenant courant.
 //
-// Appelée par BackupsPage.runNow(). Le vrai backup est délégué à un job
-// worker (pg_dump tenant-scoped) ; cette fonction n'enregistre que la
-// demande, le suivi est dans settings_audit_log + settings_backups_log.
+// ⚠️ V8 SECURITY SPRINT 1 — Option B retenue : 501 explicite.
+// Le worker `pg_dump tenant-scoped + upload S3` n'est PAS implémenté. Plutôt
+// que de renvoyer 202 « scheduled » et faire croire au client que la
+// sauvegarde est partie (faux sentiment de sécurité), on retourne 501 avec
+// un code d'erreur exploitable côté UI.
 //
-// Auth requis : token Supabase de l'utilisateur (vérification RLS).
+// Pour ré-activer : implémenter le worker (pg_cron + Edge Function externe
+// signée → pg_dump + S3) puis remplacer ce stub par l'enqueue réel.
+//
+// Auth requis : token Supabase de l'utilisateur (vérification RLS) — conservé
+// pour que la fonction ne soit jamais accessible anonymement même après
+// implémentation.
 
 // deno-lint-ignore-file no-explicit-any
 import { serve } from 'https://deno.land/std@0.220.0/http/server.ts';
@@ -67,34 +74,35 @@ serve(async (req) => {
 
     const body: BackupRequest = await req.json().catch(() => ({ scope: 'daily' as const }));
 
-    // Service-role client pour insérer la trace dans le journal d'audit
+    // Service-role client pour insérer la trace dans le journal d'audit.
+    // On loggue la TENTATIVE d'invocation (utile pour détecter du polling
+    // client qui croirait que la fonctionnalité existe).
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
-    const runId = crypto.randomUUID();
-    const startedAt = new Date().toISOString();
-
+    const at = new Date().toISOString();
     await adminClient.from('settings_audit_log').insert({
       hotel_id: hotelId,
-      entry_id: `backup_${runId}`,
-      at: startedAt,
+      entry_id: `backup_attempt_${crypto.randomUUID()}`,
+      at,
       action: 'module_inspected',
-      severity: 'info',
+      severity: 'warning',
       module: 'security_backups',
-      detail: `Sauvegarde ${body.scope} demandée (run_id=${runId})`,
-      meta: { runId, scope: body.scope, source: 'edge:trigger-backup' },
-    });
+      detail: `Tentative de sauvegarde ${body.scope} — fonctionnalité non implémentée (501).`,
+      meta: { scope: body.scope, source: 'edge:trigger-backup', status: 'not_implemented' },
+    }).then(() => {/* best effort, ne pas bloquer la réponse */});
 
-    // TODO Phase production : enqueue dans pg_cron / pg_net une exécution
-    // de pg_dump filtrée par hotel_id, upload S3, notif fin de job.
-    // Pour l'instant, on retourne le run_id et le succès "scheduled".
-
+    // ⚠️ V8 : refus explicite. Pas de mensonge `scheduled`. L'UI doit afficher
+    // que la fonctionnalité n'est pas active et orienter l'admin vers les
+    // snapshots Supabase managés en attendant le worker pg_dump.
     return new Response(JSON.stringify({
-      runId,
-      scope: body.scope,
-      status: 'scheduled',
-      scheduledAt: startedAt,
-      message: 'Sauvegarde planifiée (worker async).',
+      error: 'backup_worker_not_implemented',
+      code: 'BACKUP_NOT_IMPLEMENTED',
+      message:
+        "La sauvegarde tenant-scoped n'est pas encore active sur cet environnement. " +
+        "Les snapshots Supabase managés (rétention plan-dépendante) restent en place. " +
+        "Le worker pg_dump + S3 sera activé en Phase production.",
+      docs: 'https://docs.flowtym.com/ops/backups',
     }), {
-      status: 202,
+      status: 501,
       headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
     });
   } catch (err) {

@@ -1,12 +1,14 @@
 /**
  * FLOWTYM — Edge Function: send-dispute-email
  * Envoie un email de réclamation OTA via Resend API.
- * 
+ *
  * POST /functions/v1/send-dispute-email
  * Body: { disputeId, preview?: boolean }
- * 
- * - Si preview = true → retourne le HTML sans envoyer
- * - Si preview = false → envoie via Resend + log dans sas_email_logs
+ *
+ * V3 SECURITY SPRINT 1 — durcissement complet :
+ *   1. JWT obligatoire (Authorization: Bearer <token>)
+ *   2. Vérification que le dispute appartient au hotel du caller
+ *   3. CORS allowlist (plus de wildcard `*`)
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -17,11 +19,26 @@ const FROM_EMAIL = Deno.env.get('RESEND_FROM_EMAIL') ?? 'disputes@flowtym.com';
 const FROM_NAME = Deno.env.get('RESEND_FROM_NAME') ?? 'Flowtym PMS';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// V3 : CORS allowlist (plus de wildcard `*`).
+// Origines acceptées : env ALLOWED_ORIGINS (csv) + localhost dev par défaut.
+const ALLOWED_ORIGINS = new Set<string>([
+  ...(Deno.env.get('ALLOWED_ORIGINS') ?? '').split(',').map((o) => o.trim()).filter(Boolean),
+  'http://localhost:3000',
+  'http://localhost:5173',
+]);
+
+function buildCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') ?? '';
+  const allow = ALLOWED_ORIGINS.has(origin) ? origin : [...ALLOWED_ORIGINS][0] ?? '';
+  return {
+    'Access-Control-Allow-Origin': allow,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  };
+}
 
 // ─── Email HTML template ──────────────────────────────────────────────────────
 
@@ -167,11 +184,42 @@ function buildDisputeEmailHtml(dispute: any, partner: any, hotel: any): string {
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
+  const corsHeaders = buildCorsHeaders(req);
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
+    // ── V3.1 : JWT obligatoire ──────────────────────────────────────────────
+    const authHeader = req.headers.get('Authorization') ?? '';
+    if (!authHeader.startsWith('Bearer ')) {
+      return new Response(
+        JSON.stringify({ error: 'unauthorized', code: 'MISSING_JWT' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── V3.2 : Résoudre l'identité + hotel_id du caller via le JWT ──────────
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authErr } = await userClient.auth.getUser();
+    if (authErr || !user) {
+      return new Response(
+        JSON.stringify({ error: 'invalid_token', code: 'INVALID_JWT' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+    const { data: callerHotelId, error: hotelErr } = await userClient.rpc('get_user_hotel_id');
+    if (hotelErr || !callerHotelId) {
+      return new Response(
+        JSON.stringify({ error: 'no_active_hotel', code: 'NO_HOTEL_FOR_CALLER' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── Chargement de la dispute (service_role nécessaire pour le mailing) ──
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
     const body = await req.json();
@@ -184,7 +232,6 @@ serve(async (req) => {
       );
     }
 
-    // ── Charger le litige ────────────────────────────────────────────────────
     const { data: dispute, error: dispErr } = await supabase
       .from('sas_disputes')
       .select('*, sas_partners(*), hotels(*)')
@@ -195,6 +242,19 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Dispute not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ── V3.3 : ownership check ──────────────────────────────────────────────
+    // Le dispute DOIT appartenir au même hotel que le caller. Sinon IDOR.
+    if (dispute.hotel_id !== callerHotelId) {
+      return new Response(
+        JSON.stringify({
+          error: 'forbidden',
+          code: 'DISPUTE_OWNERSHIP_MISMATCH',
+          message: 'Cette dispute appartient à un autre hôtel.',
+        }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
