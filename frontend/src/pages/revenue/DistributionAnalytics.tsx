@@ -71,6 +71,10 @@ import {
   computeRealTotals,
   getDataSourceStatus,
 } from '@/src/lib/rms/distributionFromData';
+import {
+  computeDistributionTotals,
+  computeDistributionDependency,
+} from '@/src/lib/rms/distributionAggregates';
 import { Database, Info } from 'lucide-react';
 import { useDistributionChannels } from '@/src/hooks/useDistributionChannels';
 import { useReservations } from '@/src/domains/reservations/hooks';
@@ -350,61 +354,14 @@ export function DistributionAnalytics() {
     return arr;
   }, [channelData, sortBy]);
 
-  /* KPIs globaux — bascule sur les totaux RÉELS quand rateCalendar a chargé */
-  const totals = useMemo(() => {
-    // Totaux démonstratifs (somme du mock CHANNELS) — toujours calculés pour
-    // garantir une UI cohérente même sans connexion DB.
-    const mockRevenue = channelData.reduce((s, c) => s + c.revenue, 0);
-    const mockNet = channelData.reduce((s, c) => s + c.netRevenue, 0);
-    const mockCommission = channelData.reduce((s, c) => s + c.commissionCost, 0);
-    const mockBookings = channelData.reduce((s, c) => s + c.bookings, 0);
-    const mockNights = channelData.reduce((s, c) => s + c.roomNights, 0);
-    const mockADR = Math.round(mockRevenue / Math.max(1, mockNights));
-    const mockRevPAR = Math.round(
-      channelData.reduce((s, c) => s + c.revpar, 0) / channelData.length
-    );
-
-    // Si rateCalendar contient des données réelles, on remplace les agrégats
-    // globaux par les valeurs calculées sur les ventes effectives.
-    const totalRevenue = realTotals?.totalRevenue ?? mockRevenue;
-    const totalBookings = realTotals?.totalBookings ?? mockBookings;
-    const totalNights = realTotals?.totalRoomNights ?? mockNights;
-    const avgADR = realTotals?.avgADR ?? mockADR;
-    const avgRevPAR = realTotals?.avgRevPAR ?? mockRevPAR;
-
-    // Commission moyenne pondérée — toujours dérivée du mix de canaux
-    // (faute de mieux), mais appliquée au revenu réel.
-    const mockCommissionPct = (mockCommission / Math.max(1, mockRevenue)) * 100;
-    const totalCommission = realTotals
-      ? Math.round((totalRevenue * mockCommissionPct) / 100)
-      : mockCommission;
-    const totalNet = totalRevenue - totalCommission;
-
-    const avgConv = (
-      channelData.reduce((s, c) => s + c.conversion, 0) / channelData.length
-    ).toFixed(1);
-    const avgCancel = (
-      channelData.reduce((s, c) => s + c.cancellationRate, 0) / channelData.length
-    ).toFixed(1);
-    const commissionPct = (totalCommission / Math.max(1, totalRevenue)) * 100;
-    const direct = channelData.find((c) => c.id === 'direct');
-    const directShare = ((direct?.revenue ?? 0) / Math.max(1, mockRevenue)) * 100;
-    const otaShare = 100 - directShare;
-    return {
-      totalRevenue,
-      totalNet,
-      totalCommission,
-      totalBookings,
-      totalNights,
-      avgADR,
-      avgRevPAR,
-      avgConv,
-      avgCancel,
-      commissionPct,
-      directShare,
-      otaShare,
-    };
-  }, [channelData, realTotals]);
+  /* KPIs globaux — bascule sur les totaux RÉELS quand rateCalendar a chargé.
+     Délégué à computeDistributionTotals (testé contre les cas dégénérés :
+     channelData vide, totalRevenue = 0, etc.) pour éviter les NaN qui font
+     crasher Recharts en aval. */
+  const totals = useMemo(
+    () => computeDistributionTotals(channelData, realTotals),
+    [channelData, realTotals]
+  );
 
   /* derived */
   const top3 = sorted.slice(0, 3);
@@ -419,16 +376,10 @@ export function DistributionAnalytics() {
     [channelData]
   );
 
-  const dependencyData = useMemo(() => {
-    const sortedRev = [...channelData].sort((a, b) => b.revenue - a.revenue);
-    const topOTA = sortedRev.find((c) => c.id !== 'direct');
-    const direct = channelData.find((c) => c.id === 'direct');
-    return {
-      topOTAName: topOTA?.name ?? '',
-      topOTAShare: ((topOTA?.revenue ?? 0) / totals.totalRevenue) * 100,
-      directShare: ((direct?.revenue ?? 0) / totals.totalRevenue) * 100,
-    };
-  }, [channelData, totals]);
+  const dependencyData = useMemo(
+    () => computeDistributionDependency(channelData, totals.totalRevenue),
+    [channelData, totals]
+  );
 
   /* build export payload — shared by Excel + PDF handlers */
   const buildExportInput = (): DistributionExportInput => ({
@@ -993,7 +944,7 @@ const ChannelRow: React.FC<{
           <div>
             <div className="text-sm font-semibold text-slate-900">{channel.name}</div>
             <div className="text-[11px] text-slate-500">
-              {((channel.revenue / totals.totalRevenue) * 100).toFixed(1)}% du CA
+              {((channel.revenue / Math.max(1, totals.totalRevenue)) * 100).toFixed(1)}% du CA
             </div>
           </div>
         </div>
@@ -1199,7 +1150,7 @@ const MixDistributionCard: React.FC<{
 
         <div className="space-y-1.5">
           {data.slice(0, 8).map((d) => {
-            const pct = ((d.value / total) * 100).toFixed(1);
+            const pct = ((d.value / Math.max(1, total)) * 100).toFixed(1);
             return (
               <div key={d.name} className="flex items-center gap-2 text-xs">
                 <span
@@ -1276,7 +1227,7 @@ const DependencyCard: React.FC<{
           .sort((a, b) => b.value - a.value)
           .slice(0, 5)
           .map((d) => {
-            const pct = (d.value / total) * 100;
+            const pct = (d.value / Math.max(1, total)) * 100;
             return (
               <div key={d.name}>
                 <div className="mb-0.5 flex items-center justify-between text-[11px]">
@@ -1311,7 +1262,9 @@ const CommissionFunnelCard: React.FC<{
   commission: number;
   net: number;
 }> = ({ gross, commission, net }) => {
-  const commPct = (commission / gross) * 100;
+  const safeGross = Math.max(1, gross);
+  const commPct = (commission / safeGross) * 100;
+  const netPct = (net / safeGross) * 100;
   return (
     <div className="h-full rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center gap-2">
@@ -1342,7 +1295,7 @@ const CommissionFunnelCard: React.FC<{
       <FunnelRow
         label="CA net"
         value={net}
-        pct={(net / gross) * 100}
+        pct={netPct}
         color="from-emerald-400 to-emerald-600"
         sub="Après commissions"
         emphasize

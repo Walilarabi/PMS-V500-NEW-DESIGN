@@ -7,6 +7,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { Topbar } from '@/src/components/layout/Topbar';
 import { Sidebar } from '@/src/components/layout/Sidebar';
+import { DebugPanel } from '@/src/components/DebugPanel';
 import { useActiveHotelApps } from '@/src/domains/auth/useAppAccess';
 import { useAppShellStore } from '@/src/store/appShellStore';
 import { PageId } from '@/src/types';
@@ -419,6 +420,10 @@ export default function App() {
           )}
         </main>
       </div>
+      {/* Debug panel — accessible globalement (déplacé hors de Settings).
+          Activable via le bouton flottant 🐛 ou l'entrée « Debug » de la
+          barre principale (dispatch flowtym:toggle-debug). */}
+      <DebugPanel />
     </div>
   );
 }

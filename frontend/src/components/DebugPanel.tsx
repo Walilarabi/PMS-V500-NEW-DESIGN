@@ -1,12 +1,11 @@
 /**
  * DEBUG PANEL
- * 
+ *
  * Affiche l'état actuel des stores pour diagnostiquer les problèmes de sync.
- * À monter temporairement dans App.tsx pour vérifier que la sync fonctionne.
- * 
- * Usage:
- *   import { DebugPanel } from './components/DebugPanel';
- *   <DebugPanel />
+ * Monté globalement dans App.tsx → bouton 🐛 DEBUG flottant visible partout.
+ *
+ * Ouverture également possible via l'entrée « Debug » de la barre principale,
+ * qui dispatch l'event `flowtym:toggle-debug` écouté ci-dessous.
  */
 
 import React from 'react';
@@ -14,12 +13,20 @@ import { useConfigStore } from '@/src/store/configStore';
 import { useReservations } from '@/src/contexts/ReservationContext';
 import { useAuth } from '@/src/domains/auth/AuthContext';
 
+export const DEBUG_TOGGLE_EVENT = 'flowtym:toggle-debug';
+
 export const DebugPanel: React.FC = () => {
   const { status, session } = useAuth();
   const { rooms } = useConfigStore();
   const { reservations } = useReservations();
 
   const [isOpen, setIsOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handler = () => setIsOpen((v) => !v);
+    window.addEventListener(DEBUG_TOGGLE_EVENT, handler);
+    return () => window.removeEventListener(DEBUG_TOGGLE_EVENT, handler);
+  }, []);
 
   if (!isOpen) {
     return (
