@@ -38,6 +38,11 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       emptyOutDir: true,
+      // ⚠️ Sourcemaps désactivées en prod : ne JAMAIS exposer le code source
+      // mappé aux utilisateurs (et donc à Sentry breadcrumbs en cas d'erreur).
+      // En cas de besoin debug sourcemap → générer hidden + upload à Sentry
+      // via auth privée (hors scope pilote).
+      sourcemap: false,
       rollupOptions: {
         output: {
           manualChunks: {
