@@ -1,27 +1,199 @@
 # Pilot Execution Tracker — Folkestone Opéra
 
-**Mis à jour** : 2026-06-18 (S0 — sortie phase préparation)  
-**J0 cible** : à confirmer (D1)  
-**Format** : tableau de bord vivant. Mis à jour chaque vendredi.
+**Référence unique de suivi du pilote.**
+
+---
+
+## 📐 Règles de reporting (gravées)
+
+Chaque mise à jour hebdomadaire contient **uniquement** ces 5 sections :
+
+1. **Réalisé** — ce qui a été effectivement exécuté
+2. **Bloquants** — ce qui empêche l'avancement
+3. **Risques** — risques identifiés à court terme
+4. **Semaine suivante** — actions prévues
+5. **Date J0 estimée** — date réaliste du lancement pilote
+
+Aucun contenu théorique. Aucun rapport stratégique. Aucune nouvelle roadmap.
+
+---
+
+## 🚦 3 priorités absolues bloquant J0
+
+| # | Sujet | Statut |
+|---|---|---|
+| 1 | Email transactionnel opérationnel | ⏳ ouvert |
+| 2 | Référent Folkestone officiellement désigné | ⏳ ouvert |
+| 3 | TAU exécuté et validé (10/10 + signatures) | ⏳ ouvert |
+
+**Tant qu'au moins un de ces 3 sujets reste ouvert : pilote NON lançable.**
 
 ---
 
 ## 📊 Tableau de bord des 8 priorités
 
-| # | Priorité | Owner | Statut | Date cible | Bloquant ? |
-|---|---|---|---|---|---|
-| 1 | V12 `auth_leaked_password_protection` | walilarabi | ⏳ À faire | J-21 | non |
-| 2 | Supabase Pro + PITR | walilarabi | ⏳ À faire | J-21 | non |
-| 3 | Email transactionnel Folkestone | walilarabi + direction | ⏳ À faire | J-14 | **OUI** (impacte reset password, contrats, SAS, comms) |
-| 4 | Sentry + UptimeRobot | walilarabi | ⏳ À faire | J-14 | non |
-| 5 | Canal WhatsApp pilote | walilarabi + référent | ⏳ À faire | J-14 | non |
-| 6 | Référent Folkestone (D8) | direction Folkestone | ⏳ À faire | J-21 | **OUI** (pas de pilote sans référent) |
-| 7 | Supports formation | walilarabi | 🟡 Démarré (skeletons) | J-7 | non |
-| 8 | TAU exécuté | walilarabi + référent | ⏳ À faire | J-3 | **OUI** (gate go/no-go) |
+| # | Priorité | Owner | Statut |
+|---|---|---|---|
+| 1 | V12 `auth_leaked_password_protection` | walilarabi | ⏳ |
+| 2 | Supabase Pro + PITR | walilarabi | ⏳ |
+| 3 | **Email transactionnel Folkestone** | walilarabi + direction | ⏳ |
+| 4 | Sentry + UptimeRobot | walilarabi | ⏳ |
+| 5 | Canal WhatsApp pilote | walilarabi + référent | ⏳ |
+| 6 | **Référent Folkestone (D8)** | direction Folkestone | ⏳ |
+| 7 | Supports formation | walilarabi | 🟡 skeletons livrés |
+| 8 | **TAU exécuté + signé** | référent + walilarabi | ⏳ |
 
 **Légende** : ⏳ à faire · 🟡 en cours · ✅ fait · 🛑 bloqué
 
-**Bloquants pilote (= no pilote tant que non clos)** : P3 Email, P6 Référent, P8 TAU.
+---
+
+## 📅 Suivi hebdomadaire
+
+### Semaine 0 — 2026-06-18
+
+**Réalisé**
+- Merge sur `main` : sprint-1 + sprint-2 + devops-1 + 2 plans + checklist pilote + Sentry intégré + tracker
+- HEAD `main` : `bf919c9`
+- Skeletons formation Réception / Direction / RH publiés
+- Protocole TAU 10 scénarios publié
+
+**Bloquants**
+- Aucun à ce stade côté Flowtym
+- En attente exécution ops côté commanditaire (P1 à P6)
+
+**Risques**
+- P6 référent Folkestone : si non désigné en S1 → décalage immédiat J0
+- P3 email : DNS DKIM Folkestone peut prendre > 24h selon registrar
+- Décision D1 (date cible J0) non prise → impossible d'arbitrer les glissements
+
+**Semaine suivante (S1)**
+- Exécution attendue côté ops : P1 + P2 + P4
+- Lancement P3 (création compte Resend)
+- Identification P6 (référent)
+
+**Date J0 estimée**
+- À déterminer après décision D1 (date cible) et confirmation P3/P6
+- Plus tôt réaliste : J0 = 4 semaines à compter de la fermeture de P6
+
+---
+
+### Template hebdo (à recopier vendredi prochain)
+
+```
+### Semaine X — YYYY-MM-DD
+
+**Réalisé**
+- ...
+
+**Bloquants**
+- ...
+
+**Risques**
+- ...
+
+**Semaine suivante (S X+1)**
+- ...
+
+**Date J0 estimée**
+- ...
+```
+
+---
+
+## 📌 Détail actionnable par priorité
+
+> Conservé pour référence ops. Pas mis à jour chaque semaine — uniquement quand statut change.
+
+### P1 — V12 `auth_leaked_password_protection`
+
+Dashboard Supabase → Auth → Providers → Email → toggle "Leaked password protection" ON.
+Validation : tenter compte avec `password123` → refus attendu.
+
+### P2 — Supabase Pro + PITR
+
+Dashboard Supabase → Billing → Upgrade Pro ($25/mois).
+Forcer snapshot manuel "Pre-pilot baseline" + drill restauration → mesurer RTO.
+
+### P3 — Email transactionnel Folkestone (BLOQUANT)
+
+1. Créer compte Resend
+2. Vérifier domaine (DKIM + SPF DNS)
+3. Récupérer API key
+4. `supabase secrets set RESEND_API_KEY=re_xxx RESEND_FROM_EMAIL=... RESEND_FROM_NAME=...`
+5. `bash scripts/deploy-security-sprint1-functions.sh hzrzkvdebaadditvbqis`
+6. Settings UI Flowtym → Communication → activer email
+7. Tests : reset password, confirmation résa, dispute SAS
+
+### P4 — Sentry + UptimeRobot
+
+Sentry : compte Team $26/mois → DSN → Vercel env `VITE_SENTRY_DSN` → redeploy → test erreur volontaire → vérifier RGPD (request/user/breadcrumbs).
+UptimeRobot : compte free → monitor HTTP URL prod → alerte WhatsApp → test panne simulée.
+
+### P5 — Canal WhatsApp pilote
+
+Créer groupe "Flowtym Pilote Folkestone". Inviter walilarabi + direction + référent + backup astreinte.
+Coller règlement incident (format Quoi/Quand/Qui + SLA 30min/2h/24h selon sévérité).
+
+### P6 — Référent Folkestone (BLOQUANT)
+
+Profil : direction ou chef réception, dispo 8h-19h sur 8 semaines, joignable WhatsApp.
+À remplir avec direction Folkestone :
+
+| Item | À remplir |
+|---|---|
+| Nom + Prénom | _____________ |
+| Rôle | _____________ |
+| Email pro | _____________ |
+| WhatsApp | _____________ |
+| Disponibilité | _____________ |
+| Backup | _____________ |
+| Date début mission | _____________ |
+| Acceptation signée le | _____________ |
+
+### P7 — Formation
+
+Skeletons publiés sur `main` :
+- `docs/training/RECEPTION_GUIDE.md`
+- `docs/training/DIRECTION_GUIDE.md`
+- `docs/training/RH_GUIDE.md`
+
+À enrichir avec captures écran réelles en S-2 avant sessions.
+Sessions : J-7 kickoff, J-5/J-4 réception (2×2h), J-3 direction (6h), J-2 RH (3h).
+
+### P8 — TAU (BLOQUANT)
+
+Protocole publié sur `main` : `docs/tau/TAU_PROTOCOL.md` (10 scénarios + tests négatifs).
+
+Critère : 10/10 (ou 9/10 + scénario 10 SAS reporté si email pas prêt).
+Signatures obligatoires : référent + direction + réception + RH + walilarabi.
+Sans signatures complètes → pas de J0.
+
+---
+
+## 🆘 Incidents — log
+
+| Date | Sévérité | Description | Résolution | MTTR |
+|---|---|---|---|---|
+| — | — | Aucun incident à ce jour | — | — |
+
+---
+
+## 📦 Décisions enregistrées (D1-D8)
+
+| ID | Sujet | Décision |
+|---|---|---|
+| D1 | Date J0 | Non figée — lundi après validation complète prérequis |
+| D2 | Durée pilote | 8 semaines |
+| D3 | Périmètre | Complet (PMS, Résa, Clients, Facturation, Paiements, Revenue, RH, SAS) |
+| D4 | Sentry | Option A — intégration minimale autorisée, mergée |
+| D5 | Canal d'alerte | WhatsApp |
+| D6 | Domaine custom | Différé — URL Vercel suffit |
+| D7 | 2e superadmin break-glass | Compte distinct + MFA + traçage obligatoire |
+| D8 | Référent Folkestone | À confirmer avant J-7 |
+
+---
+
+**Document vivant. Prochaine mise à jour : vendredi prochain.**
 
 ---
 
