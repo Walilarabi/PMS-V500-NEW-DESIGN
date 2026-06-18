@@ -983,9 +983,13 @@ const PanelHeading: React.FC<{
 const ImpactCard: React.FC<{ data: { day: string; avant: number; apres: number }[] }> = ({
   data,
 }) => {
-  const avgBefore = data.reduce((s, d) => s + d.avant, 0) / data.length;
-  const avgAfter = data.reduce((s, d) => s + d.apres, 0) / data.length;
-  const uplift = ((avgAfter - avgBefore) / avgBefore) * 100;
+  // Guards anti-NaN : si `data = []`, division par zéro → NaN qui cascade
+  // dans Recharts AreaChart et fait crasher la page (même cause racine que
+  // Distribution OTA).
+  const safeLen = Math.max(1, data.length);
+  const avgBefore = data.reduce((s, d) => s + d.avant, 0) / safeLen;
+  const avgAfter = data.reduce((s, d) => s + d.apres, 0) / safeLen;
+  const uplift = ((avgAfter - avgBefore) / Math.max(1, avgBefore)) * 100;
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
       <PanelHeading
