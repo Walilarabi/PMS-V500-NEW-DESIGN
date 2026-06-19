@@ -4,6 +4,7 @@ import { FilePlus, Plus, Download, Send, X, Save, Search } from 'lucide-react';
 import { supabase } from '@/src/lib/supabase';
 import { cn } from '@/src/lib/utils';
 import toast from 'react-hot-toast';
+import { withTimeout, emitToast } from '@/src/lib/withTimeout';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
@@ -144,23 +145,52 @@ export const AdminContracts: React.FC = () => {
 
   const createMut = useMutation({
     mutationFn: async (f: typeof EMPTY) => {
-      const { error } = await db.from('platform_contracts').insert({
-        hotel_id: f.hotel_id, number: nextContractNumber(contracts),
-        status: 'draft', title: f.title, body: f.body || null, expires_at: f.expires_at || null,
-      });
+      const { error } = await withTimeout(
+        db.from('platform_contracts').insert({
+          hotel_id: f.hotel_id, number: nextContractNumber(contracts),
+          status: 'draft', title: f.title, body: f.body || null, expires_at: f.expires_at || null,
+        }),
+        15_000,
+        'Création du contrat',
+      );
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-contracts'] }); toast.success('Contrat créé.'); setShowNew(false); setForm(EMPTY); },
-    onError: (e: Error) => toast.error(e.message),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-contracts'] });
+      toast.success('Contrat créé.');
+      emitToast('Contrat créé.', 'success');
+      setShowNew(false);
+      setForm(EMPTY);
+    },
+    onError: (e: Error) => {
+      console.error('[AdminContracts] create failed:', e);
+      const message = e?.message ?? 'Erreur lors de la création du contrat';
+      toast.error(message);
+      emitToast(message, 'error');
+    },
   });
 
   const updateMut = useMutation({
     mutationFn: async ({ id, ...rest }: { id: string } & Partial<Contract>) => {
-      const { error } = await db.from('platform_contracts').update({ ...rest, updated_at: new Date().toISOString() }).eq('id', id);
+      const { error } = await withTimeout(
+        db.from('platform_contracts').update({ ...rest, updated_at: new Date().toISOString() }).eq('id', id),
+        15_000,
+        'Mise à jour du contrat',
+      );
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-contracts'] }); toast.success('Contrat mis à jour.'); setEditing(null); },
-    onError: (e: Error) => toast.error(e.message),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-contracts'] });
+      toast.success('Contrat mis à jour.');
+      emitToast('Contrat mis à jour.', 'success');
+      setEditing(null);
+    },
+    onError: (e: Error) => {
+      console.error('[AdminContracts] update failed:', e);
+      const message = e?.message ?? 'Erreur lors de la mise à jour du contrat';
+      toast.error(message);
+      emitToast(message, 'error');
+    },
   });
 
   const handleSend = (c: Contract) => {

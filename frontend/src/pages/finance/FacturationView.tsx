@@ -23,6 +23,7 @@ import {
   useBillingStats,
 } from '@/src/domains/billing/hooks';
 import type { InvoiceRow, PaymentMethod } from '@/src/domains/billing/schemas';
+import { withTimeout, emitToast } from '@/src/lib/withTimeout';
 import { RefundModal } from '@/src/components/billing/RefundModal';
 import { FinancialIntelligencePanel } from '@/src/components/billing/FinancialIntelligencePanel';
 import { SplitBillingWizard } from '@/src/components/billing/SplitBillingWizard';
@@ -88,27 +89,55 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
   const canIssue = invoice.status === 'draft' && (invoice.total_ttc ?? 0) > 0;
   const canPay = invoice.status === 'issued';
 
-  const handleAddLine = () => {
+  const handleAddLine = async () => {
     if (!folio) return;
-    addLine.mutate({
-      folioId: folio.id,
-      invoiceId,
-      description: lineForm.description,
-      serviceDate: lineForm.serviceDate,
-      quantity: parseFloat(lineForm.quantity) || 1,
-      unitPriceHt: parseFloat(lineForm.unitPrice) || 0,
-      tvaRate: parseFloat(lineForm.tvaRate) || 10,
-      source: 'manual',
-    }, { onSuccess: () => { setShowAddLine(false); setLineForm({ description: '', quantity: '1', unitPrice: '', tvaRate: '10', serviceDate: new Date().toISOString().split('T')[0] }); } });
+    try {
+      await withTimeout(
+        addLine.mutateAsync({
+          folioId: folio.id,
+          invoiceId,
+          description: lineForm.description,
+          serviceDate: lineForm.serviceDate,
+          quantity: parseFloat(lineForm.quantity) || 1,
+          unitPriceHt: parseFloat(lineForm.unitPrice) || 0,
+          tvaRate: parseFloat(lineForm.tvaRate) || 10,
+          source: 'manual',
+        }),
+        15_000,
+        'Ajout d\'une ligne de facture',
+      );
+      setShowAddLine(false);
+      setLineForm({ description: '', quantity: '1', unitPrice: '', tvaRate: '10', serviceDate: new Date().toISOString().split('T')[0] });
+      emitToast('Ligne ajoutée à la facture.', 'success');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erreur lors de l\'ajout de la ligne';
+      console.error('[FacturationView] addLine failed:', err);
+      setActionError(message);
+      emitToast(message, 'error');
+    }
   };
 
-  const handleAddPayment = () => {
-    addPayment.mutate({
-      invoiceId,
-      amount: parseFloat(payForm.amount) || 0,
-      method: payForm.method,
-      reference: payForm.reference || undefined,
-    }, { onSuccess: () => { setShowAddPayment(false); setPayForm({ amount: '', method: 'card', reference: '' }); } });
+  const handleAddPayment = async () => {
+    try {
+      await withTimeout(
+        addPayment.mutateAsync({
+          invoiceId,
+          amount: parseFloat(payForm.amount) || 0,
+          method: payForm.method,
+          reference: payForm.reference || undefined,
+        }),
+        15_000,
+        'Encaissement du paiement',
+      );
+      setShowAddPayment(false);
+      setPayForm({ amount: '', method: 'card', reference: '' });
+      emitToast('Paiement encaissé.', 'success');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erreur lors de l\'encaissement';
+      console.error('[FacturationView] addPayment failed:', err);
+      setActionError(message);
+      emitToast(message, 'error');
+    }
   };
 
   return (
@@ -276,11 +305,22 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
           lines={lines}
           payments={payments}
           reservation={null}
-          onIssue={() => {
-            issueInvoice.mutate(invoiceId, {
-              onSuccess: () => setShowPreBilling(false),
-              onError: (err) => { setActionError(`Émission échouée — ${err.message}`); setShowPreBilling(false); },
-            });
+          onIssue={async () => {
+            try {
+              await withTimeout(
+                issueInvoice.mutateAsync(invoiceId),
+                15_000,
+                'Émission de la facture',
+              );
+              setShowPreBilling(false);
+              emitToast('Facture émise.', 'success');
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Erreur lors de l\'émission';
+              console.error('[FacturationView] issueInvoice failed:', err);
+              setActionError(`Émission échouée — ${message}`);
+              setShowPreBilling(false);
+              emitToast(message, 'error');
+            }
           }}
           isIssuing={issueInvoice.isPending}
           onCancel={() => setShowPreBilling(false)}
@@ -315,7 +355,23 @@ function InvoicePanel({ invoiceId, onClose }: { invoiceId: string; onClose: () =
       {showVoid && (
         <div className="p-4 border-t border-red-100 bg-red-50 space-y-3">
           <input value={voidReason} onChange={e => setVoidReason(e.target.value)} placeholder="Motif d'annulation obligatoire" className="w-full border border-red-200 rounded-xl px-3 py-2 text-sm focus:outline-none" />
-          <Button onClick={() => { if (voidReason) { voidInvoice.mutate({ id: invoiceId, reason: voidReason }, { onError: (err) => setActionError(`Annulation échouée — ${err.message}`) }); setShowVoid(false); } }} disabled={!voidReason || voidInvoice.isPending} className="w-full bg-red-500 text-white font-bold">
+          <Button onClick={async () => {
+            if (!voidReason) return;
+            try {
+              await withTimeout(
+                voidInvoice.mutateAsync({ id: invoiceId, reason: voidReason }),
+                15_000,
+                'Annulation de la facture',
+              );
+              setShowVoid(false);
+              emitToast('Facture annulée.', 'success');
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Erreur lors de l\'annulation';
+              console.error('[FacturationView] voidInvoice failed:', err);
+              setActionError(`Annulation échouée — ${message}`);
+              emitToast(message, 'error');
+            }
+          }} disabled={!voidReason || voidInvoice.isPending} className="w-full bg-red-500 text-white font-bold">
             Confirmer l'annulation
           </Button>
         </div>
@@ -558,9 +614,17 @@ export const FacturationView = () => {
             onClose={() => setShowCreate(false)}
             onCreate={async (input) => {
               try {
-                await createInvoice.mutateAsync(input);
+                await withTimeout(
+                  createInvoice.mutateAsync(input),
+                  15_000,
+                  'Création de la facture',
+                );
+                emitToast('Facture créée.', 'success');
                 setShowCreate(false);
-              } catch {
+              } catch (err) {
+                const message = err instanceof Error ? err.message : 'Erreur lors de la création';
+                console.error('[FacturationView] createInvoice failed:', err);
+                emitToast(message, 'error');
                 // error surfaced by isError prop below
               }
             }}

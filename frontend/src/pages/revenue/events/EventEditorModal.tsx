@@ -7,6 +7,7 @@ import { useEventsStore } from '@/src/store/eventsStore';
 import type { EventCategory, RMSMarketEvent } from '@/src/types/events';
 import { CATEGORY_LABELS } from '@/src/types/events';
 import { scoreToLevel, aggregateImpact } from '@/src/services/event-impact.engine';
+import { emitToast } from '@/src/lib/withTimeout';
 
 interface EventEditorModalProps {
   open: boolean;
@@ -52,21 +53,34 @@ export const EventEditorModal: React.FC<EventEditorModalProps> = ({ open, onClos
   const score = Math.round(aggregateImpact(form.impact));
 
   function submit() {
-    if (!form.name || !form.startDate || !form.endDate) return;
-    const level = scoreToLevel(score);
-    const payload = { ...form, impact: { ...form.impact, level } };
-    if (initial) {
-      updateEvent(initial.id, payload as Partial<RMSMarketEvent>);
-    } else {
-      addEvent({
-        ...payload,
-        id: `evt_manual_${Date.now()}`,
-        history: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as RMSMarketEvent);
+    // Validation explicite : message dans le toast plutôt qu'un retour
+    // silencieux qui laisse l'utilisateur deviner ce qu'il manque.
+    if (!form.name) { emitToast('Le nom de l\'événement est obligatoire.', 'error'); return; }
+    if (!form.startDate || !form.endDate) { emitToast('Renseignez les dates de début et fin.', 'error'); return; }
+    if (form.endDate < form.startDate) { emitToast('La date de fin doit être après la date de début.', 'error'); return; }
+
+    try {
+      const level = scoreToLevel(score);
+      const payload = { ...form, impact: { ...form.impact, level } };
+      if (initial) {
+        updateEvent(initial.id, payload as Partial<RMSMarketEvent>);
+        emitToast('Événement mis à jour.', 'success');
+      } else {
+        addEvent({
+          ...payload,
+          id: `evt_manual_${Date.now()}`,
+          history: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        } as RMSMarketEvent);
+        emitToast('Événement créé.', 'success');
+      }
+      onClose();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement de l\'événement.';
+      console.error('[EventEditorModal] submit failed:', err);
+      emitToast(message, 'error');
     }
-    onClose();
   }
 
   return (

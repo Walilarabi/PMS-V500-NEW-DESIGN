@@ -27,6 +27,7 @@ import { aggregateImpact, daysBetween, formatDateRange } from '@/src/services/ev
 import { ImpactBadge, impactColor } from './components/ImpactBadge';
 import { CATEGORY_ICON } from './components/CategoryIcon';
 import { safeImpact, normalizeImpact, fmtSignedPct } from '@/src/lib/rms/eventDisplay';
+import { emitToast } from '@/src/lib/withTimeout';
 
 export type ValidationDecision =
   | { type: 'accept'; ids: string[] }
@@ -121,23 +122,35 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
   function acceptOne(id: string) {
     const ev = candidates.find((c) => c.id === id);
     if (!ev) return;
-    const syncedAt = new Date().toISOString();
-    bulkUpsert([{ ...ev, status: 'confirmed', rmsSynced: true, syncedAt }]);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-    if (candidates.length === 1) onClose();
+    try {
+      const syncedAt = new Date().toISOString();
+      bulkUpsert([{ ...ev, status: 'confirmed', rmsSynced: true, syncedAt }]);
+      emitToast(`Événement « ${ev.name} » validé.`, 'success');
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      if (candidates.length === 1) onClose();
+    } catch (err) {
+      console.error('[EventValidationModal] acceptOne failed:', err);
+      emitToast('Échec de la validation de l\'événement.', 'error');
+    }
   }
 
   function acceptSelected() {
     const ids = [...selected];
     const toAccept = candidates.filter((c) => ids.includes(c.id));
     if (toAccept.length === 0) return;
-    const syncedAt = new Date().toISOString();
-    bulkUpsert(toAccept.map((ev) => ({ ...ev, status: 'confirmed', rmsSynced: true, syncedAt })));
-    onClose();
+    try {
+      const syncedAt = new Date().toISOString();
+      bulkUpsert(toAccept.map((ev) => ({ ...ev, status: 'confirmed', rmsSynced: true, syncedAt })));
+      emitToast(`${toAccept.length} événement${toAccept.length > 1 ? 's' : ''} validé${toAccept.length > 1 ? 's' : ''}.`, 'success');
+      onClose();
+    } catch (err) {
+      console.error('[EventValidationModal] acceptSelected failed:', err);
+      emitToast('Échec de la validation des événements sélectionnés.', 'error');
+    }
   }
 
   function openRefusal(ids: string[]) {
@@ -150,14 +163,20 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
   function confirmRefusal() {
     if (!pendingRefusal) return;
     const refused = candidates.filter((c) => pendingRefusal.ids.includes(c.id));
-    addRefusedEvents(refused, { reason: refusalReason, comment: refusalComment });
-    setSelected((prev) => {
-      const next = new Set(prev);
-      pendingRefusal.ids.forEach((id) => next.delete(id));
-      return next;
-    });
-    setPendingRefusal(null);
-    if (refused.length === candidates.length) onClose();
+    try {
+      addRefusedEvents(refused, { reason: refusalReason, comment: refusalComment });
+      emitToast(`${refused.length} événement${refused.length > 1 ? 's' : ''} refusé${refused.length > 1 ? 's' : ''}.`, 'info');
+      setSelected((prev) => {
+        const next = new Set(prev);
+        pendingRefusal.ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      setPendingRefusal(null);
+      if (refused.length === candidates.length) onClose();
+    } catch (err) {
+      console.error('[EventValidationModal] confirmRefusal failed:', err);
+      emitToast('Échec de l\'enregistrement du refus.', 'error');
+    }
   }
 
   // ─── render ────────────────────────────────────────────────────────────

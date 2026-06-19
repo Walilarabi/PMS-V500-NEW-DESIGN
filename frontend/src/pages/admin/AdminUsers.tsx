@@ -7,6 +7,7 @@ import {
 import { supabase } from '@/src/lib/supabase';
 import { cn } from '@/src/lib/utils';
 import toast from 'react-hot-toast';
+import { withTimeout, emitToast } from '@/src/lib/withTimeout';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const db = supabase as any;
@@ -368,57 +369,113 @@ const AccessDrawer: React.FC<{
   const [addRole, setAddRole] = useState<string>('reception');
   const [expanded, setExpanded] = useState<string | null>(user.hotels.find((h) => h.is_default)?.hotel_id ?? null);
 
-  const handlers = {
-    onSuccess: (msg: string) => () => { qc.invalidateQueries({ queryKey: ['admin-user-access'] }); toast.success(msg); },
-    onError: (e: Error) => toast.error(e.message),
+  const onMutError = (label: string) => (e: Error) => {
+    console.error(`[AdminUsers] ${label} failed:`, e);
+    const message = e?.message ?? `Erreur lors de ${label}`;
+    toast.error(message);
+    emitToast(message, 'error');
   };
 
   const grantMut = useMutation({
     mutationFn: async ({ hotel_id, role }: { hotel_id: string; role: string }) => {
-      const { error } = await db.rpc('admin_grant_hotel', { p_user_id: user.user_id, p_hotel_id: hotel_id, p_role: role });
+      const { error } = await withTimeout(
+        db.rpc('admin_grant_hotel', { p_user_id: user.user_id, p_hotel_id: hotel_id, p_role: role }),
+        15_000,
+        'Ajout d\'un hôtel à l\'utilisateur',
+      );
       if (error) throw error;
     },
-    onSuccess: handlers.onSuccess('Hôtel ajouté.'), onError: handlers.onError,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-user-access'] });
+      toast.success('Hôtel ajouté.');
+      emitToast('Hôtel ajouté.', 'success');
+    },
+    onError: onMutError('l\'ajout d\'hôtel'),
   });
 
   const revokeMut = useMutation({
     mutationFn: async (hotel_id: string) => {
-      const { error } = await db.rpc('admin_revoke_hotel', { p_user_id: user.user_id, p_hotel_id: hotel_id });
+      const { error } = await withTimeout(
+        db.rpc('admin_revoke_hotel', { p_user_id: user.user_id, p_hotel_id: hotel_id }),
+        15_000,
+        'Retrait d\'un hôtel de l\'utilisateur',
+      );
       if (error) throw error;
     },
-    onSuccess: handlers.onSuccess('Hôtel retiré.'), onError: handlers.onError,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-user-access'] });
+      toast.success('Hôtel retiré.');
+      emitToast('Hôtel retiré.', 'success');
+    },
+    onError: onMutError('le retrait d\'hôtel'),
   });
 
   const roleMut = useMutation({
     mutationFn: async ({ hotel_id, role }: { hotel_id: string; role: string }) => {
-      const { error } = await db.rpc('admin_set_hotel_role', { p_user_id: user.user_id, p_hotel_id: hotel_id, p_role: role });
+      const { error } = await withTimeout(
+        db.rpc('admin_set_hotel_role', { p_user_id: user.user_id, p_hotel_id: hotel_id, p_role: role }),
+        15_000,
+        'Mise à jour du rôle utilisateur',
+      );
       if (error) throw error;
     },
-    onSuccess: handlers.onSuccess('Rôle mis à jour.'), onError: handlers.onError,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-user-access'] });
+      toast.success('Rôle mis à jour.');
+      emitToast('Rôle mis à jour.', 'success');
+    },
+    onError: onMutError('la mise à jour du rôle'),
   });
 
   const defaultMut = useMutation({
     mutationFn: async (hotel_id: string) => {
-      const { error } = await db.rpc('admin_set_default_hotel', { p_user_id: user.user_id, p_hotel_id: hotel_id });
+      const { error } = await withTimeout(
+        db.rpc('admin_set_default_hotel', { p_user_id: user.user_id, p_hotel_id: hotel_id }),
+        15_000,
+        'Définition de l\'hôtel par défaut',
+      );
       if (error) throw error;
     },
-    onSuccess: handlers.onSuccess('Hôtel par défaut défini.'), onError: handlers.onError,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-user-access'] });
+      toast.success('Hôtel par défaut défini.');
+      emitToast('Hôtel par défaut défini.', 'success');
+    },
+    onError: onMutError('la définition de l\'hôtel par défaut'),
   });
 
   const appMut = useMutation({
     mutationFn: async ({ hotel_id, app_id, enabled }: { hotel_id: string; app_id: string; enabled: boolean }) => {
-      const { error } = await db.rpc('admin_set_app_access', { p_user_id: user.user_id, p_hotel_id: hotel_id, p_app_id: app_id, p_enabled: enabled });
+      const { error } = await withTimeout(
+        db.rpc('admin_set_app_access', { p_user_id: user.user_id, p_hotel_id: hotel_id, p_app_id: app_id, p_enabled: enabled }),
+        15_000,
+        'Mise à jour des accès applications',
+      );
       if (error) throw error;
     },
-    onSuccess: handlers.onSuccess('Accès application mis à jour.'), onError: handlers.onError,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-user-access'] });
+      toast.success('Accès application mis à jour.');
+      emitToast('Accès application mis à jour.', 'success');
+    },
+    onError: onMutError('la mise à jour des accès application'),
   });
 
   const statusMut = useMutation({
     mutationFn: async (active: boolean) => {
-      const { error } = await db.rpc('admin_set_user_status', { p_user_id: user.user_id, p_active: active });
+      const { error } = await withTimeout(
+        db.rpc('admin_set_user_status', { p_user_id: user.user_id, p_active: active }),
+        15_000,
+        'Mise à jour du statut utilisateur',
+      );
       if (error) throw error;
     },
-    onSuccess: handlers.onSuccess('Statut mis à jour.'), onError: handlers.onError,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-user-access'] });
+      toast.success('Statut mis à jour.');
+      emitToast('Statut mis à jour.', 'success');
+    },
+    onError: onMutError('la mise à jour du statut'),
   });
 
   const assignedIds = new Set(user.hotels.map((h) => h.hotel_id));
@@ -638,21 +695,31 @@ const InviteModal: React.FC<{
 
   const inviteMut = useMutation({
     mutationFn: async (payload: typeof invite) => {
-      const { error } = await db.from('user_invitations').insert({
-        hotel_id: payload.hotel_id,
-        email: payload.email,
-        full_name: payload.full_name || null,
-        role: payload.role,
-        status: 'PENDING',
-      });
+      const { error } = await withTimeout(
+        db.from('user_invitations').insert({
+          hotel_id: payload.hotel_id,
+          email: payload.email,
+          full_name: payload.full_name || null,
+          role: payload.role,
+          status: 'PENDING',
+        }),
+        15_000,
+        'Envoi de l\'invitation',
+      );
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-invitations'] });
       toast.success('Invitation envoyée.');
+      emitToast('Invitation envoyée.', 'success');
       onClose();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      console.error('[AdminUsers] invite failed:', e);
+      const message = e?.message ?? 'Erreur lors de l\'envoi de l\'invitation';
+      toast.error(message);
+      emitToast(message, 'error');
+    },
   });
 
   const send = () => {

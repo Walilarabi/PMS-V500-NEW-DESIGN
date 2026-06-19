@@ -16,6 +16,7 @@ import { useActiveHotel, useUpdateHotel } from '@/src/domains/hotel/hooks';
 import type { PageId } from '@/src/types';
 import { logAudit } from '@/src/services/settings/settingsAuditLogger';
 import { usePagePermission } from '@/src/services/settings/permissionsService';
+import { withTimeout, emitToast } from '@/src/lib/withTimeout';
 
 interface HotelInfoPageProps {
   onNavigate: (page: PageId) => void;
@@ -72,6 +73,7 @@ export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
 
   const [draft, setDraft] = useState<HotelDraft>(() => hotelToDraft(null));
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const { canRead, canWrite, DeniedBanner } = usePagePermission('set_hotel');
 
   // Sync depuis Supabase quand les données arrivent
@@ -109,19 +111,33 @@ export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
 
   async function handleSave() {
     if (issues.length > 0) return;
-    await updateHotel.mutateAsync({
-      name: draft.name,
-      address: draft.address || null,
-      city: draft.city || null,
-      zip: draft.zip || null,
-      country: draft.country || null,
-      phone: draft.phone || null,
-      email: draft.email || null,
-      logo_url: draft.logo || null,
-    });
-    setSavedAt(new Date().toISOString());
-    logAudit({ action: 'module_inspected', detail: `Profil hôtel mis à jour : ${draft.name}` });
-    window.setTimeout(() => setSavedAt(null), 3000);
+    setSaving(true);
+    try {
+      await withTimeout(
+        updateHotel.mutateAsync({
+          name: draft.name,
+          address: draft.address || null,
+          city: draft.city || null,
+          zip: draft.zip || null,
+          country: draft.country || null,
+          phone: draft.phone || null,
+          email: draft.email || null,
+          logo_url: draft.logo || null,
+        }),
+        15_000,
+        'Sauvegarde du profil hôtel',
+      );
+      setSavedAt(new Date().toISOString());
+      logAudit({ action: 'module_inspected', detail: `Profil hôtel mis à jour : ${draft.name}` });
+      emitToast('Profil hôtel mis à jour.', 'success');
+      window.setTimeout(() => setSavedAt(null), 3000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erreur lors de la sauvegarde du profil hôtel';
+      console.error('[HotelInfoPage] save failed:', err);
+      emitToast(message, 'error');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleReset() {
@@ -160,11 +176,11 @@ export const HotelInfoPage: React.FC<HotelInfoPageProps> = ({ onNavigate }) => {
             </button>
             <button
               onClick={() => canWrite && handleSave()}
-              disabled={!dirty || issues.length > 0 || !canWrite}
+              disabled={!dirty || issues.length > 0 || !canWrite || saving}
               title={!canWrite ? 'Permission requise : set_hotel (write)' : undefined}
               className="px-4 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 inline-flex items-center gap-1.5 shadow-sm shadow-violet-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <Save className="w-3.5 h-3.5" /> Enregistrer
+              <Save className="w-3.5 h-3.5" /> {saving ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </div>
         </header>

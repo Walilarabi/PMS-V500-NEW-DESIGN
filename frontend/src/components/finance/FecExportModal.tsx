@@ -11,6 +11,7 @@ import { cn } from '@/src/lib/utils';
 import * as repo from '@/src/domains/finance/repository';
 import type { FecEntry } from '@/src/domains/finance/schemas';
 import { useActiveHotel } from '@/src/domains/hotel/hooks';
+import { withTimeout, emitToast } from '@/src/lib/withTimeout';
 
 interface FecExportModalProps {
   isOpen: boolean;
@@ -59,7 +60,11 @@ export const FecExportModal = ({ isOpen, onClose }: FecExportModalProps) => {
     setLoading(true);
     setError(null);
     try {
-      const fetchedEntries = await repo.generateFecEntries(fromDate, toDate);
+      const fetchedEntries = await withTimeout(
+        repo.generateFecEntries(fromDate, toDate),
+        20_000,
+        'Génération des écritures FEC',
+      );
       setEntries(fetchedEntries);
 
       const siren = hotel?.siret?.replace(/\s/g, '').slice(0, 9) ?? '000000000';
@@ -76,7 +81,10 @@ export const FecExportModal = ({ isOpen, onClose }: FecExportModalProps) => {
 
       setPreview({ ...built, hash, journaux });
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur lors de la génération');
+      const message = e instanceof Error ? e.message : 'Erreur lors de la génération';
+      console.error('[FecExportModal] preview failed:', e);
+      setError(message);
+      emitToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -98,19 +106,27 @@ export const FecExportModal = ({ isOpen, onClose }: FecExportModalProps) => {
 
       // Enregistrement trace immutable en DB
       const siren = hotel?.siret?.replace(/\s/g, '').slice(0, 9) ?? null;
-      await repo.saveFecExport({
-        period_from: fromDate,
-        period_to: toDate,
-        siren,
-        filename: preview.filename,
-        entries_count: entries.length,
-        total_debit: preview.totalDebit,
-        total_credit: preview.totalCredit,
-        is_balanced: preview.isBalanced,
-        sha256_hash: preview.hash,
-      });
+      await withTimeout(
+        repo.saveFecExport({
+          period_from: fromDate,
+          period_to: toDate,
+          siren,
+          filename: preview.filename,
+          entries_count: entries.length,
+          total_debit: preview.totalDebit,
+          total_credit: preview.totalCredit,
+          is_balanced: preview.isBalanced,
+          sha256_hash: preview.hash,
+        }),
+        15_000,
+        'Enregistrement de la trace FEC',
+      );
+      emitToast('Export FEC enregistré.', 'success');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur lors du téléchargement');
+      const message = e instanceof Error ? e.message : 'Erreur lors du téléchargement';
+      console.error('[FecExportModal] download failed:', e);
+      setError(message);
+      emitToast(message, 'error');
     } finally {
       setSaving(false);
     }
