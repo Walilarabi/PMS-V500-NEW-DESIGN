@@ -22,6 +22,7 @@ import type {
   RMSMarketEvent,
 } from '../types/events';
 import { IMPACT_LEVEL_ORDER } from '../types/events';
+import { normalizeImpact } from '../lib/rms/eventDisplay';
 
 // ─── Niveaux ──────────────────────────────────────────────────────────────
 
@@ -42,16 +43,22 @@ export function scoreToLevel(score: number): EventImpactLevel {
 
 /**
  * Score agrégé d'un événement (0-100).
+ *
+ * Défense en profondeur : on accepte un ImpactScore partiel ou absent
+ * (event Supabase legacy, recherche live à valider, import Excel incomplet)
+ * sans crasher. Le score est calculé sur une version normalisée — un champ
+ * manquant compte comme 0, jamais comme NaN ni TypeError.
  */
-export function aggregateImpact(impact: ImpactScore): number {
+export function aggregateImpact(impact: Partial<ImpactScore> | null | undefined): number {
+  const i = normalizeImpact({ impact: impact ?? undefined });
   // pondération métier : compression et demande > pickup > ADR
   const raw =
-    impact.compression * 0.35 +
-    impact.demand * 0.25 +
-    impact.pickup * 0.15 +
-    impact.adr * 0.10 +
-    impact.occupancy * 0.10 +
-    impact.revpar * 0.05;
+    i.compression * 0.35 +
+    i.demand * 0.25 +
+    i.pickup * 0.15 +
+    i.adr * 0.10 +
+    i.occupancy * 0.10 +
+    i.revpar * 0.05;
   return Math.max(0, Math.min(100, raw));
 }
 
@@ -88,8 +95,11 @@ export function buildMarketPressureIndex(
   }
 
   for (const ev of events) {
-    if (ev.status === 'archived' || ev.status === 'cancelled') continue;
+    if (ev?.status === 'archived' || ev?.status === 'cancelled') continue;
+    if (!ev?.startDate || !ev?.endDate) continue;
     const dates = eachDateInRange(ev.startDate, ev.endDate);
+    // aggregateImpact tolère désormais un impact partiel/absent — pas de
+    // pré-condition à honorer côté caller.
     const score = aggregateImpact(ev.impact);
     for (const d of dates) {
       if (!result[d]) continue;
@@ -173,25 +183,28 @@ export function findDuplicates(events: RMSMarketEvent[]): RMSMarketEvent[][] {
  */
 export function mergeEvents(events: RMSMarketEvent[]): RMSMarketEvent {
   if (events.length === 0) throw new Error('mergeEvents: empty list');
-  const base = events.reduce((best, e) =>
+  // Normalisation amont : chaque event vu ici a un ImpactScore complet,
+  // les Math.max/reduce ne peuvent plus tomber sur undefined.
+  const normalized = events.map((e) => ({ ...e, impact: normalizeImpact(e) }));
+  const base = normalized.reduce((best, e) =>
     aggregateImpact(e.impact) > aggregateImpact(best.impact) ? e : best,
-  events[0]);
-  const sources = Array.from(new Set(events.flatMap((e) => e.sources)));
-  const history = events
-    .flatMap((e) => e.history)
+  normalized[0]);
+  const sources = Array.from(new Set(normalized.flatMap((e) => e.sources ?? [])));
+  const history = normalized
+    .flatMap((e) => e.history ?? [])
     .concat([{ at: new Date().toISOString(), action: 'merged' as const, source: 'engine' }])
     .sort((a, b) => a.at.localeCompare(b.at));
   const impact: ImpactScore = {
-    demand: Math.max(...events.map((e) => e.impact.demand)),
-    adr: Math.max(...events.map((e) => e.impact.adr)),
-    occupancy: Math.max(...events.map((e) => e.impact.occupancy)),
-    pickup: Math.max(...events.map((e) => e.impact.pickup)),
-    revpar: Math.max(...events.map((e) => e.impact.revpar)),
-    compression: Math.max(...events.map((e) => e.impact.compression)),
+    demand: Math.max(...normalized.map((e) => e.impact.demand)),
+    adr: Math.max(...normalized.map((e) => e.impact.adr)),
+    occupancy: Math.max(...normalized.map((e) => e.impact.occupancy)),
+    pickup: Math.max(...normalized.map((e) => e.impact.pickup)),
+    revpar: Math.max(...normalized.map((e) => e.impact.revpar)),
+    compression: Math.max(...normalized.map((e) => e.impact.compression)),
     confidence: Math.round(
-      events.reduce((s, e) => s + e.impact.confidence, 0) / events.length,
+      normalized.reduce((s, e) => s + e.impact.confidence, 0) / normalized.length,
     ),
-    level: events.reduce<EventImpactLevel>((lvl, e) =>
+    level: normalized.reduce<EventImpactLevel>((lvl, e) =>
       IMPACT_LEVEL_ORDER[e.impact.level] > IMPACT_LEVEL_ORDER[lvl] ? e.impact.level : lvl,
     'very_low'),
   };

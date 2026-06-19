@@ -174,10 +174,19 @@ export const useEventsStore = create<EventsStore>()(
       syncFromSupabase: async () => {
         const result = await loadEventsFromSupabase();
         if (result === null) return; // pas d'auth — on garde le localStorage
-        // Remplace les events du store par les données Supabase.
-        // Si Supabase est vide, on conserve les events locaux (première session).
+        // Sanitisation OBLIGATOIRE : Supabase peut renvoyer des events legacy
+        // (snapshots v<5) sans `impact.compression` / `.demand` / `.level`.
+        // Sans cette passe, les selectors `getPressureForDate` /
+        // `getPressureWindow` (consommés par RMS Tableau, Calendar, Planning)
+        // crashent dès le premier accès via aggregateImpact.
         if (result.events.length > 0) {
-          set({ events: result.events, supabaseSynced: true });
+          const sanitizedEvents = result.events.map((e) => ({
+            ...e,
+            impact: normalizeImpact(e),
+            history: e.history ?? [],
+            sources: e.sources ?? [],
+          })) as RMSMarketEvent[];
+          set({ events: sanitizedEvents, supabaseSynced: true });
         } else {
           set({ supabaseSynced: true });
         }
