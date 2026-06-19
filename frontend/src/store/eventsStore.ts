@@ -457,7 +457,16 @@ export const useEventsStore = create<EventsStore>()(
       getFilteredEvents: () => {
         const { events, filters } = get();
         const q = filters.search.trim().toLowerCase();
-        return events
+        // Ceinture+bretelles : si un event échappe à la sanitisation amont
+        // (cache localStorage corrompu, hot-reload partiel, etc.), on
+        // re-normalise à la volée. Aucun consumer ne peut crasher en aval.
+        const safeEvents = events.map((e) => ({
+          ...e,
+          impact: normalizeImpact(e),
+          history: e.history ?? [],
+          sources: e.sources ?? [],
+        })) as RMSMarketEvent[];
+        return safeEvents
           .filter((e) => {
             if (filters.activeOnly && e.status !== 'active') return false;
             if (filters.statuses.length && !filters.statuses.includes(e.status)) return false;
@@ -543,7 +552,23 @@ export const useEventsStore = create<EventsStore>()(
     }),
     {
       name: 'flowtym_events_module',
-      version: 5, // événements initiaux vides — suppression SEED_PARIS_EVENTS fictifs
+      // v6 : force re-normalize via migrate sur tous les snapshots existants
+      // pour éliminer les events legacy avec impact partiel responsables
+      // du crash « Cannot read properties of undefined (reading
+      // 'compression') » à l'ouverture du module Événements.
+      version: 6,
+      migrate: (persisted, _version) => {
+        // Quel que soit le format précédent, on re-normalise tous les
+        // events. Pas de perte de données utilisateur.
+        const p = (persisted ?? {}) as Partial<EventsStore>;
+        const sanitizedEvents = (p.events ?? []).map((e) => ({
+          ...e,
+          impact: normalizeImpact(e),
+          history: e.history ?? [],
+          sources: e.sources ?? [],
+        })) as RMSMarketEvent[];
+        return { ...p, events: sanitizedEvents } as EventsStore;
+      },
       partialize: (s) => ({
         events: s.events,
         sources: s.sources,
