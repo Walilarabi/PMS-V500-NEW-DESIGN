@@ -16,6 +16,7 @@ import { supabase } from '@/src/lib/supabase';
 import { resolveHotelId } from '@/src/lib/hotelId';
 import { listRatePlanOptions, listPartners, type PartnerSummary, type Option } from '@/src/services/settings/partners.service';
 import { listRoomTypeRows, type RoomTypeRow } from '@/src/services/settings/rate-plans.service';
+import { withTimeout, emitToast } from '@/src/lib/withTimeout';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sb = supabase as any;
@@ -109,11 +110,17 @@ export const RoomTypeSheet: React.FC<Props> = ({ roomId, canWrite, onClose, onSa
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [plans, partners, rooms] = await Promise.all([
-        listRatePlanOptions(),
-        listPartners(),
-        listRoomTypeRows(),
-      ]);
+      // Timeout global sur le chargement initial : si une des 3 listes
+      // stalle, on rend la main à l'utilisateur avec un message clair.
+      const [plans, partners, rooms] = await withTimeout(
+        Promise.all([
+          listRatePlanOptions(),
+          listPartners(),
+          listRoomTypeRows(),
+        ]),
+        15_000,
+        'Chargement des options',
+      );
       setPlanOpts(plans);
       setPartnerList(partners);
       setAllRooms(rooms.filter((r) => r.id !== roomId));
@@ -158,7 +165,9 @@ export const RoomTypeSheet: React.FC<Props> = ({ roomId, canWrite, onClose, onSa
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur de chargement');
+      const message = err instanceof Error ? err.message : 'Erreur de chargement';
+      console.error('[RoomTypeSheet] load failed:', err);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -174,7 +183,9 @@ export const RoomTypeSheet: React.FC<Props> = ({ roomId, canWrite, onClose, onSa
     setSaving(true);
     setError(null);
     try {
-      const hid = await resolveHotelId();
+      // Timeout sur la résolution hotel_id : un RPC bloqué ne peut plus
+      // figer le formulaire indéfiniment (message clair à l'utilisateur).
+      const hid = await withTimeout(resolveHotelId(), 10_000, 'Résolution de l\'hôtel');
       if (!hid) throw new Error('Hôtel introuvable — reconnectez-vous.');
 
       const payload: Record<string, unknown> = {
@@ -204,35 +215,67 @@ export const RoomTypeSheet: React.FC<Props> = ({ roomId, canWrite, onClose, onSa
       };
       if (savedId) payload.id = savedId;
 
-      const { data, error: upsertError } = await sb.from('room_types')
-        .upsert(payload, { onConflict: 'hotel_id,room_type_code' })
-        .select('id').maybeSingle();
+      // Timeout sur l'upsert principal : si Supabase / RLS bloque, on
+      // remonte une erreur explicite au lieu de mouliner dans le vide.
+      const { data, error: upsertError } = await withTimeout(
+        sb.from('room_types')
+          .upsert(payload, { onConflict: 'hotel_id,room_type_code' })
+          .select('id').maybeSingle(),
+        15_000,
+        'Sauvegarde de la chambre',
+      );
       if (upsertError) throw new Error(upsertError.message);
       const newId = data?.id ?? savedId;
       setSavedId(newId);
 
-      // Sync partner mappings
+      // Sync partner mappings (best-effort — n'empêche pas la création
+      // principale d'aboutir si un mapping échoue).
       if (newId) {
-        const { data: existing } = await sb.from('partner_room_mappings')
-          .select('id, partner_id').eq('room_type_id', newId);
-        const existingRows: { id: string; partner_id: string }[] = existing ?? [];
-        const existingSet = new Set(existingRows.map((r) => r.partner_id));
-        const toAdd = [...selectedPartners].filter((pid) => !existingSet.has(pid));
-        const toRemove = existingRows.filter((r) => !selectedPartners.has(r.partner_id)).map((r) => r.id);
-        if (toAdd.length) {
-          await sb.from('partner_room_mappings').upsert(
-            toAdd.map((pid) => ({ hotel_id: hid, partner_id: pid, room_type_id: newId, is_active: true })),
-            { onConflict: 'hotel_id,partner_id,room_type_id' },
+        try {
+          const { data: existing } = await withTimeout(
+            sb.from('partner_room_mappings').select('id, partner_id').eq('room_type_id', newId),
+            10_000,
+            'Lecture des partenaires liés',
           );
-        }
-        if (toRemove.length) {
-          await sb.from('partner_room_mappings').delete().in('id', toRemove);
+          const existingRows: { id: string; partner_id: string }[] = existing ?? [];
+          const existingSet = new Set(existingRows.map((r) => r.partner_id));
+          const toAdd = [...selectedPartners].filter((pid) => !existingSet.has(pid));
+          const toRemove = existingRows.filter((r) => !selectedPartners.has(r.partner_id)).map((r) => r.id);
+          if (toAdd.length) {
+            await withTimeout(
+              sb.from('partner_room_mappings').upsert(
+                toAdd.map((pid) => ({ hotel_id: hid, partner_id: pid, room_type_id: newId, is_active: true })),
+                { onConflict: 'hotel_id,partner_id,room_type_id' },
+              ),
+              10_000,
+              'Liaison partenaires',
+            );
+          }
+          if (toRemove.length) {
+            await withTimeout(
+              sb.from('partner_room_mappings').delete().in('id', toRemove),
+              10_000,
+              'Suppression liaisons partenaires',
+            );
+          }
+        } catch (mapErr) {
+          // Le room_type est créé mais les mappings ont échoué : on
+          // prévient l'utilisateur sans bloquer la fermeture du drawer.
+          console.warn('[RoomTypeSheet] partner mappings failed:', mapErr);
+          emitToast(
+            'Chambre enregistrée, mais les liaisons partenaires ont échoué. Réessayez depuis l\'onglet Partenaires.',
+            'info',
+          );
         }
       }
 
+      emitToast(savedId ? 'Chambre mise à jour.' : 'Chambre créée.', 'success');
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
+      const message = err instanceof Error ? err.message : 'Erreur lors de la sauvegarde';
+      console.error('[RoomTypeSheet] save failed:', err);
+      setError(message);
+      emitToast(message, 'error');
     } finally {
       setSaving(false);
     }

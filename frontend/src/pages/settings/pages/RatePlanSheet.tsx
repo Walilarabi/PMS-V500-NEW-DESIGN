@@ -18,6 +18,7 @@ import { resolveHotelId } from '@/src/lib/hotelId';
 import { listRoomTypeRows, listRatePlansWithRooms, type RoomTypeRow } from '@/src/services/settings/rate-plans.service';
 import { listRatePlanOptions, listPartners, type PartnerSummary, type Option } from '@/src/services/settings/partners.service';
 import { listPolicies, type CancellationPolicy } from '@/src/services/settings/cancellation.service';
+import { withTimeout, emitToast } from '@/src/lib/withTimeout';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const sb = supabase as any;
@@ -127,12 +128,16 @@ export const RatePlanSheet: React.FC<Props> = ({ planId, canWrite, onClose, onSa
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rooms, plans, partners, cxls] = await Promise.all([
-        listRoomTypeRows(),
-        listRatePlanOptions(),
-        listPartners(),
-        listPolicies(),
-      ]);
+      const [rooms, plans, partners, cxls] = await withTimeout(
+        Promise.all([
+          listRoomTypeRows(),
+          listRatePlanOptions(),
+          listPartners(),
+          listPolicies(),
+        ]),
+        15_000,
+        'Chargement des options',
+      );
       setRoomOpts(rooms);
       setPlanOpts(plans.filter((p) => p.id !== planId));
       setPartnerList(partners);
@@ -185,7 +190,9 @@ export const RatePlanSheet: React.FC<Props> = ({ planId, canWrite, onClose, onSa
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur de chargement');
+      const message = err instanceof Error ? err.message : 'Erreur de chargement';
+      console.error('[RatePlanSheet] load failed:', err);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -201,7 +208,7 @@ export const RatePlanSheet: React.FC<Props> = ({ planId, canWrite, onClose, onSa
     setSaving(true);
     setError(null);
     try {
-      const hid = await resolveHotelId();
+      const hid = await withTimeout(resolveHotelId(), 10_000, 'Résolution de l\'hôtel');
       if (!hid) throw new Error('Hôtel introuvable — reconnectez-vous.');
 
       const payload: Record<string, unknown> = {
@@ -223,54 +230,95 @@ export const RatePlanSheet: React.FC<Props> = ({ planId, canWrite, onClose, onSa
       };
       if (savedId) payload.id = savedId;
 
-      const { data, error: upsertError } = await sb.from('rate_plans')
-        .upsert(payload, { onConflict: 'hotel_id,plan_code' })
-        .select('id')
-        .maybeSingle();
+      const { data, error: upsertError } = await withTimeout(
+        sb.from('rate_plans')
+          .upsert(payload, { onConflict: 'hotel_id,plan_code' })
+          .select('id')
+          .maybeSingle(),
+        15_000,
+        'Sauvegarde du plan tarifaire',
+      );
       if (upsertError) throw new Error(upsertError.message);
       const newId = data?.id ?? savedId;
       setSavedId(newId);
 
       if (newId) {
-        // Sync room type assignments (delta)
-        const { data: existingRooms } = await sb.from('rate_plan_room_type_assignments')
-          .select('id, room_type_id').eq('rate_plan_id', newId).eq('hotel_id', hid);
-        const existingRoomRows: { id: string; room_type_id: string }[] = existingRooms ?? [];
-        const existingRoomSet = new Set(existingRoomRows.map((r) => r.room_type_id));
-        const roomsToAdd = [...selectedRooms].filter((rid) => !existingRoomSet.has(rid));
-        const roomsToRemove = existingRoomRows.filter((r) => !selectedRooms.has(r.room_type_id)).map((r) => r.id);
-        if (roomsToAdd.length) {
-          const { error: raErr } = await sb.from('rate_plan_room_type_assignments').upsert(
-            roomsToAdd.map((rid) => ({ hotel_id: hid, rate_plan_id: newId, room_type_id: rid })),
-            { onConflict: 'hotel_id,rate_plan_id,room_type_id' },
+        // Sync associations (best-effort — n'empêche pas la fermeture
+        // du drawer si une liaison périphérique échoue).
+        try {
+          // Room type assignments (delta)
+          const { data: existingRooms } = await withTimeout(
+            sb.from('rate_plan_room_type_assignments')
+              .select('id, room_type_id').eq('rate_plan_id', newId).eq('hotel_id', hid),
+            10_000,
+            'Lecture des chambres liées',
           );
-          if (raErr) throw new Error(raErr.message);
-        }
-        if (roomsToRemove.length) {
-          await sb.from('rate_plan_room_type_assignments').delete().in('id', roomsToRemove);
-        }
+          const existingRoomRows: { id: string; room_type_id: string }[] = existingRooms ?? [];
+          const existingRoomSet = new Set(existingRoomRows.map((r) => r.room_type_id));
+          const roomsToAdd = [...selectedRooms].filter((rid) => !existingRoomSet.has(rid));
+          const roomsToRemove = existingRoomRows.filter((r) => !selectedRooms.has(r.room_type_id)).map((r) => r.id);
+          if (roomsToAdd.length) {
+            const { error: raErr } = await withTimeout(
+              sb.from('rate_plan_room_type_assignments').upsert(
+                roomsToAdd.map((rid) => ({ hotel_id: hid, rate_plan_id: newId, room_type_id: rid })),
+                { onConflict: 'hotel_id,rate_plan_id,room_type_id' },
+              ),
+              10_000,
+              'Liaison chambres',
+            );
+            if (raErr) throw new Error(raErr.message);
+          }
+          if (roomsToRemove.length) {
+            await withTimeout(
+              sb.from('rate_plan_room_type_assignments').delete().in('id', roomsToRemove),
+              10_000,
+              'Suppression liaisons chambres',
+            );
+          }
 
-        // Sync partner mappings (delta)
-        const { data: existing } = await sb.from('rate_plan_partner_mappings')
-          .select('id, partner_id').eq('rate_plan_id', newId);
-        const existingRows: { id: string; partner_id: string }[] = existing ?? [];
-        const existingSet = new Set(existingRows.map((r) => r.partner_id));
-        const toAdd = [...selectedPartners].filter((pid) => !existingSet.has(pid));
-        const toRemove = existingRows.filter((r) => !selectedPartners.has(r.partner_id)).map((r) => r.id);
-        if (toAdd.length) {
-          await sb.from('rate_plan_partner_mappings').upsert(
-            toAdd.map((pid) => ({ hotel_id: hid, rate_plan_id: newId, partner_id: pid, is_active: true })),
-            { onConflict: 'hotel_id,rate_plan_id,partner_id' },
+          // Partner mappings (delta)
+          const { data: existing } = await withTimeout(
+            sb.from('rate_plan_partner_mappings').select('id, partner_id').eq('rate_plan_id', newId),
+            10_000,
+            'Lecture des partenaires liés',
           );
-        }
-        if (toRemove.length) {
-          await sb.from('rate_plan_partner_mappings').delete().in('id', toRemove);
+          const existingRows: { id: string; partner_id: string }[] = existing ?? [];
+          const existingSet = new Set(existingRows.map((r) => r.partner_id));
+          const toAdd = [...selectedPartners].filter((pid) => !existingSet.has(pid));
+          const toRemove = existingRows.filter((r) => !selectedPartners.has(r.partner_id)).map((r) => r.id);
+          if (toAdd.length) {
+            await withTimeout(
+              sb.from('rate_plan_partner_mappings').upsert(
+                toAdd.map((pid) => ({ hotel_id: hid, rate_plan_id: newId, partner_id: pid, is_active: true })),
+                { onConflict: 'hotel_id,rate_plan_id,partner_id' },
+              ),
+              10_000,
+              'Liaison partenaires',
+            );
+          }
+          if (toRemove.length) {
+            await withTimeout(
+              sb.from('rate_plan_partner_mappings').delete().in('id', toRemove),
+              10_000,
+              'Suppression liaisons partenaires',
+            );
+          }
+        } catch (mapErr) {
+          console.warn('[RatePlanSheet] associations failed:', mapErr);
+          emitToast(
+            'Plan enregistré, mais une liaison (chambres ou partenaires) a échoué. Réessayez depuis les onglets dédiés.',
+            'info',
+          );
         }
       }
 
+      emitToast(savedId ? 'Plan tarifaire mis à jour.' : 'Plan tarifaire créé.', 'success');
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde');
+      const message = err instanceof Error ? err.message : 'Erreur lors de la sauvegarde';
+      console.error('[RatePlanSheet] save failed:', err);
+      setError(message);
+      emitToast(message, 'error');
     } finally {
       setSaving(false);
     }
