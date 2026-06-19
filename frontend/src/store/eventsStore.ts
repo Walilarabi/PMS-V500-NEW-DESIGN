@@ -453,22 +453,43 @@ export const useEventsStore = create<EventsStore>()(
       getPressureWindow: (from, to) => buildMarketPressureIndex(get().events, from, to),
 
       getKpis: () => {
+        // Garde-fous : un événement venant de Supabase ou d'une recherche
+        // live à valider peut avoir impact partiel (impact undefined, ou
+        // impact sans level/adr/revpar/confidence). Avant ces guards,
+        // `e.impact.level` crashait au filter → EventsView ne s'affichait
+        // jamais (TypeError remontait à l'ErrorBoundary global).
+        const safeNum = (v: unknown): number =>
+          typeof v === 'number' && Number.isFinite(v) ? v : 0;
         const today = now().slice(0, 10);
         const { events, sources } = get();
-        const upcoming = events.filter((e) => e.endDate >= today && e.status !== 'archived').length;
+        const upcoming = events.filter(
+          (e) => (e.endDate ?? '') >= today && e.status !== 'archived',
+        ).length;
         const critical = events.filter(
-          (e) => e.endDate >= today && (e.impact.level === 'critical' || e.impact.level === 'high'),
+          (e) =>
+            (e.endDate ?? '') >= today &&
+            (e.impact?.level === 'critical' || e.impact?.level === 'high'),
         ).length;
         const activeSrc = sources.filter((s) => s.active);
         const avgRel = activeSrc.length
-          ? Math.round(activeSrc.reduce((s, x) => s + x.reliabilityScore, 0) / activeSrc.length)
+          ? Math.round(
+              activeSrc.reduce((s, x) => s + safeNum(x.reliabilityScore), 0) / activeSrc.length,
+            )
           : 0;
         const adrWeighted = events
-          .filter((e) => e.endDate >= today)
-          .reduce((s, e) => s + e.impact.adr * (e.impact.confidence / 100), 0);
+          .filter((e) => (e.endDate ?? '') >= today)
+          .reduce(
+            (s, e) =>
+              s + safeNum(e.impact?.adr) * (safeNum(e.impact?.confidence) / 100),
+            0,
+          );
         const revparWeighted = events
-          .filter((e) => e.endDate >= today)
-          .reduce((s, e) => s + e.impact.revpar * (e.impact.confidence / 100), 0);
+          .filter((e) => (e.endDate ?? '') >= today)
+          .reduce(
+            (s, e) =>
+              s + safeNum(e.impact?.revpar) * (safeNum(e.impact?.confidence) / 100),
+            0,
+          );
         const n = Math.max(1, upcoming);
         return {
           upcoming,

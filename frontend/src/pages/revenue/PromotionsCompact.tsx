@@ -1595,26 +1595,32 @@ const RevenueTab: React.FC<{ promo: Promotion }> = ({ promo }) => {
   );
 };
 
-const ClientsTab: React.FC<{ promo: Promotion }> = ({ promo }) => (
-  <div className="space-y-3">
-    <div className="grid grid-cols-3 gap-3">
-      <StatBlock label="Clients touchés" value={`${promo.bookings}`} tone="sky" />
-      <StatBlock label="Nationalité dom." value="🇫🇷 FR" />
-      <StatBlock label="Segment dom." value={promo.segments[0]} />
+const ClientsTab: React.FC<{ promo: Promotion }> = ({ promo }) => {
+  // Une promotion créée sans segments ciblés a `segments = []` → l'accès
+  // `[0]` retournait `undefined` qui s'affichait dans le DOM. Pas un crash
+  // dur mais incohérent métier — on retombe sur « Tous » par défaut.
+  const dominantSegment = promo.segments?.[0] ?? 'Tous';
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-3 gap-3">
+        <StatBlock label="Clients touchés" value={`${promo.bookings}`} tone="sky" />
+        <StatBlock label="Nationalité dom." value="🇫🇷 FR" />
+        <StatBlock label="Segment dom." value={dominantSegment} />
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        <p>
+          La majorité des clients touchés par <strong>{promo.name}</strong> sont issus du segment{' '}
+          <strong>{dominantSegment}</strong>, en provenance principalement de France et du Benelux.
+          Le panier moyen observé est de{' '}
+          <strong>
+            {formatK(Math.round(promo.revenue / Math.max(1, promo.bookings)))}
+          </strong>{' '}
+          par réservation.
+        </p>
+      </div>
     </div>
-    <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-      <p>
-        La majorité des clients touchés par <strong>{promo.name}</strong> sont issus du segment{' '}
-        <strong>{promo.segments[0]}</strong>, en provenance principalement de France et du Benelux.
-        Le panier moyen observé est de{' '}
-        <strong>
-          {formatK(Math.round(promo.revenue / Math.max(1, promo.bookings)))}
-        </strong>{' '}
-        par réservation.
-      </p>
-    </div>
-  </div>
-);
+  );
+};
 
 const AITab: React.FC<{ promo: Promotion }> = ({ promo }) => (
   <div className="rounded-xl border border-violet-200/70 bg-gradient-to-br from-violet-50 to-white p-5">

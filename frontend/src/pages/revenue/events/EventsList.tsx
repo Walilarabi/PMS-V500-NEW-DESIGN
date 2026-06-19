@@ -22,6 +22,7 @@ import { CATEGORY_LABELS } from '@/src/types/events';
 import { ImpactBadge } from './components/ImpactBadge';
 import { CATEGORY_ICON } from './components/CategoryIcon';
 import { CountryFlag } from './components/CountryFlag';
+import { safeImpact, fmtSignedPct, safeScore } from '@/src/lib/rms/eventDisplay';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -52,10 +53,10 @@ function formatDateRange(start: string, end: string): React.ReactNode {
   );
 }
 
-function fmt(n: number, plus = true): string {
-  const s = n.toFixed(0);
-  return plus && n >= 0 ? `+${s}%` : `${s}%`;
-}
+// fmt / safeImpact / safeScore → centralisés dans `lib/rms/eventDisplay.ts`
+// pour être testables sans monter tout le composant React. Cf. tests dans
+// `lib/rms/eventDisplay.test.ts`.
+const fmt = fmtSignedPct;
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -93,15 +94,17 @@ function StatusPill({ status }: { status: EventStatus }) {
   );
 }
 
-function ScoreBadge({ score }: { score: number }) {
+function ScoreBadge({ score }: { score: number | null | undefined }) {
+  // Score absent / NaN → badge gris neutre plutôt que `NaN` ou crash render.
+  const safe = safeScore(score);
   const color =
-    score >= 80 ? 'bg-rose-50 text-rose-700 ring-rose-100' :
-    score >= 60 ? 'bg-orange-50 text-orange-700 ring-orange-100' :
-    score >= 40 ? 'bg-amber-50 text-amber-700 ring-amber-100' :
+    safe >= 80 ? 'bg-rose-50 text-rose-700 ring-rose-100' :
+    safe >= 60 ? 'bg-orange-50 text-orange-700 ring-orange-100' :
+    safe >= 40 ? 'bg-amber-50 text-amber-700 ring-amber-100' :
     'bg-slate-50 text-slate-600 ring-slate-100';
   return (
     <span className={cn('inline-flex items-center justify-center w-9 h-6 rounded-md ring-1 text-[11.5px] font-bold tabular-nums', color)}>
-      {Math.round(score)}
+      {safe}
     </span>
   );
 }
@@ -127,15 +130,19 @@ type SortKey = 'name' | 'startDate' | 'city' | 'occupancy' | 'adr' | 'revpar' | 
 function sortEvents(events: RMSMarketEvent[], key: SortKey, dir: 1 | -1): RMSMarketEvent[] {
   return [...events].sort((a, b) => {
     let va: string | number, vb: string | number;
+    // a.impact / b.impact peuvent être incomplets pour les événements en
+    // attente de validation — on retombe sur 0 plutôt que de crasher.
+    const ia = safeImpact(a);
+    const ib = safeImpact(b);
     switch (key) {
-      case 'name':       va = a.name;             vb = b.name;       break;
-      case 'startDate':  va = a.startDate;        vb = b.startDate;  break;
-      case 'city':       va = a.city;             vb = b.city;       break;
-      case 'occupancy':  va = a.impact.occupancy; vb = b.impact.occupancy; break;
-      case 'adr':        va = a.impact.adr;       vb = b.impact.adr; break;
-      case 'revpar':     va = a.impact.revpar;    vb = b.impact.revpar; break;
-      case 'confidence': va = a.impact.confidence; vb = b.impact.confidence; break;
-      case 'status':     va = a.status;           vb = b.status;     break;
+      case 'name':       va = a.name ?? '';       vb = b.name ?? '';       break;
+      case 'startDate':  va = a.startDate ?? '';  vb = b.startDate ?? '';  break;
+      case 'city':       va = a.city ?? '';       vb = b.city ?? '';       break;
+      case 'occupancy':  va = ia.occupancy ?? 0;  vb = ib.occupancy ?? 0;  break;
+      case 'adr':        va = ia.adr ?? 0;        vb = ib.adr ?? 0;        break;
+      case 'revpar':     va = ia.revpar ?? 0;     vb = ib.revpar ?? 0;     break;
+      case 'confidence': va = ia.confidence;      vb = ib.confidence;      break;
+      case 'status':     va = a.status ?? '';     vb = b.status ?? '';     break;
       default:           return 0;
     }
     if (va < vb) return -dir;
@@ -321,8 +328,13 @@ interface EventRowProps {
 }
 
 const EventRow: React.FC<EventRowProps> = ({ e, onSelect, menu, setMenu, duplicateEvent, setStatus, deleteEvent }) => {
-  const Icon = CATEGORY_ICON[e.category];
+  // Category peut être une valeur inconnue venant d'une recherche externe :
+  // on retombe sur un fallback safe plutôt que `<undefined />` au render
+  // (JSX crash dur sur composant undefined).
+  const Icon = CATEGORY_ICON[e.category] ?? CATEGORY_ICON.other;
   const catColor = CATEGORY_TONE[e.category] ?? 'bg-slate-100 text-slate-700';
+  const catLabel = CATEGORY_LABELS[e.category] ?? '—';
+  const impact = safeImpact(e);
 
   return (
     <tr
@@ -355,32 +367,32 @@ const EventRow: React.FC<EventRowProps> = ({ e, onSelect, menu, setMenu, duplica
 
       {/* Dates */}
       <td className="px-3 py-3 text-slate-600 text-[12px]">
-        {formatDateRange(e.startDate, e.endDate)}
+        {formatDateRange(e.startDate ?? '', e.endDate ?? '')}
       </td>
 
       {/* Catégorie */}
       <td className="px-3 py-3">
         <span className={cn('px-2 py-0.5 rounded-md text-[11px] font-semibold', catColor)}>
-          {CATEGORY_LABELS[e.category]}
+          {catLabel}
         </span>
       </td>
 
       {/* TO */}
       <td className="px-3 py-3 text-right tabular-nums font-semibold text-emerald-600 text-[12.5px]">
-        {fmt(e.impact.occupancy)}
+        {fmt(impact.occupancy)}
       </td>
       {/* ADR */}
       <td className="px-3 py-3 text-right tabular-nums font-semibold text-violet-600 text-[12.5px]">
-        {fmt(e.impact.adr)}
+        {fmt(impact.adr)}
       </td>
       {/* RevPAR */}
       <td className="px-3 py-3 text-right tabular-nums font-semibold text-indigo-600 text-[12.5px]">
-        {fmt(e.impact.revpar)}
+        {fmt(impact.revpar)}
       </td>
 
       {/* Score */}
       <td className="px-3 py-3">
-        <ScoreBadge score={e.impact.confidence} />
+        <ScoreBadge score={impact.confidence} />
       </td>
 
       {/* Statut */}

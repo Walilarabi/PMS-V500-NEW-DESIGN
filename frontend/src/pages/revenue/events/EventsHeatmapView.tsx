@@ -70,7 +70,11 @@ interface SelectedCell {
 
 function avgImpact(events: RMSMarketEvent[], field: 'adr' | 'occupancy' | 'revpar' | 'compression'): number {
   if (!events.length) return 0;
-  return Math.round(events.reduce((s, e) => s + (e.impact[field] ?? 0), 0) / events.length);
+  // Optional chaining sur e.impact : un événement venant de recherche live à
+  // valider peut ne pas avoir d'impact rempli → ?? 0 évite NaN final.
+  return Math.round(
+    events.reduce((s, e) => s + (e.impact?.[field] ?? 0), 0) / events.length,
+  );
 }
 
 function uniqueCountries(events: RMSMarketEvent[]): string[] {

@@ -8,6 +8,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Topbar } from '@/src/components/layout/Topbar';
 import { Sidebar } from '@/src/components/layout/Sidebar';
 import { DebugPanel } from '@/src/components/DebugPanel';
+import { RevenueScreenBoundary } from '@/src/components/revenue/RevenueScreenBoundary';
 import { useActiveHotelApps } from '@/src/domains/auth/useAppAccess';
 import { useAppShellStore } from '@/src/store/appShellStore';
 import { PageId } from '@/src/types';
@@ -239,31 +240,36 @@ function renderPage(page: PageId, setActivePage: (p: PageId) => void): React.Rea
       return <ClientsLayout activePage={page as ClientsPage} />;
 
     // ── REVENUE / RMS ─────────────────────────────────────────────────────────
+    // Chaque écran est isolé par un RevenueScreenBoundary local. Si l'un
+    // d'eux plante, seul cet écran affiche un fallback (« Réessayer » +
+    // « Debug » + nom de l'écran). Le menu, la sidebar et les autres
+    // modules restent fonctionnels — l'ErrorBoundary global de l'App
+    // n'éteint plus l'app entière pour un bug de la page Distribution OTA.
     // Pilotage
     case 'revenue':
-    case 'rev_dashboard':       return <RevenueDashboard />;
+    case 'rev_dashboard':       return <RevenueScreenBoundary screenName="Dashboard Revenue"><RevenueDashboard /></RevenueScreenBoundary>;
     case 'rev_compset':
-    case 'rev_market':          return <CompetitiveWatchPage />;
+    case 'rev_market':          return <RevenueScreenBoundary screenName="Marché & Concurrence"><CompetitiveWatchPage /></RevenueScreenBoundary>;
     case 'rms':
-    case 'rev_pricing_reco':    return <RMSTableauPro />;
+    case 'rev_pricing_reco':    return <RevenueScreenBoundary screenName="RMS Tableau"><RMSTableauPro /></RevenueScreenBoundary>;
     case 'rev_pricing':
-    case 'rev_calendar':        return <PricingCalendar />;
-    case 'rev_events':          return <EventsView />;
+    case 'rev_calendar':        return <RevenueScreenBoundary screenName="Calendrier Revenue"><PricingCalendar /></RevenueScreenBoundary>;
+    case 'rev_events':          return <RevenueScreenBoundary screenName="Événements"><EventsView /></RevenueScreenBoundary>;
     // Automatisation
     case 'rev_rules':
     case 'rev_yield':
-    case 'rev_automation':      return <YieldAndRules />;
-    case 'rev_strategies':      return <StrategiesPage />;
-    case 'rev_autopilot':       return <AutopilotPage />;
-    case 'rev_simulation':      return <SimulationPage />;
-    case 'rev_alerts':          return <AlertsPage />;
+    case 'rev_automation':      return <RevenueScreenBoundary screenName="Yield & Règles"><YieldAndRules /></RevenueScreenBoundary>;
+    case 'rev_strategies':      return <RevenueScreenBoundary screenName="Stratégies"><StrategiesPage /></RevenueScreenBoundary>;
+    case 'rev_autopilot':       return <RevenueScreenBoundary screenName="Autopilote RMS"><AutopilotPage /></RevenueScreenBoundary>;
+    case 'rev_simulation':      return <RevenueScreenBoundary screenName="Simulation"><SimulationPage /></RevenueScreenBoundary>;
+    case 'rev_alerts':          return <RevenueScreenBoundary screenName="Alertes Revenue"><AlertsPage /></RevenueScreenBoundary>;
     // Distribution
     case 'rev_channels':
-    case 'rev_distribution':    return <DistributionAnalytics />;
-    case 'rev_promotions':      return <PromotionsCompact />;
+    case 'rev_distribution':    return <RevenueScreenBoundary screenName="Distribution & OTA"><DistributionAnalytics /></RevenueScreenBoundary>;
+    case 'rev_promotions':      return <RevenueScreenBoundary screenName="Promotions"><PromotionsCompact /></RevenueScreenBoundary>;
     // Contrôle
     case 'rms_history':
-    case 'rev_audit':           return <DecisionHistoryPage />;
+    case 'rev_audit':           return <RevenueScreenBoundary screenName="Historique des décisions"><DecisionHistoryPage /></RevenueScreenBoundary>;
 
     // ── FINANCE ───────────────────────────────────────────────────────────────
     case 'finance':
