@@ -18,6 +18,7 @@ import { ImpactBadge, impactColor } from './components/ImpactBadge';
 import { CATEGORY_ICON } from './components/CategoryIcon';
 import { aggregateImpact, daysBetween, formatDateRange } from '@/src/services/event-impact.engine';
 import { EventIntelligenceSection } from './intelligence/EventIntelligenceSection';
+import { safeImpact, normalizeImpact } from '@/src/lib/rms/eventDisplay';
 
 interface EventDetailPanelProps {
   event: RMSMarketEvent | null;
@@ -28,9 +29,12 @@ interface EventDetailPanelProps {
 export const EventDetailPanel: React.FC<EventDetailPanelProps> = ({ event, onClose, onEdit }) => {
   const { duplicateEvent, setStatus } = useEventsStore();
   if (!event) return null;
-  const c = impactColor(event.impact.level);
+  // Lecture safe : un event en attente de validation peut arriver ici
+  // (pendingValidation) avec un impact partiel.
+  const impact = safeImpact(event);
+  const c = impactColor(impact.level);
   const Icon = CATEGORY_ICON[event.category];
-  const score = Math.round(aggregateImpact(event.impact));
+  const score = Math.round(aggregateImpact(normalizeImpact(event)));
 
   return (
     <>
@@ -49,8 +53,8 @@ export const EventDetailPanel: React.FC<EventDetailPanelProps> = ({ event, onClo
                 </div>
                 <h2 className="text-[18px] font-semibold text-slate-900 truncate mt-0.5">{event.name}</h2>
                 <div className="flex items-center gap-2 mt-2">
-                  <ImpactBadge level={event.impact.level} size="md" />
-                  <span className="text-[11px] text-slate-500">Score IA {score}/100 · confiance {event.impact.confidence}%</span>
+                  <ImpactBadge level={impact.level} size="md" />
+                  <span className="text-[11px] text-slate-500">Score IA {score}/100 · confiance {impact.confidence}%</span>
                 </div>
               </div>
             </div>
@@ -79,12 +83,12 @@ export const EventDetailPanel: React.FC<EventDetailPanelProps> = ({ event, onClo
           {/* Coefficients */}
           <Section icon={Activity} title="Coefficients d'impact RMS">
             <div className="grid grid-cols-2 gap-2.5">
-              <Coef label="Demande" v={event.impact.demand} />
-              <Coef label="ADR" v={event.impact.adr} />
-              <Coef label="Occupation" v={event.impact.occupancy} />
-              <Coef label="Pickup" v={event.impact.pickup} />
-              <Coef label="RevPAR" v={event.impact.revpar} />
-              <Coef label="Compression" v={event.impact.compression} max={100} />
+              <Coef label="Demande" v={impact.demand} />
+              <Coef label="ADR" v={impact.adr ?? 0} />
+              <Coef label="Occupation" v={impact.occupancy ?? 0} />
+              <Coef label="Pickup" v={impact.pickup} />
+              <Coef label="RevPAR" v={impact.revpar ?? 0} />
+              <Coef label="Compression" v={impact.compression} max={100} />
             </div>
           </Section>
 
@@ -93,7 +97,7 @@ export const EventDetailPanel: React.FC<EventDetailPanelProps> = ({ event, onClo
             <ul className="space-y-2 text-[12.5px] text-slate-700">
               <li className="flex items-center justify-between">
                 <span>Pression marché</span>
-                <strong className={c.text}>{IMPACT_LABELS[event.impact.level]}</strong>
+                <strong className={c.text}>{IMPACT_LABELS[impact.level]}</strong>
               </li>
               <li className="flex items-center justify-between">
                 <span>Recommandation tarif</span>

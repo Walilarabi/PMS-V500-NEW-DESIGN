@@ -22,6 +22,7 @@ import {
 } from '@/src/services/event-import-analyzer.service';
 import { integrateEventsToRMS } from '@/src/services/event-rms-integration.service';
 import { useEventsStore } from '@/src/store/eventsStore';
+import { safeImpact, normalizeImpact } from '@/src/lib/rms/eventDisplay';
 
 type WizardStep = 'upload' | 'analyzing' | 'review' | 'done';
 type ImportSource = 'excel' | 'csv' | 'lighthouse' | 'api';
@@ -459,7 +460,10 @@ function StepReview({
                   </div>
                 </td>
                 <td className="px-3 py-2.5">
-                  <ImpactCell level={item.event.impact.level} adr={item.event.impact.adr} />
+                  {(() => {
+                    const imp = safeImpact(item.event);
+                    return <ImpactCell level={imp.level} adr={imp.adr ?? 0} />;
+                  })()}
                 </td>
                 <td className="px-3 py-2.5 text-slate-500 text-[11.5px] max-w-[100px] truncate">
                   {item.event.primarySource || '—'}
@@ -678,7 +682,9 @@ export const EventImportModal: React.FC<EventImportModalProps> = ({ open, onClos
     // Pont RMS — propage les événements haute priorité (non-bloquant)
     let rmsIntegrated = 0;
     try {
-      const highImpact = toImport.filter((ev) => ev.impact.compression >= 60);
+      // normalizeImpact garantit `compression` numérique pour les imports
+      // Excel/CSV qui peuvent omettre le champ.
+      const highImpact = toImport.filter((ev) => normalizeImpact(ev).compression >= 60);
       integrateEventsToRMS(highImpact);
       rmsIntegrated = highImpact.length;
     } catch (e) {

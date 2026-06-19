@@ -14,6 +14,7 @@ import { cn } from '@/src/lib/utils';
 import { useEventsStore } from '@/src/store/eventsStore';
 import { CATEGORY_LABELS, IMPACT_LABELS } from '@/src/types/events';
 import type { EventCategory, EventImpactLevel, RMSMarketEvent } from '@/src/types/events';
+import { safeImpact, fmtSignedPct } from '@/src/lib/rms/eventDisplay';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -70,10 +71,13 @@ interface SelectedCell {
 
 function avgImpact(events: RMSMarketEvent[], field: 'adr' | 'occupancy' | 'revpar' | 'compression'): number {
   if (!events.length) return 0;
-  // Optional chaining sur e.impact : un événement venant de recherche live à
-  // valider peut ne pas avoir d'impact rempli → ?? 0 évite NaN final.
+  // safeImpact() garantit un ImpactScore complet même pour un event
+  // venant de recherche live à valider — plus aucun NaN possible.
   return Math.round(
-    events.reduce((s, e) => s + (e.impact?.[field] ?? 0), 0) / events.length,
+    events.reduce((s, e) => {
+      const v = safeImpact(e)[field];
+      return s + (v ?? 0);
+    }, 0) / events.length,
   );
 }
 
@@ -198,25 +202,28 @@ function CellDetailPanel({ sel, onClose }: { sel: SelectedCell; onClose: () => v
             Événements liés ({cell.count})
           </div>
           <div className="space-y-1.5 max-h-[260px] overflow-y-auto">
-            {cell.events.map((ev) => (
-              <div key={ev.id} className="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-slate-50/80 ring-1 ring-slate-100">
-                <div className={cn(
-                  'mt-0.5 w-2 h-2 rounded-full shrink-0',
-                  LEVEL_COLOR[LEVEL_RANK[ev.impact.level]].split(' ').find((c) => c.startsWith('bg-')) ?? 'bg-slate-300',
-                )} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] font-medium text-slate-900 truncate">{ev.name}</div>
-                  <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap gap-2">
-                    <span>{fmtDate(ev.startDate)} → {fmtDate(ev.endDate)}</span>
-                    {ev.venue && <span className="text-slate-400">· {ev.venue}</span>}
+            {cell.events.map((ev) => {
+              const imp = safeImpact(ev);
+              return (
+                <div key={ev.id} className="flex items-start gap-3 px-3 py-2.5 rounded-xl bg-slate-50/80 ring-1 ring-slate-100">
+                  <div className={cn(
+                    'mt-0.5 w-2 h-2 rounded-full shrink-0',
+                    LEVEL_COLOR[LEVEL_RANK[imp.level]].split(' ').find((c) => c.startsWith('bg-')) ?? 'bg-slate-300',
+                  )} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] font-medium text-slate-900 truncate">{ev.name}</div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap gap-2">
+                      <span>{fmtDate(ev.startDate)} → {fmtDate(ev.endDate)}</span>
+                      {ev.venue && <span className="text-slate-400">· {ev.venue}</span>}
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-[11px] font-semibold text-amber-600">{fmtSignedPct(imp.adr)} ADR</div>
+                    <div className="text-[10px] text-violet-600">{imp.compression}% compr.</div>
                   </div>
                 </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-[11px] font-semibold text-amber-600">+{ev.impact.adr}% ADR</div>
-                  <div className="text-[10px] text-violet-600">{ev.impact.compression}% compr.</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -284,10 +291,11 @@ export const EventsHeatmapView: React.FC = () => {
       const month = Number(ev.startDate.substring(5, 7)) - 1;
       if (Number.isNaN(month) || !m[ev.category]) continue;
       const cell = m[ev.category][month];
-      const rank = LEVEL_RANK[ev.impact.level];
+      const lvl = safeImpact(ev).level;
+      const rank = LEVEL_RANK[lvl];
       cell.count += 1;
       cell.events.push(ev);
-      if (rank > cell.rank) { cell.rank = rank; cell.level = ev.impact.level; }
+      if (rank > cell.rank) { cell.rank = rank; cell.level = lvl; }
     }
     return m;
   }, [categoriesUsed, events]);

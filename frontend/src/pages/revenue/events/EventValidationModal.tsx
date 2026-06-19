@@ -26,6 +26,7 @@ import { CATEGORY_LABELS, IMPACT_LABELS } from '@/src/types/events';
 import { aggregateImpact, daysBetween, formatDateRange } from '@/src/services/event-impact.engine';
 import { ImpactBadge, impactColor } from './components/ImpactBadge';
 import { CATEGORY_ICON } from './components/CategoryIcon';
+import { safeImpact, normalizeImpact, fmtSignedPct } from '@/src/lib/rms/eventDisplay';
 
 export type ValidationDecision =
   | { type: 'accept'; ids: string[] }
@@ -232,7 +233,8 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
               <tbody>
                 {visible.map((e) => {
                   const Icon = CATEGORY_ICON[e.category];
-                  const score = Math.round(aggregateImpact(e.impact));
+                  const imp = safeImpact(e);
+                  const score = Math.round(aggregateImpact(normalizeImpact(e)));
                   const isSelected = selected.has(e.id);
                   return (
                     <tr
@@ -278,7 +280,7 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
                       <td className="px-3 py-2.5 text-slate-600 truncate max-w-[160px]">{e.primarySource}</td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">
-                          <ImpactBadge level={e.impact.level} />
+                          <ImpactBadge level={imp.level} />
                           {knownIds.has(e.id) && (
                             <span
                               className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 ring-1 ring-slate-200"
@@ -290,9 +292,9 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums font-medium">{score}%</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 font-medium">+{e.impact.adr}%</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 font-medium">+{e.impact.occupancy}%</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{e.impact.confidence}%</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 font-medium">{fmtSignedPct(imp.adr)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-emerald-700 font-medium">{fmtSignedPct(imp.occupancy)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{imp.confidence}%</td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center justify-end gap-1">
                           <button
@@ -390,9 +392,10 @@ export const EventValidationModal: React.FC<EventValidationModalProps> = ({
 // ─── Drawer détail ─────────────────────────────────────────────────────────
 
 function DetailDrawer({ event, onClose }: { event: RMSMarketEvent; onClose: () => void }) {
-  const c = impactColor(event.impact.level);
+  const imp = safeImpact(event);
+  const c = impactColor(imp.level);
   const Icon = CATEGORY_ICON[event.category];
-  const score = Math.round(aggregateImpact(event.impact));
+  const score = Math.round(aggregateImpact(normalizeImpact(event)));
   return (
     <>
       <div className="fixed inset-0 bg-slate-900/30 z-[55]" onClick={onClose} />
@@ -407,7 +410,7 @@ function DetailDrawer({ event, onClose }: { event: RMSMarketEvent; onClose: () =
                 {CATEGORY_LABELS[event.category]}
               </div>
               <h3 className="text-[15px] font-semibold text-slate-900 truncate">{event.name}</h3>
-              <div className="mt-1.5"><ImpactBadge level={event.impact.level} size="md" /></div>
+              <div className="mt-1.5"><ImpactBadge level={imp.level} size="md" /></div>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100">
@@ -444,13 +447,13 @@ function DetailDrawer({ event, onClose }: { event: RMSMarketEvent; onClose: () =
           <Block icon={Activity} title="Impact RMS simulé">
             <div className="grid grid-cols-2 gap-2 text-[12px]">
               <Stat label="Score IA" value={`${score}/100`} />
-              <Stat label="Confiance" value={`${event.impact.confidence}%`} />
-              <Stat label="Pression marché" value={`${Math.round(event.impact.compression)}%`} />
-              <Stat label="Influence prix" value={`+${event.influencePrice}%`} accent />
-              <Stat label="ADR estimé" value={`+${event.impact.adr}%`} />
-              <Stat label="TO estimé" value={`+${event.impact.occupancy}%`} />
-              <Stat label="Pickup" value={`+${event.impact.pickup}%`} />
-              <Stat label="RevPAR" value={`+${event.impact.revpar}%`} />
+              <Stat label="Confiance" value={`${imp.confidence}%`} />
+              <Stat label="Pression marché" value={`${Math.round(imp.compression)}%`} />
+              <Stat label="Influence prix" value={`+${event.influencePrice ?? 0}%`} accent />
+              <Stat label="ADR estimé" value={fmtSignedPct(imp.adr)} />
+              <Stat label="TO estimé" value={fmtSignedPct(imp.occupancy)} />
+              <Stat label="Pickup" value={fmtSignedPct(imp.pickup)} />
+              <Stat label="RevPAR" value={fmtSignedPct(imp.revpar)} />
             </div>
           </Block>
 

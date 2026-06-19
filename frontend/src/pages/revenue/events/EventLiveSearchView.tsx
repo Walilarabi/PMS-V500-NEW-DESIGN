@@ -27,6 +27,7 @@ import {
 } from '@/src/services/event-live-search.service';
 import { useEventsStore } from '@/src/store/eventsStore';
 import type { RMSMarketEvent, EventImpactLevel } from '@/src/types/events';
+import { safeImpact, fmtSignedPct } from '@/src/lib/rms/eventDisplay';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ function fmtAttendance(ev: RMSMarketEvent): { text: string; estimated: boolean }
       : `~${n.toLocaleString('fr-FR')}`;
     return { text, estimated: false };
   }
-  const range = ATTENDANCE_RANGE[ev.impact.level] ?? ATTENDANCE_RANGE.medium;
+  const range = ATTENDANCE_RANGE[safeImpact(ev).level] ?? ATTENDANCE_RANGE.medium;
   return { text: range.label, estimated: true };
 }
 
@@ -600,10 +601,10 @@ function ResultsTable({
       : events.filter((e) => (diff.get(e.id)?.status ?? 'new') === diffFilter);
     return [...filtered].sort((a, b) => {
       if (sortKey === 'date')     return a.startDate.localeCompare(b.startDate);
-      if (sortKey === 'impact')   return (IMPACT_LEVEL_ORDER[b.impact.level] ?? 0) - (IMPACT_LEVEL_ORDER[a.impact.level] ?? 0);
+      if (sortKey === 'impact')   return (IMPACT_LEVEL_ORDER[safeImpact(b).level] ?? 0) - (IMPACT_LEVEL_ORDER[safeImpact(a).level] ?? 0);
       if (sortKey === 'capacity') {
-        const ca = a.estimatedVisitors ?? (ATTENDANCE_RANGE[a.impact.level]?.mid ?? 0);
-        const cb = b.estimatedVisitors ?? (ATTENDANCE_RANGE[b.impact.level]?.mid ?? 0);
+        const ca = a.estimatedVisitors ?? (ATTENDANCE_RANGE[safeImpact(a).level]?.mid ?? 0);
+        const cb = b.estimatedVisitors ?? (ATTENDANCE_RANGE[safeImpact(b).level]?.mid ?? 0);
         return cb - ca;
       }
       return a.name.localeCompare(b.name);
@@ -724,8 +725,9 @@ function ResultsTable({
           </thead>
           <tbody>
             {sorted.map((ev) => {
-              const imp = IMPACT_STYLES[ev.impact.level] ?? IMPACT_STYLES.very_low;
-              const src = ev.sources[0] as 'ticketmaster' | 'openagenda' | undefined;
+              const sImp = safeImpact(ev);
+              const imp = IMPACT_STYLES[sImp.level] ?? IMPACT_STYLES.very_low;
+              const src = ev.sources?.[0] as 'ticketmaster' | 'openagenda' | undefined;
               const srcStyle = src ? (SOURCE_STYLES[src] ?? SOURCE_STYLES.openagenda) : SOURCE_STYLES.openagenda;
               const days = dayCount(ev.startDate, ev.endDate);
               const isSelected = selected.has(ev.id);
@@ -813,7 +815,7 @@ function ResultsTable({
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <RmMetrics adr={ev.impact.adr} compression={ev.impact.compression} />
+                    <RmMetrics adr={sImp.adr} compression={sImp.compression} />
                   </td>
                   <td className="px-3 py-2.5 max-w-[140px] text-slate-500 truncate text-[11.5px]" title={ev.venue ?? ev.city}>
                     {ev.venue ?? ev.city}
@@ -833,11 +835,11 @@ function ResultsTable({
   );
 }
 
-function RmMetrics({ adr, compression }: { adr: number; compression: number }) {
+function RmMetrics({ adr, compression }: { adr: number | null; compression: number }) {
   return (
     <div className="flex items-center gap-2">
       <span className="text-[10.5px] text-amber-600 font-semibold flex items-center gap-0.5">
-        <TrendingUp className="w-2.5 h-2.5" /> +{adr}% ADR
+        <TrendingUp className="w-2.5 h-2.5" /> {fmtSignedPct(adr)} ADR
       </span>
       <span className="text-[10.5px] text-violet-600 font-semibold">
         {compression}% comp.
@@ -858,7 +860,8 @@ function EventTooltip({ ev, x, y, dense }: { ev: RMSMarketEvent; x: number; y: n
   if (x > window.innerWidth - 280) style.left = x - 270;
   if (y > window.innerHeight - 220) style.top = y - 200;
 
-  const imp = IMPACT_STYLES[ev.impact.level] ?? IMPACT_STYLES.very_low;
+  const sImp = safeImpact(ev);
+  const imp = IMPACT_STYLES[sImp.level] ?? IMPACT_STYLES.very_low;
   return (
     <div
       style={style}
@@ -882,9 +885,9 @@ function EventTooltip({ ev, x, y, dense }: { ev: RMSMarketEvent; x: number; y: n
         })()}
       </div>
       <div className="mt-2 pt-2 border-t border-slate-100 grid grid-cols-3 gap-1.5">
-        <MetricBox label="ADR" value={`+${ev.impact.adr}%`} color="text-amber-600" />
-        <MetricBox label="Compr." value={`${ev.impact.compression}%`} color="text-violet-600" />
-        <MetricBox label="Confiance" value={`${ev.impact.confidence}%`} color="text-emerald-600" />
+        <MetricBox label="ADR" value={fmtSignedPct(sImp.adr)} color="text-amber-600" />
+        <MetricBox label="Compr." value={`${sImp.compression}%`} color="text-violet-600" />
+        <MetricBox label="Confiance" value={`${sImp.confidence}%`} color="text-emerald-600" />
       </div>
       {dense && (
         <div className="mt-2 pt-2 border-t border-slate-100 bg-orange-50/80 rounded-lg px-2 py-1.5 text-[10px] text-orange-700 font-medium text-center ring-1 ring-orange-100">
@@ -894,7 +897,7 @@ function EventTooltip({ ev, x, y, dense }: { ev: RMSMarketEvent; x: number; y: n
         </div>
       )}
       <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-500 bg-violet-50/60 rounded-lg px-2 py-1.5 text-center font-medium">
-        Action RM suggérée : {ev.impact.level === 'hyper_compression' ? 'Stop-sell / max yield' : ev.impact.level === 'critical' ? 'Yield élevé' : ev.impact.level === 'high' ? 'Relever les tarifs' : 'Surveiller'}
+        Action RM suggérée : {sImp.level === 'hyper_compression' ? 'Stop-sell / max yield' : sImp.level === 'critical' ? 'Yield élevé' : sImp.level === 'high' ? 'Relever les tarifs' : 'Surveiller'}
       </div>
     </div>
   );

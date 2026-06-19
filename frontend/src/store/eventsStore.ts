@@ -38,6 +38,7 @@ import {
   deleteEventFromSupabase,
   batchUpsertEventsInSupabase,
 } from '../services/events/eventsRepository';
+import { normalizeImpact, safeImpact } from '../lib/rms/eventDisplay';
 
 export interface SyncLogEntry {
   at: string;
@@ -185,9 +186,12 @@ export const useEventsStore = create<EventsStore>()(
       clearSaveError: () => set({ saveError: null }),
 
       addEvent: (ev) => {
+        // Garde-fou : un event manuel ou injecté peut avoir un impact partiel.
+        // On normalise avant tout calcul pour éviter `aggregateImpact(undefined)`.
+        const normalizedImpact = normalizeImpact(ev);
         const enriched: RMSMarketEvent = {
           ...ev,
-          impact: { ...ev.impact, level: scoreToLevel(aggregateImpact(ev.impact)) },
+          impact: { ...normalizedImpact, level: scoreToLevel(aggregateImpact(normalizedImpact)) },
           createdAt: ev.createdAt ?? now(),
           updatedAt: now(),
           history: [
@@ -206,12 +210,17 @@ export const useEventsStore = create<EventsStore>()(
         set((s) => ({
           events: s.events.map((e) => {
             if (e.id !== id) return e;
+            // patch.impact peut être partiel (slider unique modifié) :
+            // on normalise avant d'agréger pour éviter NaN/undefined.
+            const patchedImpact = patch.impact
+              ? normalizeImpact({ impact: { ...e.impact, ...patch.impact } })
+              : null;
             const next: RMSMarketEvent = {
               ...e,
               ...patch,
-              impact: patch.impact
-                ? { ...patch.impact, level: scoreToLevel(aggregateImpact(patch.impact)) }
-                : e.impact,
+              impact: patchedImpact
+                ? { ...patchedImpact, level: scoreToLevel(aggregateImpact(patchedImpact)) }
+                : normalizeImpact(e),
               updatedAt: now(),
               history: [
                 ...e.history,
@@ -283,7 +292,17 @@ export const useEventsStore = create<EventsStore>()(
         const byId = new Map(state.events.map((e) => [e.id, e]));
         let added = 0;
         let updated = 0;
-        for (const ev of incoming) {
+        // Sanitisation à l'entrée du store : un import live (Ticketmaster,
+        // OpenAgenda, Excel) peut livrer des events à impact partiel ou
+        // absent. On normalise UNE fois ici → plus aucun consommateur en
+        // aval (engine, bridge RMS, composants UI) n'a à se défendre.
+        const sanitized = incoming.map((ev) => ({
+          ...ev,
+          impact: normalizeImpact(ev),
+          history: ev.history ?? [],
+          sources: ev.sources ?? [],
+        })) as RMSMarketEvent[];
+        for (const ev of sanitized) {
           const existing = byId.get(ev.id);
           if (existing) {
             // règle métier : on ne met à jour QUE les événements futurs ;
@@ -308,7 +327,7 @@ export const useEventsStore = create<EventsStore>()(
         const { deduped, merged: dups } = dedupEvents(merged);
         set({ events: deduped });
         // Sync Supabase batch (fire-and-forget) — uniquement les nouveaux/modifiés.
-        const toSync = deduped.filter((e) => incoming.some((i) => i.id === e.id));
+        const toSync = deduped.filter((e) => sanitized.some((i) => i.id === e.id));
         if (toSync.length > 0) {
           batchUpsertEventsInSupabase(toSync)
             .then((r) => { if (!r.ok) set({ saveError: r.error ?? 'Import non sauvegardé (Supabase)' }); })
@@ -316,7 +335,9 @@ export const useEventsStore = create<EventsStore>()(
         }
         // Propagation RMS automatique — déclenche le Central Pricing Engine et
         // le signal eventIntensity pour l'autopilote (effets de bord async).
-        const newAndUpdated = incoming.filter(
+        // `sanitized` garantit `impact.compression` numérique : plus de
+        // TypeError quand l'event vient d'une source live à valider.
+        const newAndUpdated = sanitized.filter(
           (ev) => ev.impact.compression >= 0, // toutes les gammes
         );
         if (newAndUpdated.length > 0) {
@@ -336,7 +357,13 @@ export const useEventsStore = create<EventsStore>()(
         const state = get();
         const refusedIds = new Set(state.refusedEvents.map((e) => e.id));
         const knownIds = new Set(state.events.map((e) => e.id));
-        const candidates = r.events.filter((e) => !refusedIds.has(e.id));
+        // Sanitisation des candidats : le moteur live peut renvoyer un
+        // event sans impact (compression/level absents) — on garantit un
+        // ImpactScore complet pour que la modale de validation et la
+        // propagation RMS ne crash plus.
+        const candidates = r.events
+          .filter((e) => !refusedIds.has(e.id))
+          .map((e) => ({ ...e, impact: normalizeImpact(e) }) as RMSMarketEvent);
         const newCount = candidates.filter((e) => !knownIds.has(e.id)).length;
         const extended = r as EventSearchResult & {
           perSource?: SyncLogEntry['perSource'];
@@ -362,7 +389,11 @@ export const useEventsStore = create<EventsStore>()(
         return entry;
       },
 
-      setPendingValidation: (events) => set({ pendingValidation: events }),
+      setPendingValidation: (events) => set({
+        // Idem applySearchResult : tout event entrant dans le store doit
+        // arriver avec un ImpactScore complet.
+        pendingValidation: events.map((e) => ({ ...e, impact: normalizeImpact(e) }) as RMSMarketEvent),
+      }),
       clearPendingValidation: () => set({ pendingValidation: [] }),
 
       addRefusedEvents: (events, opts) =>
@@ -429,7 +460,7 @@ export const useEventsStore = create<EventsStore>()(
             if (filters.toDate && e.startDate > filters.toDate) return false;
             if (
               filters.minImpact &&
-              IMPACT_LEVEL_ORDER[e.impact.level] < IMPACT_LEVEL_ORDER[filters.minImpact]
+              IMPACT_LEVEL_ORDER[safeImpact(e).level] < IMPACT_LEVEL_ORDER[filters.minImpact]
             )
               return false;
             if (q) {
@@ -518,9 +549,20 @@ export const useEventsStore = create<EventsStore>()(
       // ajout. Indispensable pour éviter les crashs au démarrage.
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<EventsStore>;
+        // Sanitise les events persistés : un snapshot v<5 peut contenir
+        // des events sans `impact.compression` (champ ajouté plus tard).
+        // Sans cette passe, le premier `bulkUpsert` ou `getFilteredEvents`
+        // après reload crashait avec « Cannot read properties of undefined ».
+        const sanitizedEvents = (p.events ?? []).map((e) => ({
+          ...e,
+          impact: normalizeImpact(e),
+          history: e.history ?? [],
+          sources: e.sources ?? [],
+        })) as RMSMarketEvent[];
         return {
           ...current,
           ...p,
+          events: sanitizedEvents,
           filters: { ...DEFAULT_FILTERS, ...(p.filters ?? {}) },
           // Réinitialise supabaseSynced à chaque démarrage — force un rechargement Supabase.
           supabaseSynced: false,

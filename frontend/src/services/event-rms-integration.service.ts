@@ -19,6 +19,7 @@ import type { RMSMarketEvent } from '../types/events';
 import { centralPricingEngine } from './revenue/centralPricingEngine.service';
 import { useRateCalendarStore } from '../components/rms/store/rateCalendarStore';
 import { useRmsAutomationStore } from '../store/rmsAutomationStore';
+import { normalizeImpact } from '../lib/rms/eventDisplay';
 
 const HIGH_IMPACT_THRESHOLD = 60; // impact.compression >= 60 → déclenche l'intégration
 
@@ -26,9 +27,12 @@ const HIGH_IMPACT_THRESHOLD = 60; // impact.compression >= 60 → déclenche l'i
  * Propage les événements haute priorité vers le Central Pricing Engine
  * et met à jour le signal eventIntensity de l'autopilote.
  *
- * Appelé juste après bulkUpsert dans le flow import.
+ * Appelé juste après bulkUpsert dans le flow import. Garde-fou interne :
+ * on re-normalise au cas où un caller transmet un event à impact partiel
+ * (ex: anciens flows). Plus aucun crash possible côté bridge.
  */
-export function integrateEventsToRMS(events: RMSMarketEvent[]): void {
+export function integrateEventsToRMS(rawEvents: RMSMarketEvent[]): void {
+  const events = rawEvents.map((ev) => ({ ...ev, impact: normalizeImpact(ev) }));
   const highImpact = events.filter(
     (ev) => ev.impact.compression >= HIGH_IMPACT_THRESHOLD,
   );

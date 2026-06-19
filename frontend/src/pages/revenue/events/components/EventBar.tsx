@@ -10,6 +10,7 @@ import { CATEGORY_LABELS } from '@/src/types/events';
 import { impactColor } from './ImpactBadge';
 import { CATEGORY_ICON } from './CategoryIcon';
 import { Sparkles } from 'lucide-react';
+import { safeImpact } from '@/src/lib/rms/eventDisplay';
 
 interface EventBarProps {
   event: RMSMarketEvent;
@@ -26,13 +27,14 @@ export const EventBar: React.FC<EventBarProps> = ({
   truncatedRight,
   onClick,
 }) => {
-  const c = impactColor(event.impact.level);
+  const level = safeImpact(event).level;
+  const c = impactColor(level);
   const Icon = CATEGORY_ICON[event.category];
   return (
     <button
       type="button"
       onClick={onClick}
-      title={`${event.name} · ${CATEGORY_LABELS[event.category]} · ${event.impact.level}`}
+      title={`${event.name} · ${CATEGORY_LABELS[event.category]} · ${level}`}
       className={cn(
         'group w-full h-7 px-2 flex items-center gap-1.5 text-left',
         'rounded-md ring-1 ring-inset transition-all',
